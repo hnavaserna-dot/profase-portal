@@ -11,6 +11,8 @@
   var PAGINA = { director: 'director.html', gerente: 'gerentes.html', contador: 'contadores.html' };
   // El director (Daniel) también puede abrir la vista de los gerentes
   var TAMBIEN = { gerente: ['director'] };
+  // Páginas que no son de un rol: las abre quien tenga permiso en la base, sea gerente, contador o director
+  var LIBRE = { cotizador: 'cot_puede' };
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
 
@@ -46,7 +48,11 @@
     try { p = await P.perfilDe(s.user.id); } catch (e) { p = null; }
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
     // «todos»: páginas que abre cualquier rol (la bitácora de variaciones, dentro de su pestaña)
-    if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
+    // LIBRE: páginas que abre quien tenga permiso en la base (el cotizador), sea del rol que sea
+    if (LIBRE[ROL]) {
+      var ok = await sb.rpc(LIBRE[ROL]);
+      if (ok.error || ok.data !== true) { location.replace(P.paginaDe(p.rol)); throw new Error('sin permiso'); }
+    } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
     return p;
   })();
@@ -241,7 +247,7 @@
     }
   };
 
-  if (ROL) {
+  if (ROL && !LIBRE[ROL]) {
     window.claude = {
       use: async function (cap) {
         await P.listo;
@@ -306,6 +312,12 @@
     // El director brinca entre su vista (con EQUILIBRIO) y la del equipo
     var otra = p.rol !== 'director' ? '' : ROL === 'director'
       ? '<a class="notas" href="gerentes.html">Vista del equipo</a>' : '<a class="notas" href="director.html">Mi vista</a>';
+    // Desde el cotizador se regresa a la página de cada quien
+    if (ROL === 'cotizador') {
+      otra = p.rol === 'director'
+        ? '<a class="notas" href="director.html">Mi vista</a><a class="notas" href="gerentes.html">Vista del equipo</a>'
+        : '<a class="notas" href="' + P.paginaDe(p.rol) + '">WorkFlow</a>';
+    }
     span.innerHTML = '<span class="pu-nom">' + esc(p.nombre) + '</span>' + otra
       + '<button class="notas" type="button" id="pu-clave">Contraseña</button>'
       + '<button class="notas" type="button" id="pu-salir">Salir</button>';
@@ -314,7 +326,18 @@
     var abrir = dialogoClave();
     document.getElementById('pu-clave').onclick = abrir;
     document.getElementById('pu-salir').onclick = P.salir;
+    if (ROL === 'cotizador') return;
+    enlaceCotizador(span);
     botonActualizar(span);
+  }
+
+  /* Enlace al cotizador: solo para quien la base le da acceso (tabla cot_permisos; el director siempre) */
+  async function enlaceCotizador(span) {
+    var r = await sb.rpc('cot_puede');
+    if (r.error || r.data !== true) return;
+    var a = document.createElement('a');
+    a.className = 'notas'; a.href = 'cotizador.html'; a.textContent = 'Cotizador';
+    span.insertBefore(a, span.querySelector('#pu-clave'));
   }
 
   /* Botón «Actualizar» (solo para quien está en la lista de la base): corre la actualización en ese momento.
