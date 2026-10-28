@@ -8,7 +8,9 @@
   var SB_URL = 'https://arbykgauatkldznwwtjx.supabase.co';
   var SB_KEY = 'sb_publishable_gUzFFB-YnzC5AOFOK_-H9Q_jBbDUzG5';
   var DOMINIO = '@usuarios.profase.com.mx';
-  var PAGINA = { gerente: 'gerentes.html', contador: 'contadores.html' };
+  var PAGINA = { director: 'gerentes.html', gerente: 'gerentes.html', contador: 'contadores.html' };
+  // El director (Héctor) también puede abrir la vista de los gerentes
+  var TAMBIEN = { gerente: ['director'] };
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
 
@@ -43,7 +45,7 @@
     var p = null;
     try { p = await P.perfilDe(s.user.id); } catch (e) { p = null; }
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
-    if (p.rol !== ROL) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
+    if (p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
     return p;
   })();
@@ -168,8 +170,8 @@
   /* ---- Quién ve la página ---- */
   var USER = {
     id: async function () { return P.uid; },
-    isOwner: async function () { return P.perfil.rol === 'gerente'; },
-    canEdit: async function () { return P.perfil.rol === 'gerente'; },
+    isOwner: async function () { return P.perfil.rol === 'gerente' || P.perfil.rol === 'director'; },
+    canEdit: async function () { return P.perfil.rol === 'gerente' || P.perfil.rol === 'director'; },
     // Los contadores también escriben (sus justificaciones); qué colección puede tocar cada quien lo decide la base
     can: async function (que) { return que === 'data.write' || que === 'data.read'; },
     profiles: async function (ids) {
