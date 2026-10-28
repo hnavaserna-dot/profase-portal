@@ -1875,6 +1875,91 @@ initDB=async function(){await initDB0();oirJust()};
   b.onclick=()=>setView('caja');
 })();
 
+/* ===== Portal PROFASE · pestaña «QUO»: Quo Contabilita, otra compañía del grupo, con su propia sección en la base.
+   Solo aparece para Daniel y para quienes están en la tabla quo_acceso de la base (Cadengo y Gabriel); a los demás
+   ni se les pinta el botón, y aunque abrieran las páginas, la base no les deja leer las colecciones quo_*.
+   Dos sub pestañas, cada una en su propia página dentro de un marco (sus estilos y su código no chocan con esta):
+   «Cotizador QUO» (quo-cotizador.html) y «Control de membresías» (quo-membresias.html). */
+(function(){
+  const sw=document.querySelector('.vsw');if(!sw||!window.PORTAL)return;
+  const P=window.PORTAL;
+  const SUB=[{k:'cot',t:'Cotizador QUO',src:'quo-cotizador.html?v=4be9b80b91'},{k:'mem',t:'Control de membresías',src:'quo-membresias.html?v=0cab3cbe2b'}];
+  P.listo.then(async function(p){
+    if(!p)return;
+    let ok=p.rol==='director';
+    if(!ok){try{const r=await P.sb.rpc('es_quo');ok=r.data===true}catch(e){ok=false}}
+    if(ok)monta();
+  }).catch(function(){});
+
+  function monta(){
+    const st=document.createElement('style');
+    st.textContent='body:not([data-view="quo"]) #v-quo{display:none!important}'
+      +'body[data-view="quo"] .asof{display:none!important}'
+      +'#v-quo{display:block;width:100%}'
+      +'#v-quo .qsub{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 16px 8px;max-width:1500px;margin:0 auto;width:100%;box-sizing:border-box}'
+      +'#v-quo .qsub .qrot{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}'
+      +'#v-quo .qsw{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;max-width:100%}'
+      +'#v-quo .qsw button{font:inherit;font-size:13px;font-weight:600;border:0;background:var(--surface);color:var(--muted);padding:6px 13px;cursor:pointer;white-space:nowrap}'
+      +'#v-quo .qsw button+button{border-left:1px solid var(--line-strong)}'
+      +'#v-quo .qsw button[aria-pressed="true"]{background:var(--accent);color:#fff}'
+      +'#v-quo iframe{display:block;width:100%;border:0;background:var(--bg)}'
+      +'#v-quo iframe[hidden]{display:none}'
+      +'@media (min-width:700px) and (min-height:500px){#v-quo{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}#v-quo .qsub{flex:none}#v-quo iframe{flex:1 1 auto;min-height:0}}'
+      +'@media (max-width:700px){.meta{min-width:0;max-width:100%}.vsw{max-width:calc(100vw - 32px);overflow-x:auto;scrollbar-width:none}.vsw::-webkit-scrollbar{display:none}.vsw button{flex:none}}';
+    document.head.appendChild(st);
+    const b=document.createElement('button');b.type='button';b.dataset.view='quo';b.setAttribute('aria-pressed','false');b.textContent='QUO';
+    b.title='Quo Contabilita';
+    sw.appendChild(b);
+    const caja=document.createElement('main');caja.id='v-quo';
+    caja.innerHTML='<div class="qsub"><span class="qrot">Quo Contabilita</span><div class="qsw" role="group" aria-label="Quo Contabilita">'
+      +SUB.map(s=>'<button type="button" data-q="'+s.k+'" aria-pressed="false">'+s.t+'</button>').join('')+'</div></div>'
+      +SUB.map(s=>'<iframe data-q="'+s.k+'" title="'+s.t+'" hidden></iframe>').join('');
+    const mains=document.querySelectorAll('body > main');
+    (mains.length?mains[mains.length-1]:document.querySelector('header')).after(caja);
+    const frames={};caja.querySelectorAll('iframe').forEach(f=>frames[f.dataset.q]=f);
+    let actual=null;
+    try{actual=localStorage.getItem('portal.quo.sub')}catch(e){}
+    if(!SUB.some(s=>s.k===actual))actual=SUB[0].k;
+    const flex=()=>matchMedia('(min-width:700px) and (min-height:500px)').matches;
+    function alto(){
+      const fr=frames[actual];if(!fr)return;
+      if(flex()){fr.style.height='';return}
+      const r=caja.querySelector('.qsub').getBoundingClientRect();
+      fr.style.height=Math.max(520,innerHeight-Math.max(0,r.bottom))+'px';
+    }
+    function sub(k){
+      actual=k;try{localStorage.setItem('portal.quo.sub',k)}catch(e){}
+      caja.querySelectorAll('.qsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.q===k?'true':'false'));
+      SUB.forEach(function(s){
+        const fr=frames[s.k];fr.hidden=s.k!==k;
+        if(s.k===k&&!fr.getAttribute('src'))fr.setAttribute('src',s.src);
+      });
+      const t=document.getElementById('vtitle');if(t)t.textContent=SUB.find(s=>s.k===k).t;
+      alto();
+    }
+    caja.querySelectorAll('.qsw button').forEach(x=>x.onclick=()=>sub(x.dataset.q));
+    // el control de membresías pide brincar al cotizador con su liga «Cotizador QUO»
+    addEventListener('message',e=>{
+      if(e.origin!==location.origin||!e.data||!SUB.some(s=>s.k===e.data.quoSub))return;
+      setView('quo');sub(e.data.quoSub);
+    });
+    addEventListener('resize',()=>{if(document.body.getAttribute('data-view')==='quo')alto()});
+    const sv0=setView;
+    setView=function(v){
+      if(v!=='quo')return sv0(v);
+      try{if(window.__cxcDlg)window.__cxcDlg.min()}catch(e){}
+      try{if(typeof minDlg==='function')minDlg()}catch(e){}
+      try{VIEW='quo'}catch(e){}
+      document.body.setAttribute('data-view','quo');
+      document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='quo'?'true':'false'));
+      sub(actual);
+      try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
+    };
+    window.__setView=setView;
+    b.onclick=()=>setView('quo');
+  }
+})();
+
 setView('wf');
 initDB();
 load();
