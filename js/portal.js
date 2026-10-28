@@ -45,7 +45,8 @@
     var p = null;
     try { p = await P.perfilDe(s.user.id); } catch (e) { p = null; }
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
-    if (p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
+    // «todos»: páginas que abre cualquier rol (la bitácora de variaciones, dentro de su pestaña)
+    if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
     return p;
   })();
