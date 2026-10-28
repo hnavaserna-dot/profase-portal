@@ -522,7 +522,8 @@ async function cargaCartera(avance){
   if(m.error) throw m.error;
   if(!m.data) return null;
   META=m.data.data;
-  const fs=await firmas('k');
+  // k|RFC: lo que ve quien tiene ese cliente; p|RFC: lo que solo ve la dirección (la base no se lo da a nadie más)
+  const fs=Object.assign(await firmas('k'), YO&&YO.rol==='director'?await firmas('p'):{});
   const ids=Object.keys(fs).sort();
   const objs={}, faltan=[];
   for(const id of ids){ const o=await cacheDe(id,fs[id]); if(o) objs[id]=o; else faltan.push(id); }
@@ -543,10 +544,13 @@ async function cargaCartera(avance){
   const dic={}, ixD={}; DIC_K.forEach(k=>{ dic[k]=[]; ixD[k]={}; }); dic.mon.push('MXN'); ixD.mon.MXN=0;
   const cli=[], cp=[], f=[]; RANGO={}; UUID_OK=new Set(); K_FIRMA={};
   const ci={}; COLS_K.forEach((c,i)=>ci[c]=i);
+  const cliIx={};
   for(const id of ids){
     const o=objs[id]; if(!o) continue;
-    const c=o.cli, n=cli.length, off=cp.length, rfc=c[1];
-    cli.push([c[0],c[0],rfc,c[2],(c[3]||[]).map(x=>gx(cont,ixC,x)),c[4]==null?null:gx(regs,ixR,c[4]),(c[5]||[]).map(x=>gx(procs,ixP,x)),c[6]||'']);
+    const c=o.cli, off=cp.length, rfc=c[1];
+    let n=cliIx[rfc];
+    if(n==null){ n=cliIx[rfc]=cli.length;
+      cli.push([c[0],c[0],rfc,c[2],(c[3]||[]).map(x=>gx(cont,ixC,x)),c[4]==null?null:gx(regs,ixR,c[4]),(c[5]||[]).map(x=>gx(procs,ixP,x)),c[6]||'']); }
     for(const x of o.cp) cp.push(x);
     const loc={}; DIC_K.forEach(k=>{ loc[k]=(o.dic[k]||[]).map(v=>gx(dic[k],ixD[k],v)); });
     const ini=f.length;
@@ -556,32 +560,34 @@ async function cargaCartera(avance){
         d('cta'),d('cl'),d('fp'),r[ci.regf],d('ser'),r[ci.folio],d('pl'),d('ver'),r[ci.sub],r[ci.iva],r[ci.ivaret],r[ci.isrret],r[ci.ter],r[ci.mif],d('rol'),
         d('cc'),d('proy'),r[ci.conta],r[ci.cic],r[ci.ieps],r[ci.dsc]]);
     }
-    RANGO[rfc]=[ini,f.length]; K_FIRMA[rfc]=fs[id];
+    RANGO[id]=[ini,f.length]; K_FIRMA[id]=fs[id];
   }
   const meta={generado:META.generado,hora:META.hora,fuente:META.fuente,modLab:META.modLab,refreshedAt:META.refreshedAt,
     id:META.refreshedAt+'|'+ids.map(i=>fs[i]).join(','),contadores:cont,regimenes:regs,procesos:procs};
   return {meta,filas:f,extra:{cli,cp,dic,mp:META.mp,est:META.est,tipo:META.tipo}};
 }
-/* los UUID de un cliente (o de todos) se bajan la primera vez que hacen falta */
+/* los UUID de un cliente (o de todos) se bajan la primera vez que hacen falta; van en u|RFC (y q|RFC para p|RFC) */
+const uDe=id=>(id[0]==='k'?'u':'q')+id.slice(1);
 async function cargaUuids(rfcs){
-  const pend=rfcs.filter(r=>RANGO[r]&&!UUID_OK.has(r));
-  if(!pend.length) return false;
+  const ids=[];
+  rfcs.forEach(r=>{ if(!UUID_OK.has(r)) ['k|','p|'].forEach(t=>{ if(RANGO[t+r]) ids.push(t+r); }); });
+  if(!ids.length) return false;
   const objs={}, faltan=[];
-  for(const r of pend){ const o=await cacheDe('u|'+r,K_FIRMA[r]); if(o) objs[r]=o; else faltan.push(r); }
+  for(const id of ids){ const o=await cacheDe(uDe(id),K_FIRMA[id]); if(o) objs[id]=o; else faltan.push(id); }
   if(faltan.length){
-    const docs=await bajaDocs(faltan.map(r=>'u|'+r));
-    for(const r of faltan){ const d=docs['u|'+r]; if(!d) continue;
-      if(d.firma!==K_FIRMA[r]) continue;
-      const o=await desb64(d.b64); objs[r]=o; CACHE.set('u|'+r,{firma:d.firma,obj:o}); }
+    const docs=await bajaDocs(faltan.map(uDe));
+    for(const id of faltan){ const d=docs[uDe(id)]; if(!d||d.firma!==K_FIRMA[id]) continue;
+      const o=await desb64(d.b64); objs[id]=o; CACHE.set(uDe(id),{firma:d.firma,obj:o}); }
   }
-  let viejo=false;
-  for(const r of pend){
-    const u=objs[r], [a,b]=RANGO[r];
+  let viejo=false; const listos=new Set();
+  for(const id of ids){
+    const u=objs[id], [a,b]=RANGO[id];
     // si los UUID ya son de una actualización más nueva que la del cliente, se recarga todo
     if(!u||u.length!==b-a){ viejo=true; continue; }
     for(let i=a;i<b;i++){ ROWS[i].uuid=u[i-a]||''; D.f[i][9]=ROWS[i].uuid; }
-    UUID_OK.add(r);
+    listos.add(id);
   }
+  rfcs.forEach(r=>{ if(['k|','p|'].every(t=>!RANGO[t+r]||listos.has(t+r))) UUID_OK.add(r); });
   if(viejo) setTimeout(()=>arranca(true).catch(()=>{}),0);
   return true;
 }
