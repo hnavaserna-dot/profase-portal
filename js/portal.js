@@ -259,7 +259,12 @@
     + '.pu-f{display:grid;gap:10px;margin-top:6px}'
     + '.pu-f label{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}'
     + '.pu-f input{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink)}'
-    + '.pu-f input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}';
+    + '.pu-f input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}'
+    + '.pu .pu-act{background:var(--navy);color:var(--navy-ink);border-color:var(--navy);font-weight:600}'
+    + '.pu .pu-act[disabled]{opacity:.7;cursor:default}'
+    + '.pu-aviso{position:fixed;top:14px;right:14px;z-index:60;max-width:min(380px,calc(100% - 28px));background:var(--surface);color:var(--ink);'
+    + 'border:1px solid var(--line-strong);border-left:5px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.18)}'
+    + '.pu-aviso[hidden]{display:none}';
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   function dialogoClave() {
@@ -308,6 +313,47 @@
     var abrir = dialogoClave();
     document.getElementById('pu-clave').onclick = abrir;
     document.getElementById('pu-salir').onclick = P.salir;
+    botonActualizar(span);
+  }
+
+  /* Botón «Actualizar» (solo para quien está en la lista de la base): corre la actualización en ese momento.
+     El horario fijo (cada 3 horas) no se mueve. Cuando llegan los datos nuevos, la página los toma sola. */
+  function aviso(txt, ms) {
+    var a = document.getElementById('pu-aviso');
+    if (!a) { a = document.createElement('div'); a.id = 'pu-aviso'; a.className = 'pu-aviso'; a.setAttribute('role', 'status'); document.body.appendChild(a); }
+    a.textContent = txt; a.hidden = false;
+    clearTimeout(a._t); if (ms) a._t = setTimeout(function () { a.hidden = true; }, ms);
+  }
+  async function horaDatos() {
+    var r = await sb.from('docs').select('data').eq('col', 'datos').eq('id', 'meta').maybeSingle();
+    return r.data && r.data.data && r.data.data.refreshedAt ? Date.parse(r.data.data.refreshedAt) : 0;
+  }
+  async function botonActualizar(span) {
+    var r = await sb.rpc('puedo_actualizar');
+    if (r.error || r.data !== true) return;
+    var b = document.createElement('button');
+    b.className = 'notas pu-act'; b.type = 'button'; b.textContent = 'Actualizar';
+    b.title = 'Trae los datos más nuevos del WorkFlow y la cobranza en este momento';
+    span.insertBefore(b, span.querySelector('#pu-clave'));
+    b.onclick = async function () {
+      b.disabled = true; b.textContent = 'Actualizando…';
+      var antes = 0; try { antes = await horaDatos(); } catch (e) { antes = 0; }
+      var q = await sb.rpc('solicitar_actualizacion');
+      if (q.error) {
+        b.disabled = false; b.textContent = 'Actualizar';
+        aviso(/llave/i.test(q.error.message) ? 'El botón todavía no está conectado. Avísale a Daniel.' : 'No se pudo pedir la actualización. Vuelve a intentar en un momento.', 6000);
+        return;
+      }
+      aviso(q.data && q.data.yaEnCurso ? 'Ya hay una actualización en camino; en un par de minutos se ven los datos nuevos.'
+        : 'Actualizando el WorkFlow y la cobranza; tarda uno o dos minutos.', 5000);
+      var fin = Date.now() + 5 * 60000;
+      (async function espera() {
+        var ahora = 0; try { ahora = await horaDatos(); } catch (e) { ahora = 0; }
+        if (ahora > antes) { vuelta(); b.disabled = false; b.textContent = 'Actualizar'; aviso('Listo: ya están los datos nuevos.', 4000); return; }
+        if (Date.now() > fin) { b.disabled = false; b.textContent = 'Actualizar'; aviso('Está tardando más de lo normal; los datos llegarán solos en cuanto termine.', 7000); return; }
+        setTimeout(espera, 10000);
+      })();
+    };
   }
   if (ROL) {
     P.listo.then(function (p) {
