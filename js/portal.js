@@ -8,7 +8,7 @@
   var SB_URL = 'https://arbykgauatkldznwwtjx.supabase.co';
   var SB_KEY = 'sb_publishable_gUzFFB-YnzC5AOFOK_-H9Q_jBbDUzG5';
   var DOMINIO = '@usuarios.profase.com.mx';
-  var PAGINA = { director: 'gerentes.html', gerente: 'gerentes.html', contador: 'contadores.html' };
+  var PAGINA = { director: 'director.html', gerente: 'gerentes.html', contador: 'contadores.html' };
   // El director (Héctor) también puede abrir la vista de los gerentes
   var TAMBIEN = { gerente: ['director'] };
   var ROL = document.documentElement.getAttribute('data-rol') || '';
@@ -71,7 +71,51 @@
     var col = path.slice(0, i), id = path.slice(i + 1);
     // Cada contador lee su propio paquete del WorkFlow en lugar del del equipo
     if (P.perfil && P.perfil.rol === 'contador' && col === 'datos' && id === 'wf_0') id = 'wfc_' + P.perfil.usuario;
+    // La vista del director (su página PROFASE) usa sus propios documentos, con EQUILIBRIO
+    if (ROL === 'director') {
+      if (col === 'datos' && /^(wf|cxc)_\d+$/.test(id)) return ['director', id];
+      if (col === 'estado' && id === 'wf') return ['director', 'estado_wf'];
+      if (col === 'estado' && id === 'actualizacion') return ['director', 'estado_cxc'];
+      if (col === 'estado') return ['privado', id];
+      if (col === 'equipo' && id === 'decisiones') return ['privado', 'decisiones'];
+      if (col === 'equipo' && id === 'pausas') return ['virtual', 'pausas'];
+    }
     return [col, id];
+  }
+
+  /* «equipo/pausas» de la página del director: se arma al momento con lo que el equipo marca en el portal */
+  var NOMBRES_P = null;
+  async function nombresPortal() {
+    if (NOMBRES_P) return NOMBRES_P;
+    var r = await sb.from('perfiles').select('id,nombre');
+    NOMBRES_P = {};
+    (r.data || []).forEach(function (p) { NOMBRES_P[p.id] = p.nombre; });
+    return NOMBRES_P;
+  }
+  function mapa(snap) { var o = {}; snap.docs.forEach(function (d) { if (d.exists) o[d.id] = d.data(); }); return o; }
+  function pausasVirtual() {
+    return {
+      id: 'pausas', path: 'equipo/pausas',
+      get: async function () {
+        var a = await colRef('pausas').get(), b = await colRef('clientes').get(), c = await colRef('sugerencias').get();
+        return foto('pausas', { data: { items: mapa(a), clientes: mapa(b), sugerencias: mapa(c), nombres: await nombresPortal(), sincronizadoAt: new Date().toISOString() } });
+      },
+      set: async function () { throw error({ code: 'not_granted', message: 'Las pausas se cambian en la vista del equipo' }); },
+      update: async function () { throw error({ code: 'not_granted', message: 'Las pausas se cambian en la vista del equipo' }); },
+      onSnapshot: function (cb, err) {
+        var ult = {}, fuera = [];
+        async function junta() {
+          if (!ult.pausas || !ult.clientes || !ult.sugerencias) return;
+          var nom = {};
+          try { nom = await nombresPortal(); } catch (e) { nom = {}; }
+          cb(foto('pausas', { data: { items: ult.pausas, clientes: ult.clientes, sugerencias: ult.sugerencias, nombres: nom, sincronizadoAt: new Date().toISOString() } }));
+        }
+        ['pausas', 'clientes', 'sugerencias'].forEach(function (c) {
+          fuera.push(colRef(c).onSnapshot(function (snap) { ult[c] = mapa(snap); junta(); }, err));
+        });
+        return function () { fuera.forEach(function (f) { f(); }); };
+      }
+    };
   }
   function foto(id, fila) { return { id: id, exists: !!fila, data: function () { return fila ? fila.data : undefined; } }; }
   function mezcla(base, cambios) {
@@ -136,6 +180,7 @@
 
   function docRef(path) {
     var c = partir(path), col = c[0], id = c[1];
+    if (col === 'virtual') return pausasVirtual();
     return {
       id: id, path: col + '/' + id,
       get: async function () { return foto(id, await leer(col, id)); },
@@ -210,7 +255,7 @@
   /* ---- Encabezado: nombre de quien entró, cambiar contraseña y salir ---- */
   var CSS = '.pu{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}'
     + '.pu-nom{font-weight:600;color:var(--ink)}'
-    + '.pu .notas{padding:5px 10px}'
+    + '.pu .notas{padding:5px 10px;text-decoration:none}'
     + '.pu-f{display:grid;gap:10px;margin-top:6px}'
     + '.pu-f label{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}'
     + '.pu-f input{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink)}'
@@ -250,13 +295,16 @@
   function encabezado(p) {
     var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     var lugar = document.querySelector('header .equipo');
-    if (!lugar) return;
     var span = document.createElement('span');
     span.className = 'pu';
-    span.innerHTML = '<span class="pu-nom">' + esc(p.nombre) + '</span>'
+    // El director brinca entre su vista (con EQUILIBRIO) y la del equipo
+    var otra = p.rol !== 'director' ? '' : ROL === 'director'
+      ? '<a class="notas" href="gerentes.html">Vista del equipo</a>' : '<a class="notas" href="director.html">Mi vista</a>';
+    span.innerHTML = '<span class="pu-nom">' + esc(p.nombre) + '</span>' + otra
       + '<button class="notas" type="button" id="pu-clave">Contraseña</button>'
       + '<button class="notas" type="button" id="pu-salir">Salir</button>';
-    lugar.replaceWith(span);
+    if (lugar) lugar.replaceWith(span);
+    else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(span); }
     var abrir = dialogoClave();
     document.getElementById('pu-clave').onclick = abrir;
     document.getElementById('pu-salir').onclick = P.salir;
