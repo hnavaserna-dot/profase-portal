@@ -9,7 +9,7 @@
   var SB_KEY = 'sb_publishable_gUzFFB-YnzC5AOFOK_-H9Q_jBbDUzG5';
   var DOMINIO = '@usuarios.profase.com.mx';
   var PAGINA = { director: 'director.html', gerente: 'gerentes.html', contador: 'contadores.html' };
-  // El director (Héctor) también puede abrir la vista de los gerentes
+  // El director (Daniel) también puede abrir la vista de los gerentes
   var TAMBIEN = { gerente: ['director'] };
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
