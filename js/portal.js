@@ -16,7 +16,7 @@
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
 
-  /* ---- Ícono del portal (29-oct-2026): el signo PROFASE para la pantalla de inicio del iPhone o iPad, Android y
+  /* ---- Ícono del portal (28-oct-2026, noche): el signo PROFASE para la pantalla de inicio del iPhone o iPad, Android y
      la pestaña del navegador. Sin esto el teléfono ponía una «P» genérica. index.html ya lo trae escrito; aquí se
      pone en las demás páginas (las arma construir.py), solo en la página principal y no en las pestañas en marco.
      Además, /apple-touch-icon.png en la raíz lo toma el iPhone aunque una página no lo declare. ---- */
