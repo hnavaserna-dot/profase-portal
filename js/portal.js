@@ -89,24 +89,35 @@
     }
   })();
 
-  /* ---- Modo claro / oscuro (pedido de Fernando Cadengo, 29-oct-2026): uno solo para todo el portal.
-     Se escoge con el botón junto al nombre (encabezado) y se guarda en el navegador de cada quien («profase-tema»).
+  /* ---- Modo claro / oscuro: uno solo para todo el portal (botón de Fernando Cadengo; regla de Daniel del 29-oct-2026).
+     Por omisión todo el portal (la entrada, cada vista, cada pestaña, sub pestaña y ventana) se ve claro u oscuro
+     según el dispositivo de cada quien, y cambia solo cuando el dispositivo cambia.
+     Al picar el botón de claro/oscuro: si sigue al dispositivo, sale un aviso que lo dice y deja escogerlo a mano;
+     si ya lo escogió a mano, cambia al momento y un aviso chico ofrece regresar a «como mi dispositivo».
+     Se guarda en el navegador de cada quien («profase-modo»: auto, claro u oscuro). La clave de antes de esta regla
+     («profase-tema») ya no se usa: todos arrancaron otra vez como su dispositivo.
      Cada página ya trae sus colores oscuros para <html data-theme="dark">; aquí solo se pone ese atributo, en la
-     página y en todas las pestañas abiertas en su marco (y sus sub pestañas). Si nadie ha escogido, sigue al equipo. ---- */
-  var TEMA = 'profase-tema', temaElegido = '';
+     página y en todas las pestañas abiertas en su marco (y sus sub pestañas). Una página nueva solo tiene que traer
+     sus colores para :root[data-theme="dark"] y cargar este archivo. ---- */
+  var MODO = 'profase-modo', modoMem = '';
   var oscuroSistema = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-  function temaGuardado() {
-    try { var v = localStorage.getItem(TEMA); return v === 'oscuro' ? 'dark' : v === 'claro' ? 'light' : ''; } catch (e) { return ''; }
+  try { localStorage.removeItem('profase-tema'); } catch (e) { /* sin almacenamiento */ }
+  function modoGuardado() {
+    try { var v = localStorage.getItem(MODO); return v === 'claro' || v === 'oscuro' || v === 'auto' ? v : ''; } catch (e) { return ''; }
   }
-  P.tema = function () {
-    var t = temaElegido || temaGuardado();
+  function delDispositivo() { return oscuroSistema && oscuroSistema.matches ? 'dark' : 'light'; }
+  // 'auto' (como el dispositivo), 'claro' u 'oscuro' (escogido a mano)
+  P.modo = function () {
+    var m = modoMem || modoGuardado();
     // sin almacenamiento en el navegador, la pestaña en su marco toma el de la página que la abrió
-    if (!t && window.parent !== window) { try { t = window.parent.PORTAL ? window.parent.PORTAL.tema() : ''; } catch (e) { t = ''; } }
-    return t || (oscuroSistema && oscuroSistema.matches ? 'dark' : 'light');
+    if (!m && window.parent !== window) { try { m = window.parent.PORTAL ? window.parent.PORTAL.modo() : ''; } catch (e) { m = ''; } }
+    return m === 'claro' || m === 'oscuro' ? m : 'auto';
   };
+  P.tema = function () { var m = P.modo(); return m === 'oscuro' ? 'dark' : m === 'claro' ? 'light' : delDispositivo(); };
   P.pintaTema = function (t) {
     t = t || P.tema();
     document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.setAttribute('data-modo', P.modo());
     try { document.dispatchEvent(new CustomEvent('profase-tema', { detail: t })); } catch (e) { /* navegador viejo: sin aviso */ }
     (function baja(w) {
       for (var i = 0; i < w.frames.length; i++) {
@@ -114,18 +125,152 @@
       }
     })(window);
   };
-  P.cambiaTema = function (t) {
-    temaElegido = t === 'dark' ? 'dark' : 'light';
-    try { localStorage.setItem(TEMA, temaElegido === 'dark' ? 'oscuro' : 'claro'); } catch (e) { /* sin almacenamiento: solo esta vez */ }
-    P.pintaTema(temaElegido);
+  P.ponModo = function (m) {
+    modoMem = m === 'claro' || m === 'oscuro' ? m : 'auto';
+    try { localStorage.setItem(MODO, modoMem); } catch (e) { /* sin almacenamiento: solo esta vez */ }
+    P.pintaTema();
   };
+  /* Lo que hace cualquier botón de claro/oscuro (el del encabezado y los que traen algunas pestañas):
+     t es el modo al que quiere pasar. El aviso sale siempre en la página de arriba, no dentro de una pestaña. */
+  P.cambiaTema = function (t) {
+    var a = null;
+    try { a = window.parent !== window && window.parent.PORTAL && window.parent.PORTAL.cambiaTema ? window.parent.PORTAL : null; } catch (e) { a = null; }
+    if (a) return a.cambiaTema(t);
+    t = t === 'dark' || t === 'light' ? t : (P.tema() === 'dark' ? 'light' : 'dark');
+    if (P.modo() === 'auto') return avisoModo(t);
+    P.ponModo(t === 'dark' ? 'oscuro' : 'claro');
+    avisoManual();
+  };
+  var CSS_MODO = '.pt-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(10,18,32,.5);display:grid;place-items:center;padding:16px;box-sizing:border-box}'
+    + '.pt-dlg{width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;background:#fff;color:#1A2333;border-radius:14px;'
+    + 'border-top:4px solid #F07A1E;box-shadow:0 18px 50px rgba(0,0,0,.3);padding:20px 20px 16px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;text-align:left}'
+    + '.pt-dlg h2{margin:0 0 8px;font-size:17px;color:#1F3864}.pt-dlg p{margin:0 0 10px}.pt-dlg b{font-weight:700}'
+    + '.pt-ic{width:42px;height:42px;border-radius:50%;background:#E6ECF6;color:#1F3864;display:grid;place-items:center;margin-bottom:10px}.pt-ic svg{width:22px;height:22px;display:block}'
+    + '.pt-acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:14px}'
+    + '.pt-b{font:inherit;font-size:14px;font-weight:600;border-radius:9px;padding:10px 14px;cursor:pointer;border:1px solid #C5CEDC;background:#fff;color:#1A2333;flex:1 1 auto;min-height:44px}'
+    + '.pt-b.pri{background:#1F3864;border-color:#1F3864;color:#fff}.pt-b:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
+    + '.pt-toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:2147483000;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;'
+    + 'display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:#1A2333;color:#fff;border-left:5px solid #F07A1E;border-radius:10px;padding:10px 14px;'
+    + 'font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3)}'
+    + '.pt-toast button{font:inherit;font-weight:700;background:none;border:0;color:#FFB070;text-decoration:underline;cursor:pointer;padding:6px 0}'
+    + ':root[data-theme="dark"] .pt-dlg{background:#172133;color:#E5EAF2;box-shadow:0 18px 50px rgba(0,0,0,.6)}'
+    + ':root[data-theme="dark"] .pt-dlg h2{color:#fff}:root[data-theme="dark"] .pt-ic{background:#22324D;color:#F07A1E}'
+    + ':root[data-theme="dark"] .pt-b{background:#1E2A40;border-color:#3A4A66;color:#E5EAF2}:root[data-theme="dark"] .pt-b.pri{background:#F07A1E;border-color:#F07A1E;color:#fff}'
+    + ':root[data-theme="dark"] .pt-toast{background:#F5F7FB;color:#1A2333}:root[data-theme="dark"] .pt-toast button{color:#B4520A}';
+  function cssModo() {
+    if (document.getElementById('pt-css')) return;
+    var st = document.createElement('style'); st.id = 'pt-css'; st.textContent = CSS_MODO; document.head.appendChild(st);
+  }
+  var NOMBRE_MODO = { dark: 'oscuro', light: 'claro' };
+  function avisoModo(quiere) {
+    cssModo();
+    var viejo = document.getElementById('pt-ov'); if (viejo) viejo.remove();
+    var hoy = P.tema(), ov = document.createElement('div');
+    ov.className = 'pt-ov'; ov.id = 'pt-ov';
+    ov.innerHTML = '<div class="pt-dlg" role="dialog" aria-modal="true" aria-labelledby="pt-h">'
+      + '<div class="pt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>'
+      + '<h2 id="pt-h">Modo claro y oscuro</h2>'
+      + '<p>Ahorita el portal se ve en <b>modo ' + NOMBRE_MODO[hoy] + '</b> porque así está configurado tu dispositivo. Cambia solo cuando cambia tu dispositivo.</p>'
+      + '<p>Si prefieres escogerlo tú, se queda como lo dejes hasta que lo vuelvas a cambiar con este mismo botón.</p>'
+      + '<div class="pt-acts"><button type="button" class="pt-b" id="pt-sigue">Dejarlo como mi dispositivo</button>'
+      + '<button type="button" class="pt-b pri" id="pt-mano">Escogerlo yo: modo ' + NOMBRE_MODO[quiere] + '</button></div></div>';
+    document.body.appendChild(ov);
+    var ant = document.activeElement;
+    function cierra() { ov.remove(); document.removeEventListener('keydown', tecla, true); try { if (ant && ant.focus) ant.focus(); } catch (e) { /* nada */ } }
+    function tecla(e) { if (e.key === 'Escape') { e.stopPropagation(); cierra(); } }
+    document.addEventListener('keydown', tecla, true);
+    ov.addEventListener('click', function (e) { if (e.target === ov) cierra(); });
+    document.getElementById('pt-sigue').onclick = cierra;
+    document.getElementById('pt-mano').onclick = function () {
+      cierra(); P.ponModo(quiere === 'dark' ? 'oscuro' : 'claro'); avisoManual();
+    };
+    document.getElementById('pt-mano').focus();
+  }
+  function avisoManual(txt) {
+    cssModo();
+    var a = document.getElementById('pt-toast');
+    if (!a) { a = document.createElement('div'); a.id = 'pt-toast'; a.className = 'pt-toast'; a.setAttribute('role', 'status'); document.body.appendChild(a); }
+    if (txt) { a.innerHTML = '<span></span>'; a.firstChild.textContent = txt; }
+    else {
+      a.innerHTML = '<span>Modo ' + NOMBRE_MODO[P.tema()] + ', escogido por ti.</span><button type="button">Usar el de mi dispositivo</button>';
+      a.querySelector('button').onclick = function () { P.ponModo('auto'); avisoManual('Listo: el portal sigue otra vez a tu dispositivo.'); };
+    }
+    a.hidden = false;
+    clearTimeout(a._t); a._t = setTimeout(function () { a.hidden = true; }, txt ? 3500 : 7000);
+  }
   P.pintaTema();
   // otra ventana del portal lo cambió
-  window.addEventListener('storage', function (e) { if (e.key === TEMA) { temaElegido = ''; P.pintaTema(); } });
+  window.addEventListener('storage', function (e) { if (e.key === MODO) { modoMem = ''; P.pintaTema(); } });
   if (oscuroSistema) {
-    var sigueSistema = function () { if (!temaElegido && !temaGuardado()) P.pintaTema(); };
+    var sigueSistema = function () { if (P.modo() === 'auto') P.pintaTema(); };
     if (oscuroSistema.addEventListener) oscuroSistema.addEventListener('change', sigueSistema); else oscuroSistema.addListener(sigueSistema);
   }
+
+  /* ---- Pantallas (regla de Daniel, 29-oct-2026): todo el portal, lo que ya está y lo nuevo, se acomoda a la pantalla
+     de cada quien (celular, tableta o computadora). Esta capa va en todas las páginas porque todas cargan este archivo;
+     cada página trae además sus propios ajustes. Antes de publicar una pestaña nueva o un cambio de diseño se corre
+     herramientas/pruebas/pantallas/revisa_pantallas.py (en profase-datos), que avisa de todo lo que se salga.
+     - En el celular, los campos de texto van a 16 px para que el iPhone no se acerque solo al escribir.
+     - Las tiras de pestañas que no caben se deslizan de lado: se desvanecen en la orilla donde hay más pestañas,
+       para que se note, y la pestaña escogida se queda a la vista. ---- */
+  (function pantallas() {
+    var css = 'html{-webkit-text-size-adjust:100%;text-size-adjust:100%}'
+      + '@media (pointer:coarse) and (max-width:900px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}}'
+      + '.pt-desliza{scroll-behavior:smooth;overscroll-behavior-x:contain}'
+      + '.pt-desliza.pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
+      + '.pt-desliza.pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
+      + '.pt-desliza.pt-izq.pt-der{-webkit-mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent)}';
+    function pon() {
+      if (document.getElementById('pt-pantallas')) return;
+      var st = document.createElement('style'); st.id = 'pt-pantallas'; st.textContent = css;
+      (document.head || document.documentElement).appendChild(st);
+    }
+    pon();
+    var TIRAS = '[role="tablist"],nav.tabs,.tabs,.wtabs,.qsw,.subtabs,.seg,.wmv';
+    function escogida(t) { return t.querySelector('[aria-selected="true"],[aria-current="page"],[aria-current="true"],[aria-pressed="true"],.on,.active'); }
+    function marca(t, centra) {
+      var cs = getComputedStyle(t);
+      if (!/(auto|scroll)/.test(cs.overflowX) || t.scrollWidth <= t.clientWidth + 2) {
+        t.classList.remove('pt-desliza', 'pt-izq', 'pt-der'); return;
+      }
+      t.classList.add('pt-desliza');
+      if (centra) {
+        var e = escogida(t);
+        if (e) {
+          var a = e.offsetLeft - t.offsetLeft, b = a + e.offsetWidth;
+          if (e.offsetParent !== t.offsetParent) { var rt = t.getBoundingClientRect(), re = e.getBoundingClientRect(); a = re.left - rt.left + t.scrollLeft; b = a + re.width; }
+          if (a < t.scrollLeft + 24 || b > t.scrollLeft + t.clientWidth - 24) t.scrollLeft = Math.max(0, a - (t.clientWidth - (b - a)) / 2);
+        }
+      }
+      t.classList.toggle('pt-izq', t.scrollLeft > 4);
+      t.classList.toggle('pt-der', t.scrollLeft + t.clientWidth < t.scrollWidth - 4);
+    }
+    var espera = null;
+    function todas(centra) {
+      clearTimeout(espera);
+      espera = setTimeout(function () {
+        if (!document.body) return;
+        document.querySelectorAll(TIRAS).forEach(function (t) { try { marca(t, centra); } catch (e) { /* nada */ } });
+      }, 120);
+    }
+    document.addEventListener('scroll', function (e) {
+      var t = e.target;
+      if (t && t.classList && t.classList.contains('pt-desliza')) marca(t, false);
+    }, true);
+    document.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest(TIRAS) : null;
+      if (t) setTimeout(function () { marca(t, true); }, 60);
+      else todas(false);
+    }, true);
+    window.addEventListener('resize', function () { todas(true); });
+    function arranca() {
+      todas(true);
+      if (window.MutationObserver && document.body) {
+        new MutationObserver(function () { todas(false); }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'aria-selected', 'class'] });
+      }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
+  })();
 
   P.usuarioLimpio = function (u) {
     return String(u || '').split('@')[0].normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -458,7 +603,8 @@
      Las secciones (Cotizador incluido) están en el menú de la izquierda (js/menu.js). ---- */
   var PUESTO = { director: 'Director', gerente: 'Gerente', contador: 'Contador' };
   function puestoDe(p) { return (p.puesto || PUESTO[p.rol] || '') + (P.consulta ? ' · Solo consulta' : ''); }
-  var CSS = '.pu{position:relative;flex:none;display:inline-flex}'
+  var CSS = '.pu-par{display:inline-flex;align-items:center;gap:8px;flex:none;margin-left:auto}'
+    + '.pu{position:relative;flex:none;display:inline-flex}'
     + '.pu-btn{font:inherit;display:flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:999px;padding:3px 10px 3px 3px;cursor:pointer;color:var(--ink)}'
     + '.pu-btn:hover,.pu-btn[aria-expanded="true"]{border-color:var(--line-strong);background:var(--navy-soft)}'
     + '.pu-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}'
@@ -682,8 +828,11 @@
       + '<button type="button" role="menuitem" id="pu-clave">' + ic('clave') + 'Cambiar contraseña</button>'
       + otra
       + '<hr><button type="button" role="menuitem" class="pu-salir" id="pu-salir">' + ic('salir') + 'Salir</button></div>';
-    if (lugar) lugar.replaceWith(pu);
-    else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(pu); }
+    // el nombre y el botón de claro/oscuro van juntos: en el celular nunca se separan en dos renglones
+    var par = document.createElement('div'); par.className = 'pu-par';
+    if (lugar) lugar.replaceWith(par);
+    else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(par); }
+    par.appendChild(pu);
     if (P.consulta) {
       var ch = document.createElement('span');
       ch.className = 'pu-cons'; ch.title = MSG_CONSULTA; ch.setAttribute('aria-label', MSG_CONSULTA);
@@ -719,14 +868,16 @@
   }
 
   /* Botón de modo claro / oscuro, a la derecha del nombre: la luna pasa a oscuro y el sol regresa a claro.
-     Cambia la página, el menú de la izquierda y todas las pestañas y sub pestañas (P.cambiaTema). */
+     Mientras siga al dispositivo, primero sale el aviso (P.cambiaTema). Cambia la página, el menú de la izquierda y
+     todas las pestañas y sub pestañas. */
   function botonTema(pu) {
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'pu-tema'; b.id = 'pu-tema';
     function pinta() {
       var oscuro = P.tema() === 'dark';
       b.innerHTML = ic(oscuro ? 'sol' : 'luna');
-      b.title = oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+      b.title = P.modo() === 'auto' ? 'Modo ' + (oscuro ? 'oscuro' : 'claro') + ', como tu dispositivo'
+        : (oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
       b.setAttribute('aria-label', b.title);
     }
     pinta();
