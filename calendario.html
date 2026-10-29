@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=1465f160f8"></script><script src="js/marca.js?v=cce53f0db1"></script></head><body>
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=a776246035"></script><script src="js/marca.js?v=cce53f0db1"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -199,7 +199,8 @@ td.nw{white-space:nowrap}
 .fg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .f{display:grid;gap:4px;min-width:0;align-content:start}
 .f.full{grid-column:1/-1}
-.f label{font-size:12px;font-weight:600;color:var(--ink-2)}
+.f label,.f .lbl{font-size:12px;font-weight:600;color:var(--ink-2)}
+.f .who{min-width:0}.f .who small{flex:1;min-width:0}
 .f input:not([type=checkbox]):not([type=radio]),.f select,.f textarea{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:8px 10px;font-size:14px;min-width:0;width:100%}
 .f small{font-size:12px;color:var(--ink-3)}
 .chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
@@ -525,7 +526,35 @@ td.emp{min-width:260px}
     return x.titulo;
   }
   var LAPIZ='<svg class="lapiz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-  function avatar(c){ return '<span class="av">'+(c&&c.foto&&/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(c.foto)?'<img src="'+esc(c.foto)+'" alt="">':esc(iniciales(c?c.nombre:'')))+'</span>'; }
+  /* Fotos de perfil espejeadas (regla de Daniel, 29-oct-2026: «para que siempre esté igual»): si el colaborador tiene
+     usuario en el portal y foto de perfil (la que subió o la que le cargaron), sale esa, la misma que en todo el portal.
+     Si no, la foto capturada aquí y, si tampoco, sus iniciales. La base liga colaborador y usuario por el nombre
+     (portal/sql/41_fotos_colab.sql, cal_fotos()); la foto la da js/portal.js (PORTAL.fotosDe). */
+  var fotosCrm={}, fotosTimer=0, fotosVez=0;
+  function fotoCrm(c){ var u=c&&c.id&&Object.prototype.hasOwnProperty.call(fotosCrm,c.id)?fotosCrm[c.id]:''; return typeof u==='string'&&/^https:\/\//i.test(u)?u:''; }
+  function avatar(c){
+    var u=fotoCrm(c);
+    if(u) return '<span class="av"><img src="'+esc(u)+'" alt=""></span>';
+    return '<span class="av">'+(c&&c.foto&&/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(c.foto)?'<img src="'+esc(c.foto)+'" alt="">':esc(iniciales(c?c.nombre:'')))+'</span>';
+  }
+  async function cargaFotos(){
+    var vez=++fotosVez;
+    clearTimeout(fotosTimer); fotosTimer=setTimeout(cargaFotos, 3*3600*1000);   // las ligas duran 6 horas
+    try{
+      if(!P||typeof P.fotosDe!=='function') return;
+      var r=await P.sb.rpc('cal_fotos');
+      if(r.error||!r.data||typeof r.data!=='object') return;   // la base todavía no lo tiene: sigue como antes
+      var liga=r.data, ids=Object.keys(liga).map(function(k){ return liga[k]; });
+      var url=await P.fotosDe(ids), nuevo={};
+      Object.keys(liga).forEach(function(k){ var u=url[String(liga[k]||'').toLowerCase()]; if(u) nuevo[k]=u; });
+      if(vez!==fotosVez) return;
+      var antes=JSON.stringify(Object.keys(fotosCrm).sort()), ahora=JSON.stringify(Object.keys(nuevo).sort());
+      fotosCrm=nuevo;
+      if(antes!==ahora||Object.keys(nuevo).length) render();
+    }catch(e){}
+  }
+  var fotosPend=0;
+  function pideFotos(){ clearTimeout(fotosPend); fotosPend=setTimeout(cargaFotos, 400); }
 
   /* ---------- resumen ---------- */
   function kpi(k,v,s,f){ return '<div class="kpi'+(f?' flag':'')+'"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'; }
@@ -967,8 +996,11 @@ td.emp{min-width:260px}
       +'<div class="f"><label for="cIng">Fecha de ingreso</label><input id="cIng" type="date" value="'+esc(c.ingreso||'')+'"><small>Para los aniversarios</small></div>'
       +'<div class="f"><label for="cDia">Día de cumpleaños</label><select id="cDia">'+Array.from({length:31},function(_,i){ return '<option'+(i+1===c.dia?' selected':'')+'>'+(i+1)+'</option>'; }).join('')+'</select></div>'
       +'<div class="f"><label for="cMes">Mes de cumpleaños</label><select id="cMes">'+MESES.map(function(m,i){ return '<option value="'+(i+1)+'"'+(i+1===c.mes?' selected':'')+'>'+m+'</option>'; }).join('')+'</select></div>'
-      +'<div class="f full"><label for="cFoto">Foto (opcional)</label><input id="cFoto" type="file" accept="image/*">'
-      +(c.foto?'<label class="chk"><input type="checkbox" id="cSinFoto"><span>Quitar la foto actual</span></label>':'')+'</div>'
+      +(!nuevo&&fotoCrm(c)
+        ? '<div class="f full"><span class="lbl">Foto</span><div class="who">'+avatar(c)+'<small>Sale la foto de su perfil del portal, la misma que en todo el portal. Si hay que cambiarla, la cambia la persona desde Perfil (en su nombre, arriba a la derecha).</small></div></div>'
+        : '<div class="f full"><label for="cFoto">Foto (opcional)</label><input id="cFoto" type="file" accept="image/*">'
+          +(c.foto?'<label class="chk"><input type="checkbox" id="cSinFoto"><span>Quitar la foto actual</span></label>':'')
+          +'<small>Si tiene usuario en el portal y foto de perfil, se usa esa en lugar de esta.</small></div>')
       +'<label class="chk f full"><input type="checkbox" id="cAut"'+(c.autoriza?' checked':'')+'><span>El colaborador autorizó que su cumpleaños (día y mes) se publique en el portal. Si no, se guarda pero no sale en el calendario ni en el aviso.</span></label>'
       +'</div><div class="err" id="cErr" role="alert"></div>'
       +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="submit" class="btn primary">'+(nuevo?'Agregar':'Guardar cambios')+'</button></div></form>',
@@ -983,7 +1015,7 @@ td.emp{min-width:260px}
         if(!ing){ err.textContent='Falta la fecha de ingreso.'; return; }
         var dup=colab.filter(function(x){ return x.id!==c.id && norm(x.nombre)===norm(nom); })[0];
         if(dup){ err.textContent='Ya hay un colaborador con ese nombre.'; return; }
-        var foto=c.foto||null, sf=ov.querySelector('#cSinFoto'), fi=ov.querySelector('#cFoto').files[0];
+        var foto=c.foto||null, sf=ov.querySelector('#cSinFoto'), cf=ov.querySelector('#cFoto'), fi=cf&&cf.files?cf.files[0]:null;
         if(sf&&sf.checked) foto=null;
         btn.disabled=true; err.textContent='';
         try{
@@ -1399,7 +1431,7 @@ td.emp{min-width:260px}
     renderLegend(); render(); cargaCli();
 
     db.collection('cal_colab').onSnapshot(function(snap){
-      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render();
+      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render(); pideFotos();
     }, function(){ cargaCol=true; toast('Se perdió la conexión con los datos. Recarga la página si no vuelve sola.'); render(); });
     db.collection('cal_eventos').onSnapshot(function(snap){
       eventos=snap.docs.map(function(ds){ var o=ds.data()||{}; return {id:ds.id, titulo:String(o.titulo||''), fecha:o.fecha||'', hora:o.hora||'', lugar:o.lugar||'', desc:o.desc||'',

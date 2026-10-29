@@ -904,6 +904,27 @@
     } catch (e) { FOTO.url = null; }
     pintaFoto(p);
   }
+  /* Fotos de perfil de otros usuarios, para espejearlas en otras pestañas (Calendario › Colaboradores y la ventana de
+     cumpleaños; pedido de Daniel, 29-oct-2026). Recibe ids de usuario y regresa { id: liga firmada } solo de quienes
+     tienen foto. Las ligas duran 6 horas. Si algo falla, regresa {} y la pestaña sigue con lo que tenía. */
+  P.fotosDe = async function (ids) {
+    var out = {};
+    try {
+      var pide = {};
+      (ids || []).forEach(function (u) { u = String(u || ''); if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u)) pide[u.toLowerCase()] = 1; });
+      if (!Object.keys(pide).length) return out;
+      var l = await sb.storage.from('fotos').list('', { limit: 1000 });
+      if (l.error || !Array.isArray(l.data)) return out;
+      var rutas = l.data.map(function (f) { return f && f.name; }).filter(function (n) { return n && pide[String(n).replace(/\.jpg$/i, '').toLowerCase()] && /\.jpg$/i.test(n); });
+      if (!rutas.length) return out;
+      var s = await sb.storage.from('fotos').createSignedUrls(rutas, 6 * 3600);
+      var base = SB_URL + '/storage/v1/object/sign/fotos/';
+      (s.data || []).forEach(function (x) {
+        if (x && !x.error && typeof x.signedUrl === 'string' && x.signedUrl.indexOf(base) === 0 && x.path) out[String(x.path).replace(/\.jpg$/i, '').toLowerCase()] = x.signedUrl;
+      });
+    } catch (e) { return {}; }
+    return out;
+  };
   function dialogoPerfil(p) {
     var ov = document.createElement('div');
     ov.className = 'ov'; ov.hidden = true;
