@@ -436,7 +436,7 @@
     return function () { ov.hidden = false; $('pu-n1').focus(); };
   }
 
-  /* ---- Foto de perfil: cubeta privada «fotos» (portal/sql/13_fotos_perfil.sql), un archivo <id>.jpg por usuario.
+  /* ---- Foto de perfil: cubeta privada «fotos» (portal/sql/14_fotos_perfil.sql), un archivo <id>.jpg por usuario.
      Cada quien sube, cambia o quita solo la suya; todos los del portal las ven. ---- */
   var FOTO = { url: null };
   function pintaFoto(p) {

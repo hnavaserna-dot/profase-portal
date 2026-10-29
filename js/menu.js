@@ -32,7 +32,8 @@
     { k: 'adm', t: 'Administración', subs: [
       { k: 'cobranza', v: 'cxc', t: 'Cobranza' },
       { k: 'cajachica', v: 'caja', t: 'Caja chica' },
-      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA' }] },
+      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA' },
+      { k: 'accesos', v: 'acc', t: 'Accesos' }] },   // bitácora de accesos: solo la ve el director
     { k: 'quo', t: 'QUO', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO' },
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías' }] }
