@@ -1760,29 +1760,39 @@ function pintarResueltas(){
     : `<tr><td colspan="8"><div class="vacio">No hay anomalías resueltas con estos filtros.</div></td></tr>`;
 }
 
-/* ---------- vista por cuenta: % de variación de todas las cuentas y empresas en común ---------- */
+/* ---------- vista por cuenta: % de variación de todas las cuentas y empresas en común ----------
+   Cada cuenta trae dos juegos de empresas:
+   - emp: lo que muestra «Saldo final». Todas las empresas con movimiento o con saldo en la cuenta, y cada una hasta
+     su último mes con balanza (el mayor entre movimiento y saldo). El saldo es el de la balanza, tal cual (BASE.sal).
+   - empMov: lo que muestra «Movimiento del mes», igual que antes (empresas con movimiento, hasta su último mes con
+     movimiento). Las celdas que solo existen en «Saldo final» llevan solo:true y nunca son hallazgo. */
 const VAR_CACHE = new Map();
 function variacionesAnio(y){
   if(VAR_CACHE.has(y)) return VAR_CACHE.get(y);
-  const out = new Map();                    // cuenta -> {cta, nombre, emp: Map(cliente -> Map(mes -> celda))}
+  const out = new Map();                    // cuenta -> {cta, nombre, emp, empMov: Map(cliente -> Map(mes -> celda))}
   VAR_CACHE.set(y, out);
   if(!BASE.mov) return out;
   const per = (yy,m) => yy+"-"+String(m).padStart(2,"0");
-  const mov = new Map(), ultimo = new Map(), pares = new Set(), sal = new Map(), ca = new Map();
+  const mov = new Map(), ultMov = new Map(), ultimo = new Map(), pares = new Set(), sal = new Map(), ca = new Map();
   for(const [ci,ct,p,c,a] of (BASE.ca||[])) ca.set(ci+"|"+ct+"|"+p, [c,a]);
   for(const [ci,ct,p,v] of BASE.mov){
     mov.set(ci+"|"+ct+"|"+p, v);
+    if(!(ultMov.get(ci) >= p)) ultMov.set(ci, p);
     if(!(ultimo.get(ci) >= p)) ultimo.set(ci, p);
     pares.add(ci+"|"+ct);
   }
   for(const [ci,ct,p,v] of (BASE.sal||[])){
     sal.set(ci+"|"+ct+"|"+p, v);
+    if(!(ultimo.get(ci) >= p)) ultimo.set(ci, p);   // último mes con balanza: el mayor entre movimiento y saldo
     // acreedoras con saldo y sin movimiento (un saldo contrario puede quedarse quieto)
-    if(ultimo.has(ci) && !pares.has(ci+"|"+ct) && ES_ACR(BASE.cuentas[ct][0])) pares.add(ci+"|"+ct);
+    if(ultMov.has(ci) && !pares.has(ci+"|"+ct) && ES_ACR(BASE.cuentas[ct][0])) pares.add(ci+"|"+ct);
   }
-  const meses = mesesAnio(y).map(([n])=>n);
+  const deMov = new Set(pares);             // las parejas de «Movimiento del mes»
+  for(const [ci,ct] of (BASE.sal||[])) pares.add(ci+"|"+ct);   // «Saldo final»: también las que solo tienen saldo
+  const meses = mesesAnio(y).map(([n])=>n), hechos = [];
   for(const par of pares){
-    const [ci,ct] = par.split("|").map(Number), hasta = ultimo.get(ci), cel = new Map();
+    const [ci,ct] = par.split("|").map(Number), hasta = ultimo.get(ci), cel = new Map(), celMov = new Map();
+    const hastaMov = deMov.has(par) ? ultMov.get(ci) : "";
     const rfc = BASE.clientes[ci][1], cta = BASE.cuentas[ct][0], acr = ES_ACR(cta);
     for(const m of meses){
       const p = per(y,m); if(p > hasta) break;
@@ -1790,23 +1800,30 @@ function variacionesAnio(y){
       const ant = mov.get(par+"|"+pAnt) || 0, act = mov.get(par+"|"+p) || 0;
       const sf = sal.get(par+"|"+p) || 0, sfAnt = sal.get(par+"|"+pAnt) || 0;
       if(!ant && !act && !sf && !sfAnt) continue;
+      const solo = !(p <= hastaMov);       // solo existe en «Saldo final»
       const rid = rfc+"_"+m+"_"+cta+(y===BASE.anioBase ? "" : "_"+y);
-      const hall = PORRID.get(rid) || PORRID.get(rfc+"_"+m+"_"+cta+"_pago"+(y===BASE.anioBase ? "" : "_"+y)) || null;
+      const hall = solo ? null : PORRID.get(rid) || PORRID.get(rfc+"_"+m+"_"+cta+"_pago"+(y===BASE.anioBase ? "" : "_"+y)) || null;
+      let x;
       if(acr){   // acreedora: variación del saldo (saldo inicial del mes contra saldo final)
         const ini = r2(sf - act), cav = ca.get(par+"|"+p) || (BASE.caTodas && /^[23]/.test(cta) ? [0,0] : null);
-        cel.set(m, {ant, act, sf, sfAnt, rid, hall, acr:true, ini, car: cav ? cav[0] : null, abo: cav ? cav[1] : null,
+        x = {ant, act, sf, sfAnt, rid, hall, acr:true, ini, car: cav ? cav[0] : null, abo: cav ? cav[1] : null,
           aum: cav ? r2(cav[1]-cav[0]) : r2(act),
-          tipo: !ini && !sf ? "sin" : !ini ? "alta" : !sf ? "baja" : "var", v: ini ? (sf-ini)/Math.abs(ini) : null});
-        continue;
+          tipo: !ini && !sf ? "sin" : !ini ? "alta" : !sf ? "baja" : "var", v: ini ? (sf-ini)/Math.abs(ini) : null};
+      } else {
+        x = {ant, act, sf, sfAnt, rid, hall,
+          tipo: !ant && !act ? "sin" : !ant ? "alta" : !act ? "baja" : "var",
+          v: !ant ? null : (CRIT.baseAbs ? (act-ant)/Math.abs(ant) : act/ant-1)};
       }
-      cel.set(m, {ant, act, sf, sfAnt, rid, hall,
-        tipo: !ant && !act ? "sin" : !ant ? "alta" : !act ? "baja" : "var",
-        v: !ant ? null : (CRIT.baseAbs ? (act-ant)/Math.abs(ant) : act/ant-1)});
+      x.solo = solo;
+      cel.set(m, x);
+      if(!solo) celMov.set(m, x);
     }
-    if(!cel.size) continue;
-    if(!out.has(ct)) out.set(ct, {ct, cta, nombre: BASE.cuentas[ct][1], emp: new Map()});
-    out.get(ct).emp.set(ci, cel);
+    if(cel.size) hechos.push({ci, ct, cta, cel, celMov});
   }
+  // las cuentas quedan en el mismo orden de antes; al final, las que solo tienen saldo
+  const cuenta = h => { if(!out.has(h.ct)) out.set(h.ct, {ct:h.ct, cta:h.cta, nombre: BASE.cuentas[h.ct][1], emp: new Map(), empMov: new Map()}); return out.get(h.ct); };
+  for(const h of hechos) if(h.celMov.size) cuenta(h).empMov.set(h.ci, h.celMov);
+  for(const h of hechos) cuenta(h).emp.set(h.ci, h.cel);
   return out;
 }
 const empPasa = ci => {
@@ -1831,6 +1848,8 @@ const SC = {orden:"conH", asc:false, sel:null, solo:true, ver:null};   // ver: "
 const verSaldo = () => { if(SC.ver===null) SC.ver = BASE.sal ? "saldo" : "mov"; return SC.ver==="saldo"; };
 // importe que muestra Movimientos para una celda: saldo final del mes o movimiento del mes, con su mes anterior
 const importeDe = x => verSaldo() ? [x.sf, x.sfAnt] : [x.act, x.ant];
+// empresas de una cuenta según lo que se muestra (ver variacionesAnio)
+const empDe = c => verSaldo() ? c.emp : c.empMov;
 const mesCorto = m => (MESES.get(m)||"").slice(0,3);
 
 function pintarCuentas(){
@@ -1841,11 +1860,13 @@ function pintarCuentas(){
     if(S.q && !norm(c.cta+" "+c.nombre).includes(S.q)) continue;
     let emp = 0, conH = 0, nH = 0, max = null, min = null;
     const porMes = new Map(meses.map(m=>[m,{u:0,d:0}])), tot = new Map(meses.map(m=>[m,{a:0,p:0,s:0,sp:0}]));
-    for(const [ci,cel] of c.emp){
+    // «Saldo final»: todas las empresas con saldo o movimiento; «Movimiento del mes»: como antes
+    for(const [ci,cel] of empDe(c)){
       if(!empPasa(ci)) continue;
       emp++; let tiene = false;
       for(const [m,x] of cel){
         const tt = tot.get(m); if(tt){ tt.a += x.act; tt.p += x.ant; tt.s += x.sf; tt.sp += x.sfAnt; }
+        if(x.solo) continue;   // solo saldo: no cuenta para «Mayor alza» ni para hallazgos
         const alza = x.act - x.ant;
         if(alza>0 && (!max || alza>max.v)) max = {v:alza, ci, m, rid: esHall(x) ? x.rid : null};
         if(esHall(x)){ tiene = true; nH++; const pm = porMes.get(m); if(pm) (x.v!==null && x.v<0) ? pm.d++ : pm.u++; }
@@ -1891,19 +1912,19 @@ function pintarCuentas(){
 function detalleCuentaHTML(datos, meses){
   const c = SC.sel===null ? null : datos.get(SC.sel);
   if(!c) return "";
-  const filas = [];
-  for(const [ci,cel] of c.emp){
+  const filas = [], empV = empDe(c);
+  for(const [ci,cel] of empV){
     if(!empPasa(ci)) continue;
     const hs = [...cel.values()].filter(esHall);
     if(SC.solo && !hs.length) continue;
     if(!SC.solo && ![...cel.values()].some(x=>x.act || x.ant || x.sf)) continue;
     const rev = hs.filter(x=>cerrado(lee(x.rid))).length;
-    const mx = Math.max(0, ...[...cel.values()].filter(x=>x.v!==null).map(x=>Math.abs(x.v)));
+    const mx = Math.max(0, ...[...cel.values()].filter(x=>x.v!==null && !x.solo).map(x=>Math.abs(x.v)));
     filas.push({ci, cel, nh:hs.length, rev, mx});
   }
   filas.sort((a,b)=>b.nh-a.nh || b.mx-a.mx || BASE.clientes[a.ci][0].localeCompare(BASE.clientes[b.ci][0],"es"));
   const enMes = m => { let u=0,d=0; filas.forEach(f=>{ const x=f.cel.get(m); if(x && esHall(x)) (x.v!==null && x.v<0) ? d++ : u++; }); return {u,d}; };
-  const total = [...c.emp.keys()].filter(empPasa).length;
+  const total = [...empV.keys()].filter(empPasa).length;
   const celda = x => {
     if(!x) return `<td class="vc"><span style="color:var(--ink-4)">·</span></td>`;
     const [va, vp] = importeDe(x);
@@ -3029,7 +3050,7 @@ async function exportar(lista, conHist){
     const idx = new Map(), hist = [], vistos = new Set();
     const celdas = (y, rfc, cta) => {
       if(!idx.has(y)){ const m = new Map();
-        for(const c of variacionesAnio(y).values()) for(const [ci,cel] of c.emp) m.set(BASE.clientes[ci][1]+"|"+c.cta, cel);
+        for(const c of variacionesAnio(y).values()) for(const [ci,cel] of c.empMov) m.set(BASE.clientes[ci][1]+"|"+c.cta, cel);
         idx.set(y, m); }
       return idx.get(y).get(rfc+"|"+cta);
     };
