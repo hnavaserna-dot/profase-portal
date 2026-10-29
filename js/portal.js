@@ -47,7 +47,7 @@
   window.PORTAL = P;
 
   /* ---- Solo consulta (29-oct-2026): Héctor Nava Ramos (usuario hnava), papá de Daniel, ve todo lo que ve Daniel
-     pero no cambia nada. El candado de verdad está en la base (portal/sql/18_solo_consulta.sql): ahí se detiene
+     pero no cambia nada. El candado de verdad está en la base (portal/sql/19_solo_consulta.sql): ahí se detiene
      cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
      para que no salga un error raro; las páginas además esconden sus botones de guardar con P.consulta. ---- */
   var MSG_CONSULTA = 'Tu usuario es de solo consulta: puedes ver todo, pero no cambiar nada.';

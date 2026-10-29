@@ -1198,7 +1198,7 @@
     try {
       var r = await sb.rpc('cot_yo'); if (r.error) throw r.error;
       YO = r.data || YO;
-      // Solo consulta (portal/sql/18_solo_consulta.sql): ve cotizaciones, catálogos, bitácora y ajustes; no crea ni cambia
+      // Solo consulta (portal/sql/19_solo_consulta.sql): ve cotizaciones, catálogos, bitácora y ajustes; no crea ni cambia
       if (P.consulta) { YO.editor = false; YO.consulta = true; modoConsulta(); }
       var u = await sb.rpc('cot_usuarios'); S.usuarios = u.data || [];
       await carga(['ajustes', 'servicios', 'asesores', 'clientes', 'cots']);
