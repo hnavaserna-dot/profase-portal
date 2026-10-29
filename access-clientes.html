@@ -124,6 +124,17 @@ tr.fila:hover td{background:var(--navy-soft)}
 :root[data-theme="dark"] .link{color:#9FB6E0}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:#9FB6E0}}
 .dos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+/* Contraseñas y archivos del SAT (portal/sql/26_credenciales.sql): se piden una por una y se esconden solas */
+.cred .fc{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.cred .fc:first-child{border-top:0}
+.cred .fc .t{font-weight:600}
+.cred .fc .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.cred .fc .izq{min-width:0;flex:1 1 220px}
+.cred .acc{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cred .val{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:6px;padding:3px 8px;margin-top:4px;overflow-wrap:anywhere;word-break:break-all;user-select:all;max-width:100%}
+.cred .sub{padding:8px 14px 2px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-top:1px solid var(--line)}
+.cred .aviso{padding:9px 14px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface-2)}
+.cred .btn{padding:6px 11px}
 @media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
 /* En celular cada cliente es una tarjeta; las tablas de la ficha se deslizan dentro de su recuadro */
 @media (max-width:640px){
@@ -362,8 +373,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<dt>Domicilio fiscal</dt><dd>' + (esc(e.dom) || '<span class="no">Sin dato</span>') + (e.entre ? '<div class="d">Entre ' + esc(e.entre) + '</div>' : '') + '</dd>'
       + '<dt>e.firma</dt><dd>' + (e.fiel ? 'Sí · vence ' + vence(e.vFiel, true) : '<span class="no">No tiene</span>') + '</dd>'
       + '<dt>Sellos (CSD)</dt><dd>' + (e.sellos ? 'Sí · vencen ' + vence(e.vSellos, true) : '<span class="no">No tiene</span>') + '</dd>'
-      + '<dt>CIEC</dt><dd>' + siNo(e.ciec) + ' <span class="no">(las contraseñas no se ven en el portal)</span></dd>'
+      + '<dt>CIEC</dt><dd>' + siNo(e.ciec) + '</dd>'
       + '<dt>Grupo</dt><dd>' + esc(grupoTxt(g)) + (g.alta ? ' <span class="no">· alta ' + esc(fecha(g.alta)) + '</span>' : '') + '</dd></dl></div>');
+    h += '<section class="sec cred" id="cred" aria-labelledby="cred-tit"><h3 id="cred-tit">Contraseñas y archivos del SAT <small>se ven una por una</small></h3><div id="cred-in"><div class="vacio">Revisando…</div></div></section>';
     h += '<div class="dos">';
     h += sec('Régimen fiscal', e.reg.length ? '<ul class="lista">' + e.reg.map(function (r) { return '<li><span class="t">' + esc(r.cl) + '</span> ' + esc(r.d) + '</li>'; }).join('') + '</ul>' : '<div class="vacio">Sin régimen capturado.</div>');
     h += sec('Actividades económicas', e.act.length ? '<ul class="lista">' + e.act.map(function (a) { return '<li><div class="t">' + esc(a.d) + '</div><div class="d">' + [a.pct != null ? a.pct + ' %' : '', a.ini ? 'desde ' + fecha(a.ini) : ''].filter(Boolean).map(esc).join(' · ') + '</div></li>'; }).join('') + '</ul>' : '<div class="vacio">Sin actividades capturadas.</div>');
@@ -406,8 +418,102 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
+    pintaCred(e);
   }
-  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  function cierra() { escondeTodo(); CRED = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
+
+  /* ---------- Contraseñas y archivos del SAT (portal/sql/26_credenciales.sql) ----------
+     Las tablas cifradas no se leen desde la página: cred_resumen() dice qué hay (sin ningún valor), cred_ver() da una
+     contraseña y cred_archivo() un archivo, solo a la dirección, los gerentes y el contador del cliente. Cada vista y
+     cada descarga queda en la bitácora de Accesos. Lo que se ve se esconde solo al minuto y nunca se guarda. */
+  var CRED = null, OCULTA = {}, SEG = 60;
+  var QUE = [['ciec', 'CIEC', 'Contraseña del SAT'], ['fiel', 'Contraseña de la e.firma', 'La de la llave privada (.key)'],
+             ['sellos', 'Contraseña de los sellos', 'La de la llave privada de los sellos (CSD)'], ['quo', 'QUO', 'Usuarios de Contabilita y Facturita']];
+  async function pintaCred(e) {
+    var caja = $('cred-in'); if (!caja) return;
+    CRED = { rfc: e.rfc, id: e.id };
+    var r;
+    try { r = await P.sb.rpc('cred_resumen', { p_rfc: e.rfc }); } catch (er) { r = { error: er }; }
+    if (!CRED || CRED.id !== e.id || !$('cred-in')) return;
+    if (r.error) { caja.innerHTML = '<div class="vacio">No se pudo revisar. Cierra la ficha y vuelve a abrirla en un momento.</div>'; return; }
+    var R = r.data;
+    if (!R) { caja.innerHTML = '<div class="vacio">Las contraseñas y los archivos de este cliente los ven la dirección, los gerentes y su contador (responsable, quien autoriza o contador asignado en el WorkFlow).</div>'; return; }
+    var h = QUE.map(function (q) {
+      var hay = !!R[q[0]];
+      return '<div class="fc"><div class="izq"><div class="t">' + esc(q[1]) + '</div><div class="d">' + esc(q[2]) + '</div><div id="cv-' + q[0] + '"></div></div><div class="acc">'
+        + (hay ? '<button class="btn" type="button" data-cver="' + q[0] + '" aria-controls="cv-' + q[0] + '">Ver</button>' : '<span class="no">No está capturada en el Access</span>') + '</div></div>';
+    }).join('');
+    var A = R.archivos || [];
+    [['e.firma', 'Archivos de la e.firma'], ['Sellos', 'Archivos de los sellos']].forEach(function (g) {
+      var L = A.filter(function (a) { return String(a.tipo || '').indexOf(g[0] + ' ·') === 0; });
+      h += '<div class="sub">' + esc(g[1]) + ' · ' + L.length + '</div>';
+      h += L.length ? L.map(function (a) {
+        return '<div class="fc"><div class="izq"><div class="t">' + esc(String(a.tipo).slice(g[0].length + 3)) + '</div><div class="d">' + esc(a.nombre) + (a.fecha ? ' · ' + esc(fecha(a.fecha)) : '') + '</div></div>'
+          + '<div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button></div></div>';
+      }).join('') : '<div class="fc"><span class="no">Ninguno en el Access.</span></div>';
+    });
+    var otros = A.filter(function (a) { return !/^(e\.firma|Sellos) ·/.test(String(a.tipo || '')); });
+    if (otros.length) h += '<div class="sub">Otros archivos · ' + otros.length + '</div>' + otros.map(function (a) {
+      return '<div class="fc"><div class="izq"><div class="t">' + esc(a.tipo) + '</div><div class="d">' + esc(a.nombre) + '</div></div><div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button></div></div>';
+    }).join('');
+    h += '<div class="aviso">Lo que ves se esconde solo al minuto. Cada vez que alguien ve una contraseña o baja un archivo queda anotado en Accesos (lo revisa la dirección). Los archivos se bajan tal cual vienen del SAT. Se siguen capturando y cambiando en el Access; aquí llegan con la actualización de cada 3 horas.</div>';
+    caja.innerHTML = h;
+  }
+  function escondeTodo() { Object.keys(OCULTA).forEach(function (k) { clearTimeout(OCULTA[k]); esconde(k); }); OCULTA = {}; }
+  function esconde(q) {
+    var c = $('cv-' + q); if (c) c.innerHTML = '';
+    var b = document.querySelector('[data-cver="' + q + '"]'); if (b) { b.textContent = 'Ver'; b.setAttribute('aria-expanded', 'false'); }
+    clearTimeout(OCULTA[q]); delete OCULTA[q];
+  }
+  function valor(etq, v) {
+    if (v == null || v === '') return '<div class="d">' + esc(etq) + ': <span class="no">vacío</span></div>';
+    return '<div class="d">' + esc(etq) + '</div><div class="acc"><code class="val">' + esc(v) + '</code><button class="btn" type="button" data-ccopia="' + esc(v) + '">Copiar</button></div>';
+  }
+  async function verCred(b) {
+    var q = b.getAttribute('data-cver'), c = $('cv-' + q);
+    if (OCULTA[q]) { esconde(q); return; }
+    if (!CRED || !c) return;
+    b.disabled = true;
+    try {
+      var r = await P.sb.rpc('cred_ver', { p_rfc: CRED.rfc, p_que: q });
+      if (r.error || !r.data) throw new Error('sin dato');
+      var d = r.data, h;
+      if (q === 'quo') {
+        h = '<div class="d" style="margin-top:6px"><b>Contabilita</b></div>' + valor('Usuario', d.contabilita && d.contabilita.usuario) + valor('Contraseña', d.contabilita && d.contabilita.clave)
+          + '<div class="d" style="margin-top:6px"><b>Facturita</b></div>' + valor('Usuario', d.facturita && d.facturita.usuario) + valor('Contraseña', d.facturita && d.facturita.clave);
+      } else {
+        h = d.clave ? '<div class="acc"><code class="val">' + esc(d.clave) + '</code><button class="btn" type="button" data-ccopia="' + esc(d.clave) + '">Copiar</button></div>' : '<div class="d no">Vacía</div>';
+      }
+      c.innerHTML = h;
+      b.textContent = 'Ocultar'; b.setAttribute('aria-expanded', 'true');
+      OCULTA[q] = setTimeout(function () { esconde(q); }, SEG * 1000);
+    } catch (er) {
+      c.innerHTML = '<div class="d">No se pudo ver. Vuelve a intentar en un momento.</div>';
+    } finally { b.disabled = false; }
+  }
+  async function copia(b) {
+    var v = b.getAttribute('data-ccopia');
+    try { await navigator.clipboard.writeText(v); b.textContent = 'Copiada'; }
+    catch (er) { b.textContent = 'Selecciónala y copia'; }
+    setTimeout(function () { b.textContent = 'Copiar'; }, 2000);
+  }
+  async function bajaArch(b) {
+    var id = +b.getAttribute('data-carch'); if (!id) return;
+    b.disabled = true; var t = b.textContent; b.textContent = 'Bajando…';
+    try {
+      var r = await P.sb.rpc('cred_archivo', { p_id: id });
+      if (r.error || !r.data || !r.data.b64) throw new Error('sin archivo');
+      // El archivo original del SAT, tal cual (sin la marca: se echaría a perder; decisión de Daniel, 29-oct-2026)
+      var bin = atob(String(r.data.b64).replace(/\s/g, '')), u = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([u], { type: 'application/octet-stream' }));
+      a.download = String(r.data.nombre || 'archivo').replace(/[\\/:*?"<>|]/g, '_');
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      b.textContent = 'Listo';
+    } catch (er) { b.textContent = 'No se pudo'; }
+    setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
+  }
 
   /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
   async function conBoton(b, fn) { b.disabled = true; try { await fn(); } catch (e) { alert0('No se pudo armar el Excel. Vuelve a intentar.'); } finally { b.disabled = false; } }
@@ -457,6 +563,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('x-cli').onclick = function () { excelClientes(this); };
   $('x-fir').onclick = function () { excelFirmas(this); };
   document.addEventListener('click', function (ev) {
+    var cb = ev.target.closest('[data-cver],[data-ccopia],[data-carch]');
+    if (cb) { if (cb.hasAttribute('data-cver')) verCred(cb); else if (cb.hasAttribute('data-ccopia')) copia(cb); else bajaArch(cb); return; }
     var t = ev.target.closest('[data-id]');
     if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
@@ -465,6 +573,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.key === 'Escape' && !$('velo').hidden) cierra();
     if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) abre(+ev.target.getAttribute('data-id'));
   });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) escondeTodo(); });
   carga();
 })();
 </script>
