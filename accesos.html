@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=3c1d97585b"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=647ade54b2"></script>
 <style>
 /* Portal PROFASE · Accesos: la bitácora de quién entra al portal (portal/sql/13_accesos.sql). Solo la abre el
    director y va dentro de su pestaña «Accesos». Las horas siempre en hora de Monterrey. */
@@ -86,6 +86,29 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
 .pie{color:var(--muted);font-size:12px;margin:0 0 24px}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0}
+.chip.cerrada{background:var(--red-soft);color:var(--red)}
+/* Sesiones abiertas y «Sacar de todos sus equipos» (portal/sql/28_sesiones.sql) */
+.ses{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.ses .n{font-weight:600}
+.btn.sacar{border-color:var(--red);color:var(--red);background:transparent;padding:5px 10px;font-size:12.5px;white-space:nowrap}
+.btn.sacar:hover{background:var(--red-soft)}
+.dlg-ov{position:fixed;inset:0;z-index:50;background:rgba(10,18,32,.55);display:grid;place-items:center;padding:16px}
+.dlg{width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);color:var(--ink);border-radius:14px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.dlg:focus{outline:none}
+.dlg h2{font-size:20px;font-weight:750;margin:0 0 8px}
+.dlg p{margin:0 0 10px}
+.dlg ul{margin:0 0 12px;padding:0;list-style:none;border:1px solid var(--line);border-radius:10px}
+.dlg li{padding:8px 12px;border-top:1px solid var(--line);font-size:13.5px;overflow-wrap:anywhere}
+.dlg li:first-child{border-top:0}
+.dlg li .rol{display:block}
+.dlg .acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px}
+.dlg .acts .btn{min-height:44px;padding:10px 14px;font-size:14px;flex:1 1 auto}
+.btn.rojo{background:var(--red);border-color:var(--red);color:#fff}
+.btn.rojo:hover{border-color:var(--red);filter:brightness(1.08)}
+:root[data-theme="dark"] .btn.rojo{color:#1A0E0C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.rojo{color:#1A0E0C}}
+.dlg .err{background:var(--red-soft);border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 10px}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;width:max-content;max-width:calc(100vw - 24px);background:var(--ink);color:var(--surface);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 /* En celular cada renglón se vuelve una tarjeta, para que «qué pasó» se vea sin desplazarse de lado */
 @media (max-width:640px){
   .card thead{display:none}
@@ -100,12 +123,13 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   #movs td:nth-child(5){grid-area:e;color:var(--muted);font-size:12.5px}
   #movs td:nth-child(6){grid-area:i;font-size:12.5px;text-align:right}
   #movs .chip.nuevo{display:block;margin:4px 0 0;width:max-content;margin-left:auto}
-  #personas tr{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"p n" "u u" "e e"}
+  #personas tr{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"p n" "u u" "e e" "s s"}
   #personas td:nth-child(1){grid-area:p}
   #personas td:nth-child(2){grid-area:u;font-size:13px}
   #personas td:nth-child(3){grid-area:n;color:var(--muted);font-size:12.5px;text-align:right}
   #personas td:nth-child(3)::before{content:"Entradas: "}
   #personas td:nth-child(4){grid-area:e;color:var(--muted);font-size:12.5px}
+  #personas td:nth-child(5){grid-area:s;margin-top:4px}
   #personas td[colspan]{grid-area:u}
 }
 </style></head><body>
@@ -131,8 +155,8 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   <div class="avisos" id="avisos" aria-live="polite"></div>
 
   <section class="card" aria-labelledby="t-personas">
-    <header><div><h2 id="t-personas">Cada persona</h2><div class="sub">Último acceso y entradas de los últimos 90 días.</div></div></header>
-    <div class="tabla"><table><thead><tr><th>Persona</th><th>Último acceso</th><th class="num">Entradas</th><th>Último equipo</th></tr></thead><tbody id="personas"></tbody></table></div>
+    <header><div><h2 id="t-personas">Cada persona</h2><div class="sub">Último acceso, entradas de los últimos 90 días y en cuántos equipos tiene la sesión abierta.</div></div></header>
+    <div class="tabla"><table><thead><tr><th>Persona</th><th>Último acceso</th><th class="num">Entradas</th><th>Último equipo</th><th>Sesión abierta</th></tr></thead><tbody id="personas"></tbody></table></div>
   </section>
 
   <section class="card" aria-labelledby="t-mov">
@@ -141,7 +165,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       <div class="filtros">
         <select id="f-periodo" aria-label="Periodo"><option value="1">Hoy</option><option value="7" selected>Últimos 7 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option></select>
         <select id="f-persona" aria-label="Persona"><option value="">Todas las personas</option></select>
-        <select id="f-tipo" aria-label="Tipo"><option value="">Todo</option><option value="entrada">Entradas</option><option value="fallo">Intentos fallidos</option><option value="salida">Salidas</option><option value="inactividad">Cierres por inactividad</option><option value="descarga">Descargas</option><option value="clave">Cambios de contraseña</option><option value="credencial">Contraseñas de clientes</option></select>
+        <select id="f-tipo" aria-label="Tipo"><option value="">Todo</option><option value="entrada">Entradas</option><option value="fallo">Intentos fallidos</option><option value="salida">Salidas</option><option value="inactividad">Cierres por inactividad</option><option value="descarga">Descargas</option><option value="clave">Cambios de contraseña</option><option value="credencial">Contraseñas de clientes</option><option value="cerrada">Sacados de sus equipos</option></select>
         <input id="f-buscar" type="search" placeholder="Buscar (archivo, equipo, IP…)" aria-label="Buscar">
       </div>
     </header>
@@ -149,7 +173,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
     <div class="vacio" id="movs-vacio" hidden>Sin movimientos con estos filtros.</div>
     <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
   </section>
-  <p class="pie">Las entradas las anota el servidor de la base en cuanto alguien inicia sesión. Los intentos fallidos, salidas, cierres por inactividad y descargas los anota la página del portal; cada vez que alguien ve una contraseña de un cliente (CIEC, e.firma, sellos o QUO) o baja un archivo de la e.firma o de los sellos, lo anota la base. Todas las horas son de Monterrey.</p>
+  <p class="pie">Las entradas las anota el servidor de la base en cuanto alguien inicia sesión. Los intentos fallidos, salidas, cierres por inactividad y descargas los anota la página del portal; cada vez que alguien ve una contraseña de un cliente (CIEC, e.firma, sellos o QUO) o baja un archivo de la e.firma o de los sellos, lo anota la base. «Sacar de todos sus equipos» cierra todas las sesiones de esa persona: si tiene el portal abierto, en menos de un minuto le pide entrar otra vez con su usuario y contraseña. Todas las horas son de Monterrey.</p>
 </div>
 
 <script>
@@ -157,9 +181,9 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   'use strict';
   var P = window.PORTAL, sb = P.sb, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey', DIA = 864e5, PAGINA = 200;
-  var TIPO = { entrada: 'Entrada', salida: 'Salida', inactividad: 'Cierre por inactividad', fallo: 'Intento fallido', descarga: 'Descarga', clave: 'Cambio de contraseña', credencial: 'Contraseña o archivo SAT de cliente' };
+  var TIPO = { entrada: 'Entrada', salida: 'Salida', inactividad: 'Cierre por inactividad', fallo: 'Intento fallido', descarga: 'Descarga', clave: 'Cambio de contraseña', credencial: 'Contraseña o archivo SAT de cliente', cerrada: 'Sacado de sus equipos' };
   var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
-  var filas = [], perfiles = [], pendientes = [], mostrar = PAGINA, cargando = false;
+  var filas = [], perfiles = [], pendientes = [], sesiones = null, mostrar = PAGINA, cargando = false;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var fHora = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -203,6 +227,8 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       perfiles = p.error ? [] : (p.data || []);
       var q = await sb.rpc('accesos_pendientes');
       pendientes = q.error ? [] : (q.data || []);
+      var se = await sb.rpc('sesiones_abiertas');   // null si la base todavía no tiene 28_sesiones.sql
+      sesiones = se.error ? null : (se.data || []);
       $('sin-tabla').hidden = true; $('error').hidden = true;
       pinta();
       $('hora').textContent = 'Al momento · ' + hora(new Date()).replace(/^.*?, /, '');
@@ -283,14 +309,85 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       return '<tr><td><div class="quien">' + esc(p.nombre) + '</div><div class="rol">' + esc(ROL[p.rol] || p.rol) + ' · ' + esc(p.usuario) + '</div></td>'
         + '<td>' + (u ? esc(hace(u.at)) + '<div class="rol">' + esc(hora(u.at)) + '</div>' : '<span class="rol">Sin entradas en 90 días</span>') + '</td>'
         + '<td class="num">' + (ent[p.usuario] || 0) + '</td>'
-        + '<td>' + (u ? esc(equipo(u.dispositivo)) + (u.ip ? '<div class="rol">' + esc(u.ip) + '</div>' : '') : '—') + '</td></tr>';
+        + '<td>' + (u ? esc(equipo(u.dispositivo)) + (u.ip ? '<div class="rol">' + esc(u.ip) + '</div>' : '') : '—') + '</td>'
+        + '<td>' + celdaSesion(p) + '</td></tr>';
     });
     pendientes.filter(function (p) { return !perfiles.some(function (x) { return x.usuario === p.usuario; }); }).forEach(function (p) {
       html.push('<tr><td><div class="quien">' + esc(p.nombre) + '</div><div class="rol">' + esc(ROL[p.rol] || p.rol) + ' · ' + esc(p.usuario) + '</div></td>'
-        + '<td colspan="3"><span class="chip descarga">Todavía no crea su contraseña</span></td></tr>');
+        + '<td colspan="4"><span class="chip descarga">Todavía no crea su contraseña</span></td></tr>');
     });
-    $('personas').innerHTML = html.join('') || '<tr><td colspan="4" class="vacio">Sin datos.</td></tr>';
+    $('personas').innerHTML = html.join('') || '<tr><td colspan="5" class="vacio">Sin datos.</td></tr>';
   }
+
+  /* ---- Sesiones abiertas y «Sacar de todos sus equipos» (portal/sql/28_sesiones.sql) ----
+     Solo daniel.nava saca a alguien; hnava (solo consulta) ve las sesiones pero no el botón (la base igual lo detiene).
+     Para Daniel mismo: «Cerrar mis otras sesiones», que conserva la de este equipo. */
+  function sesionesDe(usuario) { return (sesiones || []).filter(function (s) { return s.usuario === usuario; }); }
+  function equipos(n) { return n === 1 ? '1 equipo' : n + ' equipos'; }
+  function puedeSacar() { return !P.consulta && !!P.perfil && P.perfil.rol === 'director'; }
+  function celdaSesion(p) {
+    if (sesiones === null) return '<span class="rol">—</span>';
+    var l = sesionesDe(p.usuario), otras = l.filter(function (s) { return !s.esta; });
+    var mio = !!P.perfil && P.perfil.usuario === p.usuario;
+    if (!l.length) return '<span class="rol">Ninguna</span>';
+    var lista = Array.from(new Set(l.map(function (s) { return s.esta ? 'este equipo' : equipo(s.equipo); }))).join(', ');
+    var txt = '<div><div class="n">' + esc(equipos(l.length)) + '</div><div class="rol">' + esc(lista) + '</div></div>';
+    if (!puedeSacar() || (mio && !otras.length)) return '<div class="ses">' + txt + '</div>';
+    return '<div class="ses">' + txt + '<button class="btn sacar" type="button" data-sacar="' + esc(p.usuario) + '">'
+      + (mio ? 'Cerrar mis otras sesiones' : 'Sacar de todos sus equipos') + '</button></div>';
+  }
+  function cierraDlg() { var o = $('dlg-ov'); if (o) o.remove(); }
+  function toast(txt) {
+    var t = $('toast'); if (t) t.remove();
+    t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = txt;
+    document.body.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 7000);
+  }
+  function preguntaSacar(usuario) {
+    var p = perfiles.find(function (x) { return x.usuario === usuario; });
+    if (!p || !puedeSacar()) return;
+    var mio = P.perfil.usuario === usuario, si = mio ? 'Sí, cerrarlas' : 'Sí, sacarlo';
+    var l = sesionesDe(usuario).filter(function (s) { return !(mio && s.esta); });
+    cierraDlg();
+    var ov = document.createElement('div');
+    ov.className = 'dlg-ov'; ov.id = 'dlg-ov';
+    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-h" tabindex="-1">'
+      + '<h2 id="dlg-h">' + (mio ? 'Cerrar tus otras sesiones' : 'Sacar a ' + esc(p.nombre) + ' de todos sus equipos') + '</h2>'
+      + '<p>' + (mio ? 'Se cierra tu sesión en ' + esc(equipos(l.length)) + '; en este te quedas.'
+        : 'Se cierra su sesión en ' + esc(equipos(l.length)) + '. Si tiene el portal abierto, en menos de un minuto le pide entrar otra vez con su usuario y contraseña. Su contraseña no cambia.') + '</p>'
+      + '<ul>' + l.map(function (s) {
+          return '<li>' + esc(equipo(s.equipo)) + (s.ip ? ' · ' + esc(s.ip) : '') + '<span class="rol">Entró ' + esc(hora(s.desde)) + ' · lo usó por última vez ' + esc(hace(s.ultima || s.desde)) + '</span></li>';
+        }).join('') + '</ul>'
+      + '<div class="err" id="dlg-err" hidden></div>'
+      + '<div class="acts"><button class="btn" type="button" id="dlg-no">Cancelar</button>'
+      + '<button class="btn rojo" type="button" id="dlg-si">' + si + '</button></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) cierraDlg(); });
+    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') cierraDlg(); });
+    $('dlg-no').onclick = cierraDlg;
+    $('dlg-si').onclick = async function () {
+      var b = $('dlg-si'); b.disabled = true; b.textContent = 'Cerrando…';
+      var r = await sb.rpc('cerrar_sesiones', { p_usuario: usuario });
+      if (r.error) {
+        b.disabled = false; b.textContent = si;
+        var m = $('dlg-err'), t = (r.error.message || '') + ' ' + (r.error.code || '');
+        m.hidden = false;
+        m.textContent = /dirección|42501/i.test(t) ? 'Solo la dirección puede sacar a alguien de sus equipos.'
+          : /no existe/i.test(t) ? 'Ese usuario ya no existe en el portal.' : 'No se pudo. Vuelve a intentar en un momento.';
+        return;
+      }
+      cierraDlg();
+      var n = +r.data || 0;
+      toast(mio ? (n ? 'Listo: se cerró tu sesión en ' + equipos(n) + '.' : 'No tenías otras sesiones abiertas.')
+        : (n ? 'Listo: ' + p.nombre + ' ya no tiene sesión abierta (' + equipos(n) + ').' : p.nombre + ' ya no tenía sesión abierta.'));
+      carga();
+    };
+    try { ov.querySelector('.dlg').focus({ preventScroll: true }); } catch (e) { /* nada */ }
+  }
+  $('personas').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-sacar]');
+    if (b) preguntaSacar(b.getAttribute('data-sacar'));
+  });
 
   function opcionesPersona() {
     var sel = $('f-persona'), val = sel.value, vistos = {};

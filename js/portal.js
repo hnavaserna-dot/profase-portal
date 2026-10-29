@@ -524,6 +524,32 @@
     aLaEntrada(Date.now() - c < 120000 ? '?e=inactivo' : '');
   });
 
+  /* ---- Sesión cerrada desde Accesos (29-oct-2026, portal/sql/28_sesiones.sql): si Daniel sacó a alguien de todos sus
+     equipos, su sesión ya no existe en la base. Solo la página de arriba (no las pestañas en su marco) pregunta cada
+     30 s mientras está a la vista, y al volver a ella; si la base contesta que no, se va a la entrada con el aviso.
+     Si la base no contesta o todavía no tiene la función, no hace nada. Preguntar no cuenta como actividad. ---- */
+  function vigilaSesion() {
+    if (window.parent !== window || P._vigilaSesion) return;
+    P._vigilaSesion = true;
+    var preguntando = false;
+    async function revisa() {
+      if (preguntando || cerrando || document.hidden) return;
+      preguntando = true;
+      try {
+        var r = await sb.rpc('mi_sesion_viva');
+        if (!r.error && r.data === false && !cerrando) {
+          cerrando = true;
+          try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { /* igual se va */ }
+          aLaEntrada('?e=cerrada');
+        }
+      } catch (e) { /* sin red: se vuelve a preguntar luego */ }
+      finally { preguntando = false; }
+    }
+    setInterval(revisa, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) revisa(); });
+  }
+  P.listo.then(function (p) { if (p) vigilaSesion(); }).catch(function () {});
+
   /* ---- Errores con los mismos códigos que espera la página ---- */
   function error(e) {
     if (e && e.code && /^[a-z_]+$/.test(e.code)) return e;
