@@ -34,7 +34,85 @@
     if (r.error) throw r.error;
     return r.data;
   };
+  /* ---- Bitácora de accesos (solo la lee el director; portal/sql/13_accesos.sql) ----
+     Anota salidas, cierres por inactividad, cambios de contraseña y descargas. Nunca detiene la página:
+     si la base no responde en 1.5 s, sigue sin anotar. */
+  var NOMBRE_PAG = { director: 'Dirección', gerentes: 'Vista del equipo', contadores: 'Mi WorkFlow', cartera: 'Cartera',
+    cajachica: 'Caja chica', variaciones: 'Variaciones', activofijo: 'Activo fijo', 'quo-cotizador': 'Cotizador QUO',
+    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos' };
+  P.pagina = function () {
+    var n = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
+    return NOMBRE_PAG[n] || n || 'Portal';
+  };
+  P.registrar = function (evento, detalle) {
+    var q;
+    try {
+      q = sb.rpc('registrar_acceso', { evento: evento, detalle: String(detalle || '').slice(0, 200) }).then(function () {}, function () {});
+    } catch (e) { return Promise.resolve(); }
+    return Promise.race([q, new Promise(function (r) { setTimeout(r, 1500); })]);
+  };
+
+  /* ---- Cierre por inactividad: una hora sin tocar el portal (en ninguna pestaña ni marco) cierra la sesión.
+     La última actividad se comparte entre pestañas (localStorage) y los marcos le avisan a la página de arriba. ---- */
+  var INACTIVO = 60 * 60 * 1000, CLAVE_ACT = 'profase-actividad', CLAVE_CIERRE = 'profase-cierre';
+  var ultimaLocal = Date.now(), ultEscrita = 0, cerrando = false;
+  function guardada() { try { return +localStorage.getItem(CLAVE_ACT) || 0; } catch (e) { return 0; } }
+  function arriba() { try { return window.parent !== window && window.parent.PORTAL ? window.parent.PORTAL : null; } catch (e) { return null; } }
+  P.ultimaActividad = function () {
+    var t = Math.max(ultimaLocal, guardada()), a = arriba();
+    if (a && a.ultimaActividad) { try { t = Math.max(t, a.ultimaActividad()); } catch (e) {} }
+    return t;
+  };
+  P.marcaActividad = function () { ultimaLocal = Date.now(); };
+  // Al entrar (index.html) la cuenta empieza de cero
+  P.actividadNueva = function () {
+    ultimaLocal = Date.now(); ultEscrita = ultimaLocal;
+    try { localStorage.setItem(CLAVE_ACT, String(ultimaLocal)); } catch (e) {}
+  };
+  function actividad() {
+    var ahora = Date.now();
+    ultimaLocal = ahora;
+    if (ahora - ultEscrita < 15000) return;
+    ultEscrita = ahora;
+    try { localStorage.setItem(CLAVE_ACT, String(ahora)); } catch (e) {}
+    var a = arriba(); if (a && a.marcaActividad) { try { a.marcaActividad(); } catch (e) {} }
+  }
+  function aLaEntrada(extra) {
+    var url = './' + (extra || '');
+    try { (window.top || window).location.replace(new URL(url, location.href).href); } catch (e) { location.replace(url); }
+  }
+  async function cierraPorInactividad() {
+    if (cerrando) return;
+    cerrando = true;
+    var otro = 0; try { otro = +localStorage.getItem(CLAVE_CIERRE) || 0; } catch (e) {}
+    try {
+      var s = (await sb.auth.getSession()).data.session;
+      if (s) {
+        if (Date.now() - otro > 60000) {   // si otra pestaña ya lo anotó, no se repite
+          try { localStorage.setItem(CLAVE_CIERRE, String(Date.now())); } catch (e) {}
+          await P.registrar('inactividad', 'una hora sin uso · ' + P.pagina());
+        }
+        await sb.auth.signOut();
+      }
+    } catch (e) { /* sin red: igual se va */ }
+    aLaEntrada('?e=inactivo');
+  }
+  function revisaInactividad() { if (!cerrando && Date.now() - P.ultimaActividad() > INACTIVO) cierraPorInactividad(); }
+  function vigilaInactividad() {
+    // Si la última vez que se usó el portal fue hace más de una hora (pestañas cerradas), se cierra al abrir
+    var g = guardada();
+    if (g && Date.now() - g > INACTIVO) { cierraPorInactividad(); return; }
+    actividad();
+    ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'].forEach(function (ev) {
+      window.addEventListener(ev, actividad, { passive: true, capture: true });
+    });
+    window.addEventListener('scroll', actividad, { passive: true, capture: true });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) revisaInactividad(); });
+    setInterval(revisaInactividad, 30000);
+  }
+
   P.salir = async function () {
+    try { await P.registrar('salida', P.pagina()); } catch (e) {}
     try { await sb.auth.signOut(); } catch (e) { /* sin red: igual se va */ }
     location.replace('./');
   };
@@ -57,7 +135,12 @@
     return p;
   })();
   P.listo.catch(function () {});
-  sb.auth.onAuthStateChange(function (ev) { if (ROL && ev === 'SIGNED_OUT') location.replace('./'); });
+  sb.auth.onAuthStateChange(function (ev) {
+    if (!ROL || ev !== 'SIGNED_OUT' || cerrando) return;
+    // si la sesión se cerró en otra pestaña por inactividad, la entrada lo dice
+    var c = 0; try { c = +localStorage.getItem(CLAVE_CIERRE) || 0; } catch (e) {}
+    aLaEntrada(Date.now() - c < 120000 ? '?e=inactivo' : '');
+  });
 
   /* ---- Errores con los mismos códigos que espera la página ---- */
   function error(e) {
@@ -244,6 +327,7 @@
       var u = URL.createObjectURL(blob), a = document.createElement('a');
       a.href = u; a.download = o.filename || 'archivo'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 4000);
+      P.registrar('descarga', P.pagina() + ' · ' + (o.filename || 'archivo'));
     }
   };
 
@@ -278,9 +362,9 @@
     var ov = document.createElement('div');
     ov.className = 'ov'; ov.hidden = true;
     ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pu-h">'
-      + '<h2 id="pu-h">Cambiar contraseña</h2><p class="sub">Mínimo 8 caracteres. Se cambia para todos tus dispositivos.</p>'
-      + '<form class="pu-f" id="pu-form"><label>Contraseña nueva<input type="password" id="pu-n1" autocomplete="new-password" minlength="8" required></label>'
-      + '<label>Repítela<input type="password" id="pu-n2" autocomplete="new-password" minlength="8" required></label>'
+      + '<h2 id="pu-h">Cambiar contraseña</h2><p class="sub">Mínimo 10 caracteres. Se cambia para todos tus dispositivos.</p>'
+      + '<form class="pu-f" id="pu-form"><label>Contraseña nueva<input type="password" id="pu-n1" autocomplete="new-password" minlength="10" required></label>'
+      + '<label>Repítela<input type="password" id="pu-n2" autocomplete="new-password" minlength="10" required></label>'
       + '<div class="dmsg" id="pu-msg"></div>'
       + '<div class="dacts"><button class="btn" type="button" id="pu-x">Cancelar</button><button class="btn primary" type="submit" id="pu-ok">Guardar</button></div></form></div>';
     document.body.appendChild(ov);
@@ -292,13 +376,14 @@
     $('pu-form').addEventListener('submit', async function (e) {
       e.preventDefault();
       var a = $('pu-n1').value, b = $('pu-n2').value, m = $('pu-msg');
-      if (a.length < 8) { m.className = 'dmsg warn'; m.textContent = 'Usa al menos 8 caracteres.'; return; }
+      if (a.length < 10) { m.className = 'dmsg warn'; m.textContent = 'Usa al menos 10 caracteres.'; return; }
       if (a !== b) { m.className = 'dmsg warn'; m.textContent = 'Las dos contraseñas no coinciden.'; return; }
       var ok = $('pu-ok'); ok.disabled = true; ok.textContent = 'Guardando…';
       var r = await sb.auth.updateUser({ password: a });
       ok.disabled = false; ok.textContent = 'Guardar';
       if (r.error) { m.className = 'dmsg bad'; m.textContent = /different/i.test(r.error.message) ? 'Escribe una contraseña distinta a la actual.' : 'No se pudo cambiar. Vuelve a intentar.'; return; }
       m.className = 'dmsg ok'; m.textContent = 'Listo: tu contraseña quedó cambiada.';
+      P.registrar('clave', P.pagina());
       setTimeout(cerrar, 1400);
     });
     return function () { ov.hidden = false; $('pu-n1').focus(); };
@@ -384,6 +469,7 @@
       if (!p) return;
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { encabezado(p); });
       else encabezado(p);
+      vigilaInactividad();
     }).catch(function () {});
   }
 })();
