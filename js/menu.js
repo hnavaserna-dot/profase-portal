@@ -34,7 +34,8 @@
       { k: 'cajachica', v: 'caja', t: 'Caja chica' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA' },
       { k: 'calendario', v: 'cal', t: 'Calendario' },   // cumpleaños, aniversarios y eventos: todos lo ven
-      { k: 'accesos', v: 'acc', t: 'Accesos' }] },   // bitácora de accesos: solo la ve el director
+      { k: 'accesos', v: 'acc', t: 'Accesos' },   // bitácora de accesos: solo la ve el director
+      { k: 'cambios', v: 'chg', t: 'Cambios al portal' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     { k: 'quo', t: 'QUO', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO' },
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías' }] }
@@ -79,6 +80,9 @@
     + '.pm-subs a{display:block;color:#A9BBD8;text-decoration:none;padding:7px 10px 7px 20px;font-size:13.5px;border-left:2px solid rgba(255,255,255,.14);border-radius:0 7px 7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.pm-subs a:hover{color:#fff;background:rgba(255,255,255,.1)}'
     + '.pm-subs a[aria-current="page"]{color:#fff;font-weight:700;border-left:3px solid var(--accent,#F07A1E);background:rgba(240,122,30,.18)}'
+    // aviso de una pestaña (data-aviso en su botón; por ahora «Cambios al portal»): número junto al nombre y punto en el módulo
+    + '.pm-av{display:inline-block;min-width:19px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--accent,#F07A1E);color:#fff;font-size:11.5px;font-weight:700;line-height:19px;text-align:center;vertical-align:1px}'
+    + '.pm-mb{position:relative}.pm-mod.con-aviso>.pm-mb::after{content:"";position:absolute;left:24px;top:8px;width:8px;height:8px;border-radius:50%;background:var(--accent,#F07A1E);box-shadow:0 0 0 2px var(--navy,#1F3864)}'
     + '.pm-fly{display:none}'
     + '.pm-pie{border-top:1px solid rgba(255,255,255,.12);padding:8px}'
     + '.pm-pie button{width:100%;display:flex;align-items:center;gap:12px;border:0;background:none;color:#A9BBD8;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;text-align:left}'
@@ -175,14 +179,17 @@
     var act = activo(), h = '', guarda = false;
     modulos().forEach(function (x) {
       var m = x.m, on = !!act && x.subs.indexOf(act) >= 0, open = on || abiertos[m.k] === true;
+      var av = x.subs.some(function (s) { var b = boton(s.v); return b && +b.dataset.aviso > 0; });
       // el módulo de la sección abierta se queda abierto aunque luego se elija otro, hasta que lo cierren
       if (on && abiertos[m.k] !== true) { abiertos[m.k] = true; guarda = true; }
-      h += '<div class="pm-mod' + (on ? ' on' : '') + '" data-m="' + m.k + '" data-open="' + open + '">'
+      h += '<div class="pm-mod' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" data-open="' + open + '">'
         + '<button type="button" class="pm-mb" aria-expanded="' + open + '" title="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, 'pm-ic')
         + '<span class="pm-lbl">' + esc(m.t) + '</span>' + svg(FLECHA, 'pm-car') + '</button>'
         + '<ul class="pm-subs"><li class="pm-fly" aria-hidden="true">' + esc(m.t) + '</li>'
         + x.subs.map(function (s) {
-          return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s)) + '</a></li>';
+          var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
+          return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s))
+            + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + '</a></li>';
         }).join('') + '</ul></div>';
     });
     if (guarda) store.set('portal.menu.abiertos', JSON.stringify(abiertos));
@@ -267,7 +274,7 @@
     lista.addEventListener('mouseleave', function () { lista.querySelectorAll('.pm-mod.fly').forEach(function (m) { m.classList.remove('fly'); }); });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
-    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed'] });
+    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso'] });
     function vigilaQuo() {
       var q = document.querySelector('#v-quo .qsw');
       if (q && !quoObs) { quoObs = new MutationObserver(luego); quoObs.observe(q, { subtree: true, attributes: true, attributeFilter: ['aria-pressed'] }); luego(); }
