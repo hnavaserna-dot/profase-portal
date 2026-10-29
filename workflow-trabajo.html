@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=5cd70eec54"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=1462cf2e83"></script><script src="js/visor.js?v=6d066beacd"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -521,6 +521,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('docs-n').textContent = L.length ? String(L.length) : '';
     if (!L.length) { $('docs-in').innerHTML = '<div class="vacio">' + (a.reservado && !VEO_RES ? 'Los documentos de esta actividad solo los ve la dirección.' : 'Sin documentos.') + '</div>'; return; }
     L.forEach(function (d) { DOCS[d.id] = d; });
+    VISOR.precarga(L, function () { return ABIERTA === a.id; });   // la marca lista y los PDF chicos ya traídos
     $('docs-in').innerHTML = L.map(function (d) {
       var info = [d.subio ? 'Lo subió ' + d.subio : '', d.fecha ? fechaHora(d.fecha) : '', d.bytes ? tamano(d.bytes) : '', d.origen === 'access' ? 'del Access' : ''].filter(Boolean).join(' · ');
       var acc;
@@ -534,43 +535,28 @@ tr.fila:hover td{background:var(--navy-soft)}
         + (d.comentario ? '<div class="d">Comentario: ' + esc(d.comentario) + '</div>' : '')
         + '<div class="d">' + esc(info) + (d.enviado ? ' · <span class="tag az">Enviado al cliente' + (d.fecha_envio ? ' ' + esc(fechaHora(d.fecha_envio)) : '') + '</span>' : '') + '</div></div>'
         + '<div class="acc">' + acc + '</div></div>';
-    }).join('') + '<div class="aviso">Los PDF salen con la marca PROFASE (el signo de fondo y una línea abajo); los demás archivos, tal cual se subieron.</div>';
+    }).join('') + '<div class="aviso">«Ver» abre el PDF aquí mismo. Los PDF se ven y se bajan con la marca PROFASE (el signo de fondo y una línea abajo); los demás archivos, tal cual se subieron.</div>';
   }
   function esPdf(d) { return /\.pdf$/i.test(d.nombre || ''); }
+  // el archivo, con la marca PROFASE si es PDF (js/marca.js); «Ver» y «Bajar» lo traen una sola vez y lo guardan
+  // mientras la página está abierta (js/visor.js; pedido de Daniel, 29-oct-2026: «eficientiza ambos»)
   async function bytesDe(d) {
     var r = await P.sb.storage.from('wfdocs').download(String(d.id));
     if (r.error || !r.data) throw new Error('sin archivo');
     var b = new Uint8Array(await r.data.arrayBuffer());
-    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b); if (m) b = m; }
+    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: String(d.nombre || '').replace(/\.pdf$/i, '') }); if (m) b = m; }
     return b;
   }
   function nombreSeguro(n) { return String(n || 'documento').replace(/[\\/:*?"<>|]/g, '_'); }
-  async function baja(btn) {
-    var d = DOCS[+btn.getAttribute('data-dbaja')]; if (!d) return;
-    var t0 = btn.textContent; btn.disabled = true; btn.textContent = 'Bajando…';
-    try {
-      var b = await bytesDe(d);
-      var x = document.createElement('a'); x.href = URL.createObjectURL(new Blob([b], { type: esPdf(d) ? 'application/pdf' : 'application/octet-stream' }));
-      x.download = nombreSeguro(d.nombre); document.body.appendChild(x); x.click();
-      setTimeout(function () { URL.revokeObjectURL(x.href); x.remove(); }, 1500);
-      try { P.registrar('descarga', 'WorkFlow · ' + d.nombre); } catch (er) {}
-      btn.textContent = 'Listo';
-    } catch (er) { btn.textContent = 'No se pudo'; }
-    setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 2000);
-  }
-  async function ver(btn) {
-    var d = DOCS[+btn.getAttribute('data-dver')]; if (!d) return;
-    var w = window.open('', '_blank');
-    var t0 = btn.textContent; btn.disabled = true; btn.textContent = 'Abriendo…';
-    try {
-      var b = await bytesDe(d), u = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
-      if (w) w.location.href = u; else { var x = document.createElement('a'); x.href = u; x.target = '_blank'; x.rel = 'noopener'; document.body.appendChild(x); x.click(); x.remove(); }
-      try { P.registrar('descarga', 'WorkFlow (ver) · ' + d.nombre); } catch (er) {}
-      setTimeout(function () { URL.revokeObjectURL(u); }, 120000);
-      btn.textContent = t0;
-    } catch (er) { if (w) w.close(); btn.textContent = 'No se pudo'; setTimeout(function () { btn.textContent = t0; }, 2000); }
-    btn.disabled = false;
-  }
+  var VISOR = window.PROFASE_VISOR.nuevo({
+    trae: bytesDe, esPdf: esPdf, nombre: function (d) { return nombreSeguro(d.nombre); },
+    doc: function (el) { return DOCS[+(el.getAttribute('data-dver') || el.getAttribute('data-dbaja'))]; },
+    alVer: function (d) { try { P.registrar('descarga', 'WorkFlow (ver) · ' + d.nombre); } catch (er) {} },
+    alBajar: function (d) { try { P.registrar('descarga', 'WorkFlow · ' + d.nombre); } catch (er) {} }
+  });
+  function baja(btn) { VISOR.baja(DOCS[+btn.getAttribute('data-dbaja')], btn); }
+  // «Ver» abre el PDF aquí mismo, encima de la ficha (antes abría otra ventana que el navegador podía bloquear)
+  function ver(btn) { VISOR.ver(DOCS[+btn.getAttribute('data-dver')], btn); }
   async function borra(btn) {
     var d = DOCS[+btn.getAttribute('data-dborra')], a = POR_ID[ABIERTA]; if (!d || !a) return;
     if (!window.confirm('¿Borrar «' + d.nombre + '»?')) return;

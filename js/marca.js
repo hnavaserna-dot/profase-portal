@@ -193,19 +193,33 @@
      cuando se pueda»: a cada hoja se le pone encima el signo de marca de agua, tenue para que se siga leyendo, y abajo
      una línea chica con el signo, «PROFASE» y «Asesoría Contable, Legal y Fiscal», sin tocar el contenido. Si el PDF no
      se puede abrir (por ejemplo, viene con contraseña), regresa null y la página lo baja tal cual.
-     Uso: const b = await PROFASE_MARCA.sellaPDF(bytes) || bytes */
+     Uso: const b = await PROFASE_MARCA.sellaPDF(bytes, { titulo: 'nombre del documento' }) || bytes */
   function bytesDe(dataUrl) {
     var b = atob(String(dataUrl).split(',')[1]), u = new Uint8Array(b.length);
     for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
     return u;
   }
-  async function pdfLib() {
-    await cargaJS('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', function () { return !!(window.PDFLib && window.PDFLib.PDFDocument); });
-    return window.PDFLib;
+  /* pdf-lib vive en el mismo portal (js/lib/pdf-lib.min.js, la misma versión 1.17.1): llega más rápido que de fuera y
+     no depende de otro sitio; si no cargara, se pide a cdnjs como antes. Se pide una sola vez aunque la pidan varios. */
+  var PDFLIB = null;
+  function hayPdfLib() { return !!(window.PDFLib && window.PDFLib.PDFDocument); }
+  function pdfLib() {
+    if (hayPdfLib()) return Promise.resolve(window.PDFLib);
+    if (!PDFLIB) {
+      PDFLIB = cargaJS('js/lib/pdf-lib.min.js', hayPdfLib)
+        .catch(function () { return cargaJS('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', hayPdfLib); })
+        .then(function () { return window.PDFLib; });
+      PDFLIB.catch(function () { PDFLIB = null; });
+    }
+    return PDFLIB;
   }
-  async function sellaPDF(bytes) {
+  /* Para que la marca esté lista antes de que la pidan (al abrir una ficha con PDF). */
+  function precargaSello() { return pdfLib().then(function () { return true; }, function () { return false; }); }
+  async function sellaPDF(bytes, op) {
     try {
-      var L = await pdfLib();
+      // si la librería no llega en 15 s, el documento sale tal cual («con marca cuando se pueda»), sin dejar esperando
+      var L = await Promise.race([pdfLib(), new Promise(function (ok) { setTimeout(function () { ok(null); }, 15000); })]);
+      if (!L) return null;
       var doc = await L.PDFDocument.load(bytes);
       var agua = await doc.embedPng(bytesDe(MARCA_AGUA)), signo = await doc.embedPng(bytesDe(LOGO));
       var fb = await doc.embedFont(L.StandardFonts.HelveticaBold), fi = await doc.embedFont(L.StandardFonts.HelveticaOblique);
@@ -223,7 +237,9 @@
         pg.drawText('PROFASE', { x: x0 + 23, y: y0 + 7, size: 6.5, font: fb, color: azul });
         pg.drawText(SUB, { x: x0 + 56, y: y0 + 7, size: 6, font: fi, color: gris });
       });
-      return await doc.save();
+      // el nombre del documento como título: el lector de PDF del navegador lo enseña arriba en la vista previa
+      if (op && op.titulo) { try { doc.setTitle(String(op.titulo), { showInWindowTitleBar: true }); } catch (e) { /* sin título */ } }
+      return await doc.save({ useObjectStreams: false });   // sin flujos de objetos: se arma en la mitad del tiempo
     } catch (e) { return null; }
   }
 
@@ -411,5 +427,5 @@
     excelJS: excelJS, libro: libro, encabezado: encabezado, cabecera: cabecera, cuerpo: cuerpo, borde: borde,
     impresion: impresion, guardar: guardar,
     pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF,
-    pdfDeLibro: pdfDeLibro, empareja: empareja };
+    precargaSello: precargaSello, pdfDeLibro: pdfDeLibro, empareja: empareja };
 })();
