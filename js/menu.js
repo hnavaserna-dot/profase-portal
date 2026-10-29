@@ -182,6 +182,7 @@
     + '@media (max-width:600px){header.band .tag{display:none}.pm-tit h1{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}'   // en el celular el título no se parte a media palabra
     + '@media (min-width:901px){body.pm.pm-arriba{padding-left:0!important}body.pm.pm-arriba header.band{margin-left:0}}'
     + '@media (max-width:420px){.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
+    + '@media (max-width:370px){.pm-tb{width:44px;height:44px}.pm-tb.pm-home{margin:0 3px}}'   // 360 px: la tira de íconos cabía 3 px de más
     + '@media (prefers-reduced-motion:reduce){.pm-side,.pm-car,.pm-pie svg{transition:none}}';
 
   var sw, side, lista, hdr, titulo, crumb, top, pendiente = 0, listo = false, quoObs = null, popAbierto = '';

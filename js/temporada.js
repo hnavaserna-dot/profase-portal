@@ -8,8 +8,13 @@
      · Navidad y Año Nuevo: nieve, esferas que se mecen, el pino con foquitos y un Santa que se ríe.
      · Fiestas patrias: papel picado, cohetes, la bandera ondeando y un personaje con sombrero y camisa bordada que brinda.
      · Amor y amistad: corazones que suben.
-   - Ya dentro (las tres vistas, js/menu.js) solo van dos adornos chicos arriba a la derecha, junto a la campanita;
-     están quietos y solo brincan si se pican.
+   - Ya dentro (las tres vistas, js/menu.js):
+     · Junto al signo, en todos los menús (el encabezado de las tres vistas, en computadora y celular, con el menú de
+       la izquierda, el riel de íconos o el menú de arriba, y el menú ☰ del celular), el adorno de la temporada a un
+       lado, sin taparlo: la arañita cuelga de su hilo desde la orilla de arriba y baja y sube; el Santa, el corazón
+       que late y la banderita, a su lado. Pedido de Daniel (29-oct-2026, 17:08): «la arañita bajando», en todos los
+       menús (la propuesta #9 la había quitado de junto al signo).
+     · Dos adornos chicos arriba a la derecha, junto a la campanita (propuesta #9); quietos, solo brincan si se pican.
    - Con «reducir movimiento» del dispositivo, todo se queda quieto.
    ?temporada=navidad en la dirección deja ver otra temporada para revisarla (amor, patrias, muertos o navidad). */
 (function () {
@@ -129,6 +134,26 @@
     amor: [CORAZON(), CORAZON('#F07A1E')]
   };
 
+  // junto al signo de cada menú (clases ptc-, para no chocar con las de la escena de la entrada)
+  var JUNTO = { muertos: 'arana', navidad: 'santa', amor: 'corazon', patrias: 'bandera' };
+  var JUNTO_SVG = {
+    arana: '<svg viewBox="0 8 16 18" fill="none" stroke="currentColor" stroke-linecap="round">'
+      + '<path d="M5.6 15.2 2 12.6 1 9.6M5.4 16.6 1.2 15.6 0 13.4M5.6 18.2 1.6 19.6.6 22.4M6.2 19.4 3.8 22.6 3.6 25.2'
+      + 'M10.4 15.2 14 12.6l1-3M10.6 16.6l4.2-1 1.2-2.2M10.4 18.2l4 1.4 1 2.8M9.8 19.4l2.4 3.2.2 2.6" stroke-width="1"/>'
+      + '<circle cx="8" cy="14.4" r="2.3" fill="currentColor" stroke="none"/><circle cx="8" cy="18.6" r="3.2" fill="currentColor" stroke="none"/>'
+      + '<circle cx="7.1" cy="14" r=".55" fill="#F07A1E" stroke="none"/><circle cx="8.9" cy="14" r=".55" fill="#F07A1E" stroke="none"/></svg>',
+    santa: '<svg viewBox="0 0 20 24"><path d="M3.5 10.5C4.5 4 9 1.2 14.5 2.2l1.2 5.6-12.2 2.7z" fill="#C8102E"/>'
+      + '<circle cx="15.6" cy="2.6" r="1.9" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<rect x="2.6" y="9.4" width="14.6" height="3" rx="1.5" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<circle cx="10" cy="15.2" r="4.2" fill="#F6C9A8"/><circle cx="8.5" cy="14.4" r=".55" fill="#3A2A20"/><circle cx="11.5" cy="14.4" r=".55" fill="#3A2A20"/>'
+      + '<path d="M4.6 15.6c.4 5 3 7.6 5.4 7.6s5-2.6 5.4-7.6c-1.2 1.6-2.6 2.4-5.4 2.4s-4.2-.8-5.4-2.4z" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></svg>',
+    corazon: '<svg viewBox="0 0 16 16"><path class="ptc-lat" d="M8 14.2S1.4 10.1 1.4 5.6A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.6 1.6C14.6 10.1 8 14.2 8 14.2z" fill="#D6336C"/></svg>',
+    bandera: '<svg viewBox="0 0 18 18"><path d="M2 1v16" stroke="#8A94A6" stroke-width="1.2" stroke-linecap="round"/>'
+      + '<path d="M2.6 2h4.6v8H2.6z" fill="#006847"/><path d="M7.2 2h4.6v8H7.2z" fill="#fff" stroke="#C9D1DE" stroke-width=".4"/>'
+      + '<path d="M11.8 2h4.6v8h-4.6z" fill="#CE1126"/><circle cx="9.5" cy="6" r="1.1" fill="#8C6A3D"/></svg>'
+  };
+
   var CSS = '.pt-escena{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}'
     + '.pt-escena>*{position:absolute}.pt-escena svg{display:block;width:100%;height:auto;overflow:visible}'
     + '.pt-escena .pt-p{pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}'
@@ -174,7 +199,18 @@
     + '.pt-chicos button{width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer;display:block;border-radius:6px}'
     + '.pt-chicos button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}.pt-chicos svg{display:block;width:100%;height:100%;overflow:visible}'
     + '@media (max-width:600px){.pt-chicos button:last-child{display:none}.pt-chicos button{width:24px;height:24px}}'
-    + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *{animation:none!important}.pt-nieve{display:none}}';
+    // junto al signo de cada menú: el adorno a un lado (aparta su lugar para no encimarse en «PROFASE»)
+    + '.ptc-caja.ptc-caja{position:relative;display:block;flex:none;padding-right:15px}'   // doble: le gana a «.pm-cab span» del menú ☰
+    + '.ptc-adorno{position:absolute;left:32px;pointer-events:none}.ptc-adorno svg{display:block;width:100%;height:auto;overflow:visible}'
+    // la arañita: el hilo sale de la orilla de arriba (--ptc-d lo mide junto()) y ella baja y sube
+    + '.ptc-arana{top:calc(-1 * var(--ptc-d,10px));width:13px;height:calc(var(--ptc-d,10px) + 28px);overflow:hidden;color:#2B3445}'
+    + ':root[data-theme="dark"] .ptc-arana,.ptc-oscuro .ptc-arana{color:#E5EAF2}'
+    + '.ptc-cae{position:absolute;display:block;left:0;right:0;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
+    + '.ptc-cae:before{content:"";position:absolute;left:50%;bottom:calc(100% - 4px);width:1px;margin-left:-.5px;height:400px;background:currentColor;opacity:.55}'
+    + '@keyframes ptc-baja{from{transform:translateY(-16px)}to{transform:translateY(0)}}'
+    + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-bandera{top:0;width:15px}'
+    + '.ptc-lat{transform-origin:50% 60%;animation:ptc-lat 1.6s ease-in-out infinite}@keyframes ptc-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
+    + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *,.ptc-adorno,.ptc-adorno *{animation:none!important}.pt-nieve{display:none}}';
   function ponCss() {
     if (document.getElementById('ptemp-css')) return;
     var st = document.createElement('style'); st.id = 'ptemp-css'; st.textContent = CSS; (document.head || document.documentElement).appendChild(st);
@@ -231,14 +267,41 @@
     })();
   }
 
-  // grande: el signo de la entrada (la escena va en su panel). Si no: las vistas, con los dos adornos chicos a la derecha.
+  /* Junto al signo de un menú: el adorno de la temporada a un lado, sin taparlo ni cambiarlo. La arañita cuelga de
+     un hilo que sale de la orilla de arriba del encabezado (o del menú ☰), mida lo que mida en cada pantalla. */
+  function junto(img, k, oscuro) {
+    var cual = JUNTO[k];
+    if (!cual || !img || !img.parentNode || img.parentNode.classList.contains('ptc-caja')) return;
+    var caja = document.createElement('span'); caja.className = 'ptc-caja' + (oscuro ? ' ptc-oscuro' : '');
+    img.parentNode.insertBefore(caja, img); caja.appendChild(img);
+    var a = document.createElement('span'); a.className = 'ptc-adorno ptc-' + cual; a.setAttribute('aria-hidden', 'true');
+    a.innerHTML = cual === 'arana' ? '<span class="ptc-cae">' + JUNTO_SVG.arana + '</span>' : JUNTO_SVG[cual];
+    caja.appendChild(a);
+    if (cual !== 'arana') return;
+    var ref = caja.closest('header,nav') || caja.parentNode;
+    var mide = function () {
+      var d = caja.getBoundingClientRect().top - ref.getBoundingClientRect().top;
+      caja.style.setProperty('--ptc-d', Math.max(0, Math.round(d)) + 'px');
+    };
+    mide();
+    window.addEventListener('resize', mide);
+    if (window.ResizeObserver) new ResizeObserver(mide).observe(ref);
+  }
+
+  // grande: el signo de la entrada (la escena va en su panel). Si no: las vistas, con el adorno junto al signo del
+  // encabezado y del menú ☰ (.pm-cab, js/menu.js) y los dos adornos chicos a la derecha.
   function pon(logo, opc) {
     opc = opc || {};
     var x = actual(new Date());
     if (!x) return null;
     ponCss();
     if (opc.grande) { var panel = logo && (logo.closest('.lado') || logo.parentNode); if (panel) escena(panel, x.k); }
-    else chicos(x.k);
+    else {
+      chicos(x.k);
+      junto(logo, x.k, false);
+      var cab = document.querySelector('.pm-cab img');
+      if (cab) junto(cab, x.k, true);
+    }
     return x.k;
   }
   window.PROFASE_TEMPORADA = { actual: function () { return actual(new Date()); }, pon: pon };
