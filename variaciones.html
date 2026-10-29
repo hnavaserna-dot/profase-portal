@@ -475,6 +475,8 @@ table.vtab{min-width:1500px}
 .vtab tbody tr{cursor:default}
 .hzb{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line-2);background:var(--tile-2);border-radius:8px;padding:3px 7px;cursor:pointer;transition:.13s}
 .hzb:hover{border-color:var(--accent)}
+.avi{margin-left:4px;font-size:11px;font-family:var(--f-ui);cursor:help;white-space:nowrap}
+.avi b{font-weight:600;color:var(--ink-2);margin-left:1px}
 .pct.mu{opacity:.5;font-weight:500}
 .pt{display:block;width:7px;height:7px;border-radius:50%;background:var(--orange-2);flex:none}
 .pt.ok{background:var(--up)}
@@ -1765,7 +1767,12 @@ function pintarResueltas(){
    - emp: lo que muestra «Saldo final». Todas las empresas con movimiento o con saldo en la cuenta, y cada una hasta
      su último mes con balanza (el mayor entre movimiento y saldo). El saldo es el de la balanza, tal cual (BASE.sal).
    - empMov: lo que muestra «Movimiento del mes», igual que antes (empresas con movimiento, hasta su último mes con
-     movimiento). Las celdas que solo existen en «Saldo final» llevan solo:true y nunca son hallazgo. */
+     movimiento). Las celdas que solo existen en «Saldo final» llevan solo:true y nunca son hallazgo.
+   Continuidad de la balanza (solo se muestra en «Saldo final»): el saldo inicial del mes es saldo final − movimiento
+   (BASE.sal y BASE.mov); si difiere en más de $1 del saldo final del mes anterior de la misma empresa y cuenta, la
+   celda lleva aviso:{ini, ant}. No se revisa el primer mes con balanza de la empresa (no hay mes anterior que comparar)
+   ni enero de las cuentas de resultados (4xx a 7xx) que inician en $0, porque así quedan por el cierre del ejercicio.
+   El aviso no cambia hallazgos ni «Movimiento del mes». */
 const VAR_CACHE = new Map();
 function variacionesAnio(y){
   if(VAR_CACHE.has(y)) return VAR_CACHE.get(y);
@@ -1773,17 +1780,19 @@ function variacionesAnio(y){
   VAR_CACHE.set(y, out);
   if(!BASE.mov) return out;
   const per = (yy,m) => yy+"-"+String(m).padStart(2,"0");
-  const mov = new Map(), ultMov = new Map(), ultimo = new Map(), pares = new Set(), sal = new Map(), ca = new Map();
+  const mov = new Map(), ultMov = new Map(), ultimo = new Map(), primero = new Map(), pares = new Set(), sal = new Map(), ca = new Map();
   for(const [ci,ct,p,c,a] of (BASE.ca||[])) ca.set(ci+"|"+ct+"|"+p, [c,a]);
   for(const [ci,ct,p,v] of BASE.mov){
     mov.set(ci+"|"+ct+"|"+p, v);
     if(!(ultMov.get(ci) >= p)) ultMov.set(ci, p);
     if(!(ultimo.get(ci) >= p)) ultimo.set(ci, p);
+    if(!(primero.get(ci) <= p)) primero.set(ci, p);
     pares.add(ci+"|"+ct);
   }
   for(const [ci,ct,p,v] of (BASE.sal||[])){
     sal.set(ci+"|"+ct+"|"+p, v);
     if(!(ultimo.get(ci) >= p)) ultimo.set(ci, p);   // último mes con balanza: el mayor entre movimiento y saldo
+    if(!(primero.get(ci) <= p)) primero.set(ci, p);
     // acreedoras con saldo y sin movimiento (un saldo contrario puede quedarse quieto)
     if(ultMov.has(ci) && !pares.has(ci+"|"+ct) && ES_ACR(BASE.cuentas[ct][0])) pares.add(ci+"|"+ct);
   }
@@ -1815,6 +1824,10 @@ function variacionesAnio(y){
           v: !ant ? null : (CRIT.baseAbs ? (act-ant)/Math.abs(ant) : act/ant-1)};
       }
       x.solo = solo;
+      // continuidad: saldo inicial (saldo final − movimiento) contra el cierre del mes anterior
+      // (en enero, las cuentas de resultados 4xx a 7xx que inician en $0 vienen del cierre del ejercicio: no es aviso)
+      const iniBal = r2(sf - act), cierreEjercicio = m===1 && /^[4-7]/.test(cta) && Math.abs(iniBal) <= 1;
+      if(pAnt >= primero.get(ci) && !cierreEjercicio && Math.abs(iniBal - sfAnt) > 1) x.aviso = {ini: iniBal, ant: sfAnt};
       cel.set(m, x);
       if(!solo) celMov.set(m, x);
     }
@@ -1851,6 +1864,10 @@ const importeDe = x => verSaldo() ? [x.sf, x.sfAnt] : [x.act, x.ant];
 // empresas de una cuenta según lo que se muestra (ver variacionesAnio)
 const empDe = c => verSaldo() ? c.emp : c.empMov;
 const mesCorto = m => (MESES.get(m)||"").slice(0,3);
+// ⚠️ continuidad de la balanza (solo en «Saldo final»; ver variacionesAnio)
+const avisoTexto = (x, m) => `La balanza de ${MESES_ES[m-1].toLowerCase()} ${S.anio} inicia con ${money(x.aviso.ini)}, pero el mes anterior cerró en ${money(x.aviso.ant)}; diferencia ${money(r2(x.aviso.ini - x.aviso.ant))}`;
+const avisoCelda = (x, m) => verSaldo() && x.aviso ? `<span class="avi" title="${esc(avisoTexto(x, m))}">⚠️</span>` : "";
+const avisoCuenta = n => verSaldo() && n ? `<span class="avi" title="${esc(`${n} ${n===1?"empresa inicia":"empresas inician"} el mes con un saldo distinto al cierre del mes anterior`)}">⚠️<b>${fNum.format(n)}</b></span>` : "";
 
 function pintarCuentas(){
   const datos = variacionesAnio(S.anio), meses = mesesAnio(S.anio).map(([n])=>n);
@@ -1859,13 +1876,13 @@ function pintarCuentas(){
     if(S.ctasOff.has(c.cta)) continue;
     if(S.q && !norm(c.cta+" "+c.nombre).includes(S.q)) continue;
     let emp = 0, conH = 0, nH = 0, max = null, min = null;
-    const porMes = new Map(meses.map(m=>[m,{u:0,d:0}])), tot = new Map(meses.map(m=>[m,{a:0,p:0,s:0,sp:0}]));
+    const porMes = new Map(meses.map(m=>[m,{u:0,d:0}])), tot = new Map(meses.map(m=>[m,{a:0,p:0,s:0,sp:0,av:0}]));
     // «Saldo final»: todas las empresas con saldo o movimiento; «Movimiento del mes»: como antes
     for(const [ci,cel] of empDe(c)){
       if(!empPasa(ci)) continue;
       emp++; let tiene = false;
       for(const [m,x] of cel){
-        const tt = tot.get(m); if(tt){ tt.a += x.act; tt.p += x.ant; tt.s += x.sf; tt.sp += x.sfAnt; }
+        const tt = tot.get(m); if(tt){ tt.a += x.act; tt.p += x.ant; tt.s += x.sf; tt.sp += x.sfAnt; if(x.aviso) tt.av++; }
         if(x.solo) continue;   // solo saldo: no cuenta para «Mayor alza» ni para hallazgos
         const alza = x.act - x.ant;
         if(alza>0 && (!max || alza>max.v)) max = {v:alza, ci, m, rid: esHall(x) ? x.rid : null};
@@ -1873,7 +1890,7 @@ function pintarCuentas(){
       }
       if(tiene) conH++;
     }
-    if(emp) filas.push({c, emp, conH, nH, max, min, porMes, tot});
+    if(emp) filas.push({c, emp, conH, nH, max, min, porMes, tot, nAv: [...tot.values()].reduce((a,t)=>a+t.av,0)});
   }
   const val = f => ({cta:f.c.cta, emp:f.emp, conH:f.conH, max:f.max?f.max.v:-Infinity, min:f.min?f.min.v:Infinity})[SC.orden];
   filas.sort((a,b)=>{ const A=val(a), B=val(b); const r = typeof A==="string" ? A.localeCompare(B) : A-B; return (SC.asc?r:-r) || b.nH-a.nH; });
@@ -1896,12 +1913,12 @@ function pintarCuentas(){
       ${meses.map(m=>{ const x=f.porMes.get(m), n=x.u+x.d, tt=f.tot.get(m);
         const [va, vp] = verSaldo() ? [tt.s, tt.sp] : [tt.a, tt.p];
         const tit = `Saldo final ${money(tt.s)} · mes anterior ${money(tt.sp)}\nMovimiento del mes ${money(tt.a)}`+(n?`\n${n} ${n===1?"hallazgo":"hallazgos"} en el mes`:"");
-        return `<td class="cm" title="${esc(tit)}" style="${n?`background:color-mix(in srgb, var(--accent) ${Math.round(6+n/tope*34)}%, transparent)`:""}">${va||vp?`<span class="${va<0?"neg":""}">${esc(money(va))}</span>${signo(va,vp)}`:'<span style="color:var(--ink-4)">·</span>'}</td>`; }).join("")}
+        return `<td class="cm" title="${esc(tit)}" style="${n?`background:color-mix(in srgb, var(--accent) ${Math.round(6+n/tope*34)}%, transparent)`:""}">${va||vp?`<span class="${va<0?"neg":""}">${esc(money(va))}</span>${signo(va,vp)}`:'<span style="color:var(--ink-4)">·</span>'}${avisoCuenta(tt.av)}</td>`; }).join("")}
       <td class="r">${extremo(f.max,"up")}</td></tr>${SC.sel===f.c.ct ? `<tr class="cdrow"><td colspan="${meses.length+4}">${detalleCuentaHTML(datos, meses)}</td></tr>` : ""}`).join("")
     : `<tr><td colspan="${meses.length+4}"><div class="vacio">Ninguna cuenta cumple estos filtros.</div></td></tr>`;
-  const totH = filas.reduce((a,f)=>a+f.nH,0);
+  const totH = filas.reduce((a,f)=>a+f.nH,0), totAv = filas.reduce((a,f)=>a+f.nAv,0);
   document.getElementById("csub").textContent = filas.length
-    ? `${fNum.format(filas.length)} cuentas · ${fNum.format(totH)} hallazgos en ${S.anio}`
+    ? `${fNum.format(filas.length)} cuentas · ${fNum.format(totH)} hallazgos en ${S.anio}`+(verSaldo() && totAv ? ` · ⚠️ ${fNum.format(totAv)} ${totAv===1?"saldo inicial que no cuadra":"saldos iniciales que no cuadran"} con el mes anterior` : "")
     : "Sin cuentas";
   document.querySelectorAll("#cVer button").forEach(b=>{ const on = b.dataset.v===SC.ver; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); b.disabled = b.dataset.v==="saldo" && !BASE.sal; });
   document.getElementById("cdet").innerHTML = "";
@@ -1925,13 +1942,14 @@ function detalleCuentaHTML(datos, meses){
   filas.sort((a,b)=>b.nh-a.nh || b.mx-a.mx || BASE.clientes[a.ci][0].localeCompare(BASE.clientes[b.ci][0],"es"));
   const enMes = m => { let u=0,d=0; filas.forEach(f=>{ const x=f.cel.get(m); if(x && esHall(x)) (x.v!==null && x.v<0) ? d++ : u++; }); return {u,d}; };
   const total = [...empV.keys()].filter(empPasa).length;
-  const celda = x => {
+  const conAviso = verSaldo() ? [...empV].filter(([ci,cel])=>empPasa(ci) && [...cel.values()].some(x=>x.aviso)).length : 0;
+  const celda = (x, m) => {
     if(!x) return `<td class="vc"><span style="color:var(--ink-4)">·</span></td>`;
-    const [va, vp] = importeDe(x);
+    const [va, vp] = importeDe(x), av = avisoCelda(x, m);
     const tit = `Saldo final ${money(x.sf)} (mes anterior ${money(x.sfAnt)})\nMovimiento del mes ${money(x.act)} (mes anterior ${money(x.ant)})`
       + (x.acr ? `\nCargos ${money(x.car)} · Abonos ${money(x.abo)} · ${sentidoDe(x.aum)}${x.v!==null?" "+pct(x.v)+" sobre el saldo inicial":""}${x.sf<0?"\nSaldo contrario a su naturaleza":""}` : "");
-    if(!va && !vp && !esHall(x)) return `<td class="vc" title="${esc(tit)}"><span style="color:var(--ink-4)">·</span></td>`;
-    const imp = `<span class="mny">${esc(money(va))}</span>${signo(va, vp)}`;
+    if(!va && !vp && !esHall(x)) return `<td class="vc" title="${esc(tit)}"><span style="color:var(--ink-4)">·</span>${av}</td>`;
+    const imp = `<span class="mny">${esc(money(va))}</span>${signo(va, vp)}${av}`;
     if(esHall(x)){
       const e = lee(x.rid), ok = cerrado(e);
       return `<td class="vc"><span class="hzb" title="${esc(tit+" · hallazgo · "+tI(e.i))}">
@@ -1941,7 +1959,7 @@ function detalleCuentaHTML(datos, meses){
   };
   return `<div class="dhd">
       <div><h3><span class="cta">${esc(c.cta)}</span> ${esc(c.nombre)}</h3>
-        <p>${fNum.format(total)} empresas tienen la cuenta en ${S.anio}; ${fNum.format(filas.filter(f=>f.nh).length)} con hallazgo.</p></div>
+        <p>${fNum.format(total)} empresas tienen la cuenta en ${S.anio}; ${fNum.format(filas.filter(f=>f.nh).length)} con hallazgo.${conAviso ? ` ⚠️ ${fNum.format(conAviso)} ${conAviso===1?"empresa tiene":"empresas tienen"} algún mes cuyo saldo inicial no cuadra con el cierre del mes anterior${SC.solo?" (con «Todas las empresas» se ven todas)":""}.` : ""}</p></div>
       <div class="chips" id="cSolo">
         <button class="chip${SC.solo?" on":""}" data-v="1">Solo empresas con hallazgo</button>
         <button class="chip${SC.solo?"":" on"}" data-v="0">Todas las empresas</button>
@@ -1952,7 +1970,7 @@ function detalleCuentaHTML(datos, meses){
       <th class="r">Hallazgos</th><th class="r">Revisados</th></tr></thead>
       <tbody>${filas.length ? filas.map(f=>{ const [nom,rfc,cont,,grupo] = BASE.clientes[f.ci];
         return `<tr><td class="cli">${esc(nom)}<br><span class="grp" style="font-weight:400">${esc(grupo||"—")} · ${esc(SIGLA(cont))}</span></td>
-          ${meses.map(m=>celda(f.cel.get(m))).join("")}
+          ${meses.map(m=>celda(f.cel.get(m), m)).join("")}
           <td class="r mny">${fNum.format(f.nh)}</td><td class="r mny">${f.nh?fNum.format(f.rev)+" / "+fNum.format(f.nh):"—"}</td></tr>`; }).join("")
         : `<tr><td colspan="${meses.length+3}"><div class="vacio">Ninguna empresa con hallazgo en esta cuenta. Prueba «Todas las empresas».</div></td></tr>`}</tbody></table></div>`;
 }
