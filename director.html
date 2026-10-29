@@ -2423,7 +2423,10 @@ function pintarSync(){
       b.hidden=false;
       let nuevo=false;
       try{nuevo=await cumple(P)}catch(e){}
-      aviso(P,nuevo);
+      let mis=null;
+      try{const q=await P.sb.rpc('cal_mis_eventos');if(!q.error&&q.data)mis=q.data}catch(e){}
+      aviso(P,nuevo,mis);
+      if(mis)try{invitaciones(P,mis)}catch(e){}
     }catch(e){}
   })();
   const caja=document.createElement('main');caja.id='v-cal';
@@ -2447,7 +2450,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cal');
     const t=document.getElementById('vtitle');if(t)t.textContent='Calendario';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cal'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','calendario.html?v=40979a81ea');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','calendario.html?v=e994086664');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -2457,16 +2460,18 @@ function pintarSync(){
   /* Aviso del día: cumpleaños, aniversarios en PROFASE y eventos de hoy (y lo de mañana, abajo). Se cierra y no vuelve
      a salir ese día en este navegador. Si la base ya tiene la ventana de cumpleaños (nuevo = true), los cumpleaños de
      hoy salen en esa ventana y aquí ya no se repiten. */
-  async function aviso(P,nuevo){
+  async function aviso(P,nuevo,mis){
     const pad=n=>String(n).padStart(2,'0');
     const hoy=new Date();hoy.setHours(0,0,0,0);
     const clave=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
     const hk=clave(hoy);
     try{if(localStorage.getItem('portal.cal.aviso')===hk)return}catch(e){}
-    const r=await P.sb.from('docs').select('col,data').in('col',['cal_colab','cal_eventos']);
+    const r=await P.sb.from('docs').select('col,id,data').in('col',['cal_colab','cal_eventos']);
     if(r.error||!r.data)return;
     const colab=r.data.filter(x=>x.col==='cal_colab'&&x.data&&x.data.autoriza===true&&x.data.nombre).map(x=>x.data);
-    const evs=r.data.filter(x=>x.col==='cal_eventos'&&x.data&&x.data.titulo).map(x=>x.data);
+    // eventos: solo a los que está invitado (o por quien contesta); sin la base nueva, todos como antes
+    const mios=mis&&Array.isArray(mis.eventos)?new Set(mis.eventos.filter(e=>e.invitado||(e.para||[]).length).map(e=>e.id)):null;
+    const evs=r.data.filter(x=>x.col==='cal_eventos'&&x.data&&x.data.titulo&&(!mios||mios.has(x.id))).map(x=>x.data);
     const bis=y=>(y%4===0&&y%100!==0)||y%400===0;
     function del(d){
       const m=d.getMonth()+1,dd=d.getDate(),y=d.getFullYear(),k=clave(d);
@@ -2632,6 +2637,146 @@ function pintarSync(){
     addEventListener('storage',e=>{if(e.key===K_AV||e.key===K_PEND)revisa()});
     if(pend())revisa();   // si quedó un cierre sin mandar (sin internet), lo manda ahora
     return true;
+  }
+
+  /* Invitaciones a eventos (pedido de Fernando Cadengo, 30-oct-2026; portal/sql/23_eventos_asistencia.sql). Al entrar,
+     si hay un evento por confirmar (suyo o, para Daniel, el de su papá), sale una ventana con «Sí voy / No voy»
+     (acompañantes si el evento lo permite; motivo obligatorio al decir que no). «Contestar después» la quita solo en
+     esta sesión: vuelve a salir al entrar otra vez, hasta contestar o hasta la fecha límite. Quien es de solo consulta
+     ve una sola vez el evento y lo que contestaron por él, sin botones. Las respuestas las guarda la base
+     (cal_responder); aquí no se escribe nada directo. */
+  function invitaciones(P,mis){
+    const K_DESP='portal.ev.despues',K_VISTO='portal.ev.visto';
+    const lee=(st,k)=>{try{return JSON.parse(st.getItem(k)||'[]')||[]}catch(e){return[]}};
+    const anota=(st,k,id)=>{try{const l=lee(st,k);if(l.indexOf(id)<0){l.push(id);st.setItem(k,JSON.stringify(l.slice(-200)))}}catch(e){}};
+    const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const fl=k=>{const p=String(k||'').split('-').map(Number);if(p.length!==3)return k||'';const d=new Date(p[0],p[1]-1,p[2]);return DIAS[d.getDay()]+' '+p[2]+' de '+MESES[p[1]-1]};
+    const pila=n=>String(n||'').split(/\s+/)[0];
+    let cola=[],datos={};
+    async function docsDe(ids){
+      if(!ids.length)return;
+      const r=await P.sb.from('docs').select('id,data').eq('col','cal_eventos').in('id',ids);
+      (r.data||[]).forEach(x=>{datos[x.id]=x.data||{}});
+    }
+    function pendientes(m){
+      const desp=lee(sessionStorage,K_DESP),visto=lee(localStorage,K_VISTO);
+      return (m.eventos||[]).filter(e=>!e.pasado&&!e.cerrado&&(e.para||[]).length&&(
+        m.consulta?visto.indexOf(e.id)<0:(e.para.some(p=>!p.respuesta)&&desp.indexOf(e.id)<0)));
+    }
+    async function arranca(m){
+      cola=pendientes(m);
+      if(!cola.length)return;
+      await docsDe(cola.map(e=>e.id));
+      estilos();
+      muestra();
+    }
+    function muestra(){
+      const ev=cola.shift();if(!ev)return;
+      const d=datos[ev.id];if(!d){muestra();return}
+      const maxAc=d.acomp===true?Math.min(+d.max_acomp||1,3):0;
+      const pop=document.createElement('div');pop.id='ev-pop';
+      pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');pop.setAttribute('aria-labelledby','ev-t');
+      const cuerpo=()=>{
+        const e=ev,todos=(e.para||[]).every(p=>p.respuesta);
+        let h='<div class="ep-caja"><div class="ep-cab"><span>Nuevo evento</span>'+(mis.consulta?'<button type="button" class="ep-x" aria-label="Cerrar">✕</button>':'')+'</div><div class="ep-cuerpo">'
+          +'<h2 id="ev-t">'+esc(d.titulo)+'</h2><p class="ep-det"><b>'+esc(fl(d.fecha)+(d.hora?' · '+d.hora:''))+'</b>'+(d.lugar?'<br>'+esc(d.lugar):'')+(d.desc?'<br>'+esc(d.desc):'')+'</p>'
+          +'<p class="ep-nota">'+(maxAc?'Se puede llevar hasta '+maxAc+(maxAc===1?' acompañante':' acompañantes')+'.':'Sin acompañantes.')+(e.lugares!=null?' Quedan '+e.lugares+(e.lugares===1?' lugar.':' lugares.'):'')+'</p>'
+          +(d.limite?'<p class="ep-lim">Confirma a más tardar el '+esc(fl(d.limite))+'.</p>':'');
+        if(mis.consulta){
+          const p=(e.para||[])[0]||{};
+          h+='<div class="ep-blk"><b>Tu asistencia</b>'+(p.respuesta==='si'?'<p class="ep-ok">'+esc(pila(p.por)||'Daniel')+' confirmó que sí vas'+(p.acompanantes?' con '+p.acompanantes+(p.acompanantes===1?' acompañante':' acompañantes'):'')+'.</p>'
+            :p.respuesta==='no'?'<p class="ep-no">'+esc(pila(p.por)||'Daniel')+' avisó que no vas: «'+esc(p.motivo)+'».</p>':'<p class="ep-lim">Daniel confirma por ti.</p>')
+            +'<p class="ep-nota">Tu usuario es de solo consulta. Esta ventana solo informa; ciérrala con la ✕.</p></div>';
+        }else{
+          (e.para||[]).forEach(p=>{
+            h+='<div class="ep-blk" data-para="'+esc(p.usuario)+'"><b>'+(p.propio?'Tu respuesta':'Por '+esc(p.nombre))+'</b>'
+              +(p.respuesta==='si'?'<p class="ep-ok">'+(p.propio?'Confirmaste que sí vas':'Confirmaste que sí va')+(p.acompanantes?' con '+p.acompanantes+(p.acompanantes===1?' acompañante':' acompañantes'):'')+'.</p>':'')
+              +(p.respuesta==='no'?'<p class="ep-no">'+(p.propio?'Dijiste que no vas':'Dijiste que no va')+': «'+esc(p.motivo)+'».</p>':'')
+              +'<div class="ep-btns"><button type="button" class="ep-si" data-r="si" aria-pressed="'+(p.respuesta==='si')+'">'+(p.propio?'Sí voy':'Sí va')+'</button>'
+              +'<button type="button" class="ep-nob" data-r="no" aria-pressed="'+(p.respuesta==='no')+'">'+(p.propio?'No voy':'No va')+'</button></div><div class="ep-extra"></div><p class="ep-err" role="alert"></p></div>';
+          });
+          h+='<div class="ep-pie"><button type="button" class="ep-fin'+(todos?' ep-prim':'')+'">'+(todos?'Listo':'Contestar después')+'</button></div>'
+            +(todos?'':'<p class="ep-nota">Te volverá a salir cada vez que entres al portal hasta que contestes'+(d.limite?' (a más tardar el '+esc(fl(d.limite))+')':'')+'. También puedes contestar en Administración › Calendario.</p>');
+        }
+        return h+'</div></div>';
+      };
+      const cierra=()=>{
+        pop.remove();document.documentElement.style.overflow=ov0;
+        if(mis.consulta)anota(localStorage,K_VISTO,ev.id);
+        else if(!(ev.para||[]).every(p=>p.respuesta))anota(sessionStorage,K_DESP,ev.id);
+        muestra();
+      };
+      const enlaza=()=>{
+        const x=pop.querySelector('.ep-x');if(x)x.onclick=cierra;
+        const f=pop.querySelector('.ep-fin');if(f)f.onclick=cierra;
+        pop.querySelectorAll('.ep-blk[data-para]').forEach(bl=>{
+          const para=bl.dataset.para,ex=bl.querySelector('.ep-extra'),er=bl.querySelector('.ep-err');
+          const propio=(ev.para||[]).some(p=>p.usuario===para&&p.propio);
+          const manda=async(resp,ac,mot)=>{
+            er.textContent='';
+            try{
+              const r=await P.sb.rpc('cal_responder',{p_evento:ev.id,p_para:para,p_respuesta:resp,p_acompanantes:ac,p_motivo:mot});
+              if(r.error)throw r.error;
+              if(r.data&&r.data.error){er.textContent=r.data.error;return}
+              const q=await P.sb.rpc('cal_mis_eventos');
+              if(!q.error&&q.data){mis=q.data;const n=(q.data.eventos||[]).find(e=>e.id===ev.id);if(n)Object.assign(ev,n)}
+              pop.innerHTML=cuerpo();enlaza();
+            }catch(e){er.textContent='No se pudo guardar. Revisa tu conexión e inténtalo otra vez.'}
+          };
+          bl.querySelector('[data-r=si]').onclick=()=>{
+            if(!maxAc){manda('si',0,'');return}
+            let op='';for(let i=0;i<=maxAc;i++)op+='<option value="'+i+'">'+(i===0?(propio?'Voy solo/a':'Va solo/a'):i+(i===1?' acompañante':' acompañantes'))+'</option>';
+            ex.innerHTML='<label class="ep-l">'+(propio?'¿Llevas acompañante?':'¿Lleva acompañante?')+'<select class="ep-ac">'+op+'</select></label><button type="button" class="ep-prim ep-ok">Confirmar</button>';
+            ex.querySelector('.ep-ok').onclick=()=>manda('si',+ex.querySelector('.ep-ac').value,'');
+          };
+          bl.querySelector('[data-r=no]').onclick=()=>{
+            ex.innerHTML='<label class="ep-l">'+(propio?'¿Por qué no vas?':'¿Por qué no va?')+' (obligatorio)<textarea class="ep-mo" rows="2" maxlength="300" placeholder="Ej. Compromiso familiar"></textarea></label><button type="button" class="ep-prim ep-ok">Enviar</button>';
+            ex.querySelector('.ep-ok').onclick=()=>{const t=ex.querySelector('.ep-mo').value.trim();if(t.length<3){er.textContent='Escribe el motivo.';return}manda('no',0,t)};
+            ex.querySelector('.ep-mo').focus();
+          };
+        });
+      };
+      pop.innerHTML=cuerpo();
+      const ov0=document.documentElement.style.overflow;
+      document.documentElement.style.overflow='hidden';
+      document.body.appendChild(pop);enlaza();
+      try{(pop.querySelector('.ep-si,.ep-x')||pop).focus({preventScroll:true})}catch(e){}
+    }
+    function estilos(){
+      if(document.getElementById('ev-css'))return;
+      const s=document.createElement('style');s.id='ev-css';
+      s.textContent='#ev-pop{position:fixed;inset:0;z-index:9990;display:flex;align-items:center;justify-content:center;'
+        +'padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:rgba(13,19,32,.58)}'
+        +'#ev-pop .ep-caja{width:min(460px,100%);max-height:100%;overflow:auto;background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.35)}'
+        +'#ev-pop .ep-cab{display:flex;align-items:center;justify-content:space-between;background:var(--navy,#1F3864);color:#fff;border-bottom:4px solid var(--accent,#F07A1E);padding:12px 16px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}'
+        +'#ev-pop .ep-x{width:36px;height:36px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;font-size:16px}'
+        +'#ev-pop .ep-cuerpo{padding:16px 18px 18px}'
+        +'#ev-pop h2{margin:0 0 6px;font-family:var(--f-display,Arial,sans-serif);font-weight:750;font-size:clamp(19px,5vw,22px);line-height:1.2;color:var(--ink,#132036);text-wrap:balance}'
+        +'#ev-pop .ep-det{margin:0;font-size:14.5px;line-height:1.45;color:var(--muted,#5A6577)}#ev-pop .ep-det b{color:var(--ink,#132036);font-weight:600}'
+        +'#ev-pop .ep-nota{margin:8px 0 0;font-size:13px;color:var(--muted,#5A6577)}'
+        +'#ev-pop .ep-lim{margin:8px 0 0;font-size:13px;background:rgba(240,122,30,.13);color:var(--ink,#132036);border-radius:8px;padding:6px 10px}'
+        +'#ev-pop .ep-blk{border-top:1px solid var(--line,#DCE2EB);margin-top:12px;padding-top:12px;display:grid;gap:8px}'
+        +'#ev-pop .ep-blk>b{font-size:14.5px}'
+        +'#ev-pop .ep-ok,#ev-pop .ep-no{margin:0;font-size:13.5px;border-radius:8px;padding:7px 10px}'
+        +'#ev-pop .ep-ok{background:rgba(29,122,79,.13);color:var(--ink,#132036)}#ev-pop .ep-no{background:rgba(180,35,24,.12);color:var(--ink,#132036)}'
+        +'#ev-pop .ep-btns{display:flex;gap:8px;flex-wrap:wrap}'
+        +'#ev-pop button{font:inherit;cursor:pointer}'
+        +'#ev-pop .ep-si,#ev-pop .ep-nob,#ev-pop .ep-fin{border-radius:8px;padding:8px 14px;font-size:14.5px;font-weight:600;background:var(--surface,#fff)}'
+        +'#ev-pop .ep-si{border:1px solid #1d7a4f;color:#1d7a4f}#ev-pop .ep-si[aria-pressed="true"]{background:#1d7a4f;color:#fff}'
+        +'#ev-pop .ep-nob{border:1px solid #b42318;color:#b42318}#ev-pop .ep-nob[aria-pressed="true"]{background:#b42318;color:#fff}'
+        +'#ev-pop .ep-fin{border:1px solid var(--line,#DCE2EB);color:var(--ink,#132036)}'
+        +'#ev-pop .ep-prim{background:var(--accent,#F07A1E)!important;border:1px solid var(--accent,#F07A1E)!important;color:#fff!important;border-radius:8px;padding:8px 14px;font-weight:600;font-size:14.5px;justify-self:start}'
+        +'#ev-pop .ep-extra{display:grid;gap:8px}#ev-pop .ep-extra:empty{display:none}'
+        +'#ev-pop .ep-l{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--muted,#5A6577)}'
+        +'#ev-pop select,#ev-pop textarea{font:inherit;font-size:16px;font-weight:400;border:1px solid var(--line,#DCE2EB);border-radius:8px;padding:8px 10px;background:var(--surface,#fff);color:var(--ink,#132036);width:100%;box-sizing:border-box}'
+        +'#ev-pop .ep-err{margin:0;color:#b42318;font-size:13px}#ev-pop .ep-err:empty{display:none}'
+        +'#ev-pop .ep-pie{display:flex;justify-content:flex-end;border-top:1px solid var(--line,#DCE2EB);margin-top:14px;padding-top:12px}'
+        +':root[data-theme="dark"] #ev-pop .ep-si{color:#4caf7d;border-color:#4caf7d}:root[data-theme="dark"] #ev-pop .ep-nob{color:#e07a6c;border-color:#e07a6c}'
+        +'#ev-pop :focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}';
+      document.head.appendChild(s);
+    }
+    arranca(mis).catch(()=>{});
   }
 })();
 
