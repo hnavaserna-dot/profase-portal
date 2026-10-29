@@ -253,7 +253,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var ROL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
-  var A = [], POR_ID = {}, ASIG = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
+  var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   var HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -288,9 +288,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       MODO = m.data && m.data.valor ? m.data.valor : 'practica';
       $('practica').hidden = MODO !== 'practica';
       try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
-      var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre').order('empresa_id').range(0, 4999);
+      var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
       if (ra.error) throw ra.error;
-      (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) ASIG[s.empresa_id] = s.nombre; });
+      (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.';
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
       periodos();
@@ -404,14 +404,19 @@ tr.fila:hover td{background:var(--navy-soft)}
   function sec(tit, cuerpo, nota, id) { return '<section class="sec"' + (id ? ' id="' + id + '"' : '') + '><h3>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</h3>' + cuerpo + '</section>'; }
   function soyResp(a) { return !!a.resp_usuario && a.resp_usuario === YO; }
   function soyAut(a) { return !!a.aut_usuario && a.aut_usuario === YO; }
+  function soyAsig(a) { return ROL === 'contador' && !!ASIGU[a.empresa_id] && ASIGU[a.empresa_id] === YO; }
+  function cierra2(a) { return a.aut_nombre ? soyAut(a) : soyResp(a); }   // quien termina o rechaza (además de gerentes y dirección)
+  // las mismas reglas que la base (portal/sql/44_wf_trabajo_ajustes.sql); la base es la que manda
   function puedeEstatus(a, e) {
     if (CONSULTA) return false;
     if (jefe()) return true;
-    if (e === 2 || e === 3) return a.aut_nombre ? soyAut(a) : soyResp(a);
+    if (a.estatus === 6) return false;
+    if ((a.estatus === 2 || a.estatus === 3) && !cierra2(a)) return false;
+    if (e === 2 || e === 3) return cierra2(a);
     if (e === 6) return false;
-    return soyResp(a) || soyAut(a);
+    return soyResp(a) || soyAut(a) || soyAsig(a);
   }
-  function puedeEditar(a) { return !CONSULTA && (jefe() || soyResp(a) || soyAut(a)); }
+  function puedeEditar(a) { return !CONSULTA && (jefe() || soyResp(a) || soyAut(a) || soyAsig(a)); }
   function quienCierra(a) { return a.aut_nombre ? a.aut_nombre + ' (quien autoriza)' : (a.resp_nombre || 'el responsable') + ' (responsable)'; }
 
   function abre(id) {
@@ -427,7 +432,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div id="fe-com-c"><label for="fe-com">Comentarios</label><textarea id="fe-com" maxlength="4000"' + (edita ? '' : ' readonly') + ' placeholder="' + (edita ? 'Escribe aquí' : 'Sin comentario') + '"></textarea></div>'
       + '<div class="msg" id="fe-msg" hidden></div>'
       + (edita ? '<div class="botones"><button class="btn acento" type="button" id="fe-guarda">Guardar</button>'
-        + (soyResp(a) && a.aut_usuario && !soyAut(a) && !cerrada(a) ? '<button class="btn" type="button" id="fe-pide">Pedir autorización a ' + esc(a.aut_nombre) + '</button>' : '') + '</div>' : '')
+        + ((soyResp(a) || soyAsig(a) || jefe()) && a.aut_usuario && !soyAut(a) && !cerrada(a) ? '<button class="btn" type="button" id="fe-pide">Pedir autorización a ' + esc(a.aut_nombre) + '</button>' : '') + '</div>' : '')
       + '<div class="rfc">' + (CONSULTA ? 'Solo consulta.' : (edita ? 'Terminarla o rechazarla le toca a ' + esc(quienCierra(a)) + ', a un gerente o a la dirección.' : 'Esta actividad la mueven ' + esc(quienCierra(a)) + (a.aut_nombre && a.resp_nombre ? ' y ' + esc(a.resp_nombre) + ' (responsable)' : '') + ', un gerente o la dirección.')) + '</div>'
       + '</div>';
     h += sec('Estatus y comentarios', form);
@@ -441,7 +446,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<dt>Terminada</dt><dd>' + (a.terminado ? esc(fechaHora(a.terminado)) : '<span class="no">Todavía no</span>') + (a.a_tiempo_manual ? ' <span class="tag az">Marcada «a tiempo» a mano</span>' : '') + '</dd>'
       + '<dt>Paso</dt><dd>' + esc(a.secuencia || '—') + ' de la plantilla ' + esc(a.plantilla) + (a.periodicidad === 2 ? ' (anual)' : '') + '</dd>'
       + '<dt>Requiere</dt><dd>' + (esc(req) || '<span class="no">Nada especial</span>') + '</dd></dl></div>');
-    var sube = !CONSULTA && (!a.reservado || VEO_RES);
+    var sube = edita && (!a.reservado || VEO_RES);
     h += '<section class="sec" id="docs-sec"><h3>Documentos <small id="docs-n"></small></h3><div id="docs-in"><div class="vacio">Revisando…</div></div>'
       + (sube ? '<div class="subir"><input type="file" id="fe-arch" multiple aria-label="Escoger documentos"><button class="btn" type="button" id="fe-sube">Subir</button><span class="rfc" id="fe-sube-msg"></span></div>' : '') + '</section>';
     h += '<section class="sec" id="bit-sec"><h3>Bitácora <small id="bit-n"></small></h3><div id="bit-in"><div class="vacio">Revisando…</div></div></section>';
