@@ -23,6 +23,44 @@
   var P = { sb: sb, DOMINIO: DOMINIO, perfil: null, uid: null };
   window.PORTAL = P;
 
+  /* ---- Modo claro / oscuro (pedido de Fernando Cadengo, 29-oct-2026): uno solo para todo el portal.
+     Se escoge con el botón junto al nombre (encabezado) y se guarda en el navegador de cada quien («profase-tema»).
+     Cada página ya trae sus colores oscuros para <html data-theme="dark">; aquí solo se pone ese atributo, en la
+     página y en todas las pestañas abiertas en su marco (y sus sub pestañas). Si nadie ha escogido, sigue al equipo. ---- */
+  var TEMA = 'profase-tema', temaElegido = '';
+  var oscuroSistema = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function temaGuardado() {
+    try { var v = localStorage.getItem(TEMA); return v === 'oscuro' ? 'dark' : v === 'claro' ? 'light' : ''; } catch (e) { return ''; }
+  }
+  P.tema = function () {
+    var t = temaElegido || temaGuardado();
+    // sin almacenamiento en el navegador, la pestaña en su marco toma el de la página que la abrió
+    if (!t && window.parent !== window) { try { t = window.parent.PORTAL ? window.parent.PORTAL.tema() : ''; } catch (e) { t = ''; } }
+    return t || (oscuroSistema && oscuroSistema.matches ? 'dark' : 'light');
+  };
+  P.pintaTema = function (t) {
+    t = t || P.tema();
+    document.documentElement.setAttribute('data-theme', t);
+    try { document.dispatchEvent(new CustomEvent('profase-tema', { detail: t })); } catch (e) { /* navegador viejo: sin aviso */ }
+    (function baja(w) {
+      for (var i = 0; i < w.frames.length; i++) {
+        try { var f = w.frames[i]; if (f.PORTAL && f.PORTAL.pintaTema) f.PORTAL.pintaTema(t); else baja(f); } catch (e) { /* marco de otro sitio */ }
+      }
+    })(window);
+  };
+  P.cambiaTema = function (t) {
+    temaElegido = t === 'dark' ? 'dark' : 'light';
+    try { localStorage.setItem(TEMA, temaElegido === 'dark' ? 'oscuro' : 'claro'); } catch (e) { /* sin almacenamiento: solo esta vez */ }
+    P.pintaTema(temaElegido);
+  };
+  P.pintaTema();
+  // otra ventana del portal lo cambió
+  window.addEventListener('storage', function (e) { if (e.key === TEMA) { temaElegido = ''; P.pintaTema(); } });
+  if (oscuroSistema) {
+    var sigueSistema = function () { if (!temaElegido && !temaGuardado()) P.pintaTema(); };
+    if (oscuroSistema.addEventListener) oscuroSistema.addEventListener('change', sigueSistema); else oscuroSistema.addListener(sigueSistema);
+  }
+
   P.usuarioLimpio = function (u) {
     return String(u || '').split('@')[0].normalize('NFD').replace(/[̀-ͯ]/g, '')
       .toLowerCase().trim().replace(/\s+/g, '.');
@@ -368,6 +406,11 @@
     + '.pu-dd svg{width:17px;height:17px;color:var(--navy);flex:none;display:block}'
     + '.pu-dd hr{border:0;border-top:1px solid var(--line);margin:6px 0}'
     + '.pu-dd .pu-salir,.pu-dd .pu-salir svg{color:var(--red,#B42318)}'
+    + ':root[data-theme="dark"] .pu-dd svg{color:var(--brand-blue,#5B9BD8)}'
+    + '.pu-tema{flex:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);color:var(--navy);display:grid;place-items:center;cursor:pointer;padding:0;transition:background .15s}'
+    + '.pu-tema:hover{background:var(--navy-soft)}.pu-tema:focus-visible{outline:2px solid var(--accent);outline-offset:1px}'
+    + '.pu-tema svg{width:18px;height:18px;display:block}'
+    + ':root[data-theme="dark"] .pu-tema{color:var(--accent)}'
     + '.pu-f{display:grid;gap:10px;margin-top:6px}'
     + '.pu-f label{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}'
     + '.pu-f input{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink)}'
@@ -395,7 +438,9 @@
     act: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/>',
     vista: '<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M15 15.2c2.6-.4 4.9 1 5.7 4.3"/>',
     salir: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
-    car: '<path d="m6 9 6 6 6-6"/>'
+    car: '<path d="m6 9 6 6 6-6"/>',
+    luna: '<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.6 6.6 0 0 0 10.7 10.7z"/>',
+    sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'
   };
   function ic(k, cls) { return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[k] + '</svg>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -562,6 +607,7 @@
       + '<hr><button type="button" role="menuitem" class="pu-salir" id="pu-salir">' + ic('salir') + 'Salir</button></div>';
     if (lugar) lugar.replaceWith(pu);
     else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(pu); }
+    botonTema(pu);
     var btn = document.getElementById('pu-btn'), dd = document.getElementById('pu-dd');
     function despliega(o) {
       // en celular el menú se pega a la orilla derecha, justo abajo de la foto
@@ -587,6 +633,23 @@
     pintaFoto(p);
     cargaFoto(p);
     botonActualizar(dd);
+  }
+
+  /* Botón de modo claro / oscuro, a la derecha del nombre: la luna pasa a oscuro y el sol regresa a claro.
+     Cambia la página, el menú de la izquierda y todas las pestañas y sub pestañas (P.cambiaTema). */
+  function botonTema(pu) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'pu-tema'; b.id = 'pu-tema';
+    function pinta() {
+      var oscuro = P.tema() === 'dark';
+      b.innerHTML = ic(oscuro ? 'sol' : 'luna');
+      b.title = oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+      b.setAttribute('aria-label', b.title);
+    }
+    pinta();
+    document.addEventListener('profase-tema', pinta);
+    b.onclick = function () { P.cambiaTema(P.tema() === 'dark' ? 'light' : 'dark'); };
+    pu.parentNode.insertBefore(b, pu.nextSibling);
   }
 
   /* Botón «Actualizar» (solo para quien está en la lista de la base): corre la actualización en ese momento.

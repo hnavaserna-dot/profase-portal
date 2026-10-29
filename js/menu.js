@@ -57,6 +57,7 @@
     + '#v-quo .qsub{display:none!important}'
     + '.pm-ham{flex:none;width:38px;height:38px;border:0;background:none;border-radius:8px;cursor:pointer;display:grid;place-items:center;color:var(--navy,#1F3864);margin-left:-6px;padding:0}'
     + '.pm-ham:hover{background:var(--navy-soft,#E6ECF6)}.pm-ham svg{width:22px;height:22px;display:block}'
+    + ':root[data-theme="dark"] .pm-ham{color:var(--ink,#E5EAF2)}'   // modo oscuro: el azul no se ve sobre fondo oscuro
     + '.pm-tit{display:flex;flex-direction:column;min-width:0;flex:0 1 auto}'
     + '.pm-crumb{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#5A6577);line-height:1.1;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + 'header.band .meta{margin-left:auto}'
