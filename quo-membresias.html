@@ -1248,6 +1248,7 @@ async function iniciar(){
 
   db.collection('cotizaciones').onSnapshot(s=>{
     cotizaciones=s.docs.map(d=>Object.assign({}, d.data(), {id:d.id}));
+    if(vista==='cotizaciones') render();
   }, alErrar);
 
   db.collection('movimientos').onSnapshot(s=>{
@@ -1425,7 +1426,8 @@ const MODULOS=[
   {id:'clientes', label:'Clientes'},
   {id:'pagos',    label:'Pagos y vigencia'},
   {id:'ingresos',  label:'Ingresos'},
-  {id:'precios',  label:'Precios'}
+  {id:'precios',  label:'Precios'},
+  {id:'cotizaciones', label:'Cotizaciones'}   // las del Cotizador QUO (29-oct-2026, propuesta de Gabriel)
 ];
 
 function vistaCargando(){
@@ -2545,6 +2547,71 @@ function barraHeredada(){
 }
 
 /* ---------- PAGOS ---------- */
+/* =========================================================
+   COTIZACIONES (29-oct-2026, propuesta de Gabriel)
+   Las que se guardan en el Cotizador QUO (la misma colección), con sus estatus: Enviada, En seguimiento, Aprobada y
+   Rechazada («Aceptada», el nombre anterior, cuenta como Aprobada). Al aprobarla, «Dar de alta como cliente» crea el
+   cliente con lo que trae la cotización (o actualiza el que ya tiene ese RFC) y abre su ficha para revisarlo.
+   ========================================================= */
+const COT_EST=['Enviada','En seguimiento','Aprobada','Rechazada'];
+const COT_COLOR={'Enviada':'var(--azul-claro)','En seguimiento':'var(--t-ambar)','Aprobada':'var(--t-verde)','Rechazada':'var(--t-rojo)'};
+let cotFiltro='';
+function estCot(c){ const e=c.estatus||'Enviada'; return e==='Aceptada'?'Aprobada':e; }
+function chipCot(e){ return '<span class="chip" style="color:'+COT_COLOR[e]+';border-color:currentColor"><span class="dot"></span>'+esc(e)+'</span>'; }
+function paqueteCot(c){
+  if(c.linea==='TIMBRES') return 'Solo timbres'+(c.timbres?' · '+Number(c.timbres).toLocaleString('es-MX'):'');
+  return [c.linea, c.plan?'Plan '+c.plan:'', c.periodo].filter(Boolean).join(' · ');
+}
+function vistaCotizaciones(){
+  const lista=cotizaciones.slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  const kp=COT_EST.map(e=>{ const l=lista.filter(c=>estCot(c)===e), tot=l.reduce((t,c)=>t+(Number(c.total)||0),0);
+    return '<button class="kpi" data-cotf="'+esc(e)+'" aria-pressed="'+(cotFiltro===e)+'">'+chipCot(e)
+      +'<b style="display:block;font-size:22px;margin-top:6px">'+l.length+'</b><span style="font-size:12px;opacity:.75">'+moneyCorto(tot)+'</span></button>'; }).join('');
+  const vis=lista.filter(c=>!cotFiltro||estCot(c)===cotFiltro);
+  const ro=soloLectura();
+  const filas=vis.map(c=>{
+    const e=estCot(c);
+    const sel=ro?chipCot(e):'<select data-cotest="'+esc(c.id)+'" aria-label="Estatus de la cotización '+esc(c.folio||c.id)+'">'
+      +COT_EST.map(x=>'<option'+(x===e?' selected':'')+'>'+x+'</option>').join('')+'</select>';
+    const alta=(e==='Aprobada'&&!ro)?(c.clienteId?chipCot('Aprobada').replace('>Aprobada<','>Cliente dado de alta<')
+      :'<button class="btn" type="button" data-cotalta="'+esc(c.id)+'">Dar de alta como cliente</button>'):'';
+    return '<tr><td>'+esc(c.folio||c.id)+'</td><td>'+esc(c.fecha?new Date(c.fecha).toLocaleDateString('es-MX'):'')+'</td>'
+      +'<td><b>'+esc(c.cliente||'—')+'</b>'+(c.rfc?'<div style="font-size:12px;opacity:.7">'+esc(c.rfc)+'</div>':'')+'</td>'
+      +'<td>'+esc(paqueteCot(c))+'</td><td style="text-align:right;white-space:nowrap">'+money(c.total)+'</td><td>'+sel+'</td><td>'+esc(c.asesor||'')+'</td><td>'+alta+'</td></tr>';
+  }).join('');
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">'+kp+'</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:720px">'
+    +'<thead><tr><th style="text-align:left">Folio</th><th style="text-align:left">Fecha</th><th style="text-align:left">Cliente</th><th style="text-align:left">Paquete</th><th style="text-align:right">Total</th><th style="text-align:left">Estatus</th><th style="text-align:left">Asesor</th><th></th></tr></thead>'
+    +'<tbody>'+(filas||'<tr><td colspan="8" style="padding:24px;text-align:center;opacity:.7">'+(cotFiltro?'Ninguna cotización '+esc(cotFiltro.toLowerCase())+'.':'Todavía no hay cotizaciones: se guardan desde el Cotizador QUO.')+'</td></tr>')+'</tbody></table></div>';
+}
+async function altaDesdeCotizacion(id){
+  const c=cotizaciones.find(x=>x.id===id); if(!c) return;
+  const e=c.estado||{}, timbres=c.linea==='TIMBRES';
+  const anual=(e.periodo||c.periodo)!=='mensual';
+  const vig=new Date(); if(anual) vig.setFullYear(vig.getFullYear()+1); else vig.setMonth(vig.getMonth()+1);
+  const paquete={ linea:timbres?'':(c.linea||''), plan:timbres?'':((typeof e.plan==='number'?e.plan+1:(parseInt(c.plan,10)||1))+'.0'),
+    periodicidad:anual?'anual':'mensual' };
+  const rfc=String(c.rfc||'').trim().toUpperCase();
+  const ya=rfc?clientes.find(x=>String(x.rfc||'').trim().toUpperCase()===rfc):null;
+  let id2;
+  if(ya && confirm('Ya hay un cliente con el RFC '+rfc+' ('+(ya.nombre||'')+').\n\nAceptar: actualizarlo con el paquete de la cotización '+(c.folio||id)+'.\nCancelar: crear un cliente nuevo.')){
+    const ok=await guardarDoc('clientes/'+ya.id, Object.assign({}, paquete, {notas:((ya.notas||'')+'\nPaquete de la cotización '+(c.folio||id)+'.').trim()}), true);
+    if(!ok) return; id2=ya.id; Object.assign(ya, paquete);
+  }else{
+    id2=nuevoId('cl');
+    const datos={ nombre:c.cliente||'Cliente nuevo', rfc:rfc, tipo:'externo', contacto:c.atencion||'', tel:'',
+      correoContacto:c.correo||'', correoPlataforma:'', linea:paquete.linea, plan:paquete.plan, periodicidad:paquete.periodicidad,
+      xmlExtra:'0', usuariosExtra:0, responsable:c.asesor||'', estatus:'activo', notas:'Alta desde la cotización '+(c.folio||id)+'.',
+      requiereFactura:'si', vigenciaHasta:vig.toISOString().slice(0,10) };
+    const ok=await guardarDoc('clientes/'+id2, datos, false);
+    if(!ok) return;
+    clientes.push(Object.assign({id:id2},datos));
+  }
+  await guardarDoc('cotizaciones/'+id, {clienteId:id2, estatus:'Aprobada'}, true);
+  avisar('Cliente listo: revisa su ficha.');
+  seleccion=id2; modalFicha(id2);
+}
+
 function vistaPagos(){
   let h='';
   h+='<div class="page-head"><div><h1>Pagos y vigencia</h1>';
@@ -4449,9 +4516,21 @@ function render(){
              : vista==='clientes'?vistaClientes()
              : vista==='pagos'?vistaPagos()
              : vista==='ingresos'?vistaIngresos()
+             : vista==='cotizaciones'?vistaCotizaciones()
              : vistaPrecios();
 }
 
+document.addEventListener('change', function(ev){
+  const s=ev.target.closest&&ev.target.closest('[data-cotest]'); if(!s) return;
+  guardarDoc('cotizaciones/'+s.getAttribute('data-cotest'), {estatus:s.value}, true);
+});
+document.addEventListener('click', function(ev){
+  const cf=ev.target.closest&&ev.target.closest('[data-cotf],[data-cotalta]');
+  if(!cf) return;
+  ev.stopPropagation();
+  if(cf.hasAttribute('data-cotalta')){ altaDesdeCotizacion(cf.getAttribute('data-cotalta')); return; }
+  const v=cf.getAttribute('data-cotf'); cotFiltro=(cotFiltro===v?'':v); render();
+}, true);
 document.addEventListener('click', function(ev){
   const t=ev.target.closest('[data-vista],[data-ficha],[data-pago],[data-editpago],[data-borrarpago],[data-estado],[data-tipo],[data-factura],[data-chk],[data-paneltipo],[data-evid],[data-facpago],[data-ver],[data-ira],[data-tog],[data-factedit],[data-factborrar],[data-revertir],[data-cerrar],[data-scrim],#nuevo-cliente,#chk-todos,#chk-ninguno,#limpiar-filtros,#f-guardar,#e-guardar,#etq-crear,#quitar-comp,#refrescar-almacen,#aj-restablecer,#aj-guardar,#aj-descartar,#aj-aplicar-todos,#fact-nueva,#fk-guardar,#fk-facturado,#f-grupocubre,[data-modocli],[data-grupoabre],[data-kpi],[data-planabre],[data-cat],[data-opt],#cat-todos,#cat-aplicar,#q-limpiar,[data-subir],#tema,[data-abrepago],[data-catpago],#qp-limpiar,#limpiar-pagos,[data-plazo],[data-zoom],[data-servicio],[data-ampara],[data-verpagos],[data-vercubiertas],[data-verampara],[data-rebanada],[data-ingvolver],[data-inganio],[data-selpago],#sel-modo,#sel-todos,#sel-ninguno,#sel-facturar,#sel-combinar,#cb-guardar,#fg-guardar,#rg-limpiar,[data-borragasto],#gasto-nuevo,#gs-guardar');
   if(!t) return;
