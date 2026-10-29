@@ -2080,7 +2080,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','cal');
     const t=document.getElementById('vtitle');if(t)t.textContent='Calendario';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cal'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','calendario.html?v=5b2bff21a2');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','calendario.html?v=4dd4e94f52');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -2272,11 +2272,11 @@ initDB=async function(){await initDB0();oirJust()};
   /* Invitaciones a eventos (pedido de Fernando Cadengo, 30-oct-2026; portal/sql/23_eventos_asistencia.sql). Al entrar,
      si hay un evento por confirmar (suyo o, para Daniel, el de su papá), sale una ventana con «Sí voy / No voy»
      (acompañantes si el evento lo permite; motivo obligatorio al decir que no). «Contestar después» la quita solo en
-     esta sesión: vuelve a salir al entrar otra vez, hasta contestar o hasta la fecha límite. Quien es de solo consulta
-     ve una sola vez el evento y lo que contestaron por él, sin botones. Las respuestas las guarda la base
-     (cal_responder); aquí no se escribe nada directo. */
+     esta sesión: vuelve a salir al entrar otra vez, hasta contestar o hasta la fecha límite. El papá de Daniel (hnava,
+     solo consulta) también contesta su propia asistencia (decisión de Daniel, 29-oct-2026; 25_consulta_asistencia.sql)
+     y Daniel puede contestar por él. Las respuestas las guarda la base (cal_responder); aquí no se escribe nada directo. */
   function invitaciones(P,mis){
-    const K_DESP='portal.ev.despues',K_VISTO='portal.ev.visto';
+    const K_DESP='portal.ev.despues';
     const lee=(st,k)=>{try{return JSON.parse(st.getItem(k)||'[]')||[]}catch(e){return[]}};
     const anota=(st,k,id)=>{try{const l=lee(st,k);if(l.indexOf(id)<0){l.push(id);st.setItem(k,JSON.stringify(l.slice(-200)))}}catch(e){}};
     const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2290,9 +2290,9 @@ initDB=async function(){await initDB0();oirJust()};
       (r.data||[]).forEach(x=>{datos[x.id]=x.data||{}});
     }
     function pendientes(m){
-      const desp=lee(sessionStorage,K_DESP),visto=lee(localStorage,K_VISTO);
+      const desp=lee(sessionStorage,K_DESP);
       return (m.eventos||[]).filter(e=>!e.pasado&&!e.cerrado&&(e.para||[]).length&&(
-        m.consulta?visto.indexOf(e.id)<0:(e.para.some(p=>!p.respuesta)&&desp.indexOf(e.id)<0)));
+        e.para.some(p=>!p.respuesta)&&desp.indexOf(e.id)<0));
     }
     async function arranca(m){
       cola=pendientes(m);
@@ -2309,20 +2309,18 @@ initDB=async function(){await initDB0();oirJust()};
       pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');pop.setAttribute('aria-labelledby','ev-t');
       const cuerpo=()=>{
         const e=ev,todos=(e.para||[]).every(p=>p.respuesta);
-        let h='<div class="ep-caja"><div class="ep-cab"><span>Nuevo evento</span>'+(mis.consulta?'<button type="button" class="ep-x" aria-label="Cerrar">✕</button>':'')+'</div><div class="ep-cuerpo">'
+        let h='<div class="ep-caja"><div class="ep-cab"><span>Nuevo evento</span></div><div class="ep-cuerpo">'
           +'<h2 id="ev-t">'+esc(d.titulo)+'</h2><p class="ep-det"><b>'+esc(fl(d.fecha)+(d.hora?' · '+d.hora:''))+'</b>'+(d.lugar?'<br>'+esc(d.lugar):'')+(d.desc?'<br>'+esc(d.desc):'')+'</p>'
           +'<p class="ep-nota">'+(maxAc?'Se puede llevar hasta '+maxAc+(maxAc===1?' acompañante':' acompañantes')+'.':'Sin acompañantes.')+(e.lugares!=null?' Quedan '+e.lugares+(e.lugares===1?' lugar.':' lugares.'):'')+'</p>'
           +(d.limite?'<p class="ep-lim">Confirma a más tardar el '+esc(fl(d.limite))+'.</p>':'');
-        if(mis.consulta){
-          const p=(e.para||[])[0]||{};
-          h+='<div class="ep-blk"><b>Tu asistencia</b>'+(p.respuesta==='si'?'<p class="ep-ok">'+esc(pila(p.por)||'Daniel')+' confirmó que sí vas'+(p.acompanantes?' con '+p.acompanantes+(p.acompanantes===1?' acompañante':' acompañantes'):'')+'.</p>'
-            :p.respuesta==='no'?'<p class="ep-no">'+esc(pila(p.por)||'Daniel')+' avisó que no vas: «'+esc(p.motivo)+'».</p>':'<p class="ep-lim">Daniel confirma por ti.</p>')
-            +'<p class="ep-nota">Tu usuario es de solo consulta. Esta ventana solo informa; ciérrala con la ✕.</p></div>';
-        }else{
+        {
           (e.para||[]).forEach(p=>{
+            // quién contestó: el invitado o quien contesta por él (Daniel por su papá, y su papá por sí mismo)
+            const otro=p.por&&p.por!==p.nombre,suyo=!p.propio&&p.por&&p.por===p.nombre;
             h+='<div class="ep-blk" data-para="'+esc(p.usuario)+'"><b>'+(p.propio?'Tu respuesta':'Por '+esc(p.nombre))+'</b>'
-              +(p.respuesta==='si'?'<p class="ep-ok">'+(p.propio?'Confirmaste que sí vas':'Confirmaste que sí va')+(p.acompanantes?' con '+p.acompanantes+(p.acompanantes===1?' acompañante':' acompañantes'):'')+'.</p>':'')
-              +(p.respuesta==='no'?'<p class="ep-no">'+(p.propio?'Dijiste que no vas':'Dijiste que no va')+': «'+esc(p.motivo)+'».</p>':'')
+              +(p.respuesta==='si'?'<p class="ep-ok">'+(p.propio?(otro?esc(p.por)+' confirmó que sí vas':'Confirmaste que sí vas'):(suyo?esc(pila(p.nombre))+' confirmó que sí va':'Confirmaste que sí va'))+(p.acompanantes?' con '+p.acompanantes+(p.acompanantes===1?' acompañante':' acompañantes'):'')+'.</p>':'')
+              +(p.respuesta==='no'?'<p class="ep-no">'+(p.propio?(otro?esc(p.por)+' avisó que no vas':'Dijiste que no vas'):(suyo?esc(pila(p.nombre))+' avisó que no va':'Dijiste que no va'))+': «'+esc(p.motivo)+'».</p>':'')
+              +(p.propio&&mis.consulta?'<p class="ep-nota">Daniel también puede contestar por ti.</p>':'')
               +'<div class="ep-btns"><button type="button" class="ep-si" data-r="si" aria-pressed="'+(p.respuesta==='si')+'">'+(p.propio?'Sí voy':'Sí va')+'</button>'
               +'<button type="button" class="ep-nob" data-r="no" aria-pressed="'+(p.respuesta==='no')+'">'+(p.propio?'No voy':'No va')+'</button></div><div class="ep-extra"></div><p class="ep-err" role="alert"></p></div>';
           });
@@ -2333,12 +2331,10 @@ initDB=async function(){await initDB0();oirJust()};
       };
       const cierra=()=>{
         pop.remove();document.documentElement.style.overflow=ov0;
-        if(mis.consulta)anota(localStorage,K_VISTO,ev.id);
-        else if(!(ev.para||[]).every(p=>p.respuesta))anota(sessionStorage,K_DESP,ev.id);
+        if(!(ev.para||[]).every(p=>p.respuesta))anota(sessionStorage,K_DESP,ev.id);
         muestra();
       };
       const enlaza=()=>{
-        const x=pop.querySelector('.ep-x');if(x)x.onclick=cierra;
         const f=pop.querySelector('.ep-fin');if(f)f.onclick=cierra;
         pop.querySelectorAll('.ep-blk[data-para]').forEach(bl=>{
           const para=bl.dataset.para,ex=bl.querySelector('.ep-extra'),er=bl.querySelector('.ep-err');
