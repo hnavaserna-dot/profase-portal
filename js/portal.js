@@ -343,20 +343,67 @@
     };
   }
 
-  /* ---- Encabezado: nombre de quien entró, cambiar contraseña y salir ---- */
-  var CSS = '.pu{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}'
-    + '.pu-nom{font-weight:600;color:var(--ink)}'
-    + '.pu .notas{padding:5px 10px;text-decoration:none}'
+  /* ---- Encabezado: a la derecha, la foto y el nombre de quien entró; al picarlos se despliega Perfil,
+     Cambiar contraseña, Actualizar (si aplica), Mi vista / Vista del equipo (director) y Salir.
+     Las secciones (Cotizador incluido) están en el menú de la izquierda (js/menu.js). ---- */
+  var PUESTO = { director: 'Director', gerente: 'Gerente', contador: 'Contador' };
+  var CSS = '.pu{position:relative;flex:none;display:inline-flex}'
+    + '.pu-btn{font:inherit;display:flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:999px;padding:3px 10px 3px 3px;cursor:pointer;color:var(--ink)}'
+    + '.pu-btn:hover,.pu-btn[aria-expanded="true"]{border-color:var(--line-strong);background:var(--navy-soft)}'
+    + '.pu-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}'
+    + '.pu-nom{font-weight:600;font-size:13.5px;white-space:nowrap;color:var(--ink)}'
+    + '.pu-car{width:14px;height:14px;color:var(--muted);transition:transform .15s;display:block}'
+    + '.pu-btn[aria-expanded="true"] .pu-car{transform:rotate(180deg)}'
+    + '.pu-av{border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700;overflow:hidden;flex:none;letter-spacing:.02em;width:34px;height:34px;font-size:13px}'
+    + '.pu-av img{width:100%;height:100%;object-fit:cover;display:block}'
+    + '.pu-av.m{width:44px;height:44px;font-size:16px}'
+    + '.pu-av.l{width:112px;height:112px;font-size:38px;border:3px solid var(--surface);box-shadow:0 0 0 2px var(--accent)}'
+    + '.pu-dd{position:absolute;right:0;top:calc(100% + 8px);width:270px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:6px;z-index:45;text-align:left}'
+    + '.pu-dd[hidden]{display:none}'
+    + '.pu-dh{display:flex;gap:10px;align-items:center;padding:10px 10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}'
+    + '.pu-dh b{display:block;font-size:14px}.pu-dh small{display:block;font-size:12.5px;color:var(--muted)}'
+    + '.pu-dd button,.pu-dd a{font:inherit;width:100%;display:flex;align-items:center;gap:10px;border:0;background:none;padding:9px 10px;border-radius:8px;cursor:pointer;text-align:left;font-size:13.5px;color:var(--ink);text-decoration:none;box-sizing:border-box}'
+    + '.pu-dd button:hover,.pu-dd a:hover,.pu-dd button:focus-visible,.pu-dd a:focus-visible{background:var(--navy-soft);outline:none}'
+    + '.pu-dd button[disabled]{opacity:.6;cursor:default}'
+    + '.pu-dd svg{width:17px;height:17px;color:var(--navy);flex:none;display:block}'
+    + '.pu-dd hr{border:0;border-top:1px solid var(--line);margin:6px 0}'
+    + '.pu-dd .pu-salir,.pu-dd .pu-salir svg{color:var(--red,#B42318)}'
     + '.pu-f{display:grid;gap:10px;margin-top:6px}'
     + '.pu-f label{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}'
     + '.pu-f input{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink)}'
     + '.pu-f input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}'
-    + '.pu .pu-act{background:var(--navy);color:var(--navy-ink);border-color:var(--navy);font-weight:600}'
-    + '.pu .pu-act[disabled]{opacity:.7;cursor:default}'
+    + '.pu-perfil{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-top:8px}'
+    + '.pu-perfil .pu-pn{font-weight:700;font-size:18px;margin-top:4px}'
+    + '.pu-perfil .pu-pp{color:var(--muted);font-size:13.5px;margin-top:-6px}'
+    + '.pu-fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}'
+    + '.pu-ayuda{font-size:12px;color:var(--muted);margin:0}'
+    + '.pu .btn.pu-ac,.ov .btn.pu-ac{background:var(--accent);border-color:var(--accent);color:#fff}'
+    + '.pu-rec{position:relative;width:260px;height:260px;max-width:100%;margin:0 auto;border-radius:12px;overflow:hidden;background:#000;touch-action:none;cursor:grab}'
+    + '.pu-rec canvas{display:block;width:100%;height:100%}'
+    + '.pu-rec .pu-masc{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at center,transparent 45.5%,rgba(0,0,0,.55) 46%)}'
+    + '.pu-rec .pu-masc::after{content:"";position:absolute;left:4%;top:4%;width:92%;height:92%;box-sizing:border-box;border-radius:50%;border:2px solid #fff}'
+    + '.pu-zoom{display:flex;align-items:center;gap:10px;margin:14px auto 0;width:260px;max-width:100%;color:var(--muted);font-size:12.5px}'
+    + '.pu-zoom input{flex:1;accent-color:var(--accent)}'
     + '.pu-aviso{position:fixed;top:14px;right:14px;z-index:60;max-width:min(380px,calc(100% - 28px));background:var(--surface);color:var(--ink);'
     + 'border:1px solid var(--line-strong);border-left:5px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.18)}'
-    + '.pu-aviso[hidden]{display:none}';
+    + '.pu-aviso[hidden]{display:none}'
+    + '@media (max-width:900px){.pu-nom,.pu-btn .pu-car{display:none}.pu-btn{padding:3px}'
+    + '.pu-dd{position:fixed;right:12px;top:var(--pu-top,64px);width:min(270px,calc(100vw - 24px));max-height:calc(100vh - var(--pu-top,64px) - 12px);overflow-y:auto}}';
+  var IC = {
+    perfil: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    clave: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    act: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/>',
+    vista: '<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M15 15.2c2.6-.4 4.9 1 5.7 4.3"/>',
+    salir: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+    car: '<path d="m6 9 6 6 6-6"/>'
+  };
+  function ic(k, cls) { return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[k] + '</svg>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function iniciales(n) {
+    var p = String(n || '').trim().split(/\s+/).filter(Boolean);
+    if (!p.length) return '?';
+    return ((p[0][0] || '') + (p.length > 1 ? (p[p.length > 2 ? p.length - 2 : p.length - 1][0] || '') : '')).toUpperCase();
+  }
 
   function dialogoClave() {
     var ov = document.createElement('div');
@@ -389,40 +436,157 @@
     return function () { ov.hidden = false; $('pu-n1').focus(); };
   }
 
-  function encabezado(p) {
-    var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    var lugar = document.querySelector('header .equipo');
-    var span = document.createElement('span');
-    span.className = 'pu';
-    // El director brinca entre su vista (con EQUILIBRIO) y la del equipo
-    var otra = p.rol !== 'director' ? '' : ROL === 'director'
-      ? '<a class="notas" href="gerentes.html">Vista del equipo</a>' : '<a class="notas" href="director.html">Mi vista</a>';
-    // Desde el cotizador se regresa a la página de cada quien
-    if (ROL === 'cotizador') {
-      otra = p.rol === 'director'
-        ? '<a class="notas" href="director.html">Mi vista</a><a class="notas" href="gerentes.html">Vista del equipo</a>'
-        : '<a class="notas" href="' + P.paginaDe(p.rol) + '">WorkFlow</a>';
+  /* ---- Foto de perfil: cubeta privada «fotos» (portal/sql/13_fotos_perfil.sql), un archivo <id>.jpg por usuario.
+     Cada quien sube, cambia o quita solo la suya; todos los del portal las ven. ---- */
+  var FOTO = { url: null };
+  function pintaFoto(p) {
+    document.querySelectorAll('[data-pu-av]').forEach(function (a) {
+      a.innerHTML = FOTO.url ? '<img alt="" src="' + esc(FOTO.url) + '">' : esc(iniciales(p.nombre));
+    });
+    var q = document.getElementById('pu-quita'); if (q) q.hidden = !FOTO.url;
+  }
+  async function cargaFoto(p) {
+    try {
+      var l = await sb.storage.from('fotos').list('', { search: P.uid + '.jpg', limit: 1 });
+      if (l.error || !l.data || !l.data.some(function (f) { return f.name === P.uid + '.jpg'; })) { FOTO.url = null; pintaFoto(p); return; }
+      var s = await sb.storage.from('fotos').createSignedUrl(P.uid + '.jpg', 6 * 3600);
+      FOTO.url = (!s.error && s.data && s.data.signedUrl) || null;
+    } catch (e) { FOTO.url = null; }
+    pintaFoto(p);
+  }
+  function dialogoPerfil(p) {
+    var ov = document.createElement('div');
+    ov.className = 'ov'; ov.hidden = true;
+    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pf-h">'
+      + '<div id="pf-ver"><h2 id="pf-h">Perfil</h2>'
+      + '<div class="pu-perfil"><span class="pu-av l" data-pu-av></span>'
+      + '<div class="pu-pn">' + esc(p.nombre) + '</div><div class="pu-pp">' + esc(p.puesto || PUESTO[p.rol] || '') + '</div>'
+      + '<div class="pu-fila"><button class="btn pu-ac" type="button" id="pu-cambia">Cambiar foto</button><button class="btn" type="button" id="pu-quita" hidden>Quitar foto</button></div>'
+      + '<p class="pu-ayuda">JPG, PNG o foto del celular. Todo el equipo ve tu foto; solo tú la cambias.</p></div>'
+      + '<div class="dmsg" id="pf-msg"></div>'
+      + '<div class="dacts"><button class="btn" type="button" id="pf-x">Cerrar</button></div></div>'
+      + '<div id="pf-rec" hidden><h2>Acomoda tu foto</h2><p class="sub">Arrastra la foto para centrarla y usa la barra para acercar o alejar.</p>'
+      + '<div class="pu-rec" id="pf-area"><canvas id="pf-c" width="520" height="520"></canvas><div class="pu-masc"></div></div>'
+      + '<label class="pu-zoom">Alejar<input type="range" id="pf-z" min="1" max="4" step="0.01" value="1" aria-label="Acercar o alejar">Acercar</label>'
+      + '<div class="dmsg" id="pf-msg2"></div>'
+      + '<div class="dacts"><button class="btn" type="button" id="pf-rx">Cancelar</button><button class="btn primary" type="button" id="pf-ok">Guardar foto</button></div></div>'
+      + '<input type="file" id="pf-file" accept="image/*" hidden></div>';
+    document.body.appendChild(ov);
+    var $ = function (id) { return document.getElementById(id); };
+    var cv = $('pf-c'), cx = cv.getContext('2d'), Z = $('pf-z'), IMG = null, base = 1, zm = 1, ox = 0, oy = 0;
+    function msg(id, t, c) { var m = $(id); m.className = 'dmsg' + (c ? ' ' + c : ''); m.textContent = t || ''; }
+    function ver() { $('pf-ver').hidden = false; $('pf-rec').hidden = true; }
+    function cerrar() { ov.hidden = true; ver(); msg('pf-msg'); msg('pf-msg2'); }
+    $('pf-x').onclick = cerrar;
+    $('pf-rx').onclick = function () { ver(); msg('pf-msg2'); };
+    ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) cerrar(); });
+    $('pu-cambia').onclick = function () { $('pf-file').click(); };
+    $('pf-file').onchange = function (e) {
+      var f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      var u = URL.createObjectURL(f), im = new Image();
+      im.onload = function () {
+        IMG = im; base = Math.max(cv.width / im.width, cv.height / im.height); zm = 1; Z.value = 1; ox = 0; oy = 0;
+        dibuja(); msg('pf-msg'); $('pf-ver').hidden = true; $('pf-rec').hidden = false;
+      };
+      im.onerror = function () { URL.revokeObjectURL(u); msg('pf-msg', 'No se pudo leer esa imagen. Prueba con una foto JPG o PNG.', 'warn'); };
+      im.src = u;
+    };
+    function limita() {
+      var s = base * zm, mx = Math.max(0, (IMG.width * s - cv.width) / 2), my = Math.max(0, (IMG.height * s - cv.height) / 2);
+      ox = Math.min(mx, Math.max(-mx, ox)); oy = Math.min(my, Math.max(-my, oy));
     }
-    span.innerHTML = '<span class="pu-nom">' + esc(p.nombre) + '</span>' + otra
-      + '<button class="notas" type="button" id="pu-clave">Contraseña</button>'
-      + '<button class="notas" type="button" id="pu-salir">Salir</button>';
-    if (lugar) lugar.replaceWith(span);
-    else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(span); }
-    var abrir = dialogoClave();
-    document.getElementById('pu-clave').onclick = abrir;
-    document.getElementById('pu-salir').onclick = P.salir;
-    if (ROL === 'cotizador') return;
-    enlaceCotizador(span);
-    botonActualizar(span);
+    function dibuja() {
+      if (!IMG) return;
+      limita();
+      var s = base * zm, w = IMG.width * s, h = IMG.height * s;
+      cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(IMG, (cv.width - w) / 2 + ox, (cv.height - h) / 2 + oy, w, h);
+    }
+    Z.oninput = function () { zm = +Z.value; dibuja(); };
+    (function () {
+      var arr = null, area = $('pf-area'), k = function () { return cv.width / area.clientWidth; };
+      area.addEventListener('pointerdown', function (e) { arr = { x: e.clientX, y: e.clientY }; try { area.setPointerCapture(e.pointerId); } catch (er) { /* nada */ } area.style.cursor = 'grabbing'; });
+      area.addEventListener('pointermove', function (e) { if (!arr) return; ox += (e.clientX - arr.x) * k(); oy += (e.clientY - arr.y) * k(); arr = { x: e.clientX, y: e.clientY }; dibuja(); });
+      function fin() { arr = null; area.style.cursor = ''; }
+      area.addEventListener('pointerup', fin); area.addEventListener('pointercancel', fin);
+      area.addEventListener('wheel', function (e) { e.preventDefault(); zm = Math.min(4, Math.max(1, zm * (e.deltaY < 0 ? 1.06 : 1 / 1.06))); Z.value = zm; dibuja(); }, { passive: false });
+    })();
+    function falla(id, r) {
+      var t = String((r && (r.message || r.error)) || '');
+      msg(id, /bucket|not found|no existe/i.test(t) ? 'Las fotos todavía no están activadas en la base. Avísale a Fernando Cadengo.' : 'No se pudo guardar. Vuelve a intentar en un momento.', 'bad');
+    }
+    // Guarda solo el círculo, en 256 x 256 JPG (unos 20 KB), aunque la foto original pese varios MB
+    $('pf-ok').onclick = function () {
+      var b = $('pf-ok'), out = document.createElement('canvas');
+      out.width = out.height = 256;
+      var lado = cv.width * 0.92, ini = (cv.width - lado) / 2;
+      out.getContext('2d').drawImage(cv, ini, ini, lado, lado, 0, 0, 256, 256);
+      b.disabled = true; b.textContent = 'Guardando…';
+      out.toBlob(async function (blob) {
+        var r = blob ? await sb.storage.from('fotos').upload(P.uid + '.jpg', blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' }) : { error: { message: 'sin imagen' } };
+        b.disabled = false; b.textContent = 'Guardar foto';
+        if (r.error) { falla('pf-msg2', r.error); return; }
+        await cargaFoto(p);
+        ver(); msg('pf-msg', 'Listo: tu foto quedó guardada.', 'ok');
+      }, 'image/jpeg', 0.85);
+    };
+    $('pu-quita').onclick = async function () {
+      var b = $('pu-quita'); b.disabled = true;
+      var r = await sb.storage.from('fotos').remove([P.uid + '.jpg']);
+      b.disabled = false;
+      if (r.error) { falla('pf-msg', r.error); return; }
+      FOTO.url = null; pintaFoto(p); msg('pf-msg', 'Listo: se quitó tu foto; se ven tus iniciales.', 'ok');
+    };
+    return function () { cerrar(); ov.hidden = false; $('pu-cambia').focus(); };
   }
 
-  /* Enlace al cotizador: solo para quien la base le da acceso (tabla cot_permisos; el director siempre) */
-  async function enlaceCotizador(span) {
-    var r = await sb.rpc('cot_puede');
-    if (r.error || r.data !== true) return;
-    var a = document.createElement('a');
-    a.className = 'notas'; a.href = 'cotizador.html'; a.textContent = 'Cotizador';
-    span.insertBefore(a, span.querySelector('#pu-clave'));
+  function encabezado(p) {
+    // Solo en las páginas de cada rol abiertas solas: dentro de un marco (pestañas del portal) no va encabezado propio
+    if (!PAGINA[ROL] || window.top !== window.self) return;
+    var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+    var lugar = document.querySelector('header .equipo');
+    var pu = document.createElement('div');
+    pu.className = 'pu';
+    // El director brinca entre su vista (con EQUILIBRIO) y la del equipo
+    var otra = p.rol !== 'director' ? '' : ROL === 'director'
+      ? '<a role="menuitem" href="gerentes.html">' + ic('vista') + 'Vista del equipo</a>' : '<a role="menuitem" href="director.html">' + ic('vista') + 'Mi vista</a>';
+    pu.innerHTML = '<button class="pu-btn" type="button" id="pu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="pu-dd">'
+      + '<span class="pu-av" data-pu-av></span><span class="pu-nom">' + esc(p.nombre) + '</span>' + ic('car', 'pu-car') + '</button>'
+      + '<div class="pu-dd" id="pu-dd" role="menu" hidden>'
+      + '<div class="pu-dh"><span class="pu-av m" data-pu-av></span><div><b>' + esc(p.nombre) + '</b><small>' + esc(p.puesto || PUESTO[p.rol] || '') + '</small></div></div>'
+      + '<button type="button" role="menuitem" id="pu-perfil">' + ic('perfil') + 'Perfil</button>'
+      + '<button type="button" role="menuitem" id="pu-clave">' + ic('clave') + 'Cambiar contraseña</button>'
+      + otra
+      + '<hr><button type="button" role="menuitem" class="pu-salir" id="pu-salir">' + ic('salir') + 'Salir</button></div>';
+    if (lugar) lugar.replaceWith(pu);
+    else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(pu); }
+    var btn = document.getElementById('pu-btn'), dd = document.getElementById('pu-dd');
+    function despliega(o) {
+      // en celular el menú se pega a la orilla derecha, justo abajo de la foto
+      if (o) document.documentElement.style.setProperty('--pu-top', Math.round(btn.getBoundingClientRect().bottom + 8) + 'px');
+      dd.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false');
+      if (o) { var f = dd.querySelector('[role="menuitem"]'); if (f) f.focus(); }
+    }
+    btn.onclick = function (e) { e.stopPropagation(); despliega(dd.hidden); };
+    document.addEventListener('click', function (e) { if (!dd.hidden && !pu.contains(e.target)) despliega(false); });
+    dd.addEventListener('click', function (e) { if (e.target.closest('[role="menuitem"]')) despliega(false); });
+    document.addEventListener('keydown', function (e) {
+      if (dd.hidden) return;
+      if (e.key === 'Escape') { despliega(false); btn.focus(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        var it = [].slice.call(dd.querySelectorAll('[role="menuitem"]')), i = it.indexOf(document.activeElement);
+        e.preventDefault(); it[(i + (e.key === 'ArrowDown' ? 1 : it.length - 1)) % it.length].focus();
+      }
+    });
+    var clave = dialogoClave(), perfil = dialogoPerfil(p);
+    document.getElementById('pu-perfil').onclick = perfil;
+    document.getElementById('pu-clave').onclick = clave;
+    document.getElementById('pu-salir').onclick = P.salir;
+    pintaFoto(p);
+    cargaFoto(p);
+    botonActualizar(dd);
   }
 
   /* Botón «Actualizar» (solo para quien está en la lista de la base): corre la actualización en ese momento.
@@ -437,19 +601,22 @@
     var r = await sb.from('docs').select('data').eq('col', 'datos').eq('id', 'meta').maybeSingle();
     return r.data && r.data.data && r.data.data.refreshedAt ? Date.parse(r.data.data.refreshedAt) : 0;
   }
-  async function botonActualizar(span) {
+  async function botonActualizar(dd) {
     var r = await sb.rpc('puedo_actualizar');
     if (r.error || r.data !== true) return;
     var b = document.createElement('button');
-    b.className = 'notas pu-act'; b.type = 'button'; b.textContent = 'Actualizar';
+    b.type = 'button'; b.setAttribute('role', 'menuitem'); b.id = 'pu-act';
     b.title = 'Trae los datos más nuevos del WorkFlow y la cobranza en este momento';
-    span.insertBefore(b, span.querySelector('#pu-clave'));
+    function texto(t) { b.innerHTML = ic('act') + esc(t); }
+    texto('Actualizar');
+    var antesDe = dd.querySelector('#pu-clave');
+    antesDe.parentNode.insertBefore(b, antesDe.nextSibling);
     b.onclick = async function () {
-      b.disabled = true; b.textContent = 'Actualizando…';
+      b.disabled = true; texto('Actualizando…');
       var antes = 0; try { antes = await horaDatos(); } catch (e) { antes = 0; }
       var q = await sb.rpc('solicitar_actualizacion');
       if (q.error) {
-        b.disabled = false; b.textContent = 'Actualizar';
+        b.disabled = false; texto('Actualizar');
         aviso(/llave/i.test(q.error.message) ? 'El botón todavía no está conectado. Avísale a Daniel.' : 'No se pudo pedir la actualización. Vuelve a intentar en un momento.', 6000);
         return;
       }
@@ -458,11 +625,22 @@
       var fin = Date.now() + 5 * 60000;
       (async function espera() {
         var ahora = 0; try { ahora = await horaDatos(); } catch (e) { ahora = 0; }
-        if (ahora > antes) { vuelta(); b.disabled = false; b.textContent = 'Actualizar'; aviso('Listo: ya están los datos nuevos.', 4000); return; }
-        if (Date.now() > fin) { b.disabled = false; b.textContent = 'Actualizar'; aviso('Está tardando más de lo normal; los datos llegarán solos en cuanto termine.', 7000); return; }
+        if (ahora > antes) { vuelta(); b.disabled = false; texto('Actualizar'); aviso('Listo: ya están los datos nuevos.', 4000); return; }
+        if (Date.now() > fin) { b.disabled = false; texto('Actualizar'); aviso('Está tardando más de lo normal; los datos llegarán solos en cuanto termine.', 7000); return; }
         setTimeout(espera, 10000);
       })();
     };
+  }
+
+  /* El Cotizador DECOMSA ahora vive dentro del portal (pestaña del módulo Administración):
+     dentro de su marco se le esconde el encabezado; si alguien lo abre solo (una liga vieja), se le lleva a su página. */
+  if (ROL === 'cotizador') {
+    if (window.top !== window.self) {
+      var oc = document.createElement('style'); oc.textContent = 'header.band{display:none!important}';
+      document.head.appendChild(oc);
+    } else {
+      P.listo.then(function (p) { if (p) location.replace(P.paginaDe(p.rol) + '#cotizador'); }).catch(function () {});
+    }
   }
   if (ROL) {
     P.listo.then(function (p) {
