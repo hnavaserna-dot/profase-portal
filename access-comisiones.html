@@ -6,7 +6,7 @@
 <script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=3bf69bf020"></script><script src="js/marca.js?v=cce53f0db1"></script>
 <style>
 /* Portal PROFASE · Access › Comisiones (etapa 1 de la migración del Access, 29-oct-2026): «Comisiones del Periodo» del
-   Access, solo para consultar: por persona y mes, el detalle por factura y pago, y lo que se le ha pagado a cada quien.
+   Access, solo para consultar, igual que la pantalla del Access: por persona y mes, y lo que se le ha pagado a cada quien.
    Solo la dirección y Fernando Cadengo (decisión de Daniel); Cadengo, solo lo que viene de facturas de DECOMSA. Los
    datos los deja la actualización de cada 3 horas (nube/access_com.py); quién lee qué lo decide la base
    (portal/sql/37_comisiones.sql). Aquí no se graba nada. */
@@ -84,7 +84,6 @@ tr.fila:hover td{background:var(--navy-soft)}
 .vence.mal{color:var(--red);font-weight:600}
 .vence.ojo{color:var(--accent-ink);font-weight:600}
 .vacio{padding:20px 14px;color:var(--muted)}
-.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
 .pie{color:var(--muted);font-size:12px;margin:0 0 24px}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0}
 .cargando{padding:40px 16px;text-align:center;color:var(--muted)}
@@ -175,7 +174,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div>
     <div class="eti">Access</div>
     <h1>Comisiones</h1>
-    <p id="subt">«Comisiones del Periodo» del Access, para consultar: cuánto le toca a cada persona por mes, de qué facturas y pagos sale, y lo que ya se le pagó. Se actualiza sola cada 3 horas; los pagos a las personas se siguen capturando en el Access.</p>
+    <p id="subt">«Comisiones del Periodo» del Access, para consultar: cuánto le toca a cada persona por mes y lo que ya se le pagó. Se actualiza sola cada 3 horas; los pagos a las personas se siguen capturando en el Access.</p>
   </div>
   <div class="acts"><span id="hora" aria-live="polite"></span></div>
 </div></div>
@@ -183,7 +182,6 @@ tr.fila:hover td{background:var(--navy-soft)}
 <div class="wrap">
   <div class="tabs" role="tablist" aria-label="Secciones">
     <button type="button" role="tab" id="t-mes" aria-selected="true" aria-controls="p-mes">Por persona y mes</button>
-    <button type="button" role="tab" id="t-det" aria-selected="false" aria-controls="p-det">De dónde sale</button>
     <button type="button" role="tab" id="t-pag" aria-selected="false" aria-controls="p-pag">Pagos a personas</button>
   </div>
   <div class="nota" id="error" hidden></div>
@@ -213,24 +211,6 @@ tr.fila:hover td{background:var(--navy-soft)}
     <p class="pie" id="pie-mes">Como en el Access: la comisión se gana cuando el cliente paga (mes del pago); «Pagado» es lo que se le ha pagado a la persona por ese mes y «Diferencia», lo que falta (o sobra).</p>
   </div>
 
-  <div id="p-det" role="tabpanel" aria-labelledby="t-det" hidden>
-    <section class="card" aria-labelledby="h-det">
-      <header>
-        <div><h2 id="h-det">De dónde sale cada comisión</h2><div class="sub" id="det-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <input id="f-buscar" type="search" placeholder="Buscar (cliente, folio, plantilla)" aria-label="Buscar">
-          <select id="f-dper" aria-label="Persona"><option value="">Todas las personas</option></select>
-          <select id="f-dmes" aria-label="Mes del pago"><option value="">Todos los meses</option></select>
-          <button class="btn" type="button" id="x-det">Excel</button>
-        </div>
-      </header>
-      <div class="tabla"><table id="lista-det"><thead><tr><th>Persona</th><th>Cliente</th><th>Trabajo</th><th>Pago</th><th class="monto">Su parte</th><th class="monto">Comisión</th></tr></thead><tbody></tbody></table></div>
-      <div class="vacio" id="det-vacia" hidden>Nada con estos filtros.</div>
-      <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
-    </section>
-    <p class="pie">Cada renglón es un pago de un cliente aplicado a una factura, repartido entre quienes hicieron el trabajo de ese mes en el WorkFlow. «Su parte» es el porcentaje que le tocó de la base que se reparte.</p>
-  </div>
-
   <div id="p-pag" role="tabpanel" aria-labelledby="t-pag" hidden>
     <section class="card" aria-labelledby="h-pag">
       <header>
@@ -250,18 +230,15 @@ tr.fila:hover td{background:var(--navy-soft)}
 (function(){
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
-  var ZONA = 'America/Monterrey', PAGINA = 150;
-  var D = null, mostrar = PAGINA, ROL = '';
+  var ZONA = 'America/Monterrey';
+  var D = null, ROL = '';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
   function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
   function mesTxt(ym) { ym = +ym; if (!ym) return ''; return MESES_L[(ym % 100) - 1] + ' ' + Math.floor(ym / 100); }
-  function perTxt(s) { if (!s) return ''; var p = String(s).split('-'); return p.length < 2 ? s : MESES_L[+p[1] - 1] + ' ' + p[0]; }
   function dinero(n) { return n == null ? '—' : '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function dineroCorto(n) { n = Number(n || 0); return '$' + Math.round(n).toLocaleString('es-MX'); }
-  function pct(n) { return (Number(n || 0) * 100).toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' %'; }
 
   async function desb64(b64) {
     var r = await fetch('data:application/octet-stream;base64,' + b64);
@@ -282,17 +259,16 @@ tr.fila:hover td{background:var(--navy-soft)}
       var doc = ROL === 'director' ? await leeDoc('director', 'acc_com') : await leeDoc('comis', 'decomsa');
       if (!doc || !doc.b64) {
         $('cargando').hidden = true; $('error').hidden = false;
-        $('error').textContent = ROL === 'director' ? 'Todavía no hay comisiones en el portal. Llegan con la próxima actualización (cada 3 horas).' : 'Las comisiones solo las ven la dirección y quien Daniel autorizó.';
+        $('error').textContent = doc && doc.enRevision ? 'Las comisiones están en revisión. Daniel te avisa cuando vuelvan.'
+          : ROL === 'director' ? 'Todavía no hay comisiones en el portal. Llegan con la próxima actualización (cada 3 horas).' : 'Las comisiones solo las ven la dirección y quien Daniel autorizó.';
         return;
       }
       D = await desb64(doc.b64);
       $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
-      if (ROL !== 'director') $('subt').textContent = '«Comisiones del Periodo» del Access, de lo que factura DECOMSA, para consultar: cuánto le toca a cada persona por mes, de qué facturas y pagos sale, y lo que ya se le pagó. Se actualiza sola cada 3 horas.';
-      if (D.sinPagos) { $('t-pag').hidden = true; }
-      if ((D.meses || []).some(function (m) { return m.parcial; })) $('pie-mes').textContent += ' Los meses marcados con «—» traen comisión que no es de DECOMSA: ahí solo se ve la parte de DECOMSA.';
+      if (ROL !== 'director') $('subt').textContent = '«Comisiones del Periodo» del Access, de lo que factura DECOMSA, para consultar: cuánto le toca a cada persona por mes y lo que ya se le pagó. Se actualiza sola cada 3 horas.';
       opciones();
       $('cargando').hidden = true;
-      pintaMeses(); pintaDetalle(); pintaPagos();
+      pintaMeses(); pintaPagos();
       muestra('mes');
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
@@ -301,16 +277,14 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   function opciones() {
-    var anios = {}, pers = {}, yms = {};
+    var anios = {}, pers = {};
     (D.meses || []).forEach(function (m) { anios[Math.floor(m.ym / 100)] = 1; pers[m.n] = 1; });
-    (D.detalle || []).forEach(function (d) { pers[d.n] = 1; if (d.ym) yms[d.ym] = 1; });
     (D.pagos || []).forEach(function (p) { pers[p.n] = 1; });
     var A = Object.keys(anios).sort().reverse(), N = Object.keys(pers).filter(Boolean).sort();
     var op = function (L, f) { return L.map(function (x) { return '<option value="' + esc(x) + '">' + esc(f ? f(x) : x) + '</option>'; }).join(''); };
     $('f-anio').innerHTML = '<option value="">Todos los años</option>' + op(A); if (A.length) $('f-anio').value = A[0];
     $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + MESES_L.map(function (m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
-    ['f-per', 'f-dper', 'f-pper'].forEach(function (k) { $(k).innerHTML = '<option value="">Todas las personas</option>' + op(N); });
-    $('f-dmes').innerHTML = '<option value="">Todos los meses</option>' + op(Object.keys(yms).sort().reverse(), mesTxt);
+    ['f-per', 'f-pper'].forEach(function (k) { $(k).innerHTML = '<option value="">Todas las personas</option>' + op(N); });
   }
 
   function mesesFiltrados() {
@@ -335,30 +309,6 @@ tr.fila:hover td{background:var(--navy-soft)}
       return '<tr><td><div class="rs">' + esc(x.n) + '</div></td><td>' + esc(mesTxt(x.ym)) + '</td><td class="monto">' + esc(dinero(x.com)) + '</td><td class="monto">' + esc(dinero(x.com5)) + '</td><td class="monto"><b>' + esc(dinero(x.tot)) + '</b></td><td class="monto">' + esc(dinero(x.pag)) + '</td><td class="monto">' + (x.dif == null ? '—' : '<span class="' + (Math.abs(x.dif) >= 1 ? 'vence ojo' : 'no') + '">' + esc(dinero(x.dif)) + '</span>') + '</td></tr>';
     }).join('');
     $('mes-vacia').hidden = L.length > 0;
-  }
-
-  function detalleFiltrado() {
-    var q = norm($('f-buscar').value.trim()), n = $('f-dper').value, ym = +$('f-dmes').value || 0;
-    return (D.detalle || []).filter(function (d) {
-      if (n && d.n !== n) return false;
-      if (ym && d.ym !== ym) return false;
-      if (q && norm([d.cli, d.folio, d.pla, d.depto].join(' ')).indexOf(q) < 0) return false;
-      return true;
-    });
-  }
-  function pintaDetalle() {
-    var L = detalleFiltrado();
-    $('det-sub').textContent = L.length === 1 ? '1 renglón' : L.length + ' renglones';
-    $('lista-det').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (d) {
-      return '<tr><td><div class="rs">' + esc(d.n) + '</div><div class="rfc">' + esc(d.depto) + '</div></td>'
-        + '<td>' + esc(d.cli) + '<div class="rfc">Factura ' + (esc(d.folio) || 'sin folio') + '</div></td>'
-        + '<td>' + esc(d.pla) + '<div class="rfc">' + esc(perTxt(d.per)) + (d.term ? '' : ' · <span class="vence ojo">sin terminar</span>') + '</div></td>'
-        + '<td><span class="vence">' + esc(fecha(d.fecha)) + '</span><div class="rfc">' + esc(dinero(d.pagoSinIva)) + ' sin IVA</div></td>'
-        + '<td class="monto">' + esc(pct(d.pct)) + '<div class="rfc">de ' + esc(dinero(d.base)) + '</div></td>'
-        + '<td class="monto"><b>' + esc(dinero(d.tot)) + '</b></td></tr>';
-    }).join('');
-    $('det-vacia').hidden = L.length > 0;
-    $('mas').hidden = L.length <= mostrar;
   }
 
   function pagosFiltrados() { var n = $('f-pper').value; return (D.pagos || []).filter(function (p) { return !n || p.n === n; }); }
@@ -387,22 +337,17 @@ tr.fila:hover td{background:var(--navy-soft)}
     await conBoton(b, async function () {
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Comisiones · Access');
       if (tipo === 'mes') { var L = mesesFiltrados(); hoja(MK, wb, 'Por persona y mes', 'Comisiones por persona y mes (Access)', [datosAl(), L.length + ' renglones con los filtros de la pantalla'], ['Persona', 'Mes', 'Comisión', 'Comisión 5 %', 'Total', 'Pagado', 'Diferencia'], L.map(function (x) { return [x.n, mesTxt(x.ym), x.com, x.com5, x.tot, x.pag, x.dif]; }), [32, 18, 14, 14, 14, 14, 14], [3, 4, 5, 6, 7]); }
-      if (tipo === 'det') { var M = detalleFiltrado(); hoja(MK, wb, 'De dónde sale', 'De dónde sale cada comisión (Access)', [datosAl(), M.length + ' renglones'], ['Persona', 'Departamento', 'Cliente', 'Factura', 'Plantilla', 'Mes del trabajo', 'Fecha del pago', 'Pago sin IVA', 'Base', 'Su parte', 'Comisión'], M.map(function (d) { return [d.n, d.depto, d.cli, d.folio, d.pla, perTxt(d.per), fecha(d.fecha), d.pagoSinIva, d.base, d.pct, d.tot]; }), [28, 16, 36, 10, 24, 16, 14, 14, 14, 10, 14], [8, 9, 11]); }
       if (tipo === 'pag') { var N = pagosFiltrados(); hoja(MK, wb, 'Pagos a personas', 'Pagos a personas (Access)', [datosAl(), N.length + ' pagos'], ['Persona', 'Fecha del pago', 'Mes que se paga', 'Monto'], N.map(function (p) { return [p.n, fecha(p.fecha), mesTxt(p.ym), p.monto]; }), [32, 16, 18, 14], [4]); }
       await MK.guardar(wb, 'Comisiones PROFASE.xlsx');
     });
   }
 
-  function muestra(t) { ['mes', 'det', 'pag'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; }); }
+  function muestra(t) { ['mes', 'pag'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; }); }
   $('t-mes').onclick = function () { muestra('mes'); };
-  $('t-det').onclick = function () { muestra('det'); };
   $('t-pag').onclick = function () { muestra('pag'); };
   ['f-anio', 'f-mes', 'f-per', 'f-pend'].forEach(function (k) { $(k).addEventListener('change', pintaMeses); });
-  ['f-buscar', 'f-dper', 'f-dmes'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pintaDetalle(); }); });
   $('f-pper').addEventListener('change', pintaPagos);
-  $('ver-mas').onclick = function () { mostrar += PAGINA; pintaDetalle(); };
   $('x-mes').onclick = function () { excel(this, 'mes'); };
-  $('x-det').onclick = function () { excel(this, 'det'); };
   $('x-pag').onclick = function () { excel(this, 'pag'); };
   carga();
 })();
