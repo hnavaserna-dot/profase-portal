@@ -10,8 +10,10 @@
    - Menú arriba (29-oct-2026, propuesta de Gabriel): cada quien puede cambiar a una tira de íconos grandes arriba al
      centro, con «Inicio» en medio y los módulos repartidos a los lados; al picar un ícono se abre la descripción del
      módulo y sus sub módulos. Por omisión sigue el menú de la izquierda; se recuerda en el navegador de cada quien.
-   - Signo de temporada (29-oct-2026, propuesta de Gabriel): el logo del encabezado es solo el signo PROFASE, de un
-     color, y cambia solo con la fecha (Halloween y Día de Muertos naranja, Navidad rojo, fiestas patrias tricolor…). */
+   - El signo PROFASE es siempre el logo oficial, con sus colores (regla de Daniel, 29-oct-2026). En temporadas se le
+     pone al lado un adorno aparte (arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el 14 de febrero,
+     banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
+     solo color de la propuesta #3; el menú de arriba de esa propuesta se quedó igual. */
 (function () {
   'use strict';
   var ROL = document.documentElement.getAttribute('data-rol') || '';
@@ -64,20 +66,35 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  /* Signo PROFASE de un solo color. Los colores de cada pieza salen de --sg1 (la vela), --sg2 (la pieza de en medio)
-     y --sg3 (la punta); por omisión, azul marino (blanco en modo oscuro). Las temporadas los cambian solas. */
-  var SIGNO = '<polygon class="sg1" points="360,82 413,245 385,363 288,250"/><polygon class="sg2" points="340,311 385,363 242,430 318,337"/>'
-    + '<polygon class="sg3" points="98,337 318,337 242,430"/>';
-  function signo(cls) { return '<svg class="' + cls + '" viewBox="90 72 334 368" role="img" aria-label="PROFASE">' + SIGNO + '</svg>'; }
+  /* Adornos de temporada junto al signo (regla de Daniel, 29-oct-2026: «siempre sea el logo de siempre; pero sí se
+     puede poner una arañita cayendo porque es Halloween, un Santa Claus porque es Navidad»). El signo no se toca: el
+     adorno es aparte, a su derecha. ?temporada=navidad en la dirección deja ver otra temporada para revisarla. */
+  var ADORNOS = {
+    arana: '<svg viewBox="0 0 16 26" fill="none" stroke="currentColor" stroke-linecap="round"><g class="pm-ar">'
+      + '<path d="M8-40V13" stroke-width=".7" opacity=".6"/>'
+      + '<path d="M5.6 15.2 2 12.6 1 9.6M5.4 16.6 1.2 15.6 0 13.4M5.6 18.2 1.6 19.6.6 22.4M6.2 19.4 3.8 22.6 3.6 25.2'
+      + 'M10.4 15.2 14 12.6l1-3M10.6 16.6l4.2-1 1.2-2.2M10.4 18.2l4 1.4 1 2.8M9.8 19.4l2.4 3.2.2 2.6" stroke-width=".9"/>'
+      + '<circle cx="8" cy="14.4" r="2.3" fill="currentColor" stroke="none"/><circle cx="8" cy="18.6" r="3.2" fill="currentColor" stroke="none"/>'
+      + '<circle cx="7.1" cy="14" r=".5" fill="#F07A1E" stroke="none"/><circle cx="8.9" cy="14" r=".5" fill="#F07A1E" stroke="none"/></g></svg>',
+    santa: '<svg viewBox="0 0 20 24"><path d="M3.5 10.5C4.5 4 9 1.2 14.5 2.2l1.2 5.6-12.2 2.7z" fill="#C8102E"/>'
+      + '<circle cx="15.6" cy="2.6" r="1.9" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<rect x="2.6" y="9.4" width="14.6" height="3" rx="1.5" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<circle cx="10" cy="15.2" r="4.2" fill="#F6C9A8"/><circle cx="8.5" cy="14.4" r=".55" fill="#3A2A20"/><circle cx="11.5" cy="14.4" r=".55" fill="#3A2A20"/>'
+      + '<path d="M4.6 15.6c.4 5 3 7.6 5.4 7.6s5-2.6 5.4-7.6c-1.2 1.6-2.6 2.4-5.4 2.4s-4.2-.8-5.4-2.4z" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+      + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></svg>',
+    corazon: '<svg viewBox="0 0 16 16"><path class="pm-lat" d="M8 14.2S1.4 10.1 1.4 5.6A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.6 1.6C14.6 10.1 8 14.2 8 14.2z" fill="#D6336C"/></svg>',
+    bandera: '<svg viewBox="0 0 18 18"><path d="M2 1v16" stroke="#8A94A6" stroke-width="1.2" stroke-linecap="round"/>'
+      + '<path d="M2.6 2h4.6v8H2.6z" fill="#006847"/><path d="M7.2 2h4.6v8H7.2z" fill="#fff" stroke="#C9D1DE" stroke-width=".4"/>'
+      + '<path d="M11.8 2h4.6v8h-4.6z" fill="#CE1126"/><circle cx="9.5" cy="6" r="1.1" fill="#8C6A3D"/></svg>'
+  };
   // [mes, día] de inicio y de fin (incluidos); la Navidad cruza el año
   var TEMPORADAS = [
-    { k: 'amor', t: 'Amor y amistad', de: [2, 7], a: [2, 14], c: ['#D6336C', '#D6336C', '#D6336C'] },
-    { k: 'patrias', t: 'Fiestas patrias', de: [9, 1], a: [9, 16], c: ['#006847', '#FFFFFF', '#CE1126'], borde: true },
-    { k: 'muertos', t: 'Halloween y Día de Muertos', de: [10, 15], a: [11, 2], c: ['#F07A1E', '#F07A1E', '#F07A1E'] },
-    { k: 'navidad', t: 'Navidad y Año Nuevo', de: [12, 1], a: [1, 6], c: ['#C8102E', '#C8102E', '#C8102E'] }
+    { k: 'amor', de: [2, 7], a: [2, 14], adorno: 'corazon' },
+    { k: 'patrias', de: [9, 1], a: [9, 16], adorno: 'bandera' },
+    { k: 'muertos', de: [10, 15], a: [11, 2], adorno: 'arana' },
+    { k: 'navidad', de: [12, 1], a: [1, 6], adorno: 'santa' }
   ];
   function temporada(f) {
-    // ?temporada=navidad en la dirección deja ver otra temporada (para revisar cómo se ve)
     var pide = (location.search.match(/[?&]temporada=([a-z]+)/) || [])[1];
     if (pide) return TEMPORADAS.filter(function (x) { return x.k === pide; })[0] || null;
     var n = (f.getMonth() + 1) * 100 + f.getDate();
@@ -86,17 +103,23 @@
       return de <= a ? n >= de && n <= a : n >= de || n <= a;
     })[0] || null;
   }
-  function cssTemporada() {
+  function ponAdorno(logo) {
     var x = temporada(new Date());
-    if (!x) return '';
-    return ':root,:root[data-theme="dark"]{--sg1:' + x.c[0] + ';--sg2:' + x.c[1] + ';--sg3:' + x.c[2] + '}'
-      + (x.borde ? '.pm-signo polygon,.pm-cab svg polygon{stroke:#8A94A6;stroke-width:6;stroke-linejoin:round}' : '');
+    if (!x || !logo || !ADORNOS[x.adorno]) return;
+    var caja = document.createElement('span'); caja.className = 'pm-adorno-caja';
+    logo.parentNode.insertBefore(caja, logo); caja.appendChild(logo);
+    var a = document.createElement('span'); a.className = 'pm-adorno pm-adorno-' + x.adorno; a.setAttribute('aria-hidden', 'true');
+    a.innerHTML = ADORNOS[x.adorno]; caja.appendChild(a);
   }
 
-  var CSS = ':root{--pm-sw:248px;--pm-rail:64px;--pm-top:0px;--sg1:#1F3864;--sg2:#1F3864;--sg3:#1F3864}'
-    + ':root[data-theme="dark"]{--sg1:#FFFFFF;--sg2:#FFFFFF;--sg3:#FFFFFF}'
-    + '.sg1{fill:var(--sg1)}.sg2{fill:var(--sg2)}.sg3{fill:var(--sg3)}'
-    + 'header.band img.logo{display:none!important}.pm-signo{width:30px;height:auto;display:block;flex:none}'
+  var CSS = ':root{--pm-sw:248px;--pm-rail:64px;--pm-top:0px}'
+    + '.pm-adorno-caja{position:relative;display:block;flex:none;padding-right:16px}'
+    + '.pm-adorno{position:absolute;left:32px;pointer-events:none}.pm-adorno svg{display:block;width:100%;height:auto;overflow:visible}'
+    + '.pm-adorno-arana{top:-6px;width:13px;color:#1F2937}:root[data-theme="dark"] .pm-adorno-arana{color:#E5EAF2}'
+    + '.pm-ar{animation:pm-ar 2.8s ease-in-out infinite alternate}@keyframes pm-ar{from{transform:translateY(-2px)}to{transform:translateY(6px)}}'
+    + '.pm-adorno-santa{bottom:-3px;width:17px}.pm-adorno-corazon{top:2px;width:13px}.pm-adorno-bandera{top:0;width:15px}'
+    + '.pm-lat{transform-origin:50% 60%;animation:pm-lat 1.6s ease-in-out infinite}@keyframes pm-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
+    + '@media (prefers-reduced-motion:reduce){.pm-adorno *{animation:none!important}}'
     + '.pm-oculto{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}'
     + '#v-quo .qsub{display:none!important}'
     + '.pm-ham{flex:none;width:38px;height:38px;border:0;background:none;border-radius:8px;cursor:pointer;display:grid;place-items:center;color:var(--navy,#1F3864);margin-left:-6px;padding:0}'
@@ -354,14 +377,7 @@
     side = document.createElement('nav');
     side.className = 'pm-side'; side.id = 'pm-side'; side.setAttribute('aria-label', 'Menú del portal');
     var logo = hdr.querySelector('img.logo');
-    st.textContent += cssTemporada();
-    if (logo) {
-      var tmp = document.createElement('span'); tmp.innerHTML = signo('pm-signo');
-      var t = temporada(new Date()), sg = tmp.firstChild;
-      if (t) sg.setAttribute('aria-label', 'PROFASE · ' + t.t);
-      logo.parentNode.insertBefore(sg, logo);
-    }
-    side.innerHTML = '<div class="pm-cab">' + signo('') + '<span>PROFASE</span>'
+    side.innerHTML = '<div class="pm-cab">' + (logo ? '<img alt="" src="' + esc(logo.getAttribute('src')) + '">' : '') + '<span>PROFASE</span>'
       + '<button type="button" aria-label="Cerrar el menú">' + svg('<path d="M6 6l12 12M18 6 6 18"/>', '') + '</button></div>'
       + '<div class="pm-lista"></div>'
       + '<div class="pm-pie"><button type="button" class="pm-parr">' + svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>', 'pm-ic') + '<span class="pm-lbl">Menú arriba</span></button>'
@@ -388,6 +404,7 @@
     // el ícono picado se vuelve a pintar (ya no está en la página): ese clic no cuenta como «afuera»
     document.addEventListener('click', function (e) { if (popAbierto && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
     side.querySelector('.pm-cab button').onclick = function () { abre(false); };
+    ponAdorno(logo);
     scrim.onclick = function () { abre(false); };
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
