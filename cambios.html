@@ -199,7 +199,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     retirada: 'Retirada', choca: 'Choca con cambios recientes', error: 'No se pudo publicar', deshaciendo: 'Deshaciéndose', deshecha: 'Deshecha' };
   var SEM = { verde: 'Revisión: sencilla', amarillo: 'Revisión: con cuidado', rojo: 'Revisión: delicada', bloqueada: 'Bloqueada' };
   var SEM_TXT = { verde: 'Solo cambia páginas o textos: nada delicado.', amarillo: 'Toca algo que comparten varias pestañas o un proceso automático: revisa con cuidado.',
-    rojo: 'Toca algo delicado (la base, la seguridad o lo que solo ve la dirección): lee los avisos y, si tienes duda, pídele a tu Claude que la revise antes.',
+    rojo: 'Toca algo delicado (la base, la seguridad, código que corre con las llaves o lo que solo ve la dirección): no se puede autorizar hasta que tu Claude la revise.',
     bloqueada: 'Toca usuarios, permisos o procesos con llaves: eso no se cambia por propuesta y nadie la puede autorizar.' };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -265,7 +265,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     if (cargando) return;
     cargando = true; $('recargar').disabled = true;
     try {
-      var r = await sb.from('propuestas').select('id,rama,sha,titulo,descripcion,proponente,github,estado,semaforo,revision,fotos,sql_archivos,sql_listo_por,sql_listo_en,creada,actualizada,ultimo_por,autorizada_por,autorizada_en,rechazada_por,rechazada_en,motivo,publicada_en,deshecha_por,deshecha_en,resultado').order('id', { ascending: false }).limit(300);
+      var r = await sb.from('propuestas').select('id,rama,sha,titulo,descripcion,proponente,github,estado,semaforo,revision,fotos,sql_archivos,sql_listo_por,sql_listo_en,creada,actualizada,ultimo_por,autorizada_por,autorizada_en,rechazada_por,rechazada_en,motivo,publicada_en,deshecha_por,deshecha_en,resultado,revisada_por,revisada_sha,revisada_en,revisada_ok,dictamen').order('id', { ascending: false }).limit(300);
       if (r.error) throw r.error;
       FILAS = r.data || [];
       if (ROL !== 'consulta') {
@@ -351,6 +351,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       + '<div class="chips"><span class="chip ' + chipEstado(p) + '">' + esc(ESTADO[p.estado] || p.estado) + '</span><span class="chip ' + esc(p.semaforo) + '">' + esc(SEM[p.semaforo] || p.semaforo) + '</span></div>'
       + estado(p)
       + '<section class="card"><header><h3>Qué pide</h3></header><div class="cuerpo texto">' + texto(p.descripcion) + '</div></section>'
+      + dictamen(p)
       + revision(p, rev)
       + archivos(rev)
       + fotos(p)
@@ -371,9 +372,9 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var aut = ROL === 'autoriza' && puedeEscribir(), rev = p.revision || {}, b = [];
     var sqlTxt = (p.sql_archivos || []).length ? '<p>Trae cambios para la base: <code>' + (p.sql_archivos || []).map(esc).join('</code>, <code>') + '</code>. '
       + (p.estado === 'publicada'
-        ? (p.sql_listo_en ? (p.sql_listo_por === 'sistema' ? 'Se corrieron solos al publicarla (' + esc(hora(p.sql_listo_en)) + ').' : 'Los corrió ' + esc(nombre(p.sql_listo_por)) + ' (' + esc(hora(p.sql_listo_en)) + ').')
-          : '<b>Falta correrlos en la base</b> (el camino automático no estaba encendido): pídeselo a tu Claude y luego márcalo aquí.')
-        : 'Al publicarla se corren en la base, completos o nada; si dejaran abierto lo que solo ve la dirección, se deshacen solos y no se publica nada.') + '</p>' : '';
+        ? (p.sql_listo_en ? 'Ya se corrieron (' + esc(nombre(p.sql_listo_por)) + ', ' + esc(hora(p.sql_listo_en)) + ').'
+          : '<b>Falta correrlos en la base:</b> pídele a tu Claude «corre el SQL de la propuesta #' + p.id + '» y, cuando quede, márcalo aquí.')
+        : 'No se corren solos: después de publicarla, tu Claude los revisa y los corre.') + '</p>' : '';
     switch (p.estado) {
       case 'por_autorizar':
         if (p.semaforo === 'bloqueada') {
@@ -383,6 +384,13 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
         if (rev.pruebas_ok === false) {
           if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
           return caja('rojo', '<b>No pasa las revisiones automáticas del portal.</b> No se puede autorizar hasta que Gabo la corrija (el detalle está abajo, en «Revisión automática»).', b);
+        }
+        if (p.semaforo === 'rojo' && !(p.revisada_ok && p.revisada_sha === p.sha)) {
+          if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+          var vieja = p.revisada_en && p.revisada_sha !== p.sha;
+          return caja('amarillo', ROL === 'autoriza'
+            ? '<b>Delicada: antes de autorizarla, pídele a tu Claude «revisa la propuesta #' + p.id + '».</b> ' + (p.revisada_en && !vieja && !p.revisada_ok ? 'Tu Claude ya la revisó y no recomienda autorizarla (abajo está por qué).' : vieja ? 'La revisión que había era de una versión anterior.' : 'Cuando la revise, su dictamen aparece aquí y se habilita «Autorizar».')
+            : '<b>Delicada:</b> espera la revisión técnica del Claude de Daniel o de Fernando.', b, sqlTxt);
         }
         if (aut) { b.push('<button class="btn pri" type="button" data-a="autorizar">Autorizar y publicar</button>'); b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>'); }
         return caja(p.semaforo === 'rojo' ? 'amarillo' : '', ROL === 'autoriza' ? '<b>Espera tu revisión.</b> ' + esc(SEM_TXT[p.semaforo] || '') + ' Si la autorizas, se publica sola en alrededor de un minuto.'
@@ -399,7 +407,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       case 'rechazada':
         return caja('rojo', '<b>Rechazada por ' + esc(nombre(p.rechazada_por)) + '</b> (' + esc(hora(p.rechazada_en)) + '): ' + esc(p.motivo || ''), b);
       case 'error':
-        if (aut && p.semaforo !== 'bloqueada' && rev.pruebas_ok !== false) b.push('<button class="btn pri" type="button" data-a="autorizar">Volver a intentar</button>');
+        if (aut && p.semaforo !== 'bloqueada' && rev.pruebas_ok !== false && (p.semaforo !== 'rojo' || (p.revisada_ok && p.revisada_sha === p.sha))) b.push('<button class="btn pri" type="button" data-a="autorizar">Volver a intentar</button>');
         if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
         return caja('rojo', '<b>No se pudo publicar.</b> ' + esc(p.resultado || ''), b);
       case 'deshaciendo':
@@ -424,6 +432,13 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     return '<section class="card"><header><h3>Revisión automática</h3><span class="chip ' + esc(p.semaforo) + '">' + esc(SEM[p.semaforo] || '') + '</span></header><div class="cuerpo">'
       + '<p style="margin:0 0 10px">' + esc(SEM_TXT[p.semaforo] || '') + '</p>'
       + (av ? '<div class="avisos">' + av + '</div>' : '<div class="aviso verde">Sin avisos.</div>') + pr + '</div></section>';
+  }
+  function dictamen(p) {
+    if (!p.revisada_en) return '';
+    var vigente = p.revisada_sha === p.sha;
+    return '<section class="card"><header><h3>Revisión técnica de Claude</h3><span class="chip ' + (p.revisada_ok ? 'verde' : 'rojo') + '">' + (p.revisada_ok ? 'Se puede autorizar' : 'No conviene autorizarla') + '</span></header><div class="cuerpo">'
+      + '<div class="m" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">' + esc(p.revisada_por || 'Claude') + ' · ' + esc(hora(p.revisada_en)) + (vigente ? '' : ' · <b>era de una versión anterior</b>') + '</div>'
+      + '<div class="texto">' + texto(p.dictamen) + '</div></div></section>';
   }
   function archivos(rev) {
     var a = rev.areas || [];
@@ -508,7 +523,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       var rojo = p.semaforo === 'rojo';
       if (!await pregunta('¿Autorizar y publicar?', '<p>«' + esc(p.titulo) + '» de ' + esc(nombre(p.proponente) || 'Gabo') + '. Se publica en el portal en alrededor de un minuto, exactamente como la revisaste.</p>'
         + (rojo ? '<p><b>Tiene avisos delicados.</b> Si tienes duda, pídele antes a tu Claude: «revisa la propuesta #' + p.id + '».</p>' : '')
-        + ((p.sql_archivos || []).length ? '<p>Trae cambios para la base: se corren al publicarla.</p>' : '') + '<p>Si algo sale mal, la puedes deshacer (lo que ya cambió en la base no se deshace solo).</p>', 'Autorizar y publicar')) return;
+        + ((p.sql_archivos || []).length ? '<p>Trae cambios para la base: no se corren solos; después tu Claude los corre.</p>' : '') + '<p>Si algo sale mal, la puedes deshacer.</p>', 'Autorizar y publicar')) return;
       boton.disabled = true;
       r = await sb.rpc('cambios_autorizar', { p_id: p.id, p_sha: p.sha });
     } else if (a === 'rechazar') {
