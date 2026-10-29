@@ -351,13 +351,143 @@
     // Si la última vez que se usó el portal fue hace más de una hora (pestañas cerradas), se cierra al abrir
     var g = guardada();
     if (g && Date.now() - g > INACTIVO) { cierraPorInactividad(); return; }
-    actividad();
-    ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'].forEach(function (ev) {
-      window.addEventListener(ev, actividad, { passive: true, capture: true });
-    });
-    window.addEventListener('scroll', actividad, { passive: true, capture: true });
+    // Si la página se acaba de recargar sola por una versión nueva, eso no cuenta como actividad: abrir la página (y sus
+    // pestañas, que se mueven solas al cargar) no reinicia la hora; se empieza a escuchar unos segundos después.
+    var sola = P.recargaSola();
+    if (!sola) actividad();
+    function escucha() {
+      ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'].forEach(function (ev) {
+        window.addEventListener(ev, actividad, { passive: true, capture: true });
+      });
+      window.addEventListener('scroll', actividad, { passive: true, capture: true });
+    }
+    if (sola) setTimeout(escucha, 8000); else escucha();
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisaInactividad(); });
     setInterval(revisaInactividad, 30000);
+  }
+
+  /* ---- Versión nueva (29-oct-2026, pedido de Daniel): cada cambio que se publica (lo suba Daniel, Fernando o una
+     propuesta autorizada) le llega a quien tenga el portal abierto, sin que tenga que refrescar a mano.
+     construir.py deja en version.json la huella de lo publicado y la misma huella en <meta name="portal-version"> de
+     las tres vistas. Aquí, solo en la página de arriba (no en las pestañas que van en su marco):
+       · al abrir: si la página llegó vieja (el navegador tenía guardada la de antes), se cambia sola por la nueva;
+       · cada minuto mientras está a la vista, y al volver a ella: si se publicó algo, sale una ventana que no se
+         cierra; se actualiza al picar «Actualizar ahora» o sola en 60 segundos. Una sola vez se puede pedir esperar
+         3 minutos (por si alguien está a medio escribir); después vuelve la ventana y se actualiza sí o sí.
+     La recarga lleva ?v=<huella> para que el navegador no use la copia vieja (luego se quita de la dirección), conserva
+     la sección (#…) y la sesión, y la recarga automática no cuenta como actividad para el cierre por inactividad. ---- */
+  var RECARGA_SOLA = 'profase-recarga-sola', SALTOS_V = 'profase-version-saltos', CARGA_T = Date.now(), recargaSola = false;
+  if (window.parent === window) {
+    try {
+      var rs = +sessionStorage.getItem(RECARGA_SOLA) || 0;
+      sessionStorage.removeItem(RECARGA_SOLA);
+      recargaSola = rs > 0 && Date.now() - rs < 60000;
+    } catch (e) { recargaSola = false; }
+  }
+  // ¿Esta página (o la de arriba, si es una pestaña en su marco) se acaba de recargar sola? Vale los primeros 30 s.
+  P.recargaSola = function () {
+    var a = arriba();
+    if (a && a.recargaSola) { try { return a.recargaSola(); } catch (e) { return false; } }
+    return recargaSola && Date.now() - CARGA_T < 30000;
+  };
+  var CSS_VERSION = '.pv-nota{font-size:13px;color:#5A6474}.pv-seg{font-variant-numeric:tabular-nums}#pv-dlg:focus{outline:none}'
+    + '.pt-toast.pv-toast b{font-variant-numeric:tabular-nums}'
+    + ':root[data-theme="dark"] .pv-nota{color:#A9B4C6}';
+  var IC_VERSION = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
+  function versionNueva() {
+    if (window.parent !== window || P._versionNueva) return;
+    P._versionNueva = true;
+    var CADA_V = 60000, SEG = 60, SEG_FINAL = 30, ESPERA = 3 * 60000, HEX = /^[0-9a-f]{6,40}$/;
+    var meta = document.querySelector('meta[name="portal-version"]');
+    var propia = meta && HEX.test(meta.content) ? meta.content : null;
+    var inicial = null, nueva = null, ultima = 0, yendo = false, espero = false, tic = null;
+    // la ?v= de una recarga ya cumplió: se quita de la dirección para que se vea limpia
+    try {
+      var u0 = new URL(location.href);
+      if (u0.searchParams.has('v')) { u0.searchParams.delete('v'); history.replaceState(history.state, '', u0.href); }
+    } catch (e) { /* navegador viejo: se queda */ }
+    function lee() {
+      return fetch(new URL('version.json?t=' + Date.now(), location.href).href, { cache: 'no-store', credentials: 'omit' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { return j && HEX.test(j.version) ? j.version : null; }, function () { return null; });
+    }
+    // Si una página sigue llegando vieja, no se insiste más de dos veces por versión (cada 5 minutos)
+    function saltos(v) {
+      try { var s = JSON.parse(sessionStorage.getItem(SALTOS_V) || '{}'); return s.v === v && Date.now() - s.t < 5 * 60000 ? s.n : 0; } catch (e) { return 0; }
+    }
+    function recarga(v, sola) {
+      if (yendo) return;
+      yendo = true;
+      try {
+        sessionStorage.setItem(SALTOS_V, JSON.stringify({ v: v, n: saltos(v) + 1, t: Date.now() }));
+        if (sola) sessionStorage.setItem(RECARGA_SOLA, String(Date.now()));
+      } catch (e) { /* sin almacenamiento: igual recarga */ }
+      var u = new URL(location.href); u.searchParams.set('v', v);
+      location.replace(u.href);
+    }
+    function cuenta(fin, el) {
+      var s = Math.max(0, Math.ceil((fin - Date.now()) / 1000));
+      if (el) el.textContent = el.getAttribute('data-mmss') ? Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2) : String(s);
+      return s;
+    }
+    function ventana() {
+      cssModo();
+      if (!document.getElementById('pv-css')) { var st = document.createElement('style'); st.id = 'pv-css'; st.textContent = CSS_VERSION; document.head.appendChild(st); }
+      var t = document.getElementById('pv-toast'); if (t) t.remove();
+      if (document.getElementById('pv-ov')) return;
+      var seg = espero ? SEG_FINAL : SEG, fin = Date.now() + seg * 1000;
+      var ov = document.createElement('div');
+      ov.className = 'pt-ov'; ov.id = 'pv-ov';
+      ov.innerHTML = '<div class="pt-dlg" id="pv-dlg" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="pv-h" aria-describedby="pv-p">'
+        + '<div class="pt-ic">' + IC_VERSION + '</div>'
+        + '<h2 id="pv-h">Hay una versión nueva del portal</h2>'
+        + '<p id="pv-p">Se acaban de subir cambios al portal. Para que trabajes con lo más reciente, esta página se va a actualizar en <b class="pv-seg" id="pv-s">' + seg + '</b> segundos.</p>'
+        + '<p class="pv-nota">Te quedas en la misma sección y no se cierra tu sesión.'
+        + (espero ? '' : ' Si estás a medio escribir algo, pica «Esperar 3 minutos» y guárdalo.') + '</p>'
+        + '<div class="pt-acts">' + (espero ? '' : '<button type="button" class="pt-b" id="pv-esp">Esperar 3 minutos</button>')
+        + '<button type="button" class="pt-b pri" id="pv-ya">Actualizar ahora</button></div></div>';
+      document.body.appendChild(ov);
+      var num = document.getElementById('pv-s');
+      clearInterval(tic);
+      tic = setInterval(function () { if (cuenta(fin, num) <= 0) { clearInterval(tic); recarga(nueva, true); } }, 1000);
+      document.getElementById('pv-ya').onclick = function () { clearInterval(tic); recarga(nueva, false); };
+      var esp = document.getElementById('pv-esp');
+      if (esp) esp.onclick = function () { clearInterval(tic); ov.remove(); espera(); };
+      // el foco va a la ventana, no a un botón: si alguien venía escribiendo, su siguiente tecla no la actualiza de golpe
+      try { document.getElementById('pv-dlg').focus({ preventScroll: true }); } catch (e) { /* nada */ }
+    }
+    // Esperar 3 minutos: un aviso chico abajo con el tiempo que falta; al terminar, vuelve la ventana (sin otra espera)
+    function espera() {
+      espero = true;
+      var fin = Date.now() + ESPERA;
+      var a = document.createElement('div');
+      a.id = 'pv-toast'; a.className = 'pt-toast pv-toast'; a.setAttribute('role', 'status');
+      a.innerHTML = '<span>El portal se va a actualizar en <b data-mmss="1">3:00</b>.</span><button type="button">Actualizar ahora</button>';
+      document.body.appendChild(a);
+      var num = a.querySelector('b');
+      a.querySelector('button').onclick = function () { clearInterval(tic); recarga(nueva, false); };
+      clearInterval(tic);
+      tic = setInterval(function () { if (cuenta(fin, num) <= 0) { clearInterval(tic); ventana(); } }, 1000);
+    }
+    function revisa(alAbrir) {
+      if (yendo || nueva || (!alAbrir && document.hidden)) return;
+      var ahora = Date.now();
+      if (!alAbrir && ahora - ultima < 20000) return;
+      ultima = ahora;
+      lee().then(function (v) {
+        if (!v || yendo || nueva) return;
+        if (!propia && !inicial) { inicial = v; return; }   // página sin huella: se compara contra la primera que vio
+        if (v === (propia || inicial) || saltos(v) >= 2) return;
+        // recién abierta, todavía nada que perder: se cambia sola; si no, se avisa
+        if (alAbrir) return recarga(v, P.recargaSola());
+        nueva = v; ventana();
+      });
+    }
+    revisa(true);
+    setInterval(function () { revisa(false); }, CADA_V);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) revisa(false); });
+    window.addEventListener('focus', function () { revisa(false); });
   }
 
   P.salir = async function () {
@@ -945,6 +1075,8 @@
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { encabezado(p); });
       else encabezado(p);
       vigilaInactividad();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', versionNueva);
+      else versionNueva();
     }).catch(function () {});
   }
 })();
