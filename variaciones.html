@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script></head><body>
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script><script src="js/filtros.js"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -602,7 +602,7 @@ table.rtab{min-width:1200px}
     <div>
       <h1>Bitácora de variaciones</h1>
       <p class="lead" id="lead">cargando…</p>
-      <div class="anios" id="anios"></div>
+      <div class="anios" id="anios" hidden></div>
     </div>
     <div class="acts">
       <button class="btn-2" id="ayudaBtn" aria-expanded="false">Instrucciones</button>
@@ -610,7 +610,7 @@ table.rtab{min-width:1200px}
       <button class="btn-2" id="exportarBtn" title="Descarga en Excel las variaciones marcadas o las filtradas, con su seguimiento e historial">Exportar Excel</button>
       <button class="btn-2" id="importarBtn" title="Lee un Excel exportado de esta bitácora y actualiza estatus y comentarios">Importar Excel</button>
       <input type="file" id="importarArch" accept=".xlsx,.xlsm,.xls" hidden>
-      <button class="btn-2" id="limpiar">Limpiar filtros</button>
+      <button class="btn-2" id="limpiar" hidden>Limpiar filtros</button>
       <button class="btn-2 bell" id="campana" hidden title="Cambios de estatus y comentarios">Notificaciones<span class="bdg" id="bdg" hidden>0</span></button>
       <button class="btn-2" id="usuarios" hidden>Usuarios</button>
       <button class="btn-2" id="tema" title="Cambiar entre tema claro y oscuro">Tema oscuro</button>
@@ -624,10 +624,10 @@ table.rtab{min-width:1200px}
       <div class="l">
         <svg class="ic" style="color:var(--accent-2)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
         <h2>Explorar información</h2>
-        <span class="pill">INTERACTIVO</span>
       </div>
     </div>
-    <div class="cards" id="cards"></div>
+    <div id="fBarra"></div>
+    <div class="cards" id="cards" hidden></div>
   </section>
 
   <section class="kpis" id="kpis"></section>
@@ -1419,8 +1419,46 @@ function marcaCasilla(rid){
   if(all) all.classList.toggle("on", vis.length>0 && vis.every(f=>S.marcadas.has(f.rid)));
   pintarBulk();
 }
+/* ---------- FILTROS (29-oct-2026, propuesta de Gabriel) ----------
+   Las seis tarjetas de «Explorar información», el año y «Limpiar filtros» pasan a un solo botón «FILTROS»
+   (js/filtros.js): mayúsculas, el buscador va descartando conforme se escribe y clientes, grupos, contadores,
+   cuentas y estatus dejan marcar varios. El estado sigue en S y se filtra igual (pasa()). */
+let FB = null;
+const deSet = k => ({valor:()=>[...S[k]].map(String), pon:v=>{ S[k]=new Set(v); }});
+const deNum = k => ({valor:()=>[...S[k]].map(String), pon:v=>{ S[k]=new Set(v.map(Number)); }});
+function uno(k, def, num){ return {valor:()=>S[k]===def?[]:[String(S[k])], pon:v=>{ S[k]=v.length?(num?+v[0]:v[0]):def; }}; }
+function montaFiltros(){
+  if(FB || typeof PROFASE_FILTROS==="undefined") return;
+  const pcts = [...new Set([50,100,150,200,300,UMB_VISTA])].sort((a,b)=>a-b);
+  FB = PROFASE_FILTROS.crea({
+    donde: document.getElementById("fBarra"),
+    grupos: [
+      {t:"Clientes y grupos", campos:[
+        Object.assign({k:"cli", t:"Clientes", tipo:"varios", buscar:true,
+          opciones:()=>CLIENTES.filter(c=>!S.grupos.size||S.grupos.has(c.grupo)).map(c=>({v:c.rfc, t:c.nombre, n:c.n}))}, deSet("clientes")),
+        Object.assign({k:"gru", t:"Grupos", tipo:"varios", buscar:true, opciones:()=>GRUPOS.map(g=>({v:g.g, t:g.g, n:g.n}))}, deSet("grupos"))]},
+      {t:"Revisión", campos:[
+        Object.assign({k:"est", t:"Estatus de revisión", tipo:"varios", opciones:()=>INVIT.map(e=>({v:e.id, t:e.t}))}, deSet("estI")),
+        Object.assign({k:"con", t:"Contador asignado", tipo:"varios", buscar:CONTADORES.length>8, opciones:()=>CONTADORES.map(c=>({v:c.nombre, t:c.nombre, n:c.n}))}, deSet("contadores")),
+        Object.assign({k:"pct", t:"Criterio: variación de", tipo:"uno", opciones:()=>pcts.map(p=>({v:String(p), t:p+"% o más"}))}, uno("umbPct", UMB_VISTA, true)),
+        Object.assign({k:"mxn", t:"Criterio: cambio mínimo", tipo:"uno", opciones:()=>[[10000,"$10 mil"],[25000,"$25 mil"],[100000,"$100 mil"]].map(([v,t])=>({v:String(v), t}))}, uno("umbMxn", 0, true)),
+        Object.assign({k:"dir", t:"Dirección", tipo:"uno", opciones:()=>[{v:"sube",t:"Incrementos"},{v:"baja",t:"Disminuciones"}]}, uno("dir","todos")),
+        Object.assign({k:"rec", t:"Recurrencia", tipo:"uno", opciones:()=>[{v:"si",t:"Solo recurrentes"},{v:"no",t:"Solo únicas"}]}, uno("rec","todos")),
+        {k:"sil", t:"Casos silenciados", tipo:"uno", opciones:()=>[{v:"si",t:"Mostrarlos"}], valor:()=>S.verSil?["si"]:[], pon:v=>{ S.verSil = v[0]==="si"; }}]},
+      {t:"Cuentas", campos:[
+        Object.assign({k:"cta", t:"Cuentas que no se revisan", tipo:"varios", buscar:true,
+          opciones:()=>CUENTAS.map(c=>({v:c.cta, t:c.cta+" · "+c.nombre, n:c.n}))}, deSet("ctasOff"))]},
+      {t:"Periodo", campos:[
+        Object.assign({k:"anio", t:"Año", tipo:"uno", opciones:()=>ANIOS.filter(y=>POR_ANIO.get(y)).map(y=>({v:String(y), t:String(y)}))}, uno("anio", ANIO, true)),
+        Object.assign({k:"mes", t:"Meses", tipo:"varios", opciones:()=>(D.mesesPorAnio[S.anio]||[]).map(([k,t])=>({v:String(k), t:String(t)}))}, deNum("meses"))]}],
+    cambio: ()=>{ S.marcadas.clear(); pintar(); },
+    limpiar: ()=>{ document.getElementById("limpiar").click(); S.anio = ANIO; },
+    resultados: ()=>{ const n = FILAS.filter(f=>pasa(f)).length; return "Ver "+fNum.format(n)+(n===1?" hallazgo":" hallazgos"); }
+  });
+}
 function pintar(){
   if(pendiente){ cancelAnimationFrame(pendiente); pendiente = 0; }
+  montaFiltros(); if(FB) FB.pinta();
   const vis = ordenar(FILAS.filter(f=>pasa(f)));
   window.__vis = vis;
   const R = resumenes();

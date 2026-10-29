@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script><script src="js/filtros.js"></script>
 <style>
 /* Portal PROFASE · Access › Clientes (etapa 1 de la migración del Access, 29-oct-2026): la Base de Clientes del Access,
    solo para consultar. Los datos los deja la actualización de cada 3 horas (nube/access_nube.py); quién ve qué lo
@@ -185,13 +185,10 @@ tr.fila:hover td{background:var(--navy-soft)}
       <header>
         <div><h2 id="h-lista">Base de clientes</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
         <div class="filtros">
-          <input id="f-buscar" type="search" placeholder="Buscar (razón social, RFC, grupo, contacto)" aria-label="Buscar">
-          <select id="f-est" aria-label="Estatus"><option value="vivos">Activos e incubados</option><option value="Activo">Activos</option><option value="Incubado">Incubados</option><option value="Inactivo">Inactivos</option><option value="">Todos</option></select>
-          <select id="f-con" aria-label="Contador asignado"><option value="">Todos los contadores</option></select>
-          <select id="f-cia" aria-label="Compañía que lo atiende"><option value="">Todas las compañías</option></select>
           <button class="btn" type="button" id="x-cli">Excel</button>
         </div>
       </header>
+      <div id="f-barra" style="padding:12px 14px 0"></div>
       <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Grupo</th><th>Estatus</th><th>Contador asignado</th><th>e.firma</th><th>Sellos</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="lista-vacia" hidden>Ningún cliente con estos filtros.</div>
       <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
@@ -273,13 +270,34 @@ tr.fila:hover td{background:var(--navy-soft)}
     }
   }
 
+  /* Filtros (29-oct-2026, propuesta de Gabriel): un botón «FILTROS» (js/filtros.js) con cliente (varios), estatus,
+     contador, compañía y la búsqueda de siempre. Antes eran tres menús y el buscador. */
+  var F = { cli: [], est: ['vivos'], con: [], cia: [], q: '' }, FB = null, OP = { con: [], cia: [] };
   function opciones() {
     var cs = {}, cias = {};
     EMP.forEach(function (e) { contadores(e).forEach(function (n) { cs[n] = 1; }); e.cias.forEach(function (c) { if (c.cia) cias[c.cia] = 1; }); });
-    $('f-con').innerHTML = '<option value="">Todos los contadores</option><option value="__sin">Sin contador asignado</option>'
-      + Object.keys(cs).sort().map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
-    $('f-cia').innerHTML = '<option value="">Todas las compañías</option>'
-      + Object.keys(cias).sort().map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    OP.con = [{ v: '__sin', t: 'Sin contador asignado' }].concat(Object.keys(cs).sort().map(function (n) { return { v: n, t: n }; }));
+    OP.cia = Object.keys(cias).sort().map(function (n) { return { v: n, t: n }; });
+    if (!FB) FB = PROFASE_FILTROS.crea({
+      donde: $('f-barra'),
+      grupos: [
+        { t: 'Cliente', campos: [
+          { k: 'cli', t: 'Cliente', tipo: 'varios', buscar: true,
+            opciones: function () { return EMP.filter(function (e) { return F.est[0] !== 'vivos' || vivo(e); }).map(function (e) { return { v: String(e.id), t: e.rs + (e.rfc ? ' · ' + e.rfc : '') }; }).sort(function (a, b) { return a.t < b.t ? -1 : 1; }); },
+            valor: function () { return F.cli; }, pon: function (v) { F.cli = v; } },
+          { k: 'q', t: 'Buscar (razón social, RFC, grupo, contacto)', tipo: 'texto', valor: function () { return F.q; }, pon: function (v) { F.q = v; } }] },
+        { t: 'Estatus y compañía', campos: [
+          { k: 'est', t: 'Estatus', tipo: 'uno',
+            opciones: function () { return [{ v: 'vivos', t: 'Activos e incubados' }, { v: 'Activo', t: 'Activos' }, { v: 'Incubado', t: 'Incubados' }, { v: 'Inactivo', t: 'Inactivos' }]; },
+            valor: function () { return F.est; }, pon: function (v) { F.est = v; } },
+          { k: 'cia', t: 'Compañía que lo atiende', tipo: 'varios', opciones: function () { return OP.cia; }, valor: function () { return F.cia; }, pon: function (v) { F.cia = v; } }] },
+        { t: 'Contador', campos: [
+          { k: 'con', t: 'Contador asignado', tipo: 'varios', buscar: true, opciones: function () { return OP.con; }, valor: function () { return F.con; }, pon: function (v) { F.con = v; } }] }],
+      cambio: function () { mostrar = PAGINA; pintaLista(); },
+      limpiar: function () { F = { cli: [], est: ['vivos'], con: [], cia: [], q: '' }; },
+      resultados: function () { var n = filtrados().length; return 'Ver ' + n + (n === 1 ? ' cliente' : ' clientes'); }
+    });
+    FB.pinta();
   }
 
   function kpis() {
@@ -303,18 +321,18 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   function filtrados() {
-    var q = norm($('f-buscar').value.trim()), est = $('f-est').value, con = $('f-con').value, cia = $('f-cia').value;
+    var q = PROFASE_FILTROS.norm(F.q), est = F.est[0] || '';   // sin acentos ni signos, como en los filtros
     return EMP.filter(function (e) {
+      if (F.cli.length && F.cli.indexOf(String(e.id)) < 0) return false;
       if (est === 'vivos' && !vivo(e)) return false;
       if (est && est !== 'vivos' && e.est !== est) return false;
       var cs = contadores(e);
-      if (con === '__sin' && cs.length) return false;
-      if (con && con !== '__sin' && cs.indexOf(con) < 0) return false;
-      if (cia && !e.cias.some(function (c) { return c.cia === cia; })) return false;
+      if (F.con.length && !F.con.some(function (c) { return c === '__sin' ? !cs.length : cs.indexOf(c) >= 0; })) return false;
+      if (F.cia.length && !e.cias.some(function (c) { return F.cia.indexOf(c.cia) >= 0; })) return false;
       if (q) {
         var g = GRU[e.g] || {}, txt = [e.rs, e.rfc, g.aliasD, g.aliasE].concat(e.cias.map(function (c) { return c.alias; }))
           .concat((D.contactos || []).filter(function (c) { return c.g === e.g; }).map(function (c) { return c.n; })).join(' ');
-        if (norm(txt).indexOf(q) < 0) return false;
+        if (!PROFASE_FILTROS.pasa(txt, q)) return false;
       }
       return true;
     });
@@ -558,7 +576,6 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
   $('t-cli').onclick = function () { muestra('cli'); };
   $('t-fir').onclick = function () { muestra('fir'); };
-  ['f-buscar', 'f-est', 'f-con', 'f-cia'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pintaLista(); }); });
   $('ver-mas').onclick = function () { mostrar += PAGINA; pintaLista(); };
   $('x-cli').onclick = function () { excelClientes(this); };
   $('x-fir').onclick = function () { excelFirmas(this); };

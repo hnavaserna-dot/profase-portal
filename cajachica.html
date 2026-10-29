@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Caja chica</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script></head><body>
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Caja chica</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script><script src="js/filtros.js"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -344,15 +344,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
       <!-- Gastos del mes (todos los que capturan) -->
       <div id="pMes" role="tabpanel" aria-labelledby="tb-mes">
         <div class="toolbar">
-          <select id="fTipo" aria-label="Tipo de gasto">
-            <option value="">Todos los tipos</option>
-            <option value="vuelta">Vueltas a cliente</option>
-            <option value="interno">Gastos internos (RH / oficina)</option>
-          </select>
-          <select id="fCat" aria-label="Categoría"><option value="">Todas las categorías</option></select>
-          <select id="fEst" aria-label="Estatus"><option value="">Todos los estatus</option></select>
-          <select id="fCli" aria-label="Cliente"><option value="">Todos los clientes</option></select>
-          <div class="spacer"></div>
+          <div id="fBarra" style="flex:1 1 320px;min-width:0"></div>
           <button class="btn ghost" id="exportBtn" type="button" hidden>Exportar a Excel</button>
           <button class="btn primary" id="newBtn" type="button">Registrar gasto</button>
         </div>
@@ -598,7 +590,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
     return txt + mon + ' ' + String(cs).padStart(2,'0') + '/100 M.N.';
   }
 
-  var state = { periodo: ym(hoy()), movs: [], cortes: [], loaded: false, fTipo:'', fCat:'', fEst:'', fEmp:'todos', fCli:'',
+  var state = { periodo: ym(hoy()), movs: [], cortes: [], loaded: false, fTipo:[], fCat:[], fEst:[], fEmp:'todos', fCli:[],
                 tab:'pMes', selAut:{}, cortePersona:null, selCorte:{} };
   var db=null, dl=null, P=null, uid=null, yo=null, modo=null, esRH=false;   // modo: 'autoriza' | 'captura' | 'reporte'
   var CLIENTES=[], CLI_BY_NOMBRE={}, editingId=null, formTipo='vuelta', rechazoIds=[], toastTimer=null;
@@ -624,9 +616,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
   (function initSelects(){
     var gv=document.createElement('optgroup'); gv.label='Vueltas a cliente'; llenaCats(gv, CATS_V);
     var gi=document.createElement('optgroup'); gi.label='Gastos internos'; llenaCats(gi, CATS_I);
-    $('fCat').appendChild(gv); $('fCat').appendChild(gi);
     PAGOS.forEach(function(x){ $('pago').appendChild(new Option(x.label,x.id)); });
-    ESTS.forEach(function(x){ $('fEst').appendChild(new Option(x.label,x.id)); });
     $('periodo').value = state.periodo;
   })();
 
@@ -808,29 +798,44 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
   $('prevM').addEventListener('click', function(){ shiftMonth(-1); });
   $('nextM').addEventListener('click', function(){ shiftMonth(1); });
   function shiftMonth(n){ state.periodo=sumaMes(state.periodo,n); $('periodo').value=state.periodo; render(); }
-  $('fTipo').addEventListener('change', function(){ state.fTipo=this.value; render(); });
-  $('fCat').addEventListener('change', function(){ state.fCat=this.value; render(); });
-  $('fEst').addEventListener('change', function(){ state.fEst=this.value; render(); });
   $('fEmp').addEventListener('change', function(){ state.fEmp=this.value; render(); });
-  $('fCli').addEventListener('change', function(){ state.fCli=this.value; render(); });
+  /* Filtros (29-oct-2026, propuesta de Gabriel): tipo, categoría, estatus y cliente en un solo botón «FILTROS»
+     (js/filtros.js); cliente, categoría y estatus dejan marcar varios. Antes eran cuatro menús de uno solo. */
+  var CLIS = [];
+  function campoF(k, t, tipo, ops, buscar) {
+    return { k: k, t: t, tipo: tipo, buscar: buscar, opciones: ops, valor: function(){ return state[k]; }, pon: function(v){ state[k]=v; } };
+  }
+  var FB = PROFASE_FILTROS.crea({
+    donde: $('fBarra'),
+    grupos: [
+      { t: 'Movimiento', campos: [
+        campoF('fTipo', 'Tipo de gasto', 'uno', function(){ return [{v:'vuelta',t:'Vueltas a cliente'},{v:'interno',t:'Gastos internos (RH / oficina)'}]; }),
+        campoF('fEst', 'Estatus', 'varios', function(){ return ESTS.map(function(x){ return {v:x.id,t:x.label}; }); }),
+        campoF('fCat', 'Categoría', 'varios', function(){
+          return CATS_V.map(function(x){ return {v:x.id,t:x.label+' · vuelta'}; }).concat(CATS_I.map(function(x){ return {v:x.id,t:x.label+' · interno'}; }));
+        }, true)] },
+      { t: 'Cliente', campos: [ campoF('fCli', 'Cliente', 'varios', function(){ return CLIS; }, true) ] }],
+    cambio: function(){ render(); },
+    limpiar: function(){ state.fTipo=[]; state.fCat=[]; state.fEst=[]; state.fCli=[]; },
+    resultados: function(){ var n=visibles().length; return 'Ver '+n+(n===1?' movimiento':' movimientos'); }
+  });
 
   function delMes(per){ return state.movs.filter(function(m){ return (m.periodo||ym(m.fecha))===per; }); }
   function syncFiltroCliente(){
     var vistos={};
     delMes(state.periodo).forEach(function(m){ if(m.cliente) vistos[m.cliente]=1; });
-    var nombres=Object.keys(vistos).sort(), sel=$('fCli');
-    sel.textContent=''; sel.appendChild(new Option('Todos los clientes',''));
-    nombres.forEach(function(n){ sel.appendChild(new Option(n,n)); });
-    if(state.fCli && nombres.indexOf(state.fCli)===-1) state.fCli='';
-    sel.value=state.fCli; sel.hidden = nombres.length===0;
+    var nombres=Object.keys(vistos).sort();
+    CLIS = nombres.map(function(n){ return {v:n,t:n}; });
+    state.fCli = state.fCli.filter(function(n){ return nombres.indexOf(n)>=0; });
+    FB.pinta();
   }
   function visibles(){
     return delMes(state.periodo).filter(function(m){
       if(modo==='reporte') return true;
-      if(state.fTipo && tipoOf(m)!==state.fTipo) return false;
-      if(state.fCat && m.categoria!==state.fCat) return false;
-      if(state.fEst && est(m)!==state.fEst) return false;
-      if(state.fCli && m.cliente!==state.fCli) return false;
+      if(state.fTipo.length && state.fTipo.indexOf(tipoOf(m))<0) return false;
+      if(state.fCat.length && state.fCat.indexOf(m.categoria)<0) return false;
+      if(state.fEst.length && state.fEst.indexOf(est(m))<0) return false;
+      if(state.fCli.length && state.fCli.indexOf(m.cliente)<0) return false;
       if(state.fEmp==='mios' && m.por!==uid) return false;
       return true;
     }).sort(porFecha);
