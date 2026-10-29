@@ -448,9 +448,13 @@
       sel.innerHTML = opcionesEstatus(draft, ef);
       sel.value = ef === 'vencida' ? '' : draft.estatus; sel.className = 'st st-' + ef;
     }
-    locked = editing != null && draft.estatus !== 'borrador' && !adminUnlock;
+    locked = !!YO.consulta || (editing != null && draft.estatus !== 'borrador' && !adminUnlock);
+    sel.disabled = !!YO.consulta;
     var lb = $('#ed-lock');
-    if (locked) {
+    if (YO.consulta) {
+      lb.hidden = false;
+      lb.innerHTML = '<span>Tu usuario es de solo consulta: puedes ver las cotizaciones y bajar su PDF, pero no crear ni cambiar.</span>';
+    } else if (locked) {
       lb.hidden = false;
       lb.innerHTML = '<span>Esta cotización ya se emitió y queda fija. Para cambiarla, duplícala con un folio nuevo.</span><span class="spacer"></span>'
         + '<button type="button" class="btn sm" data-act="dup">Duplicar</button>'
@@ -473,6 +477,10 @@
   }
   function renderActions() {
     var a = $('#ed-actions');
+    if (YO.consulta) {
+      a.innerHTML = editing != null ? '<button type="button" class="btn primary" data-act="pdf">Descargar PDF</button>' : '';
+      return;
+    }
     if (locked) {
       a.innerHTML = '<button type="button" class="btn primary" data-act="pdf">Descargar PDF</button><button type="button" class="btn" data-act="dup">Duplicar</button>'
         + '<span class="spacer"></span><button type="button" class="btn ghost" data-act="new">Nueva cotización</button>';
@@ -597,6 +605,7 @@
       var b = e.target.closest('[data-act]'); if (!b) return;
       var act = b.dataset.act, f = b.dataset.folio ? Number(b.dataset.folio) : null;
       var q = f != null ? S.cots.find(function (x) { return x.folio === f; }) : null;
+      if (YO.consulta && /^(save|emit|dup|new|unlock)$/.test(act)) return;
       if (act === 'save') guardar(false);
       if (act === 'emit') guardar(true);
       if (act === 'pdf') descargarPDF(q ? deFila(q) : (editing != null ? draft : null));
@@ -770,7 +779,7 @@
     var porVencer = S.cots.filter(function (q) { var h = addDays(q.fecha, q.vigencia); return q.estatus === 'enviada' && h >= hoy && h <= en3; });
     var focused = document.activeElement && document.activeElement.id;
     v.innerHTML = '<div class="vhead"><div><div class="eyebrow">Seguimiento comercial</div><h2>Cotizaciones</h2></div><span class="spacer"></span>'
-      + '<button type="button" class="btn" data-act="backup">Descargar respaldo</button><button type="button" class="btn primary" data-act="new">+ Nueva cotización</button></div>'
+      + '<button type="button" class="btn" data-act="backup">Descargar respaldo</button>' + (YO.consulta ? '' : '<button type="button" class="btn primary" data-act="new">+ Nueva cotización</button>') + '</div>'
       + '<div class="stats">'
       + '<div class="stat"><div class="eyebrow">Emitidas</div><div class="v">' + emit.length + '</div><div class="s">' + money(suma(emit)) + ' con IVA</div></div>'
       + '<div class="stat"><div class="eyebrow">Aceptadas</div><div class="v">' + acc.length + '</div><div class="s">' + money(suma(acc)) + ' con IVA</div></div>'
@@ -787,8 +796,8 @@
         return '<tr><td class="fol">' + esc(folioTxt(q)) + '</td><td class="num">' + fdate(q.fecha) + '</td>'
           + '<td class="cl"><div title="' + esc(q.cliente) + '">' + esc(q.cliente) + '</div><small>' + esc(q.rfc) + '</small></td>'
           + '<td>' + esc(q.asesor && q.asesor.nombre ? q.asesor.nombre : '—') + '</td><td class="r">' + money(q.total) + '</td><td class="num">' + fdate(addDays(q.fecha, q.vigencia)) + '</td>'
-          + '<td><select class="st st-' + ef + '" data-st="' + q.folio + '" aria-label="Estatus de ' + esc(folioTxt(q)) + '">' + opcionesEstatus(q, ef).replace('<option value="" disabled>', '<option value="" disabled selected>') + '</select></td>'
-          + '<td><div class="acts"><button type="button" class="btn ghost sm" data-act="open" data-folio="' + q.folio + '">Abrir</button><button type="button" class="btn ghost sm" data-act="pdf" data-folio="' + q.folio + '">PDF</button><button type="button" class="btn ghost sm" data-act="dup" data-folio="' + q.folio + '">Duplicar</button></div></td></tr>';
+          + '<td><select class="st st-' + ef + '" data-st="' + q.folio + '" aria-label="Estatus de ' + esc(folioTxt(q)) + '"' + (YO.consulta ? ' disabled' : '') + '>' + opcionesEstatus(q, ef).replace('<option value="" disabled>', '<option value="" disabled selected>') + '</select></td>'
+          + '<td><div class="acts"><button type="button" class="btn ghost sm" data-act="open" data-folio="' + q.folio + '">Abrir</button><button type="button" class="btn ghost sm" data-act="pdf" data-folio="' + q.folio + '">PDF</button>' + (YO.consulta ? '' : '<button type="button" class="btn ghost sm" data-act="dup" data-folio="' + q.folio + '">Duplicar</button>') + '</div></td></tr>';
       }).join('') : '<tr><td colspan="8"><div class="empty">' + (S.cargado.cots ? (S.cots.length ? 'Ninguna cotización coincide con los filtros.' : 'Aún no hay cotizaciones. La primera que guardes aparecerá aquí con su folio.') : 'Cargando cotizaciones…') + '</div></td></tr>')
       + '</tbody></table></div>';
     $('#h-estatus').value = histF.estatus; $('#h-asesor').value = histF.asesor; $('#h-mes').value = histF.mes;
@@ -835,13 +844,13 @@
         + '<label class="f">Régimen fiscal<select class="in" id="c-regimen"><option value="">Sin capturar</option>' + REGIMENES.map(function (r) { return '<option' + (c.regimen === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') + (c.regimen && REGIMENES.indexOf(c.regimen) < 0 ? '<option selected>' + esc(c.regimen) + '</option>' : '') + '</select></label>'
         + '<div id="c-err"></div><div class="row"><button class="btn primary" type="submit">Guardar cliente</button><button class="btn" type="button" id="c-cancel">Cancelar</button><span class="spacer"></span>'
         + (c.id ? '<button class="btn ghost danger" type="button" id="c-del">' + (c.confirmDel ? 'Confirmar: eliminar' : 'Eliminar') + '</button>' : '') + '</div></form>' : '')
-        + '<div class="row" style="margin-bottom:10px"><input class="in" id="cli-q" placeholder="Buscar por razón social, RFC o contacto" value="' + esc(cliQ) + '" style="max-width:420px" aria-label="Buscar cliente"><span class="muted">' + hits.length + ' de ' + all.length + '</span><span class="spacer"></span><button type="button" class="btn sm" id="add-cli">+ Nuevo cliente</button></div>'
+        + '<div class="row" style="margin-bottom:10px"><input class="in" id="cli-q" placeholder="Buscar por razón social, RFC o contacto" value="' + esc(cliQ) + '" style="max-width:420px" aria-label="Buscar cliente"><span class="muted">' + hits.length + ' de ' + all.length + '</span><span class="spacer"></span>' + (YO.consulta ? '' : '<button type="button" class="btn sm" id="add-cli">+ Nuevo cliente</button>') + '</div>'
         + '<div class="tbl-wrap"><table class="t"><thead><tr><th>Razón social</th><th>RFC</th><th>Contacto</th><th>Teléfono / correo</th><th>Régimen</th><th>Cotizaciones</th><th></th></tr></thead><tbody>'
         + (hits.slice(0, 150).map(function (x) {
           var n = S.cots.filter(function (q2) { return q2.cliente_id === x.id; }).length;
           return '<tr><td><b>' + esc(x.razon) + '</b></td><td class="num">' + esc(x.rfc) + '</td><td>' + (esc(x.contacto) || '<span class="muted">—</span>') + '</td>'
             + '<td>' + (esc([x.telefono, x.correo].filter(Boolean).join(' / ')) || '<span class="muted">—</span>') + '</td><td class="muted">' + (esc(String(x.regimen || '').slice(0, 3)) || '—') + '</td>'
-            + '<td class="num">' + (n || '<span class="muted">—</span>') + '</td><td><button type="button" class="btn ghost sm" data-cli="' + esc(x.id) + '">Editar</button></td></tr>';
+            + '<td class="num">' + (n || '<span class="muted">—</span>') + '</td><td>' + (YO.consulta ? '' : '<button type="button" class="btn ghost sm" data-cli="' + esc(x.id) + '">Editar</button>') + '</td></tr>';
         }).join('') || '<tr><td colspan="7"><div class="empty">' + (S.cargado.clientes ? (all.length ? 'Sin coincidencias.' : 'Aún no hay clientes. Se agregan aquí o al guardar una cotización.') : 'Cargando clientes…') + '</div></td></tr>')
         + '</tbody></table></div>' + (hits.length > 150 ? '<p class="muted">Mostrando 150 de ' + hits.length + '. Usa el buscador para encontrar el resto.</p>' : '');
     } else {
@@ -1135,6 +1144,11 @@
 
   // ================= Navegación =================
   function vista() { var v = (location.hash || '#nueva').slice(1); return ['nueva', 'cotizaciones', 'catalogos', 'bitacora', 'ajustes'].indexOf(v) >= 0 ? v : 'nueva'; }
+  // Solo consulta: sin «Nueva cotización»; abre en Cotizaciones (abrir una la muestra fija, con su PDF)
+  function modoConsulta() {
+    $$('[data-nav="nueva"]').forEach(function (a) { a.hidden = true; });
+    if (vista() === 'nueva' && editing == null) location.hash = '#cotizaciones';
+  }
   function route() {
     var v = vista();
     $$('[data-view]').forEach(function (s) { s.hidden = s.dataset.view !== v; });
@@ -1184,6 +1198,8 @@
     try {
       var r = await sb.rpc('cot_yo'); if (r.error) throw r.error;
       YO = r.data || YO;
+      // Solo consulta (portal/sql/18_solo_consulta.sql): ve cotizaciones, catálogos, bitácora y ajustes; no crea ni cambia
+      if (P.consulta) { YO.editor = false; YO.consulta = true; modoConsulta(); }
       var u = await sb.rpc('cot_usuarios'); S.usuarios = u.data || [];
       await carga(['ajustes', 'servicios', 'asesores', 'clientes', 'cots']);
       var f = await sb.rpc('cot_firma'); S.firma = f.data || null;

@@ -43,8 +43,50 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'profase-portal' }
   });
 
-  var P = { sb: sb, DOMINIO: DOMINIO, perfil: null, uid: null };
+  var P = { sb: sb, DOMINIO: DOMINIO, perfil: null, uid: null, consulta: false };
   window.PORTAL = P;
+
+  /* ---- Solo consulta (29-oct-2026): Héctor Nava Ramos (usuario hnava), papá de Daniel, ve todo lo que ve Daniel
+     pero no cambia nada. El candado de verdad está en la base (portal/sql/18_solo_consulta.sql): ahí se detiene
+     cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
+     para que no salga un error raro; las páginas además esconden sus botones de guardar con P.consulta. ---- */
+  var MSG_CONSULTA = 'Tu usuario es de solo consulta: puedes ver todo, pero no cambiar nada.';
+  P.MSG_CONSULTA = MSG_CONSULTA;
+  function errConsulta() { var x = new Error(MSG_CONSULTA); x.code = 'not_granted'; return x; }
+  // Respuesta de Supabase que dice «no se puede», y que aguanta .eq(), .select() y demás antes del await
+  function rechazo() {
+    var res = { data: null, error: { code: '42501', message: MSG_CONSULTA }, status: 403, statusText: 'Solo consulta' };
+    var px = new Proxy({}, {
+      get: function (o, k) {
+        if (k === 'then') return function (ok, no) { return Promise.resolve(res).then(ok, no); };
+        if (k === 'catch' || k === 'finally') return function (f) { return Promise.resolve(res)[k](f); };
+        return function () { return px; };
+      }
+    });
+    return px;
+  }
+  (function candadoConsulta() {
+    var desde = sb.from.bind(sb), rpc = sb.rpc.bind(sb);
+    sb.from = function (t) {
+      var q = desde(t);
+      if (P.consulta) ['insert', 'update', 'upsert', 'delete'].forEach(function (m) { q[m] = rechazo; });
+      return q;
+    };
+    // Funciones de la base que guardan algo; las de solo leer y la bitácora de accesos siguen igual
+    var ESCRIBEN = { cot_guardar: 1, cot_estatus: 1, af_cargar: 1, caja_generar_corte: 1, caja_cancelar_corte: 1, solicitar_actualizacion: 1 };
+    sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
+    if (sb.storage && sb.storage.from) {
+      var cubeta = sb.storage.from.bind(sb.storage);
+      sb.storage.from = function (b) {
+        var s = cubeta(b);
+        // su propia foto de perfil sí la puede poner o quitar
+        if (P.consulta && b !== 'fotos') ['upload', 'update', 'remove', 'move', 'copy', 'uploadToSignedUrl'].forEach(function (m) {
+          if (s[m]) s[m] = function () { return Promise.resolve({ data: null, error: { message: MSG_CONSULTA, statusCode: '403' } }); };
+        });
+        return s;
+      };
+    }
+  })();
 
   /* ---- Modo claro / oscuro (pedido de Fernando Cadengo, 29-oct-2026): uno solo para todo el portal.
      Se escoge con el botón junto al nombre (encabezado) y se guarda en el navegador de cada quien («profase-tema»).
@@ -193,6 +235,9 @@
       if (ok.error || ok.data !== true) { location.replace(P.paginaDe(p.rol)); throw new Error('sin permiso'); }
     } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
+    // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
+    try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
+    if (P.consulta) document.documentElement.classList.add('pu-consulta');
     return p;
   })();
   P.listo.catch(function () {});
@@ -284,6 +329,7 @@
     return r.data;
   }
   async function guardar(col, id, data) {
+    if (P.consulta) throw errConsulta();
     var r = await sb.from('docs').upsert({ col: col, id: id, data: data }, { onConflict: 'col,id' });
     if (r.error) throw error(r.error);
     pronto();
@@ -337,7 +383,7 @@
       get: async function () { return foto(id, await leer(col, id)); },
       set: async function (data) { await guardar(col, id, data); },
       update: async function (cambios) { var f = await leer(col, id); await guardar(col, id, mezcla(f ? f.data : {}, cambios)); },
-      delete: async function () { var r = await sb.from('docs').delete().eq('col', col).eq('id', id); if (r.error) throw error(r.error); pronto(); },
+      delete: async function () { if (P.consulta) throw errConsulta(); var r = await sb.from('docs').delete().eq('col', col).eq('id', id); if (r.error) throw error(r.error); pronto(); },
       onSnapshot: function (cb, err) { return vigila({ doc: true, col: col, id: id, cb: cb, err: err, firma: null }); }
     };
   }
@@ -346,6 +392,7 @@
       id: col,
       doc: function (id) { return docRef(col + '/' + id); },
       add: async function (data) {
+        if (P.consulta) throw errConsulta();
         var id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/[^a-z0-9]/gi, '').slice(0, 20);
         var r = await sb.from('docs').insert({ col: col, id: id, data: data });
         if (r.error) throw error(r.error);
@@ -366,10 +413,11 @@
   /* ---- Quién ve la página ---- */
   var USER = {
     id: async function () { return P.uid; },
-    isOwner: async function () { return P.perfil.rol === 'gerente' || P.perfil.rol === 'director'; },
-    canEdit: async function () { return P.perfil.rol === 'gerente' || P.perfil.rol === 'director'; },
-    // Los contadores también escriben (sus justificaciones); qué colección puede tocar cada quien lo decide la base
-    can: async function (que) { return que === 'data.write' || que === 'data.read'; },
+    isOwner: async function () { return !P.consulta && (P.perfil.rol === 'gerente' || P.perfil.rol === 'director'); },
+    canEdit: async function () { return !P.consulta && (P.perfil.rol === 'gerente' || P.perfil.rol === 'director'); },
+    // Los contadores también escriben (sus justificaciones); qué colección puede tocar cada quien lo decide la base.
+    // El usuario de solo consulta lee todo y no escribe nada: las páginas entran en su modo «solo lectura».
+    can: async function (que) { return que === 'data.read' || (que === 'data.write' && !P.consulta); },
     profiles: async function (ids) {
       var out = {}, uu = (ids || []).filter(function (x) { return /^[0-9a-f-]{36}$/i.test(x); });
       if (uu.length) {
@@ -408,6 +456,7 @@
      Cambiar contraseña, Actualizar (si aplica), Mi vista / Vista del equipo (director) y Salir.
      Las secciones (Cotizador incluido) están en el menú de la izquierda (js/menu.js). ---- */
   var PUESTO = { director: 'Director', gerente: 'Gerente', contador: 'Contador' };
+  function puestoDe(p) { return (p.puesto || PUESTO[p.rol] || '') + (P.consulta ? ' · Solo consulta' : ''); }
   var CSS = '.pu{position:relative;flex:none;display:inline-flex}'
     + '.pu-btn{font:inherit;display:flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:999px;padding:3px 10px 3px 3px;cursor:pointer;color:var(--ink)}'
     + '.pu-btn:hover,.pu-btn[aria-expanded="true"]{border-color:var(--line-strong);background:var(--navy-soft)}'
@@ -453,7 +502,10 @@
     + '.pu-aviso{position:fixed;top:14px;right:14px;z-index:60;max-width:min(380px,calc(100% - 28px));background:var(--surface);color:var(--ink);'
     + 'border:1px solid var(--line-strong);border-left:5px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.18)}'
     + '.pu-aviso[hidden]{display:none}'
-    + '@media (max-width:900px){.pu-nom,.pu-btn .pu-car{display:none}.pu-btn{padding:3px}'
+    + '.pu-cons{flex:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--navy);background:var(--navy-soft);border:1px solid var(--line-strong);border-radius:999px;padding:5px 11px;white-space:nowrap;cursor:default}'
+    + '.pu-cons svg{width:15px;height:15px;display:block;flex:none}'
+    + ':root[data-theme="dark"] .pu-cons{color:var(--accent)}'
+    + '@media (max-width:900px){.pu-nom,.pu-btn .pu-car{display:none}.pu-btn{padding:3px}.pu-cons b{display:none}.pu-cons{padding:8px}'
     + '.pu-dd{position:fixed;right:12px;top:var(--pu-top,64px);width:min(270px,calc(100vw - 24px));max-height:calc(100vh - var(--pu-top,64px) - 12px);overflow-y:auto}}';
   var IC = {
     perfil: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
@@ -461,6 +513,7 @@
     act: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/>',
     vista: '<circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 20c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M15 15.2c2.6-.4 4.9 1 5.7 4.3"/>',
     salir: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+    ojo: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     car: '<path d="m6 9 6 6 6-6"/>',
     luna: '<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.6 6.6 0 0 0 10.7 10.7z"/>',
     sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'
@@ -528,7 +581,7 @@
     ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pf-h">'
       + '<div id="pf-ver"><h2 id="pf-h">Perfil</h2>'
       + '<div class="pu-perfil"><span class="pu-av l" data-pu-av></span>'
-      + '<div class="pu-pn">' + esc(p.nombre) + '</div><div class="pu-pp">' + esc(p.puesto || PUESTO[p.rol] || '') + '</div>'
+      + '<div class="pu-pn">' + esc(p.nombre) + '</div><div class="pu-pp">' + esc(puestoDe(p)) + '</div>'
       + '<div class="pu-fila"><button class="btn pu-ac" type="button" id="pu-cambia">Cambiar foto</button><button class="btn" type="button" id="pu-quita" hidden>Quitar foto</button></div>'
       + '<p class="pu-ayuda">JPG, PNG o foto del celular. Todo el equipo ve tu foto; solo tú la cambias.</p></div>'
       + '<div class="dmsg" id="pf-msg"></div>'
@@ -623,13 +676,19 @@
     pu.innerHTML = '<button class="pu-btn" type="button" id="pu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="pu-dd">'
       + '<span class="pu-av" data-pu-av></span><span class="pu-nom">' + esc(p.nombre) + '</span>' + ic('car', 'pu-car') + '</button>'
       + '<div class="pu-dd" id="pu-dd" role="menu" hidden>'
-      + '<div class="pu-dh"><span class="pu-av m" data-pu-av></span><div><b>' + esc(p.nombre) + '</b><small>' + esc(p.puesto || PUESTO[p.rol] || '') + '</small></div></div>'
+      + '<div class="pu-dh"><span class="pu-av m" data-pu-av></span><div><b>' + esc(p.nombre) + '</b><small>' + esc(puestoDe(p)) + '</small></div></div>'
       + '<button type="button" role="menuitem" id="pu-perfil">' + ic('perfil') + 'Perfil</button>'
       + '<button type="button" role="menuitem" id="pu-clave">' + ic('clave') + 'Cambiar contraseña</button>'
       + otra
       + '<hr><button type="button" role="menuitem" class="pu-salir" id="pu-salir">' + ic('salir') + 'Salir</button></div>';
     if (lugar) lugar.replaceWith(pu);
     else { var meta = document.querySelector('header .meta'); if (!meta) return; meta.appendChild(pu); }
+    if (P.consulta) {
+      var ch = document.createElement('span');
+      ch.className = 'pu-cons'; ch.title = MSG_CONSULTA; ch.setAttribute('aria-label', MSG_CONSULTA);
+      ch.innerHTML = ic('ojo') + '<b>Solo consulta</b>';
+      pu.parentNode.insertBefore(ch, pu);
+    }
     botonTema(pu);
     var btn = document.getElementById('pu-btn'), dd = document.getElementById('pu-dd');
     function despliega(o) {
