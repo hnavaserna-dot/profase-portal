@@ -523,9 +523,20 @@
     P.perfil = p; P.uid = s.user.id;
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
     try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
+    // Vista del equipo como gerente (29-oct-2026, pedido de Fernando; portal/sql/42_equipo_gerente.sql): quien está en
+    // equipo_gerente ve la página de los gerentes y sus pestañas como gerente, con los mismos botones; lo que puede
+    // guardar lo dice la base (sigue siendo contador; ahí tiene permisos de gerente en lo que pidió Fernando, nunca
+    // comisiones, contraseñas del SAT de otros clientes, lo reservado de EQUILIBRIO ni autorizar propuestas).
+    P.vistaEquipo = P.equipo && (ROL === 'gerente' || enVistaEquipo());
+    P.equipoGerente = false;
+    if (P.equipo) {
+      try { var eg = await sb.rpc('es_equipo_gerente'); P.equipoGerente = !eg.error && eg.data === true; } catch (e) { P.equipoGerente = false; }
+    }
+    if (!P.consulta && P.equipoGerente) {
+      if (P.vistaEquipo) { p = Object.assign({}, p, { rol: 'gerente', rolReal: 'contador' }); P.perfil = p; }
     // En la vista del equipo (la página de los gerentes y sus pestañas) y en el cotizador, quien la tiene en consulta
     // solo ve; en su propia vista de contador todo sigue igual.
-    if (!P.consulta && P.equipo && (ROL === 'gerente' || ROL === 'cotizador' || enVistaEquipo())) {
+    } else if (!P.consulta && P.equipo && (ROL === 'gerente' || ROL === 'cotizador' || enVistaEquipo())) {
       // Excepción por un tiempo (29-oct-2026, pedido de Fernando; portal/sql/39_caja_captura.sql): quien está en
       // caja_captura sí registra gastos en la pestaña de la caja chica; lo que puede guardar lo dice la base.
       var cajaCaptura = false;
@@ -784,7 +795,7 @@
      Cambiar contraseña, Actualizar (si aplica), Mi vista / Vista del equipo (director) y Salir.
      Las secciones (Cotizador incluido) están en el menú de la izquierda (js/menu.js). ---- */
   var PUESTO = { director: 'Director', gerente: 'Gerente', contador: 'Contador' };
-  function puestoDe(p) { return (p.puesto || PUESTO[p.rol] || '') + (P.consulta ? ' · Solo consulta' : ''); }
+  function puestoDe(p) { return (p.puesto || PUESTO[p.rolReal || p.rol] || '') + (p.rolReal ? ' · Vista del equipo' : '') + (P.consulta ? ' · Solo consulta' : ''); }
   var CSS = '.pu-par{display:inline-flex;align-items:center;gap:8px;flex:none;margin-left:auto}'
     + '.pu{position:relative;flex:none;display:inline-flex}'
     + '.pu-btn{font:inherit;display:flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:999px;padding:3px 10px 3px 3px;cursor:pointer;color:var(--ink)}'
