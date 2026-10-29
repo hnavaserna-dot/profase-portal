@@ -68,6 +68,7 @@
     var u = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = u; a.download = nombre; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 4000);
+    try { if (window.PORTAL && window.PORTAL.registrar) window.PORTAL.registrar('descarga', 'Cotizador DECOMSA · ' + nombre); } catch (e) {}
   }
 
   // ================= Cálculo (igual al de la base: cot_totales) =================

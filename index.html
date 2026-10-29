@@ -82,9 +82,9 @@ footer{text-align:center;color:var(--muted);font-size:12px}
       <p class="hint">Solo la primera vez: con el código que te dio Daniel creas tu contraseña. El código sirve una sola vez; después entras siempre en «Entrar».</p>
       <label>Usuario<input id="al-u" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="nombre.apellido" required></label>
       <label>Código<input id="al-c" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="XXXX-XXXX-XXXX" required></label>
-      <label>Contraseña nueva<input id="al-p1" type="password" autocomplete="new-password" minlength="8" required></label>
-      <label>Repite la contraseña<input id="al-p2" type="password" autocomplete="new-password" minlength="8" required></label>
-      <p class="hint">Mínimo 8 caracteres.</p>
+      <label>Contraseña nueva<input id="al-p1" type="password" autocomplete="new-password" minlength="10" required></label>
+      <label>Repite la contraseña<input id="al-p2" type="password" autocomplete="new-password" minlength="10" required></label>
+      <p class="hint">Mínimo 10 caracteres.</p>
       <div class="msg" id="al-msg" role="status"></div>
       <button class="go" type="submit" id="al-go">Crear mi acceso</button>
     </form>
@@ -106,12 +106,14 @@ footer{text-align:center;color:var(--muted);font-size:12px}
   $('tab-in').onclick=function(){tab('in')};
   $('tab-alta').onclick=function(){tab('alta')};
   function aviso(id,txt,tipo){var m=$(id);m.className='msg'+(tipo?' '+tipo:'');m.textContent=txt||''}
-  async function entrar(uid){
+  async function entrar(uid,nueva,detalle){
     var p=null;try{p=await P.perfilDe(uid)}catch(e){p=null}
     if(!p){await sb.auth.signOut();return false}
+    if(nueva){P.actividadNueva();await P.registrar('entrada',detalle||'')}
     location.replace(P.paginaDe(p.rol));return true;
   }
   if(/[?&]e=perfil/.test(location.search))aviso('in-msg','Tu usuario no tiene un perfil asignado. Avísale a Daniel.','warn');
+  if(/[?&]e=inactivo/.test(location.search))aviso('in-msg','Tu sesión se cerró porque pasó una hora sin usar el portal. Vuelve a entrar.','warn');
   sb.auth.getSession().then(function(r){var s=r.data.session;if(s)entrar(s.user.id)});
 
   $('f-in').addEventListener('submit',async function(e){
@@ -123,10 +125,11 @@ footer{text-align:center;color:var(--muted);font-size:12px}
     if(r.error||!r.data.session){
       b.disabled=false;b.textContent='Entrar';
       var m=r.error&&r.error.message||'';
+      if(/invalid login|credentials/i.test(m)){try{sb.rpc('registrar_fallo',{usuario:u}).then(function(){},function(){})}catch(_){}}
       aviso('in-msg',/invalid login|credentials/i.test(m)?'Usuario o contraseña incorrectos. Si todavía no tienes contraseña, créala en «Crear mi contraseña».':/fetch|network/i.test(m)?'Sin conexión. Revisa tu internet y vuelve a intentar.':'No se pudo entrar. Vuelve a intentar en un momento.','bad');
       return;
     }
-    if(!(await entrar(r.data.session.user.id))){b.disabled=false;b.textContent='Entrar';aviso('in-msg','Tu usuario no tiene un perfil asignado. Avísale a Daniel.','warn')}
+    if(!(await entrar(r.data.session.user.id,true))){b.disabled=false;b.textContent='Entrar';aviso('in-msg','Tu usuario no tiene un perfil asignado. Avísale a Daniel.','warn')}
   });
 
   $('f-alta').addEventListener('submit',async function(e){
@@ -136,7 +139,7 @@ footer{text-align:center;color:var(--muted);font-size:12px}
     if(c.length===12)c=c.slice(0,4)+'-'+c.slice(4,8)+'-'+c.slice(8);
     var p1=$('al-p1').value,p2=$('al-p2').value;
     if(!u||!c){aviso('al-msg','Escribe tu usuario y el código que te dio Daniel.','warn');return}
-    if(p1.length<8){aviso('al-msg','La contraseña debe tener al menos 8 caracteres.','warn');return}
+    if(p1.length<10){aviso('al-msg','La contraseña debe tener al menos 10 caracteres.','warn');return}
     if(p1!==p2){aviso('al-msg','Las dos contraseñas no coinciden.','warn');return}
     var b=$('al-go');b.disabled=true;b.textContent='Creando…';aviso('al-msg','');
     var r=await sb.auth.signUp({email:P.correoDe(u),password:p1,options:{data:{usuario:u,codigo:c}}});
@@ -149,7 +152,7 @@ footer{text-align:center;color:var(--muted);font-size:12px}
         :'El usuario o el código no son válidos, o el código ya se usó. Revísalos con Daniel.','bad');
       return;
     }
-    if(!(await entrar(r.data.session.user.id))){b.disabled=false;b.textContent='Crear mi acceso';aviso('al-msg','Se creó tu acceso pero no encontré tu perfil. Avísale a Daniel.','warn')}
+    if(!(await entrar(r.data.session.user.id,true,'primera vez'))){b.disabled=false;b.textContent='Crear mi acceso';aviso('al-msg','Se creó tu acceso pero no encontré tu perfil. Avísale a Daniel.','warn')}
   });
 })();
 </script>
