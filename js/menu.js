@@ -11,8 +11,8 @@
      centro, con «Inicio» en medio y los módulos repartidos a los lados; al picar un ícono se abre la descripción del
      módulo y sus sub módulos. Por omisión sigue el menú de la izquierda; se recuerda en el navegador de cada quien.
    - El signo PROFASE es siempre el logo oficial, con sus colores (regla de Daniel, 29-oct-2026). En temporadas se le
-     pone al lado un adorno aparte (arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el 14 de febrero,
-     banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
+     pone al lado un adorno aparte (js/temporada.js: arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el
+     14 de febrero, banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
      solo color de la propuesta #3; el menú de arriba de esa propuesta se quedó igual. */
 (function () {
   'use strict';
@@ -66,60 +66,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  /* Adornos de temporada junto al signo (regla de Daniel, 29-oct-2026: «siempre sea el logo de siempre; pero sí se
-     puede poner una arañita cayendo porque es Halloween, un Santa Claus porque es Navidad»). El signo no se toca: el
-     adorno es aparte, a su derecha. ?temporada=navidad en la dirección deja ver otra temporada para revisarla. */
-  var ADORNOS = {
-    arana: '<svg viewBox="0 0 16 26" fill="none" stroke="currentColor" stroke-linecap="round"><g class="pm-ar">'
-      + '<path d="M8-40V13" stroke-width=".7" opacity=".6"/>'
-      + '<path d="M5.6 15.2 2 12.6 1 9.6M5.4 16.6 1.2 15.6 0 13.4M5.6 18.2 1.6 19.6.6 22.4M6.2 19.4 3.8 22.6 3.6 25.2'
-      + 'M10.4 15.2 14 12.6l1-3M10.6 16.6l4.2-1 1.2-2.2M10.4 18.2l4 1.4 1 2.8M9.8 19.4l2.4 3.2.2 2.6" stroke-width=".9"/>'
-      + '<circle cx="8" cy="14.4" r="2.3" fill="currentColor" stroke="none"/><circle cx="8" cy="18.6" r="3.2" fill="currentColor" stroke="none"/>'
-      + '<circle cx="7.1" cy="14" r=".5" fill="#F07A1E" stroke="none"/><circle cx="8.9" cy="14" r=".5" fill="#F07A1E" stroke="none"/></g></svg>',
-    santa: '<svg viewBox="0 0 20 24"><path d="M3.5 10.5C4.5 4 9 1.2 14.5 2.2l1.2 5.6-12.2 2.7z" fill="#C8102E"/>'
-      + '<circle cx="15.6" cy="2.6" r="1.9" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
-      + '<rect x="2.6" y="9.4" width="14.6" height="3" rx="1.5" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
-      + '<circle cx="10" cy="15.2" r="4.2" fill="#F6C9A8"/><circle cx="8.5" cy="14.4" r=".55" fill="#3A2A20"/><circle cx="11.5" cy="14.4" r=".55" fill="#3A2A20"/>'
-      + '<path d="M4.6 15.6c.4 5 3 7.6 5.4 7.6s5-2.6 5.4-7.6c-1.2 1.6-2.6 2.4-5.4 2.4s-4.2-.8-5.4-2.4z" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
-      + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></svg>',
-    corazon: '<svg viewBox="0 0 16 16"><path class="pm-lat" d="M8 14.2S1.4 10.1 1.4 5.6A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.6 1.6C14.6 10.1 8 14.2 8 14.2z" fill="#D6336C"/></svg>',
-    bandera: '<svg viewBox="0 0 18 18"><path d="M2 1v16" stroke="#8A94A6" stroke-width="1.2" stroke-linecap="round"/>'
-      + '<path d="M2.6 2h4.6v8H2.6z" fill="#006847"/><path d="M7.2 2h4.6v8H7.2z" fill="#fff" stroke="#C9D1DE" stroke-width=".4"/>'
-      + '<path d="M11.8 2h4.6v8h-4.6z" fill="#CE1126"/><circle cx="9.5" cy="6" r="1.1" fill="#8C6A3D"/></svg>'
-  };
-  // [mes, día] de inicio y de fin (incluidos); la Navidad cruza el año
-  var TEMPORADAS = [
-    { k: 'amor', de: [2, 7], a: [2, 14], adorno: 'corazon' },
-    { k: 'patrias', de: [9, 1], a: [9, 16], adorno: 'bandera' },
-    { k: 'muertos', de: [10, 15], a: [11, 2], adorno: 'arana' },
-    { k: 'navidad', de: [12, 1], a: [1, 6], adorno: 'santa' }
-  ];
-  function temporada(f) {
-    var pide = (location.search.match(/[?&]temporada=([a-z]+)/) || [])[1];
-    if (pide) return TEMPORADAS.filter(function (x) { return x.k === pide; })[0] || null;
-    var n = (f.getMonth() + 1) * 100 + f.getDate();
-    return TEMPORADAS.filter(function (x) {
-      var de = x.de[0] * 100 + x.de[1], a = x.a[0] * 100 + x.a[1];
-      return de <= a ? n >= de && n <= a : n >= de || n <= a;
-    })[0] || null;
-  }
-  function ponAdorno(logo) {
-    var x = temporada(new Date());
-    if (!x || !logo || !ADORNOS[x.adorno]) return;
-    var caja = document.createElement('span'); caja.className = 'pm-adorno-caja';
-    logo.parentNode.insertBefore(caja, logo); caja.appendChild(logo);
-    var a = document.createElement('span'); a.className = 'pm-adorno pm-adorno-' + x.adorno; a.setAttribute('aria-hidden', 'true');
-    a.innerHTML = ADORNOS[x.adorno]; caja.appendChild(a);
-  }
-
   var CSS = ':root{--pm-sw:248px;--pm-rail:64px;--pm-top:0px}'
-    + '.pm-adorno-caja{position:relative;display:block;flex:none;padding-right:16px}'
-    + '.pm-adorno{position:absolute;left:32px;pointer-events:none}.pm-adorno svg{display:block;width:100%;height:auto;overflow:visible}'
-    + '.pm-adorno-arana{top:-6px;width:13px;color:#1F2937}:root[data-theme="dark"] .pm-adorno-arana{color:#E5EAF2}'
-    + '.pm-ar{animation:pm-ar 2.8s ease-in-out infinite alternate}@keyframes pm-ar{from{transform:translateY(-2px)}to{transform:translateY(6px)}}'
-    + '.pm-adorno-santa{bottom:-3px;width:17px}.pm-adorno-corazon{top:2px;width:13px}.pm-adorno-bandera{top:0;width:15px}'
-    + '.pm-lat{transform-origin:50% 60%;animation:pm-lat 1.6s ease-in-out infinite}@keyframes pm-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
-    + '@media (prefers-reduced-motion:reduce){.pm-adorno *{animation:none!important}}'
     + '.pm-oculto{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}'
     + '#v-quo .qsub{display:none!important}'
     + '.pm-ham{flex:none;width:38px;height:38px;border:0;background:none;border-radius:8px;cursor:pointer;display:grid;place-items:center;color:var(--navy,#1F3864);margin-left:-6px;padding:0}'
@@ -404,7 +351,7 @@
     // el ícono picado se vuelve a pintar (ya no está en la página): ese clic no cuenta como «afuera»
     document.addEventListener('click', function (e) { if (popAbierto && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
     side.querySelector('.pm-cab button').onclick = function () { abre(false); };
-    ponAdorno(logo);
+    if (window.PROFASE_TEMPORADA) window.PROFASE_TEMPORADA.pon(logo);   // js/temporada.js
     scrim.onclick = function () { abre(false); };
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
