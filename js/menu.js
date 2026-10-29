@@ -30,6 +30,7 @@
       { k: 'variaciones', v: 'var', t: 'Variaciones' },
       { k: 'activofijo', v: 'af', t: 'Activo fijo' }] },
     { k: 'adm', t: 'Administración', subs: [
+      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
       { k: 'cobranza', v: 'cxc', t: 'Cobranza' },
       { k: 'cajachica', v: 'caja', t: 'Caja chica' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA' },
@@ -115,7 +116,7 @@
     + '.pm-cab button:hover{background:rgba(255,255,255,.1)}.pm-cab svg{width:20px;height:20px;display:block}'
     + '.pm-pie{display:none}'
     + '}'
-    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit h1{font-size:17px;overflow-wrap:anywhere}}'
+    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit h1{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}'   // en el celular el título no se parte a media palabra
     + '@media (prefers-reduced-motion:reduce){.pm-side,.pm-car,.pm-pie svg{transition:none}}';
 
   var sw, side, lista, hdr, titulo, crumb, pendiente = 0, listo = false, quoObs = null;

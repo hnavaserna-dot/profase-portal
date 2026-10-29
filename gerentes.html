@@ -34,7 +34,7 @@
   :root header.band .meta > :not(.pu-par){order:2}
   :root header.band .brandtxt{display:none}
 }
-</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9a8abad3b9"></script><script src="js/marca.js?v=2ac327c483"></script><script src="js/menu.js?v=7f24f74c93"></script></head><body>
+</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9a8abad3b9"></script><script src="js/marca.js?v=2ac327c483"></script><script src="js/menu.js?v=58d60e2df4"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
@@ -2422,6 +2422,315 @@ initDB=async function(){await initDB0();oirJust()};
   };
   window.__setView=setView;
   b.onclick=()=>setView('chg');
+})();
+
+/* ===== Portal PROFASE · Notificaciones (pedido de Daniel, 29-oct-2026). Va en las tres vistas.
+   - La campanita, arriba junto a la foto: el número de avisos sin leer y, al picarla, una ventanita con los últimos 5;
+     abajo «Ver todas» lleva a Administración › Notificaciones (todas, con «Ver más»).
+   - Cada quien ve solo los suyos: los de su trabajo (propuestas, comentarios, avisos que le mandan) y los de todos
+     (cumpleaños, aniversarios, eventos del Calendario, avisos generales). Los arma la base
+     (portal/sql/22_notificaciones.sql): notif_mias() para leer y notif_leer() para marcar como leído.
+   - «Nuevos cambios»: lo importante nuevo del portal sale una sola vez en una ventana, hasta que se pica «Entendido».
+   - hnava (solo consulta) los lee; lo que marca como leído se queda en su navegador (la base no le deja cambiar nada).
+   - Si la base todavía no tiene las notificaciones (sin 22), no aparece nada y el portal sigue igual. */
+(function(){
+  const sw=document.querySelector('.vsw');if(!sw)return;
+  const LIGA={cambios:'chg',calendario:'cal',panel:'wf',clientes:'cli',comentarios:'com',cartera:'car',variaciones:'var',
+    activofijo:'af',cobranza:'cxc',cajachica:'caja',cotizador:'cot',accesos:'acc',notificaciones:'ntf'};
+  const ICO={
+    cumple:'<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20M7 8v3M12 8v3M17 8v3M7 4h.01M12 4h.01M17 4h.01"/>',
+    aniversario:'<path d="m12 3 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>',
+    evento:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    propuesta:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    comentario:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    aviso:'<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+    novedad:'<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'
+  };
+  const CAMPANA='<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>';
+  const ic=(d,c)=>'<svg class="'+(c||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+  const e=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const st=document.createElement('style');
+  st.textContent='body:not([data-view="ntf"]) #v-ntf{display:none!important}'
+    +'body[data-view="ntf"] .asof{display:none!important}'
+    +'#v-ntf{display:block;width:100%}'
+    /* campanita */
+    +'.ntf-b{position:relative;flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--line,#D9DEE7);background:var(--surface,#fff);color:var(--navy,#1F3864);display:grid;place-items:center;cursor:pointer;padding:0;margin-right:2px}'
+    +'.ntf-b:hover{background:var(--navy-soft,#E6ECF6)}.ntf-b svg{width:19px;height:19px;display:block}'
+    +'.ntf-b:focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}'
+    +':root[data-theme="dark"] .ntf-b{color:var(--ink,#E5EAF2)}'
+    +'.ntf-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent,#F07A1E);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--surface,#fff)}'
+    +'.ntf-n[hidden]{display:none}'
+    /* ventanita */
+    +'.ntf-pop{position:fixed;top:var(--ntf-top,64px);right:12px;width:min(390px,calc(100vw - 24px));max-height:min(560px,calc(100vh - var(--ntf-top,64px) - 16px));display:flex;flex-direction:column;background:var(--surface,#fff);color:var(--ink,#1B2333);border:1px solid var(--line,#D9DEE7);border-radius:12px;box-shadow:0 14px 40px rgba(15,25,45,.22);z-index:70;overflow:hidden}'
+    +'.ntf-pop[hidden]{display:none}'
+    +'.ntf-ph{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line,#D9DEE7)}'
+    +'.ntf-ph b{flex:1;font-size:15px}'
+    +'.ntf-lnk{border:0;background:none;color:var(--navy,#1F3864);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 6px;border-radius:6px}'
+    +'.ntf-lnk:hover{background:var(--navy-soft,#E6ECF6)}:root[data-theme="dark"] .ntf-lnk{color:#9CC0F2}'
+    +'.ntf-lista{overflow-y:auto;flex:1 1 auto}'
+    +'.ntf-it{display:flex;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line,#E6EAF0);background:none;color:inherit;font:inherit;padding:11px 14px;cursor:pointer;align-items:flex-start}'
+    +'.ntf-it:hover{background:var(--navy-soft,#F1F5FB)}.ntf-it:last-child{border-bottom:0}'
+    +'.ntf-it.nueva{background:var(--accent-soft,#FFF4EB)}.ntf-it.nueva:hover{background:var(--navy-soft,#F1F5FB)}'
+    +'.ntf-ic{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--navy-soft,#E6ECF6);color:var(--navy,#1F3864)}'
+    +'.ntf-ic svg{width:17px;height:17px}:root[data-theme="dark"] .ntf-ic{color:#9CC0F2}'
+    +'.ntf-ic.t-cumple,.ntf-ic.t-aniversario,.ntf-ic.t-evento{background:var(--accent-soft,#FFF0E3);color:var(--accent,#F07A1E)}'
+    +'.ntf-tx{flex:1;min-width:0}'
+    +'.ntf-tt{font-size:14px;line-height:1.3;font-weight:500;overflow-wrap:anywhere}.ntf-it.nueva .ntf-tt{font-weight:700}'
+    +'.ntf-ds{font-size:13px;line-height:1.35;color:var(--muted,#5A6577);margin-top:2px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'
+    +'.ntf-hr{font-size:12px;color:var(--muted,#5A6577);margin-top:3px}.ntf-it.nueva .ntf-hr{color:var(--accent,#C85F0E);font-weight:600}'
+    +'.ntf-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent,#F07A1E);margin-top:12px}'
+    +'.ntf-vacio{padding:26px 16px;text-align:center;color:var(--muted,#5A6577);font-size:14px}'
+    +'.ntf-pf{border-top:1px solid var(--line,#D9DEE7);padding:8px;text-align:center}'
+    +'.ntf-pf button{width:100%;border:0;background:none;color:var(--navy,#1F3864);font:inherit;font-weight:700;font-size:14px;padding:9px;border-radius:8px;cursor:pointer}'
+    +'.ntf-pf button:hover{background:var(--navy-soft,#E6ECF6)}:root[data-theme="dark"] .ntf-pf button{color:#9CC0F2}'
+    /* pestaña */
+    +'.ntf-pag{max-width:820px;margin:0 auto;padding:18px 16px 40px}'
+    +'.ntf-cab{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:12px}'
+    +'.ntf-cab h2{margin:0;font-size:20px;flex:1 1 auto}'
+    +'.ntf-seg{display:inline-flex;border:1px solid var(--line,#D9DEE7);border-radius:9px;overflow:hidden}'
+    +'.ntf-seg button{border:0;background:var(--surface,#fff);color:var(--ink,#1B2333);font:inherit;font-size:13.5px;padding:7px 13px;cursor:pointer}'
+    +'.ntf-seg button[aria-pressed="true"]{background:var(--navy,#1F3864);color:#fff;font-weight:600}'
+    +'.ntf-caja{background:var(--surface,#fff);border:1px solid var(--line,#D9DEE7);border-radius:12px;overflow:hidden}'
+    +'.ntf-mas{display:block;margin:14px auto 0;border:1px solid var(--line,#D9DEE7);background:var(--surface,#fff);color:var(--navy,#1F3864);font:inherit;font-weight:600;padding:9px 18px;border-radius:9px;cursor:pointer}'
+    +':root[data-theme="dark"] .ntf-mas{color:#9CC0F2}'
+    +'.ntf-pag .ntf-ds{-webkit-line-clamp:unset;display:block}'
+    +'.ntf-pag .ntf-it{padding:13px 16px}'
+    /* «Nuevos cambios» */
+    +'.ntf-ov{position:fixed;inset:0;background:rgba(10,18,34,.45);z-index:90;display:grid;place-items:center;padding:16px}'
+    +'.ntf-dlg{background:var(--surface,#fff);color:var(--ink,#1B2333);border-radius:14px;width:min(480px,100%);max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);border-top:5px solid var(--accent,#F07A1E)}'
+    +'.ntf-dlg header{display:flex;align-items:center;gap:10px;padding:16px 18px 6px}'
+    +'.ntf-dlg header h3{margin:0;font-size:18px;flex:1}'
+    +'.ntf-dlg .x{border:0;background:none;color:var(--muted,#5A6577);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px}'
+    +'.ntf-dlg ul{list-style:none;margin:0;padding:6px 18px 4px}'
+    +'.ntf-dlg li{padding:10px 0;border-bottom:1px solid var(--line,#E6EAF0)}.ntf-dlg li:last-child{border-bottom:0}'
+    +'.ntf-dlg li b{display:block;font-size:15px}.ntf-dlg li p{margin:4px 0 0;font-size:14px;color:var(--muted,#5A6577);line-height:1.4}'
+    +'.ntf-dlg li .ntf-lnk{margin-top:4px;padding-left:0}'
+    +'.ntf-dlg footer{padding:10px 18px 16px;text-align:right}'
+    +'.ntf-dlg footer button{border:0;border-radius:9px;background:var(--navy,#1F3864);color:#fff;font:inherit;font-weight:700;padding:10px 20px;cursor:pointer}'
+    +'.ntf-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:65;max-width:min(380px,calc(100vw - 32px));background:#1F3864;color:#fff;border-left:5px solid #F07A1E;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:11px 14px;font-size:14px;display:flex;gap:12px;align-items:center}'
+    +'.ntf-toast span{flex:1}.ntf-toast button{border:0;border-radius:8px;padding:6px 10px;font:inherit;font-weight:600;cursor:pointer;background:#F07A1E;color:#fff}'
+    +'@media (max-width:700px){.ntf-b{width:34px;height:34px}.ntf-pop{right:8px;width:calc(100vw - 16px)}.ntf-pag{padding:14px 12px 32px}}'
+    +'@media (max-width:420px){.ntf-b{width:30px;height:30px;margin-right:0;border:0;background:none}.ntf-b svg{width:20px;height:20px}.ntf-n{top:-6px;right:-7px}}';
+  document.head.appendChild(st);
+
+  const b=document.createElement('button');b.type='button';b.dataset.view='ntf';b.setAttribute('aria-pressed','false');b.textContent='Notificaciones';b.hidden=true;
+  sw.appendChild(b);
+  const main=document.createElement('main');main.id='v-ntf';
+  main.innerHTML='<div class="ntf-pag"><div class="ntf-cab"><h2>Notificaciones</h2>'
+    +'<div class="ntf-seg" role="group" aria-label="Qué ver"><button type="button" data-f="todas" aria-pressed="true">Todas</button><button type="button" data-f="sin" aria-pressed="false">Sin leer</button></div>'
+    +'<button type="button" class="ntf-lnk" id="ntf-todas-leidas">Marcar todo como leído</button></div>'
+    +'<div class="ntf-caja"><div class="ntf-lista" id="ntf-lista-pag"><div class="ntf-vacio">Cargando…</div></div></div>'
+    +'<button type="button" class="ntf-mas" id="ntf-mas" hidden>Ver más</button></div>';
+  const mains=document.querySelectorAll('body > main');
+  (mains.length?mains[mains.length-1]:document.querySelector('header')).after(main);
+
+  /* lo que marca como leído hnava (solo consulta) se queda en su navegador */
+  const LOC=new Set();let CONSULTA=false;
+  try{(JSON.parse(localStorage.getItem('profase-ntf-vistas')||'[]')||[]).forEach(x=>LOC.add(+x))}catch(err){}
+  function guardaLoc(){try{localStorage.setItem('profase-ntf-vistas',JSON.stringify([...LOC].slice(-400)))}catch(err){}}
+  const esLeida=n=>!!n.leida||LOC.has(+n.id);
+
+  const MTY='America/Monterrey';
+  function cuando(s){
+    const d=new Date(s),seg=(Date.now()-d.getTime())/1000;
+    if(seg<60)return 'hace un momento';
+    if(seg<3600)return 'hace '+Math.floor(seg/60)+' min';
+    if(seg<86400)return 'hace '+Math.floor(seg/3600)+' h';
+    const dia=x=>new Intl.DateTimeFormat('en-CA',{timeZone:MTY,year:'numeric',month:'2-digit',day:'2-digit'}).format(x);
+    const ay=new Date(Date.now()-86400000);
+    if(dia(d)===dia(ay))return 'ayer, '+new Intl.DateTimeFormat('es-MX',{timeZone:MTY,hour:'numeric',minute:'2-digit'}).format(d);
+    return new Intl.DateTimeFormat('es-MX',{timeZone:MTY,day:'numeric',month:'short',year:(Date.now()-d.getTime()>300*86400000)?'numeric':undefined}).format(d);
+  }
+  const completa=s=>new Intl.DateTimeFormat('es-MX',{timeZone:MTY,dateStyle:'full',timeStyle:'short'}).format(new Date(s));
+  function renglon(n){
+    const nueva=!esLeida(n),t=ICO[n.tipo]?n.tipo:'aviso';
+    return '<button type="button" class="ntf-it'+(nueva?' nueva':'')+'" data-id="'+(+n.id)+'" data-liga="'+e(n.liga||'')+'">'
+      +'<span class="ntf-ic t-'+t+'">'+ic(ICO[t])+'</span><span class="ntf-tx"><span class="ntf-tt">'+e(n.titulo)+'</span>'
+      +(n.texto?'<span class="ntf-ds">'+e(n.texto)+'</span>':'')
+      +'<span class="ntf-hr" title="'+e(completa(n.creada))+'">'+e(cuando(n.creada))+'</span></span>'
+      +(nueva?'<span class="ntf-dot" aria-label="Sin leer"></span>':'')+'</button>';
+  }
+
+  let P=null,ULT=null,SIN=0,PRIMERO=true,MAXID=0;
+  async function pide(lim,antes,sin){
+    const r=await P.sb.rpc('notif_mias',{p_limite:lim,p_antes:antes||null,p_sin_leer:!!sin});
+    if(r.error)throw r.error;
+    return r.data;
+  }
+  async function marca(ids){
+    ids=(ids||[]).map(Number).filter(x=>x>0);
+    if(CONSULTA){ids.forEach(x=>LOC.add(x));guardaLoc();return}
+    try{await P.sb.rpc('notif_leer',{p_ids:ids.length?ids:null})}catch(err){}
+  }
+  async function marcaTodas(){
+    if(CONSULTA){
+      try{const d=await pide(50,null,true);(d.items||[]).forEach(n=>LOC.add(+n.id));guardaLoc()}catch(err){}
+    }else{try{await P.sb.rpc('notif_leer',{p_ids:null})}catch(err){}}
+    await refresca();
+    if(document.body.getAttribute('data-view')==='ntf')pagina(true);
+  }
+
+  /* --- la campanita --- */
+  let bell=null,pop=null,num=null;
+  function ponCampana(){
+    const par=document.querySelector('.pu-par');if(!par||bell)return !!bell;
+    bell=document.createElement('button');bell.type='button';bell.className='ntf-b';bell.id='ntf-b';
+    bell.setAttribute('aria-haspopup','dialog');bell.setAttribute('aria-expanded','false');bell.setAttribute('aria-controls','ntf-pop');
+    bell.innerHTML=ic(CAMPANA)+'<span class="ntf-n" hidden></span>';
+    num=bell.querySelector('.ntf-n');
+    const pu=par.querySelector('.pu')||par.querySelector('.pu-cons')||par.firstChild;
+    par.insertBefore(bell,pu);
+    pop=document.createElement('div');pop.className='ntf-pop';pop.id='ntf-pop';pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Notificaciones');pop.hidden=true;
+    pop.innerHTML='<div class="ntf-ph"><b>Notificaciones</b><button type="button" class="ntf-lnk" id="ntf-pop-leidas">Marcar todo como leído</button></div>'
+      +'<div class="ntf-lista" id="ntf-pop-lista"></div><div class="ntf-pf"><button type="button" id="ntf-pop-todas">Ver todas</button></div>';
+    document.body.appendChild(pop);
+    bell.onclick=ev=>{ev.stopPropagation();abre(pop.hidden)};
+    document.addEventListener('click',ev=>{if(!pop.hidden&&!pop.contains(ev.target)&&ev.target!==bell&&!bell.contains(ev.target))abre(false)});
+    document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&!pop.hidden){abre(false);bell.focus()}});
+    addEventListener('resize',()=>{if(!pop.hidden)posiciona()});
+    pop.querySelector('#ntf-pop-todas').onclick=()=>{abre(false);setView('ntf')};
+    pop.querySelector('#ntf-pop-leidas').onclick=()=>marcaTodas();
+    pop.querySelector('#ntf-pop-lista').addEventListener('click',ev=>{const it=ev.target.closest('.ntf-it');if(it){abre(false);sigue(it)}});
+    return true;
+  }
+  function posiciona(){
+    const r=bell.getBoundingClientRect();
+    document.documentElement.style.setProperty('--ntf-top',Math.round(r.bottom+8)+'px');
+  }
+  function abre(o){
+    if(!pop)return;
+    if(o){posiciona();pintaPop()}
+    pop.hidden=!o;bell.setAttribute('aria-expanded',o?'true':'false');
+  }
+  function pintaNum(){
+    if(!num)return;
+    num.hidden=!(SIN>0);num.textContent=SIN>99?'99+':String(SIN);
+    bell.setAttribute('aria-label',SIN>0?'Notificaciones: '+SIN+' sin leer':'Notificaciones');
+    bell.title=SIN>0?SIN+(SIN===1?' notificación sin leer':' notificaciones sin leer'):'Notificaciones';
+    if(SIN>0){b.dataset.aviso=String(SIN);b.textContent='Notificaciones ('+SIN+')'}else{delete b.dataset.aviso;b.textContent='Notificaciones'}
+  }
+  function pintaPop(){
+    if(!pop||!ULT)return;
+    const its=(ULT.items||[]).slice(0,5);
+    pop.querySelector('#ntf-pop-lista').innerHTML=its.length?its.map(renglon).join(''):'<div class="ntf-vacio">No tienes notificaciones todavía.</div>';
+    pop.querySelector('#ntf-pop-leidas').hidden=!(SIN>0);
+  }
+  async function sigue(it){
+    const id=+it.dataset.id,liga=it.dataset.liga||'';
+    if(it.classList.contains('nueva')){await marca([id]);refresca()}
+    const v=LIGA[liga];
+    if(!v)return;
+    if(v==='ntf'){setView('ntf');return}
+    const btn=document.querySelector('.vsw button[data-view="'+v+'"]');
+    if(btn&&!btn.hidden)btn.click();
+  }
+
+  async function refresca(){
+    if(!P)return;
+    let d;
+    try{d=await pide(5)}catch(err){return}
+    if(!d)return;
+    CONSULTA=!!d.consulta;
+    ULT=d;
+    let sin=+d.sin_leer||0;
+    if(CONSULTA&&sin>0){try{const s=await pide(50,null,true);sin=(s.items||[]).filter(n=>!LOC.has(+n.id)).length}catch(err){}}
+    const nuevo=(d.items||[]).reduce((a,n)=>Math.max(a,+n.id),0);
+    if(!PRIMERO&&nuevo>MAXID&&sin>SIN){const n=(d.items||[]).find(x=>+x.id===nuevo);if(n&&!esLeida(n))toast(n)}
+    MAXID=Math.max(MAXID,nuevo);SIN=sin;PRIMERO=false;
+    pintaNum();if(pop&&!pop.hidden)pintaPop();
+    novedades((d.novedades||[]).filter(n=>!LOC.has(+n.id)));
+  }
+  function toast(n){
+    const t=document.createElement('div');t.className='ntf-toast';t.setAttribute('role','status');
+    t.innerHTML='<span></span><button type="button">Ver</button>';
+    t.firstChild.textContent=n.titulo;
+    t.querySelector('button').onclick=()=>{t.remove();abre(true)};
+    document.body.appendChild(t);
+    setTimeout(()=>{try{t.remove()}catch(err){}},8000);
+  }
+
+  /* --- «Nuevos cambios»: una ventana que sale una sola vez por aviso, hasta «Entendido» --- */
+  let mostrandoNov=false;const OCULTAS=new Set();
+  function novedades(lista){
+    lista=lista.filter(n=>!OCULTAS.has(+n.id));
+    if(!lista.length||mostrandoNov)return;
+    if(document.getElementById('cumple-pop')){setTimeout(()=>novedades(lista),4000);return}   // primero la de cumpleaños
+    mostrandoNov=true;
+    const ov=document.createElement('div');ov.className='ntf-ov';
+    ov.innerHTML='<div class="ntf-dlg" role="dialog" aria-modal="true" aria-labelledby="ntf-nov-t"><header>'+ic(ICO.novedad,'')+'<h3 id="ntf-nov-t">Nuevos cambios en el portal</h3>'
+      +'<button type="button" class="x" aria-label="Cerrar por ahora">✕</button></header><ul>'
+      +lista.map(n=>'<li><b>'+e(n.titulo)+'</b>'+(n.texto?'<p>'+e(n.texto)+'</p>':'')
+        +(LIGA[n.liga]?'<button type="button" class="ntf-lnk" data-liga="'+e(n.liga)+'" data-id="'+(+n.id)+'">Ir a verlo</button>':'')+'</li>').join('')
+      +'</ul><footer><button type="button" class="ok">Entendido</button></footer></div>';
+    const dlg=ov.firstChild,svgI=dlg.querySelector('header svg');if(svgI){svgI.style.cssText='width:22px;height:22px;color:var(--accent,#F07A1E);flex:none'}
+    const cierra=async(leer)=>{
+      ov.remove();mostrandoNov=false;
+      lista.forEach(n=>OCULTAS.add(+n.id));   // en esta sesión ya no vuelve a salir, pase lo que pase
+      if(leer){await marca(lista.map(n=>n.id));refresca()}
+    };
+    dlg.querySelector('.ok').onclick=()=>cierra(true);
+    dlg.querySelector('.x').onclick=()=>cierra(false);
+    dlg.querySelectorAll('[data-liga]').forEach(x=>x.onclick=async()=>{await cierra(true);const v=LIGA[x.dataset.liga];if(v==='ntf')setView('ntf');else{const btn=document.querySelector('.vsw button[data-view="'+v+'"]');if(btn&&!btn.hidden)btn.click()}});
+    document.body.appendChild(ov);
+    try{dlg.querySelector('.ok').focus()}catch(err){}
+  }
+
+  /* --- la pestaña Administración › Notificaciones --- */
+  let FILTRO='todas',CARGADAS=[],HAY=false;
+  async function pagina(desdeCero){
+    const lis=main.querySelector('#ntf-lista-pag'),mas=main.querySelector('#ntf-mas');
+    if(desdeCero){CARGADAS=[];lis.innerHTML='<div class="ntf-vacio">Cargando…</div>'}
+    let d;
+    try{d=await pide(20,CARGADAS.length?CARGADAS[CARGADAS.length-1].id:null,FILTRO==='sin')}
+    catch(err){lis.innerHTML='<div class="ntf-vacio">No pude cargar tus notificaciones. Recarga la página.</div>';mas.hidden=true;return}
+    let its=d.items||[];
+    if(FILTRO==='sin'&&CONSULTA)its=its.filter(n=>!LOC.has(+n.id));
+    CARGADAS=CARGADAS.concat(its);HAY=!!d.mas;
+    lis.innerHTML=CARGADAS.length?CARGADAS.map(renglon).join('')
+      :'<div class="ntf-vacio">'+(FILTRO==='sin'?'No tienes notificaciones sin leer.':'No tienes notificaciones todavía.')+'</div>';
+    mas.hidden=!HAY;
+    main.querySelector('#ntf-todas-leidas').hidden=!(SIN>0);
+  }
+  main.querySelector('#ntf-mas').onclick=()=>pagina(false);
+  main.querySelector('#ntf-todas-leidas').onclick=()=>marcaTodas();
+  main.querySelectorAll('.ntf-seg button').forEach(x=>x.onclick=()=>{
+    FILTRO=x.dataset.f;main.querySelectorAll('.ntf-seg button').forEach(y=>y.setAttribute('aria-pressed',y===x?'true':'false'));pagina(true);
+  });
+  main.querySelector('#ntf-lista-pag').addEventListener('click',async ev=>{
+    const it=ev.target.closest('.ntf-it');if(!it)return;
+    if(it.classList.contains('nueva')){it.classList.remove('nueva');const dot=it.querySelector('.ntf-dot');if(dot)dot.remove()}
+    sigue(it);
+  });
+
+  const sv0=setView;
+  setView=function(v){
+    if(v!=='ntf')return sv0(v);
+    try{if(window.__cxcDlg)window.__cxcDlg.min()}catch(err){}
+    try{if(typeof minDlg==='function')minDlg()}catch(err){}
+    try{VIEW='ntf'}catch(err){}
+    document.body.setAttribute('data-view','ntf');
+    const t=document.getElementById('vtitle');if(t)t.textContent='Notificaciones';
+    document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='ntf'?'true':'false'));
+    try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
+    pagina(true);
+  };
+  window.__setView=setView;
+  b.onclick=()=>setView('ntf');
+
+  (async function(){
+    try{
+      P=window.PORTAL;if(!P)return;
+      await P.listo;
+      let d;try{d=await pide(5)}catch(err){return}   // sin 22_notificaciones.sql en la base: no aparece nada
+      if(!d)return;
+      b.hidden=false;
+      for(let i=0;i<50&&!ponCampana();i++)await new Promise(r=>setTimeout(r,200));
+      await refresca();
+      setInterval(()=>{if(!document.hidden)refresca()},60000);
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresca()});
+      if(/^#notificaciones$/.test(location.hash))setView('ntf');
+    }catch(err){}
+  })();
 })();
 
 setView('wf');
