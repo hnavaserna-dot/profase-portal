@@ -44,8 +44,11 @@
   function encabezado(wb, ws, ancho, op) {
     op = op || {}; ancho = Math.max(ancho || 1, 1);
     ws.getRow(1).height = 24; ws.getRow(2).height = 14; ws.getRow(3).height = 5; ws.getRow(4).height = 9;
-    ws.addImage(logoDe(wb), { tl: { nativeCol: 0, nativeColOff: 5 * 9525, nativeRow: 0, nativeRowOff: 6 * 9525 },
-      ext: { width: 30, height: 34 }, editAs: 'oneCell' });
+    // el signo va anclado de esquina a esquina (como lo guarda el propio Excel), 30 × 34 px dentro de la columna A:
+    // de 5 px a 35 px de ancho y de 6 px (renglón 1, de 32 px) a 40 px (8 px dentro del renglón 2)
+    var E = 9525;
+    ws.addImage(logoDe(wb), { tl: { nativeCol: 0, nativeColOff: 5 * E, nativeRow: 0, nativeRowOff: 6 * E },
+      br: { nativeCol: 0, nativeColOff: 35 * E, nativeRow: 1, nativeRowOff: 8 * E }, editAs: 'oneCell' });
     var a1 = ws.getCell(1, 1), a2 = ws.getCell(2, 1);
     a1.value = 'PROFASE';
     a1.font = { name: FUENTE, size: 16, bold: true, color: { argb: C.azul } };
