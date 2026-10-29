@@ -1,0 +1,925 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=41b8937c8b"></script><script src="js/marca.js?v=2ac327c483"></script></head><body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Portal PROFASE · Administración › Calendario (pedido de Fernando Cadengo, 29-oct-2026). Va dentro de la pestaña
+   «Calendario» de las tres vistas. Banda azul con el resumen del mes, sub pestañas (Calendario, Próximos,
+   Colaboradores, Eventos) y el contenido abajo.
+   Quién hace qué lo decide la base (portal/sql/16_calendario.sql): todos consultan; captura quien esté en
+   cal_captura (Fernando Cadengo). Del cumpleaños solo se guarda el día y el mes; quien no autorizó publicarlo
+   solo lo ve quien captura. Los días festivos e inhábiles no se guardan: se calculan aquí. */
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
+  --ink:#131f2d; --ink-2:#4e5d6e; --ink-3:#7b8a9b;
+  --line:#dde3ea; --line-2:#cdd5df;
+  --brand:#1F3864; --brand-soft:#e4e9f2; --brand-ink:#1F3864;
+  --accent:#F07A1E; --accent-soft:#fdeedf; --accent-ink:#a24b08;
+  --ok:#1d7a4f; --ok-soft:#e2f1e8;
+  --danger:#a33224; --danger-soft:#f7e3df;
+  --gray-soft:#e8ebef; --gray-ink:#4e5d6e;
+  --band-bg:#1F3864; --band-fg:#eef2f8; --band-dim:#a9b8d0; --band-line:#34507f;
+  --on-primary:#ffffff;
+  --f-display:'Archivo',system-ui,-apple-system,sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1218; --surface:#151c25; --surface-2:#1c2530;
+    --ink:#e9eef4; --ink-2:#a7b5c4; --ink-3:#7a8798;
+    --line:#2a3542; --line-2:#37455a;
+    --brand:#7f9fd6; --brand-soft:#1a2740; --brand-ink:#a9c0e8;
+    --accent:#ff9247; --accent-soft:#3a2614; --accent-ink:#ffb27a;
+    --ok:#4caf7d; --ok-soft:#173022;
+    --danger:#e07a6c; --danger-soft:#3a1d19;
+    --gray-soft:#232d39; --gray-ink:#a7b5c4;
+    --band-bg:#0f1d36; --band-fg:#e9eef4; --band-dim:#8ea2c2; --band-line:#253c63;
+    --on-primary:#0d1218;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1218; --surface:#151c25; --surface-2:#1c2530;
+  --ink:#e9eef4; --ink-2:#a7b5c4; --ink-3:#7a8798;
+  --line:#2a3542; --line-2:#37455a;
+  --brand:#7f9fd6; --brand-soft:#1a2740; --brand-ink:#a9c0e8;
+  --accent:#ff9247; --accent-soft:#3a2614; --accent-ink:#ffb27a;
+  --ok:#4caf7d; --ok-soft:#173022;
+  --danger:#e07a6c; --danger-soft:#3a1d19;
+  --gray-soft:#232d39; --gray-ink:#a7b5c4;
+  --band-bg:#0f1d36; --band-fg:#e9eef4; --band-dim:#8ea2c2; --band-line:#253c63;
+  --on-primary:#0d1218;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:default;opacity:.6}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* banda */
+.band{background:var(--band-bg);color:var(--band-fg)}
+.band .wrap{padding-block:16px 20px}
+.masthead{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 22px;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img{width:34px;height:38px;object-fit:contain;background:#fff;border-radius:8px;padding:3px}
+.mark{font-family:var(--f-display);font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--band-dim)}
+.mark span{color:var(--accent)}
+.masthead h1{font-size:clamp(20px,4.2vw,26px);font-weight:600;color:var(--band-fg);margin-top:2px}
+.whoami{font-size:13px;color:var(--band-dim)}
+.whoami b{color:var(--band-fg);font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--band-line);border:1px solid var(--band-line);border-radius:12px;overflow:hidden;margin-top:16px}
+.kpi{background:var(--band-bg);padding:13px 15px 15px;min-width:0}
+.kpi .k{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--band-dim)}
+.kpi .v{font-family:var(--f-mono);font-weight:500;font-size:clamp(18px,3.4vw,23px);margin-top:5px;color:var(--band-fg)}
+.kpi .v.txt{font-family:var(--f-display);font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-size:11.5px;color:var(--band-dim);margin-top:3px}
+.kpi.flag .v{color:var(--accent)}
+
+main .wrap{padding-block:18px 40px;display:grid;gap:16px}
+.sin{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px 20px;text-align:center}
+.sin h2{font-size:19px;font-weight:600}
+.sin p{color:var(--ink-2);margin:6px 0 0}
+.vacio{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--accent-soft);color:var(--accent-ink);border-radius:10px;padding:10px 14px;font-size:14px}
+.vacio .t{flex:1 1 260px;min-width:0}
+
+/* sub pestañas */
+.subtabs{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line-2);border-radius:8px;overflow:hidden;justify-self:start;max-width:100%}
+.subtabs button{border:0;background:var(--surface);padding:8px 14px;font-weight:600;font-size:13px;color:var(--ink-2)}
+.subtabs button+button{border-left:1px solid var(--line-2)}
+.subtabs button[aria-pressed="true"]{background:var(--brand);color:var(--on-primary)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.bar h2{font-size:19px;font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 12px;font-size:13.5px;font-weight:500;color:var(--ink)}
+.btn:hover:not(:disabled){background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover:not(:disabled){filter:brightness(.95);background:var(--accent)}
+.btn.icon{width:36px;padding:7px 0;text-align:center}
+#mesTit{min-width:170px;text-align:center}
+
+/* leyenda */
+.legend{display:flex;flex-wrap:wrap;gap:6px 8px;margin-bottom:12px}
+.legend label{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 6px;cursor:pointer;user-select:none}
+.legend input{margin:0;accent-color:var(--brand)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.t-cumple{--c:var(--accent);--cs:var(--accent-soft);--ci:var(--accent-ink)}
+.t-aniv{--c:var(--brand);--cs:var(--brand-soft);--ci:var(--brand-ink)}
+.t-lft{--c:var(--danger);--cs:var(--danger-soft);--ci:var(--danger)}
+.t-sat{--c:var(--ink-3);--cs:var(--gray-soft);--ci:var(--gray-ink)}
+.t-evento{--c:var(--ok);--cs:var(--ok-soft);--ci:var(--ok)}
+.dot{background:var(--c)}
+
+/* calendario */
+.cal-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px;align-self:start}
+.cal .wd{background:var(--surface-2);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding:6px 8px;font-weight:600}
+.day{background:var(--surface);min-height:104px;padding:6px;display:flex;flex-direction:column;gap:3px;border:0;text-align:left;min-width:0;font-size:12px}
+.day:hover{background:var(--surface-2)}
+.day.out{background:var(--bg);color:var(--ink-3)}
+.day.out .n{opacity:.55}
+.day.wkend .n{color:var(--ink-3)}
+.day .n{font-family:var(--f-mono);font-size:12.5px;font-weight:500;width:24px;height:24px;display:grid;place-items:center;border-radius:50%}
+.day.today .n{background:var(--accent);color:#fff}
+.day.sel{box-shadow:inset 0 0 0 2px var(--brand)}
+.chip{display:block;background:var(--cs);color:var(--ci);border-left:3px solid var(--c);border-radius:4px;padding:1px 5px;font-size:11.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.more{font-size:11px;color:var(--ink-3);padding-left:4px}
+.dots{display:none;gap:3px;flex-wrap:wrap}
+.side{display:grid;gap:12px;align-content:start;min-width:0}
+.side .panel{padding:14px}
+.side h3{font-size:15px;font-weight:600}
+.side .date{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.item{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .dot{margin-top:7px}
+.item .av{margin-top:1px}
+.item .tt{font-weight:500;min-width:0;overflow-wrap:anywhere}
+.item .ss{display:block;font-size:12.5px;color:var(--ink-2);font-weight:400}
+.empty{color:var(--ink-3);font-size:13.5px;padding:8px 0}
+.note{font-size:12px;color:var(--ink-3);line-height:1.45;margin:0}
+
+/* próximos y eventos */
+.grp{display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 16px;padding:10px 0;border-top:1px solid var(--line)}
+.grp:first-child{border-top:0}
+.grp .when b{display:block;font-family:var(--f-display);font-weight:600}
+.grp .when small{color:var(--ink-3);font-size:12px}
+.grp .when.hoy b{color:var(--accent-ink)}
+.sub-h{font-size:13px;color:var(--ink-3);margin:18px 0 4px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+
+/* tablas */
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{background:var(--surface-2);text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:8px 10px;white-space:nowrap}
+td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
+td.nw{white-space:nowrap}
+.who{display:flex;align-items:center;gap:10px;min-width:180px}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink);font-family:var(--f-display);font-weight:700;font-size:12px;overflow:hidden}
+.av img{width:100%;height:100%;object-fit:cover}
+.pill{display:inline-block;font-size:11.5px;border-radius:999px;padding:1px 8px;background:var(--ok-soft);color:var(--ok);font-weight:500;white-space:nowrap}
+.pill.no{background:var(--danger-soft);color:var(--danger)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.filters input,.filters select{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:14px;min-width:0}
+.filters input{flex:1 1 220px}
+.link{background:none;border:0;color:var(--brand-ink);font-weight:500;padding:2px 4px;text-decoration:underline;text-underline-offset:2px;font-size:13.5px}
+.link.danger{color:var(--danger)}
+
+/* ventanas */
+.ov{position:fixed;inset:0;background:rgba(10,18,30,.5);display:grid;place-items:center;padding:16px;z-index:50}
+.modal{background:var(--surface);border-radius:14px;width:min(560px,100%);max-height:90vh;overflow:auto;padding:18px;border:1px solid var(--line)}
+.modal h3{font-size:18px;font-weight:600;margin-bottom:4px}
+.modal .sub{font-size:13px;color:var(--ink-2);margin:0 0 12px}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f{display:grid;gap:4px;min-width:0;align-content:start}
+.f.full{grid-column:1/-1}
+.f label{font-size:12px;font-weight:600;color:var(--ink-2)}
+.f input,.f select,.f textarea{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:8px 10px;font-size:14px;min-width:0;width:100%}
+.f small{font-size:12px;color:var(--ink-3)}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
+.chk input{margin-top:3px;accent-color:var(--accent)}
+.mact{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.err{color:var(--danger);font-size:13px;min-height:1em;margin-top:8px}
+.prev{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px}
+.prev table{font-size:13px}
+.prev td{padding:6px 8px}
+.prev tr.mal td{color:var(--danger)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
+
+@media (max-width:860px){.cal-layout{grid-template-columns:1fr}}
+@media (max-width:620px){
+  .day{min-height:58px;padding:4px;align-items:center}
+  .day .chip,.day .more{display:none}
+  .day .dots{display:flex;justify-content:center}
+  .cal .wd{padding:6px 2px;text-align:center;letter-spacing:.02em}
+  .fg{grid-template-columns:1fr}
+  .grp{grid-template-columns:1fr}
+  .kpi:last-child{grid-column:1/-1}
+}
+</style>
+
+<header class="band">
+  <div class="wrap">
+    <div class="masthead">
+      <div class="brand">
+        <img id="logo" src="img/logo.png" alt="PROFASE" hidden>
+        <div>
+          <div class="mark"><span>PROFASE</span> · Administración</div>
+          <h1>Calendario del equipo</h1>
+        </div>
+      </div>
+      <div class="whoami" id="whoami">Cargando…</div>
+    </div>
+    <div class="kpis" id="kpis" hidden></div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="sin" id="sinAcceso" hidden><h2 id="sinAccesoT"></h2><p id="sinAccesoP"></p></div>
+
+    <div id="contenido" hidden>
+      <div style="display:grid;gap:16px">
+        <div class="vacio" id="vacio" hidden></div>
+
+        <nav class="subtabs" id="tabs" aria-label="Secciones del calendario">
+          <button type="button" data-t="cal" aria-pressed="true">Calendario</button>
+          <button type="button" data-t="prox" aria-pressed="false">Próximos</button>
+          <button type="button" data-t="col" aria-pressed="false">Colaboradores</button>
+          <button type="button" data-t="ev" aria-pressed="false">Eventos de la empresa</button>
+        </nav>
+
+        <!-- Calendario -->
+        <section class="panel" id="p-cal">
+          <div class="bar">
+            <div class="btns">
+              <button type="button" class="btn icon" id="prev" aria-label="Mes anterior">‹</button>
+              <h2 id="mesTit"></h2>
+              <button type="button" class="btn icon" id="next" aria-label="Mes siguiente">›</button>
+              <button type="button" class="btn" id="hoyBtn">Hoy</button>
+            </div>
+            <div class="btns">
+              <button type="button" class="btn primary solo-captura" data-acc="nuevo-ev">Agregar evento</button>
+              <button type="button" class="btn" data-acc="excel-mes">Descargar mes en Excel</button>
+            </div>
+          </div>
+          <div class="legend" id="legend"></div>
+          <div class="cal-layout">
+            <div class="cal" id="cal"></div>
+            <aside class="side" id="side"></aside>
+          </div>
+        </section>
+
+        <!-- Próximos -->
+        <section class="panel" id="p-prox" hidden>
+          <div class="bar"><h2>Próximos 45 días</h2></div>
+          <div id="proxList"></div>
+        </section>
+
+        <!-- Colaboradores -->
+        <section class="panel" id="p-col" hidden>
+          <div class="bar">
+            <h2>Colaboradores</h2>
+            <div class="btns">
+              <button type="button" class="btn primary solo-captura" data-acc="nuevo-col">Agregar colaborador</button>
+              <button type="button" class="btn solo-captura" data-acc="subir">Subir Excel</button>
+              <button type="button" class="btn solo-captura" data-acc="plantilla">Bajar plantilla</button>
+              <button type="button" class="btn" data-acc="excel-col">Descargar Excel</button>
+            </div>
+          </div>
+          <input type="file" id="xlsIn" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          <div class="filters">
+            <input type="search" id="q" placeholder="Buscar por nombre" aria-label="Buscar por nombre">
+            <select id="fArea" aria-label="Área"><option value="">Todas las áreas</option></select>
+            <select id="fMes" aria-label="Mes de cumpleaños"><option value="">Todos los meses</option></select>
+          </div>
+          <div class="tablebox"><table>
+            <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th class="solo-captura">Autorizó publicar</th><th class="solo-captura"></th></tr></thead>
+            <tbody id="colBody"></tbody>
+          </table></div>
+          <p class="note" style="margin-top:10px" id="colNota"></p>
+        </section>
+
+        <!-- Eventos -->
+        <section class="panel" id="p-ev" hidden>
+          <div class="bar">
+            <h2>Eventos de la empresa</h2>
+            <div class="btns"><button type="button" class="btn primary solo-captura" data-acc="nuevo-ev">Agregar evento</button></div>
+          </div>
+          <div id="evList"></div>
+        </section>
+
+        <p class="note">Días de descanso obligatorio: artículo 74 de la Ley Federal del Trabajo. Días inhábiles del SAT: artículo 12 del Código Fiscal de la Federación (incluye el 5 de mayo) y la Resolución Miscelánea Fiscal (jueves y viernes santos). El periodo de vacaciones del SAT de fin de año se agrega cuando se confirme en la RMF del año. Los sábados y domingos también son inhábiles y no se marcan.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="ovRoot"></div>
+
+<script>
+(function(){
+  'use strict';
+  var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var MES3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  var AREAS=['Contabilidad','Nóminas','Fiscal','VAX','Administración','Dirección'];
+  var TIPOS={ cumple:'Cumpleaños', aniv:'Aniversario en PROFASE', evento:'Evento de la empresa', lft:'Descanso obligatorio (LFT)', sat:'Inhábil SAT' };
+  var HOY=new Date(); HOY.setHours(0,0,0,0);
+
+  var P=null, db=null, dl=null, yo=null, modo=null;
+  var colab=[], eventos=[], cargaCol=false, cargaEv=false;
+  var tab='cal', vista={y:HOY.getFullYear(), m:HOY.getMonth()}, sel=null, filtros={};
+  Object.keys(TIPOS).forEach(function(k){ filtros[k]=true; });
+
+  function $(id){ return document.getElementById(id); }
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function key(y,m,d){ return y+'-'+pad(m+1)+'-'+pad(d); }
+  function keyD(d){ return key(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function parse(k){ var p=String(k||'').split('-').map(Number); return new Date(p[0],(p[1]||1)-1,p[2]||1); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function bisiesto(y){ return (y%4===0&&y%100!==0)||y%400===0; }
+  function fLarga(d){ return DIAS[d.getDay()]+' '+d.getDate()+' de '+MESES[d.getMonth()]; }
+  function mayus(t){ return t ? t[0].toUpperCase()+t.slice(1) : t; }
+  function iniciales(n){ return String(n||'').split(/\s+/).filter(Boolean).slice(0,2).map(function(p){ return p[0]; }).join('').toUpperCase(); }
+  function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
+  function captura(){ return modo==='captura'; }
+  function sel0(){ return keyD(HOY); }
+  sel=sel0();
+
+  var toastTimer=null;
+  function toast(msg){
+    var el=document.querySelector('.toast'); if(el) el.remove();
+    el=document.createElement('div'); el.className='toast'; el.setAttribute('role','status'); el.textContent=msg;
+    document.body.appendChild(el);
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ if(el.parentNode) el.remove(); },3800);
+  }
+  function falla(err){
+    var m=(err&&err.message)||'error desconocido';
+    if(err && (err.code==='not_granted' || /row-level security/i.test(m))) m='La base no deja hacer ese cambio con tu usuario.';
+    return m;
+  }
+
+  /* ---------- días festivos (LFT art. 74) e inhábiles del SAT (CFF art. 12 y RMF) ---------- */
+  function nLunes(y,m,n){ var wd=new Date(y,m,1).getDay(); return 1+((1-wd+7)%7)+(n-1)*7; }
+  function pascua(y){
+    var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+        h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+        mes=Math.floor((h+l-7*m+114)/31),dia=((h+l-7*m+114)%31)+1;
+    return new Date(y,mes-1,dia);
+  }
+  var festCache={};
+  function festivos(y){
+    if(festCache[y]) return festCache[y];
+    var f={}, lft='También inhábil para el SAT';
+    function add(m,d,tipo,n,s){ var k=key(y,m,d); (f[k]=f[k]||[]).push({tipo:tipo,titulo:n,sub:s}); }
+    add(0,1,'lft','Año Nuevo',lft);
+    add(1,nLunes(y,1,1),'lft','Día de la Constitución','Se recorre al primer lunes de febrero. '+lft);
+    add(2,nLunes(y,2,3),'lft','Natalicio de Benito Juárez','Se recorre al tercer lunes de marzo. '+lft);
+    add(4,1,'lft','Día del Trabajo',lft);
+    add(4,5,'sat','Batalla de Puebla','Inhábil para el SAT (CFF art. 12); no es descanso obligatorio');
+    add(8,16,'lft','Día de la Independencia',lft);
+    if((y-2024)%6===0) add(9,1,'lft','Transmisión del Poder Ejecutivo Federal',lft);
+    add(10,nLunes(y,10,3),'lft','Revolución Mexicana','Se recorre al tercer lunes de noviembre. '+lft);
+    add(11,25,'lft','Navidad',lft);
+    var p=pascua(y);
+    [[-3,'Jueves Santo'],[-2,'Viernes Santo']].forEach(function(x){
+      var d=new Date(p); d.setDate(d.getDate()+x[0]); add(d.getMonth(),d.getDate(),'sat',x[1],'Inhábil para el SAT (RMF)');
+    });
+    return festCache[y]=f;
+  }
+
+  /* ---------- qué hay en cada día ---------- */
+  function publicados(){ return colab.filter(function(c){ return c.autoriza===true; }); }
+  function delDia(y,m,d){
+    var out=[], pub=publicados(), k=key(y,m,d);
+    pub.forEach(function(c){
+      var feb29=c.mes===2&&c.dia===29&&!bisiesto(y)&&m===1&&d===28;
+      if((c.mes===m+1&&c.dia===d)||feb29) out.push({tipo:'cumple',titulo:c.nombre,sub:'Cumpleaños · '+(c.area||'')+(feb29?' (29 de febrero)':''),c:c});
+    });
+    pub.forEach(function(c){
+      if(!c.ingreso) return;
+      var i=parse(c.ingreso), n=y-i.getFullYear();
+      if(n>0&&i.getMonth()===m&&i.getDate()===d) out.push({tipo:'aniv',titulo:c.nombre,sub:'Cumple '+n+(n===1?' año':' años')+' en PROFASE · '+(c.area||''),n:n,c:c});
+    });
+    eventos.filter(function(e){ return e.fecha===k; }).sort(function(a,b){ return (a.hora||'').localeCompare(b.hora||''); })
+      .forEach(function(e){ out.push({tipo:'evento',titulo:e.titulo,sub:[e.hora,e.lugar].filter(Boolean).join(' · '),e:e}); });
+    (festivos(y)[k]||[]).forEach(function(x){ out.push(x); });
+    return out;
+  }
+  function proximos(n){
+    var out=[];
+    for(var i=0;i<n;i++){ var d=new Date(HOY); d.setDate(d.getDate()+i); var it=delDia(d.getFullYear(),d.getMonth(),d.getDate()); if(it.length) out.push({fecha:d,dias:i,items:it}); }
+    return out;
+  }
+  function corto(x){
+    var p=String(x.titulo).split(/\s+/);
+    if(x.tipo==='cumple') return p[0]+(p[1]?' '+p[1][0]+'.':'');
+    if(x.tipo==='aniv') return p[0]+' · '+x.n+(x.n===1?' año':' años');
+    if(x.tipo==='evento') return (x.e.hora?x.e.hora+' ':'')+x.titulo;
+    return x.titulo;
+  }
+  function avatar(c){ return '<span class="av">'+(c&&c.foto?'<img src="'+esc(c.foto)+'" alt="">':esc(iniciales(c?c.nombre:'')))+'</span>'; }
+
+  /* ---------- resumen ---------- */
+  function kpi(k,v,s,f){ return '<div class="kpi'+(f?' flag':'')+'"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'; }
+  function renderKpis(){
+    var y=vista.y, m=vista.m, dias=new Date(y,m+1,0).getDate(), cu=0, an=0, ev=0, fe=0;
+    for(var d=1;d<=dias;d++) delDia(y,m,d).forEach(function(x){
+      if(x.tipo==='cumple') cu++; else if(x.tipo==='aniv') an++; else if(x.tipo==='evento') ev++;
+      else { var wd=new Date(y,m,d).getDay(); if(wd!==0&&wd!==6) fe++; }
+    });
+    var prox=null, pc=null, g=proximos(366);
+    for(var i=0;i<g.length&&!pc;i++){ if(g[i].dias>0){ var c=g[i].items.filter(function(x){ return x.tipo==='cumple'; })[0]; if(c){ prox=g[i]; pc=c; } } }
+    $('kpis').innerHTML=kpi('Cumpleaños en '+MESES[m],cu,cu===1?'colaborador':'colaboradores',cu>0)+kpi('Aniversarios en '+MESES[m],an,'en PROFASE')
+      +kpi('Eventos en '+MESES[m],ev,'de la empresa')+kpi('Festivos e inhábiles',fe,'entre semana')
+      +'<div class="kpi"><div class="k">Próximo cumpleaños</div><div class="v txt">'+(pc?esc(pc.titulo.split(/\s+/).slice(0,2).join(' ')):'—')+'</div><div class="s">'+(prox?fLarga(prox.fecha)+' · en '+prox.dias+(prox.dias===1?' día':' días'):'')+'</div></div>';
+  }
+
+  /* ---------- calendario ---------- */
+  function renderLegend(){
+    $('legend').innerHTML=Object.keys(TIPOS).map(function(k){
+      return '<label class="t-'+k+'"><input type="checkbox" data-f="'+k+'"'+(filtros[k]?' checked':'')+'><span class="dot"></span>'+TIPOS[k]+'</label>';
+    }).join('');
+    $('legend').querySelectorAll('input').forEach(function(i){ i.onchange=function(){ filtros[i.dataset.f]=i.checked; renderCal(); }; });
+  }
+  function renderCal(){
+    var y=vista.y, m=vista.m;
+    $('mesTit').textContent=mayus(MESES[m])+' '+y;
+    var off=(new Date(y,m,1).getDay()+6)%7, start=new Date(y,m,1-off), sem=Math.ceil((off+new Date(y,m+1,0).getDate())/7);
+    var h=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(function(d){ return '<div class="wd">'+d+'</div>'; }).join('');
+    for(var i=0;i<sem*7;i++){
+      var d=new Date(start); d.setDate(start.getDate()+i);
+      var k=keyD(d), it=delDia(d.getFullYear(),d.getMonth(),d.getDate()).filter(function(x){ return filtros[x.tipo]; });
+      var cls=['day', d.getMonth()!==m?'out':'', (d.getDay()===0||d.getDay()===6)?'wkend':'', +d===+HOY?'today':'', k===sel?'sel':''].join(' ');
+      h+='<button type="button" class="'+cls+'" data-k="'+k+'" aria-label="'+fLarga(d)+(it.length?', '+it.length+(it.length===1?' marcado':' marcados'):'')+'">'
+        +'<span class="n">'+d.getDate()+'</span>'
+        +it.slice(0,3).map(function(x){ return '<span class="chip t-'+x.tipo+'" title="'+esc(x.titulo)+'">'+esc(corto(x))+'</span>'; }).join('')
+        +(it.length>3?'<span class="more">+'+(it.length-3)+' más</span>':'')
+        +'<span class="dots">'+it.slice(0,4).map(function(x){ return '<span class="dot t-'+x.tipo+'"></span>'; }).join('')+'</span></button>';
+    }
+    $('cal').innerHTML=h;
+    $('cal').querySelectorAll('.day').forEach(function(b){ b.onclick=function(){
+      sel=b.dataset.k; var d=parse(sel);
+      if(d.getMonth()!==vista.m||d.getFullYear()!==vista.y){ vista={y:d.getFullYear(),m:d.getMonth()}; }
+      renderCal();
+    }; });
+    renderSide(); renderKpis();
+  }
+  function itemHtml(x){
+    var ed=captura()&&x.tipo==='evento';
+    return '<div class="item t-'+x.tipo+'">'+(x.c?avatar(x.c):'<span class="dot"></span>')+'<div class="tt">'+esc(x.titulo)
+      +'<span class="ss">'+esc(x.sub||'')+'</span>'+(x.tipo==='evento'&&x.e.desc?'<span class="ss">'+esc(x.e.desc)+'</span>':'')
+      +(ed?'<span><button type="button" class="link" data-edit-ev="'+esc(x.e.id)+'">Editar</button><button type="button" class="link danger" data-del-ev="'+esc(x.e.id)+'">Quitar</button></span>':'')
+      +'</div></div>';
+  }
+  function renderSide(){
+    var d=parse(sel), it=delDia(d.getFullYear(),d.getMonth(),d.getDate());
+    var y=vista.y, m=vista.m, dias=new Date(y,m+1,0).getDate(), r=[];
+    for(var i=1;i<=dias;i++) delDia(y,m,i).filter(function(x){ return filtros[x.tipo]&&(x.tipo==='cumple'||x.tipo==='aniv'); }).forEach(function(x){
+      r.push('<div class="item t-'+x.tipo+'"><span class="dot"></span><div class="tt"><span class="num" style="color:var(--ink-3);margin-right:6px">'+pad(i)+'</span>'+esc(x.titulo)
+        +'<span class="ss">'+esc(x.tipo==='cumple'?(x.c.area||''):x.sub)+'</span></div></div>');
+    });
+    $('side').innerHTML='<div class="panel"><div class="date">'+(+d===+HOY?'Hoy · ':'')+DIAS[d.getDay()]+'</div>'
+      +'<h3>'+d.getDate()+' de '+MESES[d.getMonth()]+' de '+d.getFullYear()+'</h3>'
+      +'<div style="margin-top:8px">'+(it.length?it.map(itemHtml).join(''):'<div class="empty">Sin cumpleaños ni eventos este día.</div>')+'</div>'
+      +(captura()?'<button type="button" class="btn" style="margin-top:10px;width:100%" id="evDia">Agregar evento este día</button>':'')+'</div>'
+      +'<div class="panel"><h3>En '+MESES[m]+'</h3><div style="margin-top:6px">'+(r.length?r.join(''):'<div class="empty">Nadie cumple años ni aniversario este mes.</div>')+'</div></div>';
+    if(captura()) $('evDia').onclick=function(){ abrirEvento(null,sel); };
+    enlaza($('side'));
+  }
+
+  /* ---------- próximos ---------- */
+  function renderProx(){
+    var g=proximos(45);
+    $('proxList').innerHTML=g.length?g.map(function(x){
+      return '<div class="grp"><div class="when'+(x.dias===0?' hoy':'')+'"><b>'+(x.dias===0?'Hoy':x.dias===1?'Mañana':'En '+x.dias+' días')+'</b><small>'+fLarga(x.fecha)+'</small></div><div>'+x.items.map(itemHtml).join('')+'</div></div>';
+    }).join(''):'<div class="empty">Nada en los próximos 45 días.</div>';
+    enlaza($('proxList'));
+  }
+
+  /* ---------- colaboradores ---------- */
+  function anios(c){
+    if(!c.ingreso) return null;
+    var i=parse(c.ingreso), a=HOY.getFullYear()-i.getFullYear();
+    if(HOY<new Date(HOY.getFullYear(),i.getMonth(),i.getDate())) a--;
+    return a;
+  }
+  function ordenCol(a,b){ return (a.mes-b.mes)||(a.dia-b.dia)||String(a.nombre).localeCompare(String(b.nombre),'es'); }
+  function filtrados(){
+    var q=norm($('q').value), a=$('fArea').value, fm=$('fMes').value;
+    return colab.filter(function(c){ return (!q||norm(c.nombre).indexOf(q)>=0)&&(!a||c.area===a)&&(!fm||c.mes===+fm); }).sort(ordenCol);
+  }
+  function renderCol(){
+    var rows=filtrados(), cap=captura();
+    $('colBody').innerHTML=rows.length?rows.map(function(c){
+      var i=c.ingreso?parse(c.ingreso):null, an=anios(c);
+      return '<tr><td><div class="who">'+avatar(c)+esc(c.nombre)+'</div></td><td class="nw">'+esc(c.area||'')+'</td>'
+        +'<td class="nw">'+c.dia+' de '+MESES[c.mes-1]+'</td>'
+        +'<td class="nw">'+(i?'<span class="num">'+i.getDate()+'-'+MES3[i.getMonth()]+'-'+i.getFullYear()+'</span> · '+(an<1?'menos de un año':an+(an===1?' año':' años')):'—')+'</td>'
+        +(cap?'<td>'+(c.autoriza?'<span class="pill">Sí</span>':'<span class="pill no">No · no se publica</span>')+'</td>'
+          +'<td class="nw"><button type="button" class="link" data-edit-col="'+esc(c.id)+'">Editar</button><button type="button" class="link danger" data-del-col="'+esc(c.id)+'">Dar de baja</button></td>':'')
+        +'</tr>';
+    }).join(''):'<tr><td colspan="6" class="empty">'+(colab.length?'Nadie coincide con la búsqueda.':'Todavía no hay colaboradores capturados.')+'</td></tr>';
+    $('colNota').textContent=cap
+      ? 'Del cumpleaños solo se guarda el día y el mes, sin el año, para no exponer la edad (dato personal). Quien no autorizó publicarlo solo aparece aquí, en tu lista: la base no se lo muestra a nadie más. La fecha de ingreso lleva el año porque con ella se calculan los aniversarios.'
+      : 'Del cumpleaños solo se guarda el día y el mes. Si tus datos no están o hay que corregirlos, avísale a Fernando Cadengo.';
+    enlaza($('colBody'));
+  }
+
+  /* ---------- eventos ---------- */
+  function renderEv(){
+    var hk=sel0();
+    var prox=eventos.filter(function(e){ return e.fecha>=hk; }).sort(function(a,b){ return (a.fecha+(a.hora||'')).localeCompare(b.fecha+(b.hora||'')); });
+    var pas=eventos.filter(function(e){ return e.fecha<hk; }).sort(function(a,b){ return b.fecha.localeCompare(a.fecha); });
+    function blk(arr){ return arr.map(function(e){ var d=parse(e.fecha);
+      return '<div class="grp"><div class="when"><b>'+d.getDate()+' '+MES3[d.getMonth()]+' '+d.getFullYear()+'</b><small>'+DIAS[d.getDay()]+(e.hora?' · '+esc(e.hora):'')+'</small></div><div>'+itemHtml({tipo:'evento',titulo:e.titulo,sub:e.lugar||'',e:e})+'</div></div>'; }).join(''); }
+    $('evList').innerHTML=(prox.length?blk(prox):'<div class="empty">No hay eventos próximos.'+(captura()?' Agrega el primero con «Agregar evento».':'')+'</div>')
+      +(pas.length?'<h3 class="sub-h">Pasados</h3>'+blk(pas):'');
+    enlaza($('evList'));
+  }
+
+  function enlaza(root){
+    root.querySelectorAll('[data-edit-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirEvento(eventos.filter(function(x){ return x.id===b.dataset.editEv; })[0]); }; });
+    root.querySelectorAll('[data-del-ev]').forEach(function(b){ b.onclick=function(e){
+      e.stopPropagation(); var ev=eventos.filter(function(x){ return x.id===b.dataset.delEv; })[0]; if(!ev) return;
+      confirmar('¿Quitar el evento «'+ev.titulo+'»?', async function(){
+        try{ await db.doc('cal_eventos/'+ev.id).delete(); eventos=eventos.filter(function(x){ return x.id!==ev.id; }); render(); toast('Evento quitado'); }
+        catch(err){ toast('No se pudo quitar: '+falla(err)); }
+      });
+    }; });
+    root.querySelectorAll('[data-edit-col]').forEach(function(b){ b.onclick=function(){ abrirColab(colab.filter(function(x){ return x.id===b.dataset.editCol; })[0]); }; });
+    root.querySelectorAll('[data-del-col]').forEach(function(b){ b.onclick=function(){
+      var c=colab.filter(function(x){ return x.id===b.dataset.delCol; })[0]; if(!c) return;
+      confirmar('¿Dar de baja a '+c.nombre+'? Ya no saldrá en el calendario.', async function(){
+        try{ await db.doc('cal_colab/'+c.id).delete(); colab=colab.filter(function(x){ return x.id!==c.id; }); render(); toast(c.nombre+' dado de baja'); }
+        catch(err){ toast('No se pudo dar de baja: '+falla(err)); }
+      });
+    }; });
+  }
+
+  function renderVacio(){
+    var v=$('vacio');
+    if(!cargaCol||colab.length){ v.hidden=true; return; }
+    v.hidden=false;
+    v.innerHTML=captura()
+      ? '<div class="t">Todavía no hay colaboradores. Agrégalos uno por uno o baja la plantilla, llénala y súbela.</div><button type="button" class="btn" data-acc="plantilla">Bajar plantilla</button><button type="button" class="btn primary" data-acc="subir">Subir Excel</button>'
+      : '<div class="t">Los cumpleaños todavía no están capturados. Mientras, ya ves los días festivos e inhábiles.</div>';
+  }
+  function renderTabs(){
+    document.querySelectorAll('#tabs button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.t===tab)); });
+    ['cal','prox','col','ev'].forEach(function(t){ $('p-'+t).hidden=t!==tab; });
+  }
+  function render(){
+    renderCal(); renderProx(); renderCol(); renderEv(); renderVacio(); renderTabs();
+    document.querySelectorAll('.solo-captura').forEach(function(x){ x.hidden=!captura(); });
+  }
+
+  /* ---------- ventanas ---------- */
+  function ventana(html, alAbrir){
+    var ov=document.createElement('div'); ov.className='ov';
+    ov.innerHTML='<div class="modal" role="dialog" aria-modal="true">'+html+'</div>';
+    function tecla(e){ if(e.key==='Escape') cerrar(); }
+    function cerrar(){ ov.remove(); document.removeEventListener('keydown',tecla); }
+    ov.addEventListener('mousedown',function(e){ if(e.target===ov) cerrar(); });
+    document.addEventListener('keydown',tecla);
+    $('ovRoot').appendChild(ov);
+    if(alAbrir) alAbrir(ov,cerrar);
+    var f=ov.querySelector('input:not([type=file]),select,textarea,button'); if(f) f.focus();
+  }
+  function confirmar(msg, ok){
+    ventana('<h3>Confirmar</h3><p class="sub">'+esc(msg)+'</p><div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="button" class="btn primary" data-ok>Sí, continuar</button></div>',
+      function(ov,c){ ov.querySelector('[data-x]').onclick=c; ov.querySelector('[data-ok]').onclick=function(){ c(); ok(); }; });
+  }
+  function firma(){ return { por: P.uid, porNombre: (yo&&yo.nombre)||'', ts: new Date().toISOString() }; }
+
+  // la foto se guarda chica (160 × 160 JPG, unos 10 KB), recortada al centro
+  function achica(file){
+    return new Promise(function(ok,ko){
+      var r=new FileReader();
+      r.onload=function(){
+        var im=new Image();
+        im.onload=function(){
+          var L=160, c=document.createElement('canvas'); c.width=c.height=L;
+          var s=Math.min(im.width,im.height);
+          c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,L,L);
+          ok(c.toDataURL('image/jpeg',0.82));
+        };
+        im.onerror=function(){ ko(new Error('No se pudo leer la imagen.')); };
+        im.src=r.result;
+      };
+      r.onerror=function(){ ko(new Error('No se pudo leer la imagen.')); };
+      r.readAsDataURL(file);
+    });
+  }
+  var MAXD=[31,29,31,30,31,30,31,31,30,31,30,31];
+
+  function abrirColab(c){
+    var nuevo=!c;
+    c=c||{nombre:'',area:'Contabilidad',dia:1,mes:HOY.getMonth()+1,ingreso:'',autoriza:false,foto:null};
+    ventana('<form id="fCol" novalidate><h3>'+(nuevo?'Agregar colaborador':'Editar colaborador')+'</h3>'
+      +'<p class="sub">Del cumpleaños solo se pide el día y el mes.</p><div class="fg">'
+      +'<div class="f full"><label for="cNom">Nombre completo</label><input id="cNom" value="'+esc(c.nombre)+'" autocomplete="off" maxlength="80"></div>'
+      +'<div class="f"><label for="cArea">Área</label><select id="cArea">'+AREAS.map(function(a){ return '<option'+(a===c.area?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>'
+      +'<div class="f"><label for="cIng">Fecha de ingreso</label><input id="cIng" type="date" value="'+esc(c.ingreso||'')+'"><small>Para los aniversarios</small></div>'
+      +'<div class="f"><label for="cDia">Día de cumpleaños</label><select id="cDia">'+Array.from({length:31},function(_,i){ return '<option'+(i+1===c.dia?' selected':'')+'>'+(i+1)+'</option>'; }).join('')+'</select></div>'
+      +'<div class="f"><label for="cMes">Mes de cumpleaños</label><select id="cMes">'+MESES.map(function(m,i){ return '<option value="'+(i+1)+'"'+(i+1===c.mes?' selected':'')+'>'+m+'</option>'; }).join('')+'</select></div>'
+      +'<div class="f full"><label for="cFoto">Foto (opcional)</label><input id="cFoto" type="file" accept="image/*">'
+      +(c.foto?'<label class="chk"><input type="checkbox" id="cSinFoto"><span>Quitar la foto actual</span></label>':'')+'</div>'
+      +'<label class="chk f full"><input type="checkbox" id="cAut"'+(c.autoriza?' checked':'')+'><span>El colaborador autorizó que su cumpleaños (día y mes) se publique en el portal. Si no, se guarda pero no sale en el calendario ni en el aviso.</span></label>'
+      +'</div><div class="err" id="cErr" role="alert"></div>'
+      +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="submit" class="btn primary">'+(nuevo?'Agregar':'Guardar cambios')+'</button></div></form>',
+    function(ov,cerrar){
+      ov.querySelector('[data-x]').onclick=cerrar;
+      ov.querySelector('#fCol').onsubmit=async function(e){
+        e.preventDefault();
+        var err=ov.querySelector('#cErr'), btn=ov.querySelector('button[type=submit]');
+        var nom=ov.querySelector('#cNom').value.trim().replace(/\s+/g,' '), dia=+ov.querySelector('#cDia').value, mes=+ov.querySelector('#cMes').value, ing=ov.querySelector('#cIng').value;
+        if(!nom){ err.textContent='Escribe el nombre del colaborador.'; return; }
+        if(dia>MAXD[mes-1]){ err.textContent=mayus(MESES[mes-1])+' tiene '+MAXD[mes-1]+' días; revisa el día.'; return; }
+        if(!ing){ err.textContent='Falta la fecha de ingreso.'; return; }
+        var dup=colab.filter(function(x){ return x.id!==c.id && norm(x.nombre)===norm(nom); })[0];
+        if(dup){ err.textContent='Ya hay un colaborador con ese nombre.'; return; }
+        var foto=c.foto||null, sf=ov.querySelector('#cSinFoto'), fi=ov.querySelector('#cFoto').files[0];
+        if(sf&&sf.checked) foto=null;
+        btn.disabled=true; err.textContent='';
+        try{
+          if(fi) foto=await achica(fi);
+          var datos=Object.assign({nombre:nom,area:ov.querySelector('#cArea').value,dia:dia,mes:mes,ingreso:ing,autoriza:ov.querySelector('#cAut').checked,foto:foto}, firma());
+          if(nuevo){ var ref=await db.collection('cal_colab').add(datos); colab.push(Object.assign({id:ref.id},datos)); }
+          else { await db.doc('cal_colab/'+c.id).set(datos); Object.assign(colab.filter(function(x){ return x.id===c.id; })[0]||{},datos); }
+          cerrar(); render(); toast(nuevo?nom+' agregado':'Cambios guardados');
+        }catch(x){ err.textContent='No se pudo guardar: '+falla(x); btn.disabled=false; }
+      };
+    });
+  }
+
+  function abrirEvento(e, fecha){
+    var nuevo=!e;
+    e=e||{titulo:'',fecha:fecha||sel0(),hora:'',lugar:'',desc:''};
+    ventana('<form id="fEv" novalidate><h3>'+(nuevo?'Agregar evento de la empresa':'Editar evento')+'</h3>'
+      +'<p class="sub">Lo ve todo el equipo en el calendario y, el mismo día, en el aviso al entrar al portal.</p><div class="fg">'
+      +'<div class="f full"><label for="eTit">Nombre del evento</label><input id="eTit" value="'+esc(e.titulo)+'" autocomplete="off" maxlength="100" placeholder="Ej. Posada PROFASE"></div>'
+      +'<div class="f"><label for="eFec">Fecha</label><input id="eFec" type="date" value="'+esc(e.fecha)+'"></div>'
+      +'<div class="f"><label for="eHora">Hora (opcional)</label><input id="eHora" type="time" value="'+esc(e.hora||'')+'"></div>'
+      +'<div class="f full"><label for="eLug">Lugar (opcional)</label><input id="eLug" value="'+esc(e.lugar||'')+'" autocomplete="off" maxlength="100"></div>'
+      +'<div class="f full"><label for="eDesc">Detalle (opcional)</label><textarea id="eDesc" rows="3" maxlength="500">'+esc(e.desc||'')+'</textarea></div>'
+      +'</div><div class="err" id="eErr" role="alert"></div>'
+      +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="submit" class="btn primary">'+(nuevo?'Agregar':'Guardar cambios')+'</button></div></form>',
+    function(ov,cerrar){
+      ov.querySelector('[data-x]').onclick=cerrar;
+      ov.querySelector('#fEv').onsubmit=async function(x){
+        x.preventDefault();
+        var err=ov.querySelector('#eErr'), btn=ov.querySelector('button[type=submit]');
+        var t=ov.querySelector('#eTit').value.trim(), f=ov.querySelector('#eFec').value;
+        if(!t){ err.textContent='Escribe el nombre del evento.'; return; }
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){ err.textContent='Elige la fecha.'; return; }
+        var datos=Object.assign({titulo:t,fecha:f,hora:ov.querySelector('#eHora').value,lugar:ov.querySelector('#eLug').value.trim(),desc:ov.querySelector('#eDesc').value.trim()}, firma());
+        btn.disabled=true; err.textContent='';
+        try{
+          if(nuevo){ var ref=await db.collection('cal_eventos').add(datos); eventos.push(Object.assign({id:ref.id},datos)); }
+          else { await db.doc('cal_eventos/'+e.id).set(datos); Object.assign(eventos.filter(function(y){ return y.id===e.id; })[0]||{},datos); }
+          sel=f; var fd=parse(f); vista={y:fd.getFullYear(),m:fd.getMonth()};
+          cerrar(); render(); toast(nuevo?'Evento agregado':'Cambios guardados');
+        }catch(y){ err.textContent='No se pudo guardar: '+falla(y); btn.disabled=false; }
+      };
+    });
+  }
+
+  /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
+  var COLS=['Nombre completo','Área','Día de cumpleaños','Mes de cumpleaños','Fecha de ingreso','Autorizó publicar (Sí/No)'];
+  var ANCHOS=[36,18,12,14,16,16,14];
+  function cuandoTxt(){ return new Date().toLocaleString('es-MX',{timeZone:'America/Monterrey',dateStyle:'medium',timeStyle:'short'}); }
+  function fechaXls(k){ var p=String(k||'').split('-'); return p.length===3?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):null; }
+  async function guardaLibro(wb, nombre){
+    var datos=await wb.xlsx.writeBuffer();
+    await dl.save({filename:nombre, data:new Blob([datos],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})});
+  }
+  async function conBoton(btn, fn){
+    if(!dl){ toast('Las descargas no están disponibles; recarga la página.'); return; }
+    if(btn) btn.disabled=true;
+    try{ await fn(); toast('Archivo descargado'); }catch(err){ toast('No se pudo armar el Excel: '+falla(err)); }
+    if(btn) btn.disabled=false;
+  }
+  // hoja de colaboradores: la misma forma que la plantilla, para poder bajarla, corregirla y volver a subirla
+  function hojaColab(MK, wb, filas, conAut, plantilla){
+    var ws=wb.addWorksheet('Colaboradores');
+    var head=conAut?COLS.slice():COLS.slice(0,5);
+    if(!plantilla) head.push('Años en PROFASE');
+    ws.columns=head.map(function(_,i){ return {width:ANCHOS[i]||14}; });
+    var g=MK.encabezado(wb, ws, head.length, {titulo: plantilla?'Plantilla de colaboradores · Calendario del equipo':'Colaboradores · Calendario del equipo',
+      lineas: plantilla
+        ? ['Un renglón por colaborador, desde el renglón de abajo de los encabezados. Del cumpleaños solo el día y el mes (sin año).',
+           'Área: '+AREAS.join(', ')+'. Mes: número (1 a 12) o nombre. Fecha de ingreso: dd/mm/aaaa. Autorizó publicar: Sí o No.',
+           'Si un nombre ya existe en el portal, se actualizan sus datos; si no, se agrega.']
+        : [filas.length+(filas.length===1?' colaborador':' colaboradores')+(conAut?'':' (solo los que autorizaron publicar su cumpleaños)'), 'Exportado el '+cuandoTxt()+' (hora de Monterrey)']});
+    head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
+    MK.cabecera(ws, g, 1, head.length);
+    filas.forEach(function(c,k){
+      var r=ws.getRow(g+1+k), v=[c.nombre, c.area||'', c.dia, c.mes, fechaXls(c.ingreso)];
+      if(conAut) v.push(c.autoriza?'Sí':'No');
+      if(!plantilla) v.push(anios(c));
+      r.values=v; r.getCell(5).numFmt='dd/mm/yyyy';
+    });
+    var hasta=g+Math.max(filas.length, plantilla?150:0);
+    if(plantilla){
+      for(var f=g+1; f<=hasta; f++){
+        ws.getCell(f,2).dataValidation={type:'list',allowBlank:true,formulae:['"'+AREAS.join(',')+'"']};
+        ws.getCell(f,3).dataValidation={type:'whole',operator:'between',allowBlank:true,formulae:[1,31],showErrorMessage:true,error:'Día del 1 al 31'};
+        ws.getCell(f,4).dataValidation={type:'whole',operator:'between',allowBlank:true,formulae:[1,12],showErrorMessage:true,error:'Mes del 1 al 12'};
+        ws.getCell(f,5).numFmt='dd/mm/yyyy';
+        ws.getCell(f,6).dataValidation={type:'list',allowBlank:true,formulae:['"Sí,No"']};
+      }
+    }
+    if(hasta>g) MK.cuerpo(ws, g+1, hasta, 1, head.length);
+    ws.views=[{state:'frozen',ySplit:g,showGridLines:false}];
+    MK.impresion(ws, {repetir:g, vertical:true});
+    return ws;
+  }
+  async function excelColab(btn){
+    await conBoton(btn, async function(){
+      var MK=window.PROFASE_MARCA, EX=await MK.excelJS();
+      var wb=MK.libro(EX,'Colaboradores · Calendario del equipo');
+      hojaColab(MK, wb, filtrados(), captura(), false);
+      await guardaLibro(wb, 'Colaboradores PROFASE.xlsx');
+    });
+  }
+  async function excelPlantilla(btn){
+    await conBoton(btn, async function(){
+      var MK=window.PROFASE_MARCA, EX=await MK.excelJS();
+      var wb=MK.libro(EX,'Plantilla de colaboradores · Calendario del equipo');
+      hojaColab(MK, wb, colab.slice().sort(ordenCol), true, true);
+      await guardaLibro(wb, 'Plantilla colaboradores PROFASE.xlsx');
+    });
+  }
+  async function excelMes(btn){
+    await conBoton(btn, async function(){
+      var MK=window.PROFASE_MARCA, EX=await MK.excelJS(), y=vista.y, m=vista.m, tit='Calendario · '+MESES[m]+' '+y;
+      var wb=MK.libro(EX, tit), ws=wb.addWorksheet(mayus(MESES[m])+' '+y);
+      var head=['Fecha','Día','Tipo','Descripción','Detalle'];
+      ws.columns=[{width:13},{width:12},{width:26},{width:40},{width:52}];
+      var filas=[], dias=new Date(y,m+1,0).getDate();
+      for(var d=1; d<=dias; d++) delDia(y,m,d).filter(function(x){ return filtros[x.tipo]; }).forEach(function(x){
+        var det=x.tipo==='cumple'?(x.c.area||''):x.tipo==='evento'?[x.e.hora,x.e.lugar,x.e.desc].filter(Boolean).join(' · '):x.sub;
+        filas.push([new Date(Date.UTC(y,m,d)), DIAS[new Date(y,m,d).getDay()], TIPOS[x.tipo], x.titulo, det||'']);
+      });
+      var g=MK.encabezado(wb, ws, head.length, {titulo:'Calendario del equipo · '+mayus(MESES[m])+' '+y,
+        lineas:[filas.length+(filas.length===1?' fecha marcada':' fechas marcadas'), 'Exportado el '+cuandoTxt()+' (hora de Monterrey)']});
+      head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
+      MK.cabecera(ws, g, 1, head.length);
+      filas.forEach(function(v,k){ var r=ws.getRow(g+1+k); r.values=v; r.getCell(1).numFmt='dd-mmm-yyyy'; });
+      if(filas.length) MK.cuerpo(ws, g+1, g+filas.length, 1, head.length);
+      ws.views=[{state:'frozen',ySplit:g,showGridLines:false}];
+      MK.impresion(ws, {repetir:g});
+      await guardaLibro(wb, 'Calendario PROFASE '+MESES[m]+' '+y+'.xlsx');
+    });
+  }
+
+  // Subir Excel: se lee, se revisa renglón por renglón y se muestra antes de guardar
+  function aFecha(v){
+    if(v instanceof Date) return v.getUTCFullYear()+'-'+pad(v.getUTCMonth()+1)+'-'+pad(v.getUTCDate());
+    if(typeof v==='number' && v>20000 && v<80000) return aFecha(new Date(Math.round(Math.floor(v)-25569)*864e5));
+    var s=norm(v), r;
+    if((r=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return valida(+r[1],+r[2],+r[3]);
+    if((r=s.match(/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{4})$/))) return valida(+r[3],+r[2],+r[1]);
+    if((r=s.match(/^(\d{1,2})[\/\-. ]([a-z]{3})[a-z]*[\/\-. ](\d{4})$/))){ var mm=MES3.indexOf(r[2]); if(mm>=0) return valida(+r[3],mm+1,+r[1]); }
+    return null;
+  }
+  function valida(y,m,d){ if(y<1950||y>2100||m<1||m>12||d<1||d>new Date(y,m,0).getDate()) return null; return y+'-'+pad(m)+'-'+pad(d); }
+  function aMes(v){
+    if(typeof v==='number') return v>=1&&v<=12&&v%1===0?v:null;
+    var s=norm(v); if(/^\d+$/.test(s)) return aMes(+s);
+    var i=MES3.indexOf(s.slice(0,3)); return i>=0?i+1:null;
+  }
+  // para leer se usa SheetJS (el mismo lector de la pestaña Activo fijo): aguanta mejor los archivos que Excel vuelve
+  // a guardar con el signo y las listas; las fechas llegan como número de serie y aFecha las convierte
+  var LECTOR=null;
+  function lector(){
+    if(window.XLSX&&window.XLSX.read) return Promise.resolve(window.XLSX);
+    if(!LECTOR) LECTOR=new Promise(function(ok,ko){
+      var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=function(){ window.XLSX&&window.XLSX.read?ok(window.XLSX):ko(new Error('no cargó el lector de Excel')); };
+      s.onerror=function(){ LECTOR=null; ko(new Error('no cargó el lector de Excel')); };
+      document.head.appendChild(s);
+    });
+    return LECTOR;
+  }
+  async function leeExcel(file){
+    var X=await lector();
+    var wb=X.read(new Uint8Array(await file.arrayBuffer()),{type:'array'});
+    var ws=wb.Sheets[wb.SheetNames[0]]; if(!ws) throw new Error('El archivo no trae hojas.');
+    var tabla=X.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+    var fh=-1, mapa={};
+    for(var n=0; n<tabla.length && fh<0; n++){
+      var m={};
+      tabla[n].forEach(function(c, col){
+        var t=norm(c);
+        if(/^nombre/.test(t)) m.nombre=col; else if(/^area/.test(t)) m.area=col; else if(/^dia/.test(t)) m.dia=col;
+        else if(/^mes/.test(t)) m.mes=col; else if(/ingreso/.test(t)) m.ingreso=col; else if(/autoriz/.test(t)) m.autoriza=col;
+      });
+      if(m.nombre!=null&&m.dia!=null&&m.mes!=null){ fh=n; mapa=m; }
+    }
+    if(fh<0) throw new Error('No encontré los encabezados (Nombre completo, Día de cumpleaños, Mes de cumpleaños). Usa la plantilla.');
+    var out=[], vistos={};
+    for(n=fh+1; n<tabla.length; n++){
+      var row=tabla[n], v=function(k){ var x=mapa[k]!=null?row[mapa[k]]:''; return typeof x==='string'?x.trim():x; };
+      var nom=String(v('nombre')||'').trim().replace(/\s+/g,' ');
+      if(!nom) continue;
+      var r={fila:n+1, nombre:nom, errores:[]};
+      var a=norm(v('area')), area=AREAS.filter(function(x){ return norm(x)===a; })[0];
+      if(!a) r.errores.push('falta el área'); else if(!area) r.errores.push('área «'+v('area')+'» no es de la lista'); else r.area=area;
+      r.mes=aMes(v('mes')); if(!r.mes) r.errores.push('mes no válido');
+      var dd=v('dia'); r.dia=typeof dd==='number'?dd:parseInt(norm(dd),10);
+      if(!(r.dia>=1&&r.dia<=31&&r.dia%1===0)||(r.mes&&r.dia>MAXD[r.mes-1])) r.errores.push('día no válido');
+      r.ingreso=aFecha(v('ingreso')); if(!r.ingreso) r.errores.push('fecha de ingreso no válida');
+      var au=norm(v('autoriza')); r.autoriza=/^(si|s|x|1|true|verdadero)$/.test(au);
+      if(au && !r.autoriza && !/^(no|n|0|false|falso)$/.test(au)) r.errores.push('«Autorizó» debe ser Sí o No');
+      if(vistos[norm(nom)]) r.errores.push('nombre repetido en el archivo');
+      vistos[norm(nom)]=1;
+      r.existe=colab.filter(function(x){ return norm(x.nombre)===norm(nom); })[0]||null;
+      out.push(r);
+    }
+    return out;
+  }
+  function revisaSubida(filas){
+    var ok=filas.filter(function(r){ return !r.errores.length; }), nuevos=ok.filter(function(r){ return !r.existe; }).length, cambian=ok.length-nuevos, mal=filas.length-ok.length;
+    ventana('<h3>Revisar antes de guardar</h3>'
+      +'<p class="sub">'+filas.length+(filas.length===1?' renglón':' renglones')+' en el archivo: '+nuevos+' nuevos, '+cambian+' que ya existían (se actualizan)'+(mal?' y <b>'+mal+' con errores</b>, que no se guardan':'')+'.</p>'
+      +'<div class="prev"><table><thead><tr><th>Renglón</th><th>Nombre</th><th>Cumpleaños</th><th>Qué pasa</th></tr></thead><tbody>'
+      +filas.map(function(r){ return '<tr'+(r.errores.length?' class="mal"':'')+'><td class="num">'+r.fila+'</td><td>'+esc(r.nombre)+'</td><td class="nw">'+(r.dia&&r.mes&&!r.errores.length?r.dia+' de '+MESES[r.mes-1]:'—')+'</td><td>'
+        +(r.errores.length?esc(r.errores.join('; ')):(r.existe?'Se actualiza':'Nuevo')+(r.autoriza?'':' · no se publica'))+'</td></tr>'; }).join('')
+      +'</tbody></table></div><div class="err" id="sErr" role="alert"></div>'
+      +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="button" class="btn primary" data-ok'+(ok.length?'':' disabled')+'>Guardar '+ok.length+'</button></div>',
+    function(ov,cerrar){
+      ov.querySelector('[data-x]').onclick=cerrar;
+      ov.querySelector('[data-ok]').onclick=async function(){
+        var b=this; b.disabled=true; var hechos=0;
+        try{
+          for(var i=0;i<ok.length;i++){
+            var r=ok[i], datos=Object.assign({nombre:r.nombre,area:r.area,dia:r.dia,mes:r.mes,ingreso:r.ingreso,autoriza:r.autoriza,foto:r.existe?r.existe.foto||null:null}, firma());
+            if(r.existe){ await db.doc('cal_colab/'+r.existe.id).set(datos); Object.assign(r.existe,datos); }
+            else { var ref=await db.collection('cal_colab').add(datos); colab.push(Object.assign({id:ref.id},datos)); }
+            hechos++; b.textContent='Guardando '+hechos+' de '+ok.length+'…';
+          }
+          cerrar(); render(); toast(hechos+(hechos===1?' colaborador guardado':' colaboradores guardados'));
+        }catch(x){ ov.querySelector('#sErr').textContent='Se guardaron '+hechos+' y se detuvo: '+falla(x); render(); }
+      };
+    });
+  }
+
+  /* ---------- botones ---------- */
+  document.addEventListener('click', function(e){
+    var b=e.target.closest('[data-acc]'); if(!b) return;
+    var a=b.dataset.acc;
+    if(a==='nuevo-ev') abrirEvento(null, tab==='cal'?sel:null);
+    else if(a==='nuevo-col') abrirColab(null);
+    else if(a==='excel-mes') excelMes(b);
+    else if(a==='excel-col') excelColab(b);
+    else if(a==='plantilla') excelPlantilla(b);
+    else if(a==='subir'){ $('xlsIn').value=''; $('xlsIn').click(); }
+  });
+  $('xlsIn').addEventListener('change', async function(){
+    var f=this.files[0]; if(!f) return;
+    try{ var filas=await leeExcel(f); if(!filas.length){ toast('El archivo no trae colaboradores debajo de los encabezados.'); return; } revisaSubida(filas); }
+    catch(err){ toast('No se pudo leer el Excel: '+falla(err)); }
+  });
+  $('tabs').addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    tab=b.dataset.t; try{ localStorage.setItem('portal.cal.tab',tab); }catch(x){}
+    renderTabs();
+  });
+  $('prev').onclick=function(){ vista.m--; if(vista.m<0){ vista.m=11; vista.y--; } renderCal(); };
+  $('next').onclick=function(){ vista.m++; if(vista.m>11){ vista.m=0; vista.y++; } renderCal(); };
+  $('hoyBtn').onclick=function(){ vista={y:HOY.getFullYear(),m:HOY.getMonth()}; sel=sel0(); renderCal(); };
+  AREAS.forEach(function(a){ var o=document.createElement('option'); o.textContent=a; $('fArea').appendChild(o); });
+  MESES.forEach(function(m,i){ var o=document.createElement('option'); o.value=i+1; o.textContent=m; $('fMes').appendChild(o); });
+  ['q','fArea','fMes'].forEach(function(id){ $(id).addEventListener('input', renderCol); });
+  try{ var t0=localStorage.getItem('portal.cal.tab'); if(['cal','prox','col','ev'].indexOf(t0)>=0) tab=t0; }catch(e){}
+  if(window.top===window.self) $('logo').hidden=false;
+
+  /* ---------- arranque ---------- */
+  function sinAcceso(t, p){
+    $('sinAcceso').hidden=false; $('sinAccesoT').textContent=t; $('sinAccesoP').textContent=p;
+    $('whoami').textContent=''; $('kpis').hidden=true; $('contenido').hidden=true;
+  }
+  function limpiaCol(ds){
+    var o=ds.data()||{};
+    return {id:ds.id, nombre:String(o.nombre||''), area:o.area||'', dia:+o.dia||1, mes:+o.mes||1, ingreso:o.ingreso||'', autoriza:o.autoriza===true, foto:o.foto||null};
+  }
+  async function arranca(){
+    if(!(window.claude && window.PORTAL)){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
+    try{
+      db=await window.claude.use('db');
+      P=window.PORTAL; yo=P.perfil;
+      var q=await P.sb.rpc('veo_cal');
+      if(q.error){ sinAcceso('El calendario todavía no está activado','Falta un paso en la base; avísale a Fernando Cadengo.'); return; }
+      modo=q.data||null;
+      if(!modo){ sinAcceso('Sin acceso al calendario','El calendario lo ven los usuarios del portal.'); return; }
+    }catch(e){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
+    try{ dl=await window.claude.use('downloads'); }catch(e){ dl=null; }
+
+    $('whoami').textContent='';
+    var b=document.createElement('b'); b.textContent=(yo&&yo.nombre)||''; $('whoami').appendChild(b);
+    $('whoami').appendChild(document.createTextNode(captura()?' · captura cumpleaños y eventos':' · consulta'));
+    $('kpis').hidden=false; $('contenido').hidden=false;
+    renderLegend(); render();
+
+    db.collection('cal_colab').onSnapshot(function(snap){
+      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render();
+    }, function(){ cargaCol=true; toast('Se perdió la conexión con los datos. Recarga la página si no vuelve sola.'); render(); });
+    db.collection('cal_eventos').onSnapshot(function(snap){
+      eventos=snap.docs.map(function(ds){ var o=ds.data()||{}; return {id:ds.id, titulo:String(o.titulo||''), fecha:o.fecha||'', hora:o.hora||'', lugar:o.lugar||'', desc:o.desc||''}; })
+        .filter(function(e){ return e.titulo&&/^\d{4}-\d{2}-\d{2}$/.test(e.fecha); });
+      cargaEv=true; render();
+    }, function(){ cargaEv=true; render(); });
+  }
+  arranca();
+})();
+</script>
+
+</body></html>

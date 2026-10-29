@@ -39,7 +39,7 @@
      si la base no responde en 1.5 s, sigue sin anotar. */
   var NOMBRE_PAG = { director: 'Dirección', gerentes: 'Vista del equipo', contadores: 'Mi WorkFlow', cartera: 'Cartera',
     cajachica: 'Caja chica', variaciones: 'Variaciones', activofijo: 'Activo fijo', 'quo-cotizador': 'Cotizador QUO',
-    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos' };
+    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos', calendario: 'Calendario' };
   P.pagina = function () {
     var n = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
     return NOMBRE_PAG[n] || n || 'Portal';
