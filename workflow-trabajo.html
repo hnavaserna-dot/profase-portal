@@ -269,16 +269,16 @@ tr.fila:hover td{background:var(--navy-soft)}
   function tamano(b) { b = +b || 0; return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : b + ' B'; }
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return m.replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
 
+  // todas las filas: la primera página dice cuántas hay y las demás se piden juntas (más rápido)
   async function todas(armar) {
-    var out = [], de = 0;
-    for (;;) {
-      var r = await armar().range(de, de + 999);
-      if (r.error) throw r.error;
-      out = out.concat(r.data || []);
-      if (!r.data || r.data.length < 1000) return out;
-      de += 1000;
-    }
+    var r = await armar(true).range(0, 999);
+    if (r.error) throw r.error;
+    var out = r.data || [], total = r.count == null ? out.length : r.count, pide = [];
+    for (var de = 1000; de < total; de += 1000) pide.push(armar(false).range(de, de + 999));
+    (await Promise.all(pide)).forEach(function (x) { if (x.error) throw x.error; out = out.concat(x.data || []); });
+    return out;
   }
+  function sel(cuenta) { return P.sb.from('wf_act').select(COLS, cuenta ? { count: 'exact' } : undefined); }
 
   async function carga() {
     try {
@@ -288,7 +288,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       MODO = m.data && m.data.valor ? m.data.valor : 'practica';
       $('practica').hidden = MODO !== 'practica';
       try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
-      (await todas(function () { return P.sb.from('wf_asignado').select('empresa_id,nombre').order('empresa_id'); })).forEach(function (s) { if (!ASIG[s.empresa_id]) ASIG[s.empresa_id] = s.nombre; });
+      var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre').order('empresa_id').range(0, 4999);
+      if (ra.error) throw ra.error;
+      (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) ASIG[s.empresa_id] = s.nombre; });
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.';
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
       periodos();
@@ -315,12 +317,14 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('lista-sub').textContent = 'Cargando…';
     if (m) {
       var per = y + '-' + dos(m) + '-01';
-      var mens = await todas(function () { return P.sb.from('wf_act').select(COLS).eq('activa', true).eq('periodo', per).order('id'); });
-      var anu = await todas(function () { return P.sb.from('wf_act').select(COLS).eq('activa', true).eq('periodicidad', 2).gte('periodo', y + '-01-01').lte('periodo', y + '-12-01').order('id'); });
+      var dosL = await Promise.all([
+        todas(function (c) { return sel(c).eq('activa', true).eq('periodo', per).order('id'); }),
+        todas(function (c) { return sel(c).eq('activa', true).eq('periodicidad', 2).gte('periodo', y + '-01-01').lte('periodo', y + '-12-01').order('id'); })]);
+      var mens = dosL[0], anu = dosL[1];
       var ya = {}; filas = [];
       mens.concat(anu).forEach(function (a) { if (!ya[a.id]) { ya[a.id] = 1; filas.push(a); } });
     } else {
-      filas = await todas(function () { return P.sb.from('wf_act').select(COLS).eq('activa', true).gte('periodo', y + '-01-01').lte('periodo', y + '-12-01').order('id'); });
+      filas = await todas(function (c) { return sel(c).eq('activa', true).gte('periodo', y + '-01-01').lte('periodo', y + '-12-01').order('id'); });
     }
     filas.sort(function (a, b) { return a.rs.localeCompare(b.rs) || a.plantilla.localeCompare(b.plantilla) || (a.secuencia - b.secuencia) || (a.id - b.id); });
     A = filas; POR_ID = {}; A.forEach(function (a) { POR_ID[a.id] = a; });
