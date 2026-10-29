@@ -17,6 +17,7 @@
     rep: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     adm: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
     quo: '<circle cx="11.5" cy="11.5" r="7.5"/><path d="m16.5 16.5 4 4"/>',
+    access: '<ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/>',
     mas: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'
   };
   // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO
@@ -39,7 +40,10 @@
       { k: 'cambios', v: 'chg', t: 'Cambios al portal' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     { k: 'quo', t: 'QUO', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO' },
-      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías' }] }
+      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías' }] },
+    // Lo que se pasa del Access, por etapas (29-oct-2026, pedido de Daniel; Fernando Cadengo dirá cómo acomodarlo)
+    { k: 'access', t: 'Access', subs: [
+      { k: 'access-clientes', v: 'axcli', t: 'Clientes' }] }
   ];
   // Una pestaña nueva que todavía no tenga lugar en el menú sale en «Más», para que nunca se pierda
   var MAS = { k: 'mas', t: 'Más', subs: [] };
