@@ -16,6 +16,29 @@
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
 
+  /* ---- Ícono del portal (29-oct-2026): el signo PROFASE para la pantalla de inicio del iPhone o iPad, Android y
+     la pestaña del navegador. Sin esto el teléfono ponía una «P» genérica. index.html ya lo trae escrito; aquí se
+     pone en las demás páginas (las arma construir.py), solo en la página principal y no en las pestañas en marco.
+     Además, /apple-touch-icon.png en la raíz lo toma el iPhone aunque una página no lo declare. ---- */
+  (function icono() {
+    if (window.parent !== window || !document.head) return;
+    function liga(rel, href, extra) {
+      if (document.head.querySelector('link[rel="' + rel + '"]')) return;
+      var l = document.createElement('link'); l.rel = rel; l.href = href;
+      for (var k in (extra || {})) l.setAttribute(k, extra[k]);
+      document.head.appendChild(l);
+    }
+    function meta(name, content) {
+      if (document.head.querySelector('meta[name="' + name + '"]')) return;
+      var m = document.createElement('meta'); m.name = name; m.content = content; document.head.appendChild(m);
+    }
+    liga('apple-touch-icon', '/apple-touch-icon.png', { sizes: '180x180' });
+    liga('manifest', '/manifest.webmanifest');
+    liga('icon', '/img/icono-48.png', { type: 'image/png' });
+    meta('apple-mobile-web-app-title', 'CRM PROFASE');
+    meta('application-name', 'CRM PROFASE');
+  })();
+
   var sb = window.supabase.createClient(SB_URL, SB_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'profase-portal' }
   });
