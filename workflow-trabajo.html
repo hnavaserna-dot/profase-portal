@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=1462cf2e83"></script><script src="js/visor.js?v=6d066beacd"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=1462cf2e83"></script><script src="js/visor.js?v=00e0102658"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -553,10 +553,23 @@ tr.fila:hover td{background:var(--navy-soft)}
   function esPdf(d) { return /\.pdf$/i.test(d.nombre || ''); }
   // el archivo, con la marca PROFASE si es PDF (js/marca.js); «Ver» y «Bajar» lo traen una sola vez y lo guardan
   // mientras la página está abierta (js/visor.js; pedido de Daniel, 29-oct-2026: «eficientiza ambos»)
-  async function bytesDe(d) {
+  // 1.º y 3.º intento con la sesión (download); el 2.º con una liga firmada de 60 s y fetch, por si la red o el
+  // navegador detienen la primera forma (la base decide igual quién puede: la liga solo se da a quien ve el archivo)
+  function falla2(e) { return e ? String(e.message || e.error || e.name || e) + (e.statusCode || e.status ? ' (' + (e.statusCode || e.status) + ')' : '') : ''; }
+  async function archivo(d, intento) {
+    if (intento === 2) {
+      var s = await P.sb.storage.from('wfdocs').createSignedUrl(String(d.id), 60);
+      if (s.error || !s.data || !s.data.signedUrl) throw new Error('liga: ' + (falla2(s.error) || 'sin liga'));
+      var res = await fetch(s.data.signedUrl, { cache: 'no-store', credentials: 'omit' });
+      if (!res.ok) throw new Error('liga: HTTP ' + res.status);
+      return new Uint8Array(await res.arrayBuffer());
+    }
     var r = await P.sb.storage.from('wfdocs').download(String(d.id));
-    if (r.error || !r.data) throw new Error('sin archivo');
-    var b = new Uint8Array(await r.data.arrayBuffer());
+    if (r.error || !r.data) throw new Error(falla2(r.error) || 'sin archivo');
+    return new Uint8Array(await r.data.arrayBuffer());
+  }
+  async function bytesDe(d, intento) {
+    var b = await archivo(d, intento || 1);
     if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: String(d.nombre || '').replace(/\.pdf$/i, '') }); if (m) b = m; }
     return b;
   }

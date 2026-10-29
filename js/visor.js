@@ -13,7 +13,7 @@
    - Quién ve qué no cambia: cada archivo se pide con la sesión de quien entró y la base decide (wf_docs, cubeta wfdocs).
      Cada vista y cada descarga se siguen anotando en Accesos (la página lo hace con P.registrar).
 
-   Uso:  var V = PROFASE_VISOR.nuevo({ trae: async d => Uint8Array (PDF ya sellado), esPdf: d => bool,
+   Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
                                        doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {} });
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton); */
 (function () {
@@ -72,6 +72,9 @@
     + '.pv-hoja canvas{display:block;width:100%;height:auto}'
     + '.pv-hoja .pv-n{position:absolute;right:8px;bottom:6px;font-size:11px;color:#5A6577;background:rgba(255,255,255,.85);border-radius:6px;padding:1px 6px}'
     + '.pv-msg{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:var(--muted,#5A6577);font-size:14px;padding:24px;text-align:center}'
+    + '.pv-otra{border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:var(--ink,#132036);border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}'
+    + '.pv-otra:focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}'
+    + '.pv-det{font-size:12px;color:var(--muted,#5A6577);max-width:560px;overflow-wrap:anywhere}'
     + '.pv-gira{width:30px;height:30px;border-radius:50%;border:3px solid var(--line,#DCE2EB);border-top-color:var(--accent,#F07A1E);animation:pv-g .8s linear infinite}'
     + '@keyframes pv-g{to{transform:rotate(360deg)}}'
     + '@media (prefers-reduced-motion:reduce){.pv-gira{animation-duration:2.4s}}'
@@ -89,12 +92,30 @@
         var k = ids.shift(); total -= guardados.get(k).n || 0; guardados.delete(k);
       }
     }
+    // hasta 3 intentos (la página decide cómo traerlo en cada uno: op.trae(d, intento)); si los 3 fallan, el error
+    // lleva el detalle de cada uno para enseñarlo y saber qué pasó
+    var INTENTOS = 3, ESPERAS = [0, 400, 1200];
+    function detalle(e) {
+      if (!e) return 'sin detalle';
+      var t = String(e.message || e.error || e.name || e);
+      var st = e.statusCode || e.status;
+      return (t + (st && t.indexOf(String(st)) < 0 ? ' (' + st + ')' : '')).slice(0, 140);
+    }
+    function intenta(d, n, previos) {
+      previos = previos || [];
+      return Promise.resolve().then(function () { return op.trae(d, n); }).catch(function (e) {
+        var p = previos.concat(n + ': ' + detalle(e));
+        try { console.warn('[visor] documento ' + d.id + ', intento ' + n + ' de ' + INTENTOS + ':', e); } catch (x) { /* sin consola */ }
+        if (n >= INTENTOS) { var err = new Error(p.join(' · ')); err.intentos = p; throw err; }
+        return new Promise(function (ok) { setTimeout(ok, ESPERAS[n]); }).then(function () { return intenta(d, n + 1, p); });
+      });
+    }
     // los bytes de un documento (con la marca si es PDF), una sola vez por página abierta
     function bytes(d) {
       var g = guardados.get(d.id);
       if (g) return g.p;
       g = { p: null, n: 0 };
-      g.p = Promise.resolve().then(function () { return op.trae(d); }).then(function (b) {
+      g.p = intenta(d, 1).then(function (b) {
         g.n = b ? b.byteLength : 0; recorta(); return b;
       }, function (e) { guardados.delete(d.id); throw e; });
       guardados.set(d.id, g);
@@ -118,7 +139,7 @@
         guardaArchivo(b, d);
         try { if (op.alBajar) op.alBajar(d); } catch (e) { /* la descarga ya salió */ }
         if (btn) btn.textContent = 'Listo';
-      }).catch(function () { if (btn) btn.textContent = 'No se pudo'; }).then(function () {
+      }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); } }).then(function () {
         clearTimeout(aviso);
         if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1200);
       });
@@ -242,8 +263,13 @@
           if (navigator.pdfViewerEnabled !== false) conLector(c, b);   // sin PDF.js: el lector del navegador
           else mensaje(c, 'No se pudo mostrar aquí. Usa «Bajar» para abrirlo en tu equipo.');
         });
-      }).catch(function () {
-        if (!c.cerrada) mensaje(c, 'No se pudo abrir el documento. Cierra y vuelve a intentar en un momento.');
+      }).catch(function (e) {
+        if (c.cerrada) return;
+        c.cuerpo.innerHTML = '<div class="pv-msg" role="alert"><div>No se pudo abrir el documento.</div>'
+          + '<button type="button" class="pv-otra" data-pv="otra">Intentar de nuevo</button>'
+          + '<div class="pv-det">Detalle para Claude: ' + esc(detalle(e)) + '</div></div>';
+        var b = c.cuerpo.querySelector('[data-pv="otra"]');
+        if (b) b.onclick = function (ev) { ev.stopPropagation(); ver(d, c.antes); };
       });
     }
 
