@@ -526,7 +526,13 @@
     // En la vista del equipo (la página de los gerentes y sus pestañas) y en el cotizador, quien la tiene en consulta
     // solo ve; en su propia vista de contador todo sigue igual.
     if (!P.consulta && P.equipo && (ROL === 'gerente' || ROL === 'cotizador' || enVistaEquipo())) {
-      P.consulta = true; MSG_CONSULTA = MSG_EQUIPO; P.MSG_CONSULTA = MSG_EQUIPO;
+      // Excepción por un tiempo (29-oct-2026, pedido de Fernando; portal/sql/39_caja_captura.sql): quien está en
+      // caja_captura sí registra gastos en la pestaña de la caja chica; lo que puede guardar lo dice la base.
+      var cajaCaptura = false;
+      if (/\/cajachica\.html$/.test(location.pathname)) {
+        try { var cc = await sb.rpc('es_caja_captura'); cajaCaptura = !cc.error && cc.data === true; } catch (e) { cajaCaptura = false; }
+      }
+      if (!cajaCaptura) { P.consulta = true; MSG_CONSULTA = MSG_EQUIPO; P.MSG_CONSULTA = MSG_EQUIPO; }
     }
     if (P.consulta) document.documentElement.classList.add('pu-consulta');
     return p;
