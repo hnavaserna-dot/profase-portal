@@ -165,6 +165,14 @@ tr.fila:hover td{background:var(--navy-soft)}
 .subir{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
 .subir input[type=file]{max-width:100%;font-size:13px}
 .btn.peligro{color:var(--red);border-color:var(--red-soft)}
+.form .dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
+.form label.radio{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:inherit;margin:6px 0 0}
+.form label.radio input{margin-top:3px;flex:none}
+.gen-res{padding:10px 14px;border-top:1px solid var(--line)}
+.gen-res .grande{font-family:var(--f-display);font-size:24px;font-weight:750}
+.gen-res .n{text-align:right;font-variant-numeric:tabular-nums}
+.gen-res .tabla{margin:8px -14px 0}
+.gen-nota{padding:0 2px;margin:0}
 .masf{flex-basis:100%}
 .masf>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--navy);padding:4px 0;list-style:none}
 .masf>summary::-webkit-details-marker{display:none}
@@ -232,6 +240,7 @@ tr.fila:hover td{background:var(--navy-soft)}
           <button class="btn" type="button" id="limpia">Quitar filtros</button>
         </div></details>
         <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
+        <button class="btn acento" type="button" id="gen-abre" hidden>Generar el mes</button>
       </div>
     </header>
     <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Actividad</th><th>Estatus</th><th>Responsable</th><th>Vencimiento</th><th>Docs</th></tr></thead><tbody></tbody></table></div>
@@ -295,6 +304,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
       periodos();
       if (window.matchMedia('(min-width: 900px)').matches) $('masf').open = true;
+      $('gen-abre').hidden = !(jefe() && !CONSULTA);
       await cargaPeriodo();
       $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
     } catch (e) {
@@ -590,6 +600,77 @@ tr.fila:hover td{background:var(--navy-soft)}
     a.n_docs = (a.n_docs || 0) + hechos; inp.value = ''; b.disabled = false; pinta(); pintaDocs(a);
   }
 
+  /* ---------- Generar el mes (como «Generar» del Access; portal/sql/45_wf_generar.sql). Dirección y gerentes. ---------- */
+  var GEN = { pla: null, emp: null };
+  async function abreGenerar() {
+    if (!jefe() || CONSULTA) return;
+    ABIERTA = null;
+    var y = +HOY.slice(0, 4), m = +HOY.slice(5, 7) - 1;   // por omisión, el mes que se acaba de cerrar
+    if (m === 0) { m = 12; y--; }
+    var anios = []; for (var a = +HOY.slice(0, 4) + 1; a >= 2025; a--) anios.push(a);
+    var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Generar el mes</h2><div class="rfc">Crea las actividades del mes con las plantillas asignadas a cada cliente, como «Generar» del Access</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">';
+    if (MODO === 'practica') h += '<div class="practica" style="margin:0">Práctica: lo que generes se borra en la siguiente actualización.</div>';
+    var form = '<div class="form">'
+      + '<div><label for="g-mes">Periodo</label><div class="dos"><select id="g-anio" aria-label="Año">' + anios.map(function (a) { return '<option' + (a === y ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select>'
+      + '<select id="g-mes" aria-label="Mes">' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></div></div>'
+      + '<div><label for="g-pla">Plantilla</label><select id="g-pla"><option value="">Todas las mensuales</option></select></div>'
+      + '<div><label for="g-emp">Cliente</label><select id="g-emp"><option value="">Todos los clientes activos</option></select></div>'
+      + '<div><label>Cuáles</label><label class="radio"><input type="radio" name="g-modo" value="mes_pasado" checked><span>Como el mes pasado: los clientes y plantillas que tuvieron trabajo el mes anterior (en una anual, el año anterior)</span></label>'
+      + '<label class="radio"><input type="radio" name="g-modo" value="asignadas"><span>Todas las asignaciones habilitadas (con un cliente escogido, siempre así)</span></label></div>'
+      + '<div class="botones"><button class="btn" type="button" id="g-revisa">Revisar qué se generaría</button></div>'
+      + '<div class="msg" id="g-msg" hidden></div></div><div id="g-res"></div>';
+    h += sec('Qué generar', form);
+    h += '<p class="rfc gen-nota">Como en el Access: solo clientes activos y plantillas habilitadas para cada uno, y nada se repite (si la actividad del mes ya existe, se deja; una anual, en todo el año). Cada actividad nace «Por Iniciar» con su responsable, quien autoriza y sus vencimientos (SAT por el sexto dígito del RFC; Profase según la actividad).</p>';
+    h += '</div>';
+    $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
+    try { $('cerrar').focus(); } catch (er) {}
+    try {
+      if (!GEN.pla) { var rp = await P.sb.from('wf_plantillas').select('id,nombre,periodicidad').order('nombre').range(0, 999); if (rp.error) throw rp.error; GEN.pla = rp.data || []; }
+      if (!GEN.emp) {
+        var re = await todas(function (c) { return P.sb.from('wf_asign').select('empresa_id,rs', c ? { count: 'exact' } : undefined).eq('emp_estatus', 1).order('id'); });
+        var o = {}; re.forEach(function (x) { o[x.empresa_id] = x.rs; });
+        GEN.emp = Object.keys(o).map(function (k) { return [+k, o[k]]; }).sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+      }
+      if (!$('g-pla')) return;
+      $('g-pla').innerHTML = '<option value="">Todas las mensuales</option>' + GEN.pla.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.nombre) + (p.periodicidad === 2 ? ' (anual)' : '') + '</option>'; }).join('');
+      $('g-emp').innerHTML = '<option value="">Todos los clientes activos</option>' + GEN.emp.map(function (e) { return '<option value="' + esc(e[0]) + '">' + esc(e[1]) + '</option>'; }).join('');
+    } catch (e) { gmsg('No se pudieron leer las plantillas. Cierra y vuelve a abrir.', false); }
+  }
+  function gmsg(t, ok) { var g = $('g-msg'); if (!g) return; g.hidden = !t; g.className = 'msg ' + (ok ? 'ok' : 'mal'); g.textContent = t || ''; }
+  function gArgs(prueba) {
+    var modo = (document.querySelector('input[name="g-modo"]:checked') || {}).value || 'mes_pasado';
+    return { p_periodo: $('g-anio').value + '-' + dos(+$('g-mes').value) + '-01', p_plantilla: +$('g-pla').value || null, p_empresa: +$('g-emp').value || null, p_modo: modo, p_prueba: prueba };
+  }
+  var G_ARGS = null;
+  async function genera(prueba) {
+    if (!$('g-res')) return;
+    var b = $(prueba ? 'g-revisa' : 'g-genera'); if (b) b.disabled = true; gmsg('');
+    var args = prueba ? gArgs(true) : Object.assign({}, G_ARGS, { p_prueba: false });
+    try {
+      var r = await P.sb.rpc('wf_genera', args);
+      if (r.error) throw r.error;
+      var d = r.data || {}, mes = mesTxt(args.p_periodo);
+      if (prueba) {
+        G_ARGS = args;
+        var inact = (d.nuevas || 0) - (d.activas || 0);
+        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">' + esc((d.activas || 0).toLocaleString('es-MX')) + ' actividades nuevas</div>'
+          + '<div class="rfc">' + esc(mes) + (inact ? ' · ' + esc(inact) + ' más que se crean deshabilitadas, como en el Access' : '') + ' · ' + esc(d.yaExistian || 0) + ' ya existían y se dejan</div>'
+          + (d.responsablesFueraDelPortal ? '<div class="rfc">Responsables sin usuario en el portal: ' + esc(d.responsablesFueraDelPortal) + '</div>' : '')
+          + ((d.porPlantilla || []).length ? '<div class="tabla"><table><thead><tr><th>Plantilla</th><th class="n">Actividades</th><th class="n">Clientes</th></tr></thead><tbody>'
+            + d.porPlantilla.map(function (p) { return '<tr><td>' + esc(p.plantilla) + '</td><td class="n">' + esc(p.actividades) + '</td><td class="n">' + esc(p.empresas) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '')
+          + (d.nuevas ? '<div class="form" style="padding:10px 0 0"><div class="botones"><button class="btn acento" type="button" id="g-genera">Sí, generar ' + esc(mes) + '</button><span class="rfc">Si cambias algo arriba, vuelve a revisar.</span></div></div>' : '<div class="rfc" style="margin-top:6px">No hay nada que generar con esto.</div>')
+          + '</div>';
+      } else {
+        G_ARGS = null;
+        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se generaron ' + esc((d.activas || 0).toLocaleString('es-MX')) + ' actividades de ' + esc(mes) + '. Ya salen en la lista.</div></div>';
+        $('f-anio').value = args.p_periodo.slice(0, 4); $('f-mes').value = String(+args.p_periodo.slice(5, 7));
+        cargaPeriodo().catch(function () {});
+      }
+    } catch (er) { gmsg(falla(er), false); }
+    if (b && document.body.contains(b)) b.disabled = false;
+  }
+
   /* ---------- Excel (con la marca PROFASE: js/marca.js), con las columnas del Excel del Access ---------- */
   async function excel(b) {
     b.disabled = true;
@@ -617,12 +698,16 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('limpia').onclick = function () { ['f-buscar', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; }); actividades(); mostrar = PAGINA; pinta(); };
   $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
   $('x-lista').onclick = function () { excel(this); };
+  document.addEventListener('change', function (ev) { if (ev.target.closest && ev.target.closest('#ficha') && /^g-/.test(ev.target.id || ev.target.name || '')) { G_ARGS = null; if ($('g-res')) $('g-res').innerHTML = ''; } });
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-dbaja],[data-dver],[data-dborra]');
     if (b) { if (b.hasAttribute('data-dbaja')) baja(b); else if (b.hasAttribute('data-dver')) ver(b); else borra(b); return; }
     if (ev.target.id === 'fe-guarda') { guarda(); return; }
     if (ev.target.id === 'fe-pide') { pideAut(); return; }
     if (ev.target.id === 'fe-sube') { sube(); return; }
+    if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
+    if (ev.target.id === 'g-revisa') { genera(true); return; }
+    if (ev.target.id === 'g-genera') { genera(false); return; }
     var t = ev.target.closest('[data-id]');
     if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
