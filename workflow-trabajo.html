@@ -173,6 +173,19 @@ tr.fila:hover td{background:var(--navy-soft)}
 .gen-res .n{text-align:right;font-variant-numeric:tabular-nums}
 .gen-res .tabla{margin:8px -14px 0}
 .gen-nota{padding:0 2px;margin:0}
+.gen-ayuda{font-size:13px;color:var(--muted);margin:10px 0 6px}
+.gen-pla{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface)}
+.gen-pla>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;justify-content:space-between;padding:10px 12px}
+.gen-pla>summary::-webkit-details-marker{display:none}
+.gen-pla>summary .t{font-weight:650;overflow-wrap:anywhere}
+.gen-pla>summary .t::before{content:"› ";color:var(--muted)}
+.gen-pla[open]>summary .t::before{content:"⌄ "}
+.gen-acc{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 6px}
+.gen-acc .btn{padding:5px 10px;font-size:12.5px}
+.gen-cli{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
+.gen-cli input{margin-top:3px;flex:none;width:18px;height:18px}
+.gen-cli .q{display:flex;flex-direction:column;min-width:0}
+.gen-cli .rs{font-weight:600;font-size:13.5px;overflow-wrap:anywhere}
 .masf{flex-basis:100%}
 .masf>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--navy);padding:4px 0;list-style:none}
 .masf>summary::-webkit-details-marker{display:none}
@@ -628,33 +641,64 @@ tr.fila:hover td{background:var(--navy-soft)}
     var modo = (document.querySelector('input[name="g-modo"]:checked') || {}).value || 'mes_pasado';
     return { p_periodo: $('g-anio').value + '-' + dos(+$('g-mes').value) + '-01', p_plantilla: +$('g-pla').value || null, p_empresa: +$('g-emp').value || null, p_modo: modo, p_prueba: prueba };
   }
-  var G_ARGS = null;
+  var G_ARGS = null, G_PARES = [];
+  function num(n) { return (+n || 0).toLocaleString('es-MX'); }
+  // cuántas actividades y clientes van con las casillas como están
+  function gCuenta() {
+    var act = 0, ina = 0, cli = {}, por = {};
+    G_PARES.forEach(function (x) {
+      por[x.p] = por[x.p] || { k: 0, n: 0, a: 0, s: 0 }; por[x.p].n++; if (!x.mp) por[x.p].s++;
+      if (!x.sel) return;
+      act += x.activas; ina += x.nuevas - x.activas; cli[x.e] = 1; por[x.p].k++; por[x.p].a += x.activas;
+    });
+    var mes = G_ARGS ? mesTxt(G_ARGS.p_periodo) : '';
+    if ($('g-tot')) $('g-tot').textContent = num(act) + ' actividades nuevas';
+    if ($('g-sub')) $('g-sub').textContent = mes + ' · ' + num(Object.keys(cli).length) + ' clientes' + (ina ? ' · ' + num(ina) + ' más que se crean deshabilitadas, como en el Access' : '');
+    Object.keys(por).forEach(function (p) { var e = document.querySelector('[data-gcta="' + p + '"]'); if (e) e.textContent = por[p].k + ' de ' + por[p].n + ' clientes · ' + num(por[p].a) + ' actividades' + (por[p].s ? ' · ' + por[p].s + ' sin trabajo el ' + (G_PARES.some(function (x) { return x.p === +p && x.anual; }) ? 'año' : 'mes') + ' pasado' : ''); });
+    var b = $('g-genera'); if (b) { b.disabled = !act && !ina; b.textContent = 'Sí, generar ' + mes; }
+  }
   async function genera(prueba) {
     if (!$('g-res')) return;
     var b = $(prueba ? 'g-revisa' : 'g-genera'); if (b) b.disabled = true; gmsg('');
-    var args = prueba ? gArgs(true) : Object.assign({}, G_ARGS, { p_prueba: false });
+    var args = prueba ? gArgs(true) : Object.assign({}, G_ARGS, { p_prueba: false,
+      p_pares: G_PARES.filter(function (x) { return x.sel; }).map(function (x) { return [x.e, x.p]; }) });
+    if (!prueba && !args.p_pares.length) { gmsg('No hay ningún cliente marcado.', false); if (b) b.disabled = false; return; }
     try {
       var r = await P.sb.rpc('wf_genera', args);
       if (r.error) throw r.error;
       var d = r.data || {}, mes = mesTxt(args.p_periodo);
       if (prueba) {
-        G_ARGS = args;
-        var inact = (d.nuevas || 0) - (d.activas || 0);
-        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">' + esc((d.activas || 0).toLocaleString('es-MX')) + ' actividades nuevas</div>'
-          + '<div class="rfc">' + esc(mes) + (inact ? ' · ' + esc(inact) + ' más que se crean deshabilitadas, como en el Access' : '') + ' · ' + esc(d.yaExistian || 0) + ' ya existían y se dejan</div>'
+        G_ARGS = args; G_PARES = (d.pares || []).map(function (x) { return { e: +x.e, p: +x.p, rs: x.rs || '', grupo: x.grupo || '', plantilla: x.plantilla || '', activas: +x.activas || 0, nuevas: +x.nuevas || 0, mp: !!x.mp, sel: !!x.sel, anual: !!x.anual }; });
+        var grupos = [], ix = {};
+        G_PARES.forEach(function (x, i) { if (!(x.p in ix)) { ix[x.p] = grupos.length; grupos.push({ p: x.p, nombre: x.plantilla, l: [] }); } grupos[ix[x.p]].l.push(i); });
+        // primero los que no tuvieron trabajo el mes pasado (son los que hay que decidir)
+        grupos.forEach(function (g) { g.l.sort(function (a, b) { var x = G_PARES[a], y = G_PARES[b]; return (x.mp - y.mp) || x.rs.localeCompare(y.rs); }); });
+        var h = '<div class="gen-res"><div class="grande" id="g-tot"></div><div class="rfc" id="g-sub"></div>'
+          + (d.yaExistian ? '<div class="rfc">' + num(d.yaExistian) + ' ya existían y se dejan</div>' : '')
           + (d.responsablesFueraDelPortal ? '<div class="rfc">Responsables sin usuario en el portal: ' + esc(d.responsablesFueraDelPortal) + '</div>' : '')
-          + ((d.porPlantilla || []).length ? '<div class="tabla"><table><thead><tr><th>Plantilla</th><th class="n">Actividades</th><th class="n">Clientes</th></tr></thead><tbody>'
-            + d.porPlantilla.map(function (p) { return '<tr><td>' + esc(p.plantilla) + '</td><td class="n">' + esc(p.actividades) + '</td><td class="n">' + esc(p.empresas) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '')
-          + (d.nuevas ? '<div class="form" style="padding:10px 0 0"><div class="botones"><button class="btn acento" type="button" id="g-genera">Sí, generar ' + esc(mes) + '</button><span class="rfc">Si cambias algo arriba, vuelve a revisar.</span></div></div>' : '<div class="rfc" style="margin-top:6px">No hay nada que generar con esto.</div>')
+          + (G_PARES.length ? '<p class="gen-ayuda">Van marcados los clientes que tuvieron trabajo ' + (G_ARGS.p_plantilla || G_ARGS.p_empresa || G_ARGS.p_modo === 'asignadas' ? 'según lo que escogiste' : 'el mes pasado') + '. Abre cada plantilla para quitar o agregar clientes antes de generar.</p>' : '')
+          + grupos.map(function (g) {
+            return '<details class="gen-pla"><summary><span class="t">' + esc(g.nombre) + '</span><span class="rfc" data-gcta="' + esc(g.p) + '"></span></summary>'
+              + '<div class="gen-acc"><button class="btn" type="button" data-gtodos="' + esc(g.p) + '" data-gval="1">Marcar todos</button><button class="btn" type="button" data-gtodos="' + esc(g.p) + '" data-gval="0">Quitar todos</button></div>'
+              + g.l.map(function (i) {
+                var x = G_PARES[i];
+                return '<label class="gen-cli"><input type="checkbox" data-gp="' + i + '"' + (x.sel ? ' checked' : '') + '><span class="q"><span class="rs">' + esc(x.rs) + '</span>'
+                  + '<span class="rfc">' + (x.grupo ? esc(x.grupo) + ' · ' : '') + num(x.activas) + ' actividades' + (x.mp ? '' : ' · <span class="chip ojo">sin trabajo el ' + (x.anual ? 'año' : 'mes') + ' pasado</span>') + '</span></span></label>';
+              }).join('') + '</details>';
+          }).join('')
+          + (G_PARES.length ? '<div class="form" style="padding:12px 0 0"><div class="botones"><button class="btn acento" type="button" id="g-genera">Sí, generar</button><span class="rfc">Si cambias el periodo, la plantilla o el cliente, vuelve a revisar.</span></div></div>'
+            : '<div class="rfc" style="margin-top:6px">No hay nada que generar con esto' + (d.yaExistian ? ': ya está generado' : '') + '.</div>')
           + '</div>';
+        $('g-res').innerHTML = h;
+        gCuenta();
       } else {
-        G_ARGS = null;
-        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se generaron ' + esc((d.activas || 0).toLocaleString('es-MX')) + ' actividades de ' + esc(mes) + '. Ya salen en la lista.</div></div>';
+        G_ARGS = null; G_PARES = [];
+        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se generaron ' + num(d.activas) + ' actividades de ' + esc(mes) + '. Ya salen en la lista.</div></div>';
         $('f-anio').value = args.p_periodo.slice(0, 4); $('f-mes').value = String(+args.p_periodo.slice(5, 7));
         cargaPeriodo().catch(function () {});
       }
     } catch (er) { gmsg(falla(er), false); }
-    if (b && document.body.contains(b)) b.disabled = false;
+    if (b && document.body.contains(b)) { b.disabled = false; if (!prueba) gCuenta(); }
   }
 
   /* ---------- Excel (con la marca PROFASE: js/marca.js), con las columnas del Excel del Access ---------- */
@@ -684,7 +728,10 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('limpia').onclick = function () { ['f-buscar', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; }); actividades(); mostrar = PAGINA; pinta(); };
   $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
   $('x-lista').onclick = function () { excel(this); };
-  document.addEventListener('change', function (ev) { if (ev.target.closest && ev.target.closest('#ficha') && /^g-/.test(ev.target.id || ev.target.name || '')) { G_ARGS = null; if ($('g-res')) $('g-res').innerHTML = ''; } });
+  document.addEventListener('change', function (ev) {
+    if (ev.target.hasAttribute && ev.target.hasAttribute('data-gp')) { var x = G_PARES[+ev.target.getAttribute('data-gp')]; if (x) { x.sel = ev.target.checked; gCuenta(); } return; }
+    if (ev.target.closest && ev.target.closest('#ficha') && /^g-/.test(ev.target.id || ev.target.name || '')) { G_ARGS = null; G_PARES = []; if ($('g-res')) $('g-res').innerHTML = ''; }
+  });
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-dbaja],[data-dver],[data-dborra]');
     if (b) { if (b.hasAttribute('data-dbaja')) baja(b); else if (b.hasAttribute('data-dver')) ver(b); else borra(b); return; }
@@ -694,6 +741,12 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
     if (ev.target.id === 'g-revisa') { genera(true); return; }
     if (ev.target.id === 'g-genera') { genera(false); return; }
+    var gt = ev.target.closest('[data-gtodos]');
+    if (gt) {
+      var p = +gt.getAttribute('data-gtodos'), v = gt.getAttribute('data-gval') === '1';
+      G_PARES.forEach(function (x, i) { if (x.p === p) { x.sel = v; var c = document.querySelector('[data-gp="' + i + '"]'); if (c) c.checked = v; } });
+      gCuenta(); return;
+    }
     var t = ev.target.closest('[data-id]');
     if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
