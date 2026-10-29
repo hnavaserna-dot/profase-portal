@@ -1,0 +1,481 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Access · Tareas y proyectos</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=1465f160f8"></script><script src="js/marca.js?v=cce53f0db1"></script>
+<style>
+/* Portal PROFASE · Access › Tareas y proyectos (etapa 1 de la migración del Access, 29-oct-2026): la pestaña «Tareas y
+   Proyectos» del Access, solo para consultar: pendientes no recurrentes por grupo con sus responsables, fechas límite
+   (y reprogramaciones), avance, comentarios y bitácora. Los datos los deja la actualización de cada 3 horas
+   (nube/access_tar.py): la dirección y los gerentes ven todas; cada contador las que creó o donde es responsable
+   (decisión de Daniel, 29-oct-2026; portal/sql/40_access_tareas.sql). Aquí no se graba nada. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:720px}
+.band .acts{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--band-dim)}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:focus-visible,select:focus-visible,input:focus-visible,.fila:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:4px;margin:16px 0 0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.mal .v{color:var(--red)}
+.kpi.ojo .v{color:var(--accent-ink)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
+.filtros input{width:230px}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 12px;white-space:nowrap}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr.fila{cursor:pointer}
+tr.fila:hover td{background:var(--navy-soft)}
+.rs{font-weight:600}
+.rfc{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.vence{white-space:nowrap}
+.vence.mal{color:var(--red);font-weight:600}
+.vence.ojo{color:var(--accent-ink);font-weight:600}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
+.pie{color:var(--muted);font-size:12px;margin:0 0 24px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+/* Ficha: panel a la derecha; en celular, pantalla completa */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(780px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .cab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
+.ficha .cab .rfc{color:var(--band-dim)}
+.ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sec>h3 small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted)}
+.sec .in{padding:10px 14px}
+.sec table{font-size:13px}
+.sec td,.sec th{padding:6px 10px}
+.dl{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr);gap:6px 14px;margin:0}
+.dl dt{color:var(--muted);font-size:12.5px}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.lista{margin:0;padding:0;list-style:none}
+.lista li{padding:8px 14px;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600}
+.lista .d,.dl .d{color:var(--muted);font-size:12.5px}
+.pla{border-top:1px solid var(--line)}
+.pla:first-child{border-top:0}
+.pla summary{cursor:pointer;padding:9px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;list-style:none}
+.pla summary::-webkit-details-marker{display:none}
+.pla summary .n{font-weight:600}
+.pla summary::after{content:"›";color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.pla[open] summary::after{transform:rotate(-90deg)}
+.si{color:var(--ok);font-weight:600}
+.no{color:var(--muted)}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
+.tag.az{background:var(--navy-soft);color:var(--ink)}
+.link{background:none;border:0;padding:0;color:var(--navy);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .link{color:#9FB6E0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:#9FB6E0}}
+.dos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+
+@media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
+/* Estatus del Access */
+.est{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.est.e2{background:var(--ok-soft);color:var(--ok)}
+.est.e3{background:var(--red-soft);color:var(--red)}
+.est.e4{background:var(--accent-soft);color:var(--accent-ink)}
+.est.e5{background:var(--surface-2);color:var(--muted)}
+.est.e6{background:var(--surface-2);color:var(--muted);text-decoration:line-through}
+.clip{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.bit{margin:0;padding:0;list-style:none}
+.bit li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line)}
+.bit li:first-child{border-top:0}
+.bit .q{font-weight:600}
+.bit .c{color:var(--muted);font-size:12.5px}
+.doc{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.doc:first-child{border-top:0}
+.doc .izq{min-width:0;flex:1 1 240px}
+.doc .t{font-weight:600;overflow-wrap:anywhere}
+.doc .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.doc .acc{display:flex;gap:6px;flex-wrap:wrap}
+.doc .btn{padding:6px 11px}
+.coment{padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.aviso{padding:9px 14px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface-2)}
+/* Avance */
+.av{display:flex;align-items:center;gap:8px;min-width:110px}
+.av .barra{flex:1 1 auto;height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;min-width:50px}
+.av .barra i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.av .barra i.ok{background:var(--ok)}
+.av .p{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--muted);min-width:34px;text-align:right}
+.resp{font-size:13px}
+.resp .d{color:var(--muted);font-size:12.5px}
+.texto{padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.fl{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--line)}
+.fl:first-child{border-top:0}
+.fl .t{font-weight:600}
+.fl .d{color:var(--muted);font-size:12.5px}
+.fl.vieja .t{text-decoration:line-through;color:var(--muted);font-weight:500}
+/* En celular cada tarea y cada proyecto es una tarjeta */
+@media (max-width:640px){
+  .filtros input,.filtros select{width:100%}
+  .filtros{width:100%}
+  #lista thead,#lista-proy thead{display:none}
+  #lista tr,#lista-proy tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+  #lista td,#lista-proy td{border:0;padding:0;min-width:0}
+  #lista td:nth-child(1){grid-column:1}
+  #lista td:nth-child(5){grid-column:2;grid-row:1;text-align:right}
+  #lista td:nth-child(2),#lista td:nth-child(3),#lista td:nth-child(4){grid-column:1/-1;font-size:12.5px}
+  #lista td:nth-child(2)::before{content:"Responsables: ";color:var(--muted)}
+  #lista td:nth-child(4)::before{content:"Fecha final: ";color:var(--muted)}
+  #lista-proy td:nth-child(1){grid-column:1}
+  #lista-proy td:nth-child(5){grid-column:2;grid-row:1;text-align:right}
+  #lista-proy td:nth-child(2),#lista-proy td:nth-child(3),#lista-proy td:nth-child(4){grid-column:1/-1;font-size:12.5px}
+  #lista-proy td:nth-child(2)::before{content:"Tipo: ";color:var(--muted)}
+  #lista-proy td:nth-child(3)::before{content:"Responsable: ";color:var(--muted)}
+  #lista-proy td:nth-child(4)::before{content:"Fechas: ";color:var(--muted)}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .dl dt{margin-top:4px}
+  .ficha .cab h2{font-size:18px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">Access</div>
+    <h1>Tareas y proyectos</h1>
+    <p id="subt">La pestaña «Tareas y Proyectos» del Access, para consultar: los pendientes de cada grupo con sus responsables, fechas límite, avance y comentarios. Se actualiza sola cada 3 horas; las tareas se siguen capturando en el Access.</p>
+  </div>
+  <div class="acts"><span id="hora" aria-live="polite"></span></div>
+</div></div>
+
+<div class="wrap">
+  <div class="tabs" role="tablist" aria-label="Secciones">
+    <button type="button" role="tab" id="t-tar" aria-selected="true" aria-controls="p-tar">Tareas</button>
+    <button type="button" role="tab" id="t-proy" aria-selected="false" aria-controls="p-proy">Proyectos</button>
+  </div>
+  <div class="nota" id="error" hidden></div>
+  <div class="cargando" id="cargando">Cargando las tareas…</div>
+
+  <div id="p-tar" role="tabpanel" aria-labelledby="t-tar" hidden>
+    <section class="kpis" aria-label="Resumen">
+      <div class="kpi"><div class="l">Tareas</div><div class="v num" id="k-n">–</div><div class="s" id="k-n-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Terminadas</div><div class="v num" id="k-ter">–</div><div class="s" id="k-ter-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Pendientes</div><div class="v num" id="k-pen">–</div><div class="s" id="k-pen-s">&nbsp;</div></div>
+      <div class="kpi" id="k-ven-c"><div class="l">Vencidas</div><div class="v num" id="k-ven">–</div><div class="s" id="k-ven-s">&nbsp;</div></div>
+    </section>
+    <section class="card" aria-labelledby="h-lista">
+      <header>
+        <div><h2 id="h-lista">Tareas</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="f-buscar" type="search" placeholder="Buscar (tarea, grupo, cliente, proyecto)" aria-label="Buscar">
+          <select id="f-est" aria-label="Estatus"><option value="">Todas</option><option value="pen">Pendientes</option><option value="ven">Vencidas</option><option value="ter">Terminadas</option></select>
+          <select id="f-per" aria-label="Persona"><option value="">Todas las personas</option></select>
+          <select id="f-anio" aria-label="Año en que se creó"><option value="">Todos los años</option></select>
+          <button class="btn" type="button" id="x-tar">Excel</button>
+        </div>
+      </header>
+      <div class="tabla"><table id="lista"><thead><tr><th>Tarea</th><th>Responsables</th><th>Avance</th><th>Fecha final</th><th>Estatus</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="lista-vacia" hidden>Ninguna tarea con estos filtros.</div>
+    </section>
+    <p class="pie">Como en el Access: la fecha final es la última fecha límite que se le puso (si se reprogramó, en la ficha está el historial). Vencida = sin terminar y con la fecha final ya pasada.</p>
+  </div>
+
+  <div id="p-proy" role="tabpanel" aria-labelledby="t-proy" hidden>
+    <section class="card" aria-labelledby="h-proy">
+      <header>
+        <div><h2 id="h-proy">Proyectos</h2><div class="sub" id="proy-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="f-pbuscar" type="search" placeholder="Buscar (proyecto, grupo, responsable)" aria-label="Buscar proyectos">
+          <button class="btn" type="button" id="x-proy">Excel</button>
+        </div>
+      </header>
+      <div class="tabla"><table id="lista-proy"><thead><tr><th>Proyecto</th><th>Tipo</th><th>Responsable</th><th>Fechas</th><th>Tareas</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="proy-vacia" hidden>Ningún proyecto.</div>
+    </section>
+    <p class="pie">Cada grupo tiene además un proyecto «de grupo» donde caen las tareas sueltas; aquí solo sale si tiene tareas.</p>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var ZONA = 'America/Monterrey';
+  var D = null, T = [], POR_ID = {}, PROY = {}, ROL = '', HOY = '';
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; var h = String(s).slice(11, 16); return fecha(s) + (h ? ' · ' + h : ''); }
+  function dias(a, b) { return Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5); }
+  function terminada(t) { return t.est === 3; }
+  function vencida(t) { return !terminada(t) && t.fin && t.fin < HOY; }
+  function tarde(t) { return terminada(t) && t.cumplida && t.fin && t.cumplida > t.fin; }
+  function nomEst(t) { return (D.estatus || {})[t.est] || 'Sin estatus'; }
+  function chipEst(t) {
+    if (terminada(t)) return '<span class="chip ok">' + esc(nomEst(t)) + '</span>';
+    if (vencida(t)) return '<span class="chip mal">Vencida</span>';
+    return '<span class="chip ' + (t.est === 2 ? 'ojo' : 'az') + '">' + esc(nomEst(t)) + '</span>';
+  }
+  function avance(t) { var a = Math.max(0, Math.min(100, +t.avance || 0)); return '<div class="av"><span class="barra"><i class="' + (a >= 100 ? 'ok' : '') + '" style="width:' + a + '%"></i></span><span class="p">' + a + ' %</span></div>'; }
+  function finTxt(t) {
+    if (!t.fin) return '<span class="no">Sin fecha</span>';
+    var h = '<span class="vence' + (vencida(t) ? ' mal' : '') + '">' + esc(fecha(t.fin)) + '</span>';
+    if (vencida(t)) { var n = dias(t.fin, HOY); h += '<div class="rfc">' + n + (n === 1 ? ' día vencida' : ' días vencida') + '</div>'; }
+    else if (terminada(t) && t.cumplida) h += '<div class="rfc">terminada el ' + esc(fecha(t.cumplida)) + (tarde(t) ? ', tarde' : '') + '</div>';
+    else if (!terminada(t)) { var m = dias(HOY, t.fin); h += '<div class="rfc">' + (m === 0 ? 'vence hoy' : 'faltan ' + m + (m === 1 ? ' día' : ' días')) + '</div>'; }
+    return h;
+  }
+
+  async function desb64(b64) {
+    var r = await fetch('data:application/octet-stream;base64,' + b64);
+    var s = r.body.pipeThrough(new DecompressionStream('gzip'));
+    return JSON.parse(await new Response(s).text());
+  }
+  async function leeDoc(col, id) {
+    var q = await P.sb.from('docs').select('data').eq('col', col).eq('id', id).maybeSingle();
+    if (q.error) throw q.error;
+    return q.data ? q.data.data : null;
+  }
+
+  async function carga() {
+    try {
+      var p = await P.listo; if (!p) return;
+      ROL = p.rol;
+      HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      // la dirección lee el suyo; los gerentes el del equipo; cada contador el suyo (portal/sql/40_access_tareas.sql)
+      var doc = ROL === 'director' ? await leeDoc('director', 'acc_tar') : ROL === 'gerente' ? await leeDoc('access', 'tar_equipo') : await leeDoc('access', 'tar_' + p.usuario);
+      if (!doc || !doc.b64) {
+        $('cargando').hidden = true; $('error').hidden = false;
+        $('error').textContent = ROL === 'contador' ? 'No tienes tareas del Access todavía (aquí salen las que creaste o donde eres responsable).' : 'Todavía no hay tareas en el portal. Llegan con la próxima actualización (cada 3 horas).';
+        return;
+      }
+      D = await desb64(doc.b64);
+      T = D.tareas || []; POR_ID = {}; T.forEach(function (t) { POR_ID[t.id] = t; });
+      PROY = {}; (D.proyectos || []).forEach(function (x) { PROY[x.id] = x; });
+      $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
+      if (ROL === 'contador') $('subt').textContent = 'Las tareas del Access que creaste o donde eres responsable, con sus fechas límite, avance y comentarios, para consultar. Se actualiza sola cada 3 horas; las tareas se siguen capturando en el Access.';
+      opciones();
+      $('cargando').hidden = true;
+      pintaTareas(); pintaProyectos();
+      muestra('tar');
+    } catch (e) {
+      $('cargando').hidden = true; $('error').hidden = false;
+      $('error').textContent = 'No se pudieron leer las tareas. Vuelve a intentar en un momento.';
+    }
+  }
+
+  function opciones() {
+    var pers = {}, anios = {};
+    T.forEach(function (t) { if (t.creo) pers[t.creo] = 1; (t.ri || []).forEach(function (n) { pers[n] = 1; }); if (t.creado) anios[t.creado.slice(0, 4)] = 1; });
+    var op = function (L) { return L.map(function (x) { return '<option value="' + esc(x) + '">' + esc(x) + '</option>'; }).join(''); };
+    $('f-per').innerHTML = '<option value="">Todas las personas</option>' + op(Object.keys(pers).sort());
+    $('f-anio').innerHTML = '<option value="">Todos los años</option>' + op(Object.keys(anios).sort().reverse());
+  }
+
+  function proyDe(t) { var x = PROY[t.proy]; return x ? (x.deGrupo ? 'Tarea de grupo' : x.nombre) : ''; }
+  function filtradas() {
+    var q = norm($('f-buscar').value.trim()), e = $('f-est').value, n = $('f-per').value, a = $('f-anio').value;
+    return T.filter(function (t) {
+      if (e === 'pen' && terminada(t)) return false;
+      if (e === 'ven' && !vencida(t)) return false;
+      if (e === 'ter' && !terminada(t)) return false;
+      if (n && t.creo !== n && (t.ri || []).indexOf(n) < 0) return false;
+      if (a && (t.creado || '').slice(0, 4) !== a) return false;
+      if (q && norm([t.tarea, t.desc, t.grupo, t.rs, t.rfc, proyDe(t), t.tipo].join(' ')).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function pct(a, b) { return b ? Math.round(100 * a / b) + ' %' : '–'; }
+  function pintaTareas() {
+    var L = filtradas(), ter = 0, aTiempo = 0, pen = 0, ven = 0;
+    L.forEach(function (t) { if (terminada(t)) { ter++; if (!tarde(t)) aTiempo++; } else { pen++; if (vencida(t)) ven++; } });
+    $('k-n').textContent = L.length; $('k-n-s').textContent = L.length === 1 ? '1 con estos filtros' : 'con estos filtros';
+    $('k-ter').textContent = ter; $('k-ter-s').textContent = pct(ter, L.length) + (ter ? ' · ' + aTiempo + ' a tiempo' : '');
+    $('k-pen').textContent = pen; $('k-pen-s').textContent = pct(pen, L.length);
+    $('k-ven').textContent = ven; $('k-ven-s').textContent = pen ? 'de ' + pen + (pen === 1 ? ' pendiente' : ' pendientes') : 'ninguna pendiente';
+    $('k-ven-c').className = 'kpi' + (ven ? ' mal' : '');
+    $('lista-sub').textContent = L.length === 1 ? '1 tarea' : L.length + ' tareas';
+    $('lista').tBodies[0].innerHTML = L.map(function (t) {
+      return '<tr class="fila" tabindex="0" data-id="' + esc(t.id) + '"><td><div class="rs">' + esc(t.tarea) + '</div><div class="rfc">' + esc(t.grupo) + (t.rs ? ' · ' + esc(t.rs) : '') + '</div></td>'
+        + '<td class="resp">' + (t.ri.length ? esc(t.ri.join(', ')) : '<span class="no">—</span>') + '<div class="d">creó ' + esc(t.creo || '—') + '</div></td>'
+        + '<td>' + avance(t) + '</td><td>' + finTxt(t) + '</td><td>' + chipEst(t) + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = L.length > 0;
+  }
+
+  function tareasDe(x) { return T.filter(function (t) { return t.proy === x.id; }); }
+  function proyFiltrados() {
+    var q = norm($('f-pbuscar').value.trim());
+    return (D.proyectos || []).filter(function (x) { return !q || norm([x.nombre, x.grupo, x.rs, x.resp, x.tipo].join(' ')).indexOf(q) >= 0; });
+  }
+  function pintaProyectos() {
+    var L = proyFiltrados();
+    $('proy-sub').textContent = L.length === 1 ? '1 proyecto' : L.length + ' proyectos';
+    $('lista-proy').tBodies[0].innerHTML = L.map(function (x) {
+      var n = tareasDe(x), pen = n.filter(function (t) { return !terminada(t); }).length;
+      return '<tr class="fila" tabindex="0" data-proy="' + esc(x.id) + '"><td><div class="rs">' + esc(x.deGrupo ? 'Tareas de grupo' : x.nombre) + '</div><div class="rfc">' + esc(x.grupo) + (x.rs ? ' · ' + esc(x.rs) : '') + '</div></td>'
+        + '<td>' + esc(x.tipo) + '</td><td>' + esc(x.resp) + '</td>'
+        + '<td><span class="vence">' + esc(fecha(x.creado)) + '</span>' + (x.termina ? '<div class="rfc">termina ' + esc(fecha(x.termina)) + '</div>' : '') + '</td>'
+        + '<td>' + (n.length ? '<span class="chip ' + (pen ? 'az' : 'ok') + '">' + n.length + (n.length === 1 ? ' tarea' : ' tareas') + '</span>' : '<span class="no">Sin tareas</span>') + '</td></tr>';
+    }).join('');
+    $('proy-vacia').hidden = L.length > 0;
+  }
+
+  /* ---------- fichas ---------- */
+  function sec(tit, cuerpo, nota) { return '<section class="sec"><h3>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</h3>' + cuerpo + '</section>'; }
+  function abreTarea(id) {
+    var t = POR_ID[id]; if (!t) return;
+    var h = '<div class="cab"><div><div class="rfc">' + esc(t.grupo) + (proyDe(t) ? ' · ' + esc(proyDe(t)) : '') + '</div><h2 id="f-tit">' + esc(t.tarea) + '</h2><div class="rfc">' + esc(t.rs) + (t.rfc ? ' · ' + esc(t.rfc) : '') + (t.tipo ? ' · ' + esc(t.tipo) : '') + '</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar la ficha">Cerrar</button></div><div class="cuerpo">';
+    h += sec('La tarea', '<div class="in"><dl class="dl">'
+      + '<dt>Estatus</dt><dd>' + chipEst(t) + '</dd>'
+      + '<dt>Avance</dt><dd>' + avance(t) + '</dd>'
+      + '<dt>Descripción</dt><dd>' + (esc(t.desc) || '<span class="no">—</span>') + '</dd>'
+      + (t.coment ? '<dt>Comentarios</dt><dd>' + esc(t.coment) + '</dd>' : '')
+      + '<dt>Creó</dt><dd>' + esc(t.creo || '—') + '</dd>'
+      + '<dt>Creación</dt><dd>' + esc(fecha(t.creado)) + '</dd>'
+      + '<dt>Inicio</dt><dd>' + esc(fecha(t.inicio)) + '</dd>'
+      + '<dt>Fecha final</dt><dd>' + finTxt(t) + '</dd>'
+      + (t.cumplida ? '<dt>Cumplida</dt><dd>' + esc(fecha(t.cumplida)) + '</dd>' : '')
+      + '</dl></div>');
+    h += sec('Responsables', (t.ri.length || t.re.length) ? '<ul class="lista">'
+      + t.ri.map(function (n) { return '<li><div class="t">' + esc(n) + '</div><div class="d">del despacho</div></li>'; }).join('')
+      + t.re.map(function (n) { return '<li><div class="t">' + esc(n) + '</div><div class="d">de fuera (por ejemplo, del cliente)</div></li>'; }).join('')
+      + '</ul>' : '<div class="vacio">Sin responsables.</div>', String(t.ri.length + t.re.length));
+    var F = (t.fechas || []).slice().sort(function (a, b) { return a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0; });
+    h += sec('Fechas límite', F.length ? F.map(function (f, i) {
+      return '<div class="fl' + (i ? ' vieja' : '') + '"><span class="t">' + esc(fecha(f[0])) + '</span><span class="d">' + (i ? 'reprogramada · ' : 'vigente · ') + 'la puso ' + esc(f[2] || '—') + (f[1] ? ' el ' + esc(fecha(f[1])) : '') + '</span></div>';
+    }).join('') : '<div class="vacio">Sin fecha límite.</div>', F.length > 1 ? (F.length - 1) + (F.length === 2 ? ' reprogramación' : ' reprogramaciones') : '');
+    h += sec('Comentarios', t.com.length ? '<ul class="bit">' + t.com.slice().reverse().map(function (c) {
+      return '<li><span class="q">' + esc(c[1] || '—') + '</span><span class="c">' + esc(fechaHora(c[0])) + '</span>' + (c[3] ? '<span class="tag az">Avance</span>' : '') + '<div class="texto" style="padding:4px 0 0;flex-basis:100%">' + esc(c[2]) + '</div></li>';
+    }).join('') + '</ul>' : '<div class="vacio">Sin comentarios.</div>', String(t.com.length));
+    h += sec('Bitácora', t.ev.length ? '<ul class="bit">' + t.ev.slice().reverse().map(function (e) {
+      return '<li><span class="q">' + esc(e[2]) + '</span><span class="c">' + esc(e[1] || '—') + ' · ' + esc(fechaHora(e[0])) + '</span></li>';
+    }).join('') + '</ul>' : '<div class="vacio">Sin movimientos.</div>', String(t.ev.length));
+    h += '</div>';
+    abreFicha(h);
+  }
+  function abreProyecto(id) {
+    var x = PROY[id]; if (!x) return;
+    var L = tareasDe(x);
+    var h = '<div class="cab"><div><div class="rfc">' + esc(x.grupo) + (x.tipo ? ' · ' + esc(x.tipo) : '') + '</div><h2 id="f-tit">' + esc(x.deGrupo ? 'Tareas de grupo' : x.nombre) + '</h2><div class="rfc">' + (esc(x.rs) || 'Sin empresa predeterminada') + '</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar la ficha">Cerrar</button></div><div class="cuerpo">';
+    h += sec('El proyecto', '<div class="in"><dl class="dl"><dt>Estatus</dt><dd>' + (esc(x.estatus) || '—') + '</dd><dt>Responsable</dt><dd>' + (esc(x.resp) || '—') + '</dd><dt>Creación</dt><dd>' + esc(fecha(x.creado)) + '</dd><dt>Terminación</dt><dd>' + (esc(fecha(x.termina)) || '—') + '</dd></dl></div>');
+    h += sec('Tareas', L.length ? '<div class="tabla"><table><thead><tr><th>Tarea</th><th>Fecha final</th><th>Estatus</th></tr></thead><tbody>'
+      + L.map(function (t) { return '<tr class="fila" tabindex="0" data-id="' + esc(t.id) + '"><td><div class="rs">' + esc(t.tarea) + '</div><div class="rfc">' + esc(t.rs) + '</div></td><td>' + finTxt(t) + '</td><td>' + chipEst(t) + '</td></tr>'; }).join('')
+      + '</tbody></table></div>' : '<div class="vacio">Sin tareas' + (ROL === 'contador' ? ' tuyas' : '') + '.</div>', String(L.length));
+    h += '</div>';
+    abreFicha(h);
+  }
+  function abreFicha(h) {
+    $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
+    try { $('cerrar').focus(); } catch (er) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+
+  /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
+  function hoja(MK, wb, nombre, titulo, lineas, head, filas, anchos) {
+    var ws = wb.addWorksheet(nombre);
+    ws.columns = anchos.map(function (w) { return { width: w }; });
+    var f = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+    ws.getRow(f).values = head; MK.cabecera(ws, f, 1, head.length);
+    filas.forEach(function (r, i) { ws.getRow(f + 1 + i).values = r; });
+    if (filas.length) MK.cuerpo(ws, f + 1, f + filas.length, 1, head.length);
+    ws.views = [{ state: 'frozen', ySplit: f }];
+    MK.impresion(ws, { repetir: f });
+  }
+  async function conBoton(b, fn) { b.disabled = true; try { await fn(); } catch (e) { $('error').hidden = false; $('error').textContent = 'No se pudo armar el Excel. Vuelve a intentar.'; setTimeout(function () { $('error').hidden = true; }, 6000); } finally { b.disabled = false; } }
+  function datosAl() { return 'Datos al ' + ($('hora').textContent.replace(/^Datos al /, '') || ''); }
+  async function excelTareas(b) {
+    await conBoton(b, async function () {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = filtradas(), wb = MK.libro(EX, 'Tareas · Access');
+      hoja(MK, wb, 'Tareas', 'Tareas (Access)', [datosAl(), L.length + ' tareas con los filtros de la pantalla'],
+        ['Tarea', 'Descripción', 'Grupo', 'Razón social', 'Proyecto', 'Tipo', 'Creó', 'Responsables', 'De fuera', 'Creación', 'Inicio', 'Fecha final', 'Reprogramaciones', 'Avance', 'Estatus', 'Cumplida'],
+        L.map(function (t) { return [t.tarea, t.desc, t.grupo, t.rs, proyDe(t), t.tipo, t.creo, t.ri.join(', '), t.re.join(', '), fecha(t.creado), fecha(t.inicio), fecha(t.fin), Math.max(0, (t.fechas || []).length - 1), (+t.avance || 0) / 100, vencida(t) ? 'Vencida' : nomEst(t), fecha(t.cumplida)]; }),
+        [34, 44, 24, 34, 22, 16, 24, 30, 22, 13, 13, 13, 10, 9, 13, 13]);
+      wb.worksheets[0].getColumn(14).numFmt = '0%';
+      await MK.guardar(wb, 'Tareas Access PROFASE.xlsx');
+    });
+  }
+  async function excelProyectos(b) {
+    await conBoton(b, async function () {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = proyFiltrados(), wb = MK.libro(EX, 'Proyectos · Access');
+      hoja(MK, wb, 'Proyectos', 'Proyectos (Access)', [datosAl(), L.length + ' proyectos'],
+        ['Proyecto', 'Grupo', 'Empresa', 'Tipo', 'Responsable', 'Estatus', 'Creación', 'Terminación', 'Tareas'],
+        L.map(function (x) { return [x.deGrupo ? 'Tareas de grupo' : x.nombre, x.grupo, x.rs, x.tipo, x.resp, x.estatus, fecha(x.creado), fecha(x.termina), tareasDe(x).length]; }),
+        [34, 26, 34, 16, 24, 11, 13, 13, 9]);
+      await MK.guardar(wb, 'Proyectos Access PROFASE.xlsx');
+    });
+  }
+
+  function muestra(t) { ['tar', 'proy'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; }); }
+  $('t-tar').onclick = function () { muestra('tar'); };
+  $('t-proy').onclick = function () { muestra('proy'); };
+  ['f-buscar', 'f-est', 'f-per', 'f-anio'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', pintaTareas); });
+  $('f-pbuscar').addEventListener('input', pintaProyectos);
+  $('x-tar').onclick = function () { excelTareas(this); };
+  $('x-proy').onclick = function () { excelProyectos(this); };
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-id],[data-proy]');
+    if (t && t.classList.contains('fila')) { if (t.hasAttribute('data-proy')) abreProyecto(+t.getAttribute('data-proy')); else abreTarea(+t.getAttribute('data-id')); return; }
+    if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('velo').hidden) cierra();
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) ev.target.click();
+  });
+  carga();
+})();
+</script>
+</body></html>
