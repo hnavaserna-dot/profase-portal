@@ -12,8 +12,9 @@
    Cumpleaños de clientes (29-oct, pedido de Fernando): los contactos de los clientes activos de DECOMSA, leídos del
    Access cada 3 horas (nube/access_nube.py → access/cumple_equipo para dirección y gerentes; access/cumple_<usuario>
    para cada contador, los de sus clientes como contador asignado; portal/sql/27_cumple_clientes.sql). Solo día y mes.
-   Desde el 29-oct (decisión de Daniel) entran también los clientes activos de la otra compañía del grupo. El WhatsApp de PROFASE los felicita solo, a nombre de PROFASE (nube/whatsapp_cumple.py; lo
-   administran solo Daniel y su Claude); aquí se ve cómo va cada uno (portal/sql/35_whatsapp_profase.sql). */
+   La dirección ve además los de clientes que solo atiende la otra compañía del grupo (director/cumple_todo; decisión de
+   Daniel, 29-oct); el equipo no. Las felicitaciones por WhatsApp las manda solo el WhatsApp de PROFASE, aparte, y aquí
+   no se enseña nada de eso (Daniel: «ellos ni yo debemos por qué enterarnos»). */
 :root{
   --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
   --ink:#131f2d; --ink-2:#4e5d6e; --ink-3:#7b8a9b;
@@ -243,20 +244,13 @@ td.nw{white-space:nowrap}
 @media (max-width:620px){.rk{grid-template-columns:1fr 1fr}}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
 
-/* felicitar por WhatsApp a los contactos de los clientes */
+/* hoy cumplen (contactos de los clientes) */
 .cli-hoy{border:1px solid var(--line);border-left:4px solid var(--cli);border-radius:10px;padding:12px 14px;margin-bottom:14px;background:var(--surface-2)}
 .cli-hoy h3{font-size:15px;font-weight:600}
 .cli-hoy .item{border-top-color:var(--line-2)}
 .cli-hoy .empty{padding:4px 0 0}
 .cuando{display:block;font-size:12px;color:var(--ink-3)}
 .cuando.hoy{color:var(--accent-ink);font-weight:600}
-.felok{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--ok);font-weight:500}
-.felok svg{width:14px;height:14px;flex:none}
-.felmal{font-size:12.5px;color:var(--danger);font-weight:500}
-#cliBody td:last-child{min-width:190px}
-.felacc{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:4px}
-td .felacc{margin-top:0}
-.sincel{font-size:12px;color:var(--ink-3)}
 .modal textarea{resize:vertical}
 /* de qué cliente es cada cumpleaños (pedido de Fernando) */
 .tcli{display:inline-block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;border-radius:4px;padding:0 5px;margin-right:6px;background:var(--cli-soft);color:var(--cli-ink);vertical-align:1px}
@@ -378,7 +372,7 @@ td.emp{min-width:260px}
             <select id="fMesCli" aria-label="Mes de cumpleaños"><option value="">Todos los meses</option></select>
           </div>
           <div class="tablebox"><table>
-            <thead><tr><th>Contacto del cliente</th><th>Cumpleaños</th><th>Grupo</th><th>Empresas del grupo</th><th>Contador asignado</th><th>Felicitación</th></tr></thead>
+            <thead><tr><th>Contacto del cliente</th><th>Cumpleaños</th><th>Grupo</th><th>Empresas del grupo</th><th>Contador asignado</th></tr></thead>
             <tbody id="cliBody"></tbody>
           </table></div>
           <p class="note" style="margin-top:10px" id="cliNota"></p>
@@ -433,8 +427,6 @@ td.emp{min-width:260px}
   var colab=[], eventos=[], cargaCol=false, cargaEv=false;
   // cumpleaños de los contactos de los clientes (los arma la actualización de cada 3 horas; solo lectura)
   var clientes=[], pendCli=[], veCli=false, cliHora='', gruposCli=[];
-  // quién ya los felicitó este año por WhatsApp (portal/sql/30_felicita_clientes.sql) y si quien entra felicita
-  var felic={}, felOk=false, felPend=false, felPuedo=false;
   // asistencia a eventos (portal/sql/23_eventos_asistencia.sql): lo que la base dice de cada evento para quien entra
   var mis={}, misOk=false, consultaYo=false, misPend=false, personas=null;
   var tab='cal', vista={y:HOY.getFullYear(), m:HOY.getMonth()}, sel=null, filtros={};
@@ -588,7 +580,6 @@ td.emp{min-width:260px}
       +(x.tipo==='evento'?'<span class="ss"><b>'+esc(CLASES[claseDe(x.e)][0])+'</b>'+(x.e.cliente&&x.e.cliente.g?' · cliente '+esc(x.e.cliente.g):'')+'</span>':'')
       +(x.tipo==='cli'?cliLineas(x.k):'<span class="ss">'+esc(x.sub||'')+'</span>')+(x.tipo==='evento'&&x.e.desc?'<span class="ss">'+esc(x.e.desc)+'</span>':'')
       +(x.tipo==='evento'?asistHtml(x.e):'')
-      +(x.tipo==='cli'?felHtml(x.k):'')
       +(captura()&&x.c&&(x.tipo==='cumple'||x.tipo==='aniv')?'<span><button type="button" class="link" data-edit-col="'+esc(x.c.id)+'">Editar</button></span>':'')
       +(ed?'<span><button type="button" class="link" data-edit-ev="'+esc(x.e.id)+'">Editar</button><button type="button" class="link danger" data-del-ev="'+esc(x.e.id)+'">Quitar</button></span>':'')
       +'</div></div>';
@@ -804,15 +795,12 @@ td.emp{min-width:260px}
         :(sig?'<div class="empty">El siguiente: '+esc(sig.nombre)+' ('+esc(sig.g)+'), '+esc(fLarga(new Date(HOY.getFullYear(),HOY.getMonth(),HOY.getDate()+diasPara(sig))))+' · '+esc(faltaTxt(diasPara(sig)).toLowerCase())+'.</div>':''));
     var rows=cliFiltrados();
     $('cliBody').innerHTML=rows.length?rows.map(function(c){
-      var dp=diasPara(c), fh=felHtml(c);
-      return '<tr><td>'+esc(c.nombre)+'</td><td class="nw">'+c.d+' de '+MESES[c.m-1]+(dp<=7?'<span class="cuando'+(dp===0?' hoy':'')+'">'+faltaTxt(dp)+'</span>':'')+'</td><td>'+esc(c.g)+'</td><td class="emp">'+esc(empTxt(c.emp))+'</td><td>'+esc(contTxt(c.cont)||'Sin asignar')+'</td>'
-        +'<td>'+(fh||'<span class="sincel">—</span>')+'</td></tr>';
-    }).join(''):'<tr><td colspan="6" class="empty">'+(clientes.length?'Nadie coincide con la búsqueda.':'No hay cumpleaños de clientes para mostrarte.')+'</td></tr>';
+      var dp=diasPara(c);
+      return '<tr><td>'+esc(c.nombre)+'</td><td class="nw">'+c.d+' de '+MESES[c.m-1]+(dp<=7?'<span class="cuando'+(dp===0?' hoy':'')+'">'+faltaTxt(dp)+'</span>':'')+'</td><td>'+esc(c.g)+'</td><td class="emp">'+esc(empTxt(c.emp))+'</td><td>'+esc(contTxt(c.cont)||'Sin asignar')+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">'+(clientes.length?'Nadie coincide con la búsqueda.':'No hay cumpleaños de clientes para mostrarte.')+'</td></tr>';
     $('cliNota').textContent='Contactos de los clientes activos del despacho, con la fecha de nacimiento que tienen en el Access (se actualiza cada 3 horas'
       +(cliHora?'; datos al '+cliHora:'')+'). Solo se muestran el día y el mes. El día del cumpleaños, desde las 9:00, llega un aviso a la campanita de la dirección, de los gerentes y del contador asignado. '
-      +'Si una fecha está mal o falta, se corrige en los contactos del cliente en el Access. '
-      +(waOn?'El día de su cumpleaños, a las '+waHora+', el WhatsApp de PROFASE le manda su felicitación solo y a nombre de PROFASE: «¡Feliz cumpleaños, [nombre]! 🎉 Gracias por ser parte de la familia PROFASE…». Cómo va cada uno sale en «Felicitación».'
-        :'En cuanto quede conectado el WhatsApp de PROFASE, a cada contacto le llegará sola su felicitación el día de su cumpleaños, a nombre de PROFASE.');
+      +'Si una fecha está mal o falta, se corrige en los contactos del cliente en el Access.';
     $('pendTit').textContent=pendCli.length?'Por corregir en el Access ('+pendCli.length+')':'';
     $('pendBox').hidden=!pendCli.length;
     $('pendBody').innerHTML=pendCli.map(function(c){
@@ -831,64 +819,12 @@ td.emp{min-width:260px}
       +'<span class="ss"><b>Contador asignado:</b> '+esc(contTxt(c.cont)||'sin asignar')+'</span>';
   }
 
-  /* ---------- WhatsApp de PROFASE (portal/sql/30_felicita_clientes.sql y 35_whatsapp_profase.sql) ----------
-     Las felicitaciones las manda solo el WhatsApp de PROFASE (nube/whatsapp_cumple.py), a nombre de PROFASE; aquí solo
-     se enseña cómo va cada contacto. Daniel (el único en cli_felicita_quien) puede marcar «ya lo felicité» para que no
-     se le mande, o quitar un envío que falló para que se reintente. La página nunca manda mensajes. */
-  var OKSVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
-  var waOn=false, waHora='9:00';
-  var ZONA='America/Monterrey';
-  function anioMty(){ return +new Intl.DateTimeFormat('en-CA',{timeZone:ZONA,year:'numeric'}).format(new Date()); }
-  function fCuando(t){
-    if(!t) return ''; var x=new Date(t);
-    return new Intl.DateTimeFormat('es-MX',{timeZone:ZONA,day:'numeric',month:'short'}).format(x).replace(/\./g,'')+' '
-      +new Intl.DateTimeFormat('es-MX',{timeZone:ZONA,hour:'numeric',minute:'2-digit'}).format(x);
-  }
+  /* ---------- fechas de los cumpleaños de clientes ---------- */
   // su cumpleaños en el año yy (el 29 de febrero, el 28 en años no bisiestos) y cuántos días faltan (0 = hoy)
   function fCumple(c,yy){ return new Date(yy,c.m-1,(c.m===2&&c.d===29&&!bisiesto(yy))?28:c.d); }
   function diasPara(c){ var f=fCumple(c,HOY.getFullYear()); if(f<HOY) f=fCumple(c,HOY.getFullYear()+1); return Math.round((f-HOY)/864e5); }
   function faltaTxt(n){ return n===0?'Hoy':n===1?'Mañana':'En '+n+' días'; }
-  function puedeFel(){ return felPuedo&&felOk&&!(P&&P.consulta); }
-  function felDe(c){ return felOk&&c?felic[c.id]||null:null; }
-  function felTxt(c){
-    var f=felDe(c);
-    if(f&&f.estado==='enviado') return f.medio==='whatsapp'?'Enviado por WhatsApp de PROFASE · '+fCuando(f.en):'Ya felicitado (no se le manda) · '+fCuando(f.en);
-    if(f) return 'No se pudo mandar: '+(f.detalle||'error');
-    if(!c.cel) return 'Sin celular en el Access';
-    return '';
-  }
-  function felHtml(c){
-    var f=felDe(c), h='', dp=diasPara(c), yo=puedeFel();
-    if(f&&f.estado==='enviado') h='<span class="felok">'+OKSVG+esc(felTxt(c))+'</span>'
-      +(yo&&f.medio!=='whatsapp'?'<button type="button" class="link" data-fel-quita="'+esc(c.id)+'">Quitar</button>':'');
-    else if(f) h='<span class="felmal">'+esc(felTxt(c))+'</span>'
-      +(yo?'<button type="button" class="link" data-fel-quita="'+esc(c.id)+'">Reintentar</button>':'');
-    else if(!c.cel) h='<span class="sincel">Sin celular en el Access</span>';
-    else if(dp<=7) h='<span class="sincel">'+(waOn?(dp===0?'Se le manda hoy por WhatsApp de PROFASE ('+esc(waHora)+')':'Se le manda solo ese día por WhatsApp de PROFASE'):'WhatsApp de PROFASE por conectar')+'</span>'
-      +(yo?'<button type="button" class="link" data-fel-marca="'+esc(c.id)+'">Ya lo felicité</button>':'');
-    return h?'<span class="felacc">'+h+'</span>':'';
-  }
-  async function marcaFel(id, quitar){
-    try{
-      var r=await P.sb.rpc('cli_felicitar',{p_contacto:String(id),p_quitar:!!quitar});
-      if(r.error) throw r.error;
-      if(r.data&&r.data.error){ toast(r.data.error); return; }
-      if(quitar) delete felic[id]; else if(r.data&&r.data.contacto) felic[r.data.contacto]=r.data;
-      render();
-      toast(quitar?'Listo: se vuelve a intentar en el siguiente horario del WhatsApp de PROFASE':'Listo: a este contacto ya no se le manda este año');
-    }catch(x){ toast('No se pudo guardar: '+falla(x)); }
-  }
-  async function cargaFel(){
-    if(felPend||!P||!veCli) return false; felPend=true; var cambio=false;
-    try{
-      var r=await P.sb.from('cli_felicita').select('contacto,anio,por,por_nombre,medio,estado,detalle,en').eq('anio',anioMty());
-      if(!r.error&&r.data){
-        var n={}; r.data.forEach(function(f){ n[f.contacto]=f; });
-        cambio=!felOk||JSON.stringify(n)!==JSON.stringify(felic); felic=n; felOk=true;
-      }
-    }catch(e){}
-    felPend=false; return cambio;
-  }
+
   // los nombres llegan en mayúsculas del Access: «MARIA DE LA LUZ» → «Maria de la Luz»
   function bonito(t){
     var chicas={de:1,del:1,la:1,las:1,los:1,y:1};
@@ -899,8 +835,7 @@ td.emp{min-width:260px}
   function limpiaCli(c){
     var d=+c.d, m=+c.m;
     if(!(m>=1&&m<=12&&d>=1&&d<=31)||!c.n) return null;
-    return {id:String(c.id||''), nombre:bonito(c.n), g:String(c.g||''), d:d, m:m, cont:Array.isArray(c.cont)?c.cont:[], emp:Array.isArray(c.emp)?c.emp.map(String):[],
-            nom:bonito(c.nom||String(c.n||'').split(/\s+/)[0]), cel:/^\d{10}$/.test(String(c.cel||''))?String(c.cel):''};
+    return {id:String(c.id||''), nombre:bonito(c.n), g:String(c.g||''), d:d, m:m, cont:Array.isArray(c.cont)?c.cont:[], emp:Array.isArray(c.emp)?c.emp.map(String):[]};
   }
   async function cargaCli(){
     var r=yo&&yo.rol, id=(r==='director'||r==='gerente')?'cumple_equipo':r==='contador'&&yo.usuario?'cumple_'+yo.usuario:'';
@@ -916,13 +851,20 @@ td.emp{min-width:260px}
       pendCli=(Array.isArray(o.pend)?o.pend:[]).filter(function(c){ return c&&c.n; })
         .map(function(c){ return {nombre:bonito(c.n), g:String(c.g||''), f:String(c.f||''), por:String(c.por||''), cont:Array.isArray(c.cont)?c.cont:[], emp:Array.isArray(c.emp)?c.emp.map(String):[]}; });
       cliHora=o.refreshedAt?new Date(o.refreshedAt).toLocaleString('es-MX',{timeZone:'America/Monterrey',dateStyle:'medium',timeStyle:'short'}):'';
-      waOn=!!(o.wa&&o.wa.activo===true); waHora=String((o.wa&&o.wa.hora)||'9:00').slice(0,5);
+      // la dirección: también los de clientes que solo atiende la otra compañía del grupo (la base solo a ella se los da)
+      if(r==='director'){
+        try{
+          var dd=await db.doc('director/cumple_todo').get(), t=dd.exists?(dd.data()||{}):null;
+          if(t&&Array.isArray(t.cumple)){
+            clientes=t.cumple.map(limpiaCli).filter(Boolean).sort(function(a,b){ return (a.m-b.m)||(a.d-b.d)||a.nombre.localeCompare(b.nombre,'es'); });
+            pendCli=(Array.isArray(t.pend)?t.pend:[]).filter(function(c){ return c&&c.n; })
+              .map(function(c){ return {nombre:bonito(c.n), g:String(c.g||''), f:String(c.f||''), por:String(c.por||''), cont:Array.isArray(c.cont)?c.cont:[], emp:Array.isArray(c.emp)?c.emp.map(String):[]}; });
+          }
+        }catch(e){}
+      }
       veCli=true;
     }catch(e){ return; }
-    try{ var q=await P.sb.rpc('cli_felicito'); felPuedo=!q.error&&q.data===true; }catch(e){ felPuedo=false; }
-    await cargaFel();
     renderLegend(); render();
-    setInterval(async function(){ if(!document.hidden&&await cargaFel()) render(); }, 120000);
   }
 
   /* ---------- eventos ---------- */
@@ -945,14 +887,6 @@ td.emp{min-width:260px}
         try{ await db.doc('cal_eventos/'+ev.id).delete(); eventos=eventos.filter(function(x){ return x.id!==ev.id; }); render(); toast('Evento quitado'); }
         catch(err){ toast('No se pudo quitar: '+falla(err)); }
       });
-    }; });
-    root.querySelectorAll('[data-fel-marca]').forEach(function(b){ b.onclick=function(e){
-      e.stopPropagation(); var id=b.dataset.felMarca;
-      confirmar('¿Ya lo felicitaste? Entonces este año no se le manda el WhatsApp de PROFASE.', function(){ marcaFel(id,false); });
-    }; });
-    root.querySelectorAll('[data-fel-quita]').forEach(function(b){ b.onclick=function(e){
-      e.stopPropagation(); var id=b.dataset.felQuita;
-      confirmar('¿Quitar esta marca? El WhatsApp de PROFASE lo vuelve a intentar en su siguiente horario de hoy (9:00 y 12:00).', function(){ marcaFel(id,true); });
     }; });
     root.querySelectorAll('[data-resp-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirResponder(b.dataset.respEv); }; });
     root.querySelectorAll('[data-ver-resp]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirRespuestas(b.dataset.verResp); }; });
@@ -1203,8 +1137,8 @@ td.emp{min-width:260px}
         MK.impresion(ws, {repetir:g});
       }
       var L=cliFiltrados();
-      hoja(tit, ['Contacto del cliente','Grupo','Empresas del grupo','Día','Mes','Contador asignado','WhatsApp de PROFASE este año'], [34,26,44,7,13,34,40],
-        L.map(function(c){ return [c.nombre, c.g, c.emp.join(', '), c.d, MESES[c.m-1], contTxt(c.cont), felTxt(c)]; }),
+      hoja(tit, ['Contacto del cliente','Grupo','Empresas del grupo','Día','Mes','Contador asignado'], [34,26,44,7,13,34],
+        L.map(function(c){ return [c.nombre, c.g, c.emp.join(', '), c.d, MESES[c.m-1], contTxt(c.cont)]; }),
         [L.length+(L.length===1?' contacto':' contactos')+' · solo día y mes', 'Datos del Access'+(cliHora?' al '+cliHora:'')]);
       if(pendCli.length) hoja('Por corregir en el Access', ['Contacto del cliente','Grupo','Empresas del grupo','Fecha en el Access','Por qué no entra','Contador asignado'], [34,26,44,16,38,34],
         pendCli.map(function(c){ return [c.nombre, c.g, c.emp.join(', '), c.f||'', c.por, contTxt(c.cont)]; }),
@@ -1425,7 +1359,6 @@ td.emp{min-width:260px}
     var b=e.target.closest('button'); if(!b) return;
     tab=b.dataset.t; try{ localStorage.setItem('portal.cal.tab',tab); }catch(x){}
     renderTabs();
-    if(tab==='cli') cargaFel().then(function(c){ if(c) render(); });
   });
   $('prev').onclick=function(){ vista.m--; if(vista.m<0){ vista.m=11; vista.y--; } renderCal(); };
   $('next').onclick=function(){ vista.m++; if(vista.m>11){ vista.m=0; vista.y++; } renderCal(); };
