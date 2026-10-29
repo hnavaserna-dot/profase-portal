@@ -176,8 +176,46 @@
       bodyStyles: { fillColor: false }, headStyles: { fillColor: [31, 56, 100], textColor: 255, fontStyle: 'bold', lineColor: [31, 56, 100] } };
   }
 
+  /* PDF que ya existe (un documento que el equipo subió al WorkFlow). Decisión de Daniel (29-oct-2026): «con marca
+     cuando se pueda»: a cada hoja se le pone encima el signo de marca de agua, tenue para que se siga leyendo, y abajo
+     una línea chica con el signo, «PROFASE» y «Asesoría Contable, Legal y Fiscal», sin tocar el contenido. Si el PDF no
+     se puede abrir (por ejemplo, viene con contraseña), regresa null y la página lo baja tal cual.
+     Uso: const b = await PROFASE_MARCA.sellaPDF(bytes) || bytes */
+  function bytesDe(dataUrl) {
+    var b = atob(String(dataUrl).split(',')[1]), u = new Uint8Array(b.length);
+    for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    return u;
+  }
+  async function pdfLib() {
+    await cargaJS('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', function () { return !!(window.PDFLib && window.PDFLib.PDFDocument); });
+    return window.PDFLib;
+  }
+  async function sellaPDF(bytes) {
+    try {
+      var L = await pdfLib();
+      var doc = await L.PDFDocument.load(bytes);
+      var agua = await doc.embedPng(bytesDe(MARCA_AGUA)), signo = await doc.embedPng(bytesDe(LOGO));
+      var fb = await doc.embedFont(L.StandardFonts.HelveticaBold), fi = await doc.embedFont(L.StandardFonts.HelveticaOblique);
+      var azul = L.rgb(31 / 255, 56 / 255, 100 / 255), gris = L.rgb(0.53, 0.53, 0.53);
+      doc.getPages().forEach(function (pg) {
+        var c = pg.getCropBox(), W = c.width, H = c.height, x0 = c.x, y0 = c.y, giro = ((pg.getRotation().angle % 360) + 360) % 360;
+        var lado = giro === 90 || giro === 270, MW = Math.min(300, (lado ? H : W) * 0.6, (lado ? W : H) * 0.6 * 360 / 402), MH = MW * 402 / 360;
+        var cx = x0 + W / 2, cy = y0 + H / 2;
+        // en una hoja girada el signo se dibuja girado al revés, para que se vea derecho (nunca de lado)
+        var pos = giro === 90 ? { x: cx + MH / 2, y: cy - MW / 2 } : giro === 180 ? { x: cx + MW / 2, y: cy + MH / 2 }
+          : giro === 270 ? { x: cx - MH / 2, y: cy + MW / 2 } : { x: cx - MW / 2, y: cy - MH / 2 };
+        pg.drawImage(agua, { x: pos.x, y: pos.y, width: MW, height: MH, opacity: 0.55, rotate: L.degrees(giro) });
+        if (giro !== 0) return;     // hoja girada: solo la marca de agua (el pie quedaría de lado)
+        pg.drawImage(signo, { x: x0 + 12, y: y0 + 5, width: 8, height: 8.9 });
+        pg.drawText('PROFASE', { x: x0 + 23, y: y0 + 7, size: 6.5, font: fb, color: azul });
+        pg.drawText(SUB, { x: x0 + 56, y: y0 + 7, size: 6, font: fi, color: gris });
+      });
+      return await doc.save();
+    } catch (e) { return null; }
+  }
+
   window.PROFASE_MARCA = { logo: LOGO, marcaAgua: MARCA_AGUA, tablaPDF: tablaPDF, colores: C, fuente: FUENTE, subtitulo: SUB,
     excelJS: excelJS, libro: libro, encabezado: encabezado, cabecera: cabecera, cuerpo: cuerpo, borde: borde,
     impresion: impresion, guardar: guardar,
-    pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF };
+    pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF };
 })();

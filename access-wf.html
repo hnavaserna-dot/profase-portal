@@ -1,0 +1,461 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Access · WorkFlow</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c413f7cf52"></script><script src="js/marca.js?v=cce53f0db1"></script>
+<style>
+/* Portal PROFASE · Access › WorkFlow (etapa 1 de la migración del Access, 29-oct-2026): cada actividad del WorkFlow
+   como en la ficha del Access, solo para consultar: estatus completo, comentario, bitácora y documentos. Los datos los
+   deja la actualización de cada 3 horas (nube/access_wf.py, nube/wfdocs_nube.py); quién ve qué lo decide la base
+   (portal/sql/29_access_wf.sql): la dirección todo; los gerentes todo menos lo reservado a la dirección; cada
+   contador sus actividades. Aquí no se graba nada. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:720px}
+.band .acts{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--band-dim)}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:focus-visible,select:focus-visible,input:focus-visible,.fila:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:4px;margin:16px 0 0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.mal .v{color:var(--red)}
+.kpi.ojo .v{color:var(--accent-ink)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
+.filtros input{width:230px}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 12px;white-space:nowrap}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr.fila{cursor:pointer}
+tr.fila:hover td{background:var(--navy-soft)}
+.rs{font-weight:600}
+.rfc{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.vence{white-space:nowrap}
+.vence.mal{color:var(--red);font-weight:600}
+.vence.ojo{color:var(--accent-ink);font-weight:600}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
+.pie{color:var(--muted);font-size:12px;margin:0 0 24px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+/* Ficha del cliente: panel a la derecha; en celular, pantalla completa */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(780px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .cab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
+.ficha .cab .rfc{color:var(--band-dim)}
+.ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sec>h3 small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted)}
+.sec .in{padding:10px 14px}
+.sec table{font-size:13px}
+.sec td,.sec th{padding:6px 10px}
+.dl{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr);gap:6px 14px;margin:0}
+.dl dt{color:var(--muted);font-size:12.5px}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.lista{margin:0;padding:0;list-style:none}
+.lista li{padding:8px 14px;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600}
+.lista .d,.dl .d{color:var(--muted);font-size:12.5px}
+.pla{border-top:1px solid var(--line)}
+.pla:first-child{border-top:0}
+.pla summary{cursor:pointer;padding:9px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;list-style:none}
+.pla summary::-webkit-details-marker{display:none}
+.pla summary .n{font-weight:600}
+.pla summary::after{content:"›";color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.pla[open] summary::after{transform:rotate(-90deg)}
+.si{color:var(--ok);font-weight:600}
+.no{color:var(--muted)}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
+.tag.az{background:var(--navy-soft);color:var(--ink)}
+.link{background:none;border:0;padding:0;color:var(--navy);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .link{color:#9FB6E0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:#9FB6E0}}
+.dos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+
+@media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
+/* Estatus del Access */
+.est{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.est.e2{background:var(--ok-soft);color:var(--ok)}
+.est.e3{background:var(--red-soft);color:var(--red)}
+.est.e4{background:var(--accent-soft);color:var(--accent-ink)}
+.est.e5{background:var(--surface-2);color:var(--muted)}
+.est.e6{background:var(--surface-2);color:var(--muted);text-decoration:line-through}
+.clip{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.bit{margin:0;padding:0;list-style:none}
+.bit li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line)}
+.bit li:first-child{border-top:0}
+.bit .q{font-weight:600}
+.bit .c{color:var(--muted);font-size:12.5px}
+.doc{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.doc:first-child{border-top:0}
+.doc .izq{min-width:0;flex:1 1 240px}
+.doc .t{font-weight:600;overflow-wrap:anywhere}
+.doc .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.doc .acc{display:flex;gap:6px;flex-wrap:wrap}
+.doc .btn{padding:6px 11px}
+.coment{padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.aviso{padding:9px 14px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface-2)}
+/* En celular cada actividad es una tarjeta */
+@media (max-width:640px){
+  .filtros input,.filtros select{width:100%}
+  .filtros{width:100%}
+  #lista thead{display:none}
+  #lista tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+  #lista td{border:0;padding:0;min-width:0}
+  #lista td:nth-child(1){grid-column:1}
+  #lista td:nth-child(2){grid-column:1/-1;order:3}
+  #lista td:nth-child(3){grid-column:2;grid-row:1;text-align:right}
+  #lista td:nth-child(4),#lista td:nth-child(5),#lista td:nth-child(6){grid-column:1/-1;font-size:12.5px;order:4}
+  #lista td:nth-child(4)::before{content:"Responsable: ";color:var(--muted)}
+  #lista td:nth-child(5)::before{content:"Vence: ";color:var(--muted)}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .dl dt{margin-top:4px}
+  .ficha .cab h2{font-size:18px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">Access</div>
+    <h1>WorkFlow</h1>
+    <p id="subt">Cada actividad del WorkFlow como en la ficha del Access: estatus, comentario, bitácora y documentos, para consultar. Se actualiza sola cada 3 horas; los cambios se siguen haciendo en el Access.</p>
+  </div>
+  <div class="acts"><span id="hora" aria-live="polite"></span></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="error" hidden></div>
+  <div class="cargando" id="cargando">Cargando el WorkFlow…</div>
+
+  <section class="kpis" id="kpis" aria-label="Resumen" hidden>
+    <div class="kpi"><div class="l">Actividades</div><div class="v num" id="k-tot">–</div><div class="s" id="k-tot-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Por iniciar</div><div class="v num" id="k-pi">–</div><div class="s" id="k-pi-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">En proceso</div><div class="v num" id="k-ep">–</div><div class="s" id="k-ep-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Terminadas</div><div class="v num" id="k-te">–</div><div class="s" id="k-te-s">&nbsp;</div></div>
+  </section>
+
+  <section class="card" id="p-lista" aria-labelledby="h-lista" hidden>
+    <header>
+      <div><h2 id="h-lista">Actividades</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
+      <div class="filtros">
+        <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, actividad)" aria-label="Buscar">
+        <select id="f-mes" aria-label="Mes del WorkFlow"></select>
+        <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
+        <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
+        <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
+        <button class="btn" type="button" id="x-lista">Excel</button>
+      </div>
+    </header>
+    <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Actividad</th><th>Estatus</th><th>Responsable</th><th>Vence</th><th>Docs</th></tr></thead><tbody></tbody></table></div>
+    <div class="vacio" id="lista-vacia" hidden>Ninguna actividad con estos filtros.</div>
+    <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
+  </section>
+  <p class="pie" id="pie">El vencimiento es el del WorkFlow del portal (por ley y por las reglas de Daniel). La bitácora de cambios de estatus empieza en agosto de 2025, cuando el Access la empezó a guardar.</p>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var ZONA = 'America/Monterrey', PAGINA = 150;
+  var D = null, T = [], POR_ID = {}, mostrar = PAGINA, ROL = '', ABIERTA = null;
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var ORDEN_EST = [5, 4, 3, 2, 6];
+  // posiciones de cada actividad en el paquete (nube/access_wf.py)
+  var I = { id: 0, pla: 1, act: 2, emp: 3, ym: 4, est: 5, resp: 6, aut: 7, cont: 8, vence: 9, venPro: 10, term: 11, coment: 12, sec: 13, reqArch: 14, reqSec: 15, perdon: 16, docs: 17, bit: 18 };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var fDia = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' });
+  var HOY = +fDia.format(new Date()).replace(/-/g, '');
+  function fechaN(n) { if (!n) return ''; var s = String(n); return (+s.slice(6, 8)) + ' ' + MESES[+s.slice(4, 6) - 1] + ' ' + s.slice(0, 4); }
+  function fechaHora(s) { if (!s) return ''; var d = String(s).slice(0, 10).split('-'); var h = String(s).slice(11, 16); return d.length < 3 ? String(s) : (+d[2]) + ' ' + MESES[+d[1] - 1] + ' ' + d[0] + (h ? ' · ' + h : ''); }
+  function fechaIso(s) { if (!s) return ''; try { return new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(s)).replace(/\./g, ''); } catch (e) { return String(s).slice(0, 16); } }
+  function mesTxt(ym) { var y = Math.floor(ym / 100), m = ym % 100; return MESES_L[m - 1] + ' ' + y; }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function per(i) { return i >= 0 && D.per[i] ? D.per[i] : ''; }
+  function estTxt(e) { return D.est[e] || D.est[String(e)] || ('Estatus ' + e); }
+  function chipEst(e) { return '<span class="est e' + esc(e) + '">' + esc(estTxt(e)) + '</span>'; }
+  function emp(t) { return D.emp[t[I.emp]] || [0, '', '', '']; }
+  function actTxt(t) { return (D.act[t[I.act]] || [0, ''])[1]; }
+  function plaTxt(t) { return D.pla[t[I.pla]] || ''; }
+  function tamano(b) { b = +b || 0; return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : b + ' B'; }
+  function venceHtml(t) {
+    var v = t[I.vence]; if (!v) return '<span class="no">Sin vencimiento</span>';
+    var tarde = t[I.est] !== 2 && t[I.est] !== 6 && v < HOY;
+    return '<span class="vence' + (tarde ? ' mal' : '') + '">' + esc(fechaN(v)) + '</span>';
+  }
+
+  async function desb64(b64) {
+    var r = await fetch('data:application/octet-stream;base64,' + b64);
+    var s = r.body.pipeThrough(new DecompressionStream('gzip'));
+    return JSON.parse(await new Response(s).text());
+  }
+  async function leeDoc(col, id) {
+    var q = await P.sb.from('docs').select('data').eq('col', col).eq('id', id).maybeSingle();
+    if (q.error) throw q.error;
+    return q.data ? q.data.data : null;
+  }
+
+  async function carga() {
+    try {
+      var p = await P.listo; if (!p) return;
+      ROL = p.rol;
+      var col = ROL === 'director' ? 'director' : 'access';
+      var id = ROL === 'director' ? 'acc_wf' : ROL === 'gerente' ? 'wf_equipo' : 'wf_' + p.usuario;
+      var doc = await leeDoc(col, id);
+      if (!doc || !doc.b64) {
+        $('cargando').hidden = true; $('error').hidden = false;
+        $('error').textContent = 'Todavía no hay datos del WorkFlow para tu usuario. Llegan con la próxima actualización (cada 3 horas).';
+        return;
+      }
+      D = await desb64(doc.b64);
+      T = D.tareas || []; POR_ID = {}; T.forEach(function (t) { POR_ID[t[I.id]] = t; });
+      $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
+      if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en la ficha del Access: estatus, comentario, bitácora y documentos. Se actualiza sola cada 3 horas; los cambios se siguen haciendo en el Access.';
+      opciones();
+      $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
+      pinta();
+      var h = /^#a(\d+)$/.exec(location.hash); if (h && POR_ID[+h[1]]) abre(+h[1]);
+    } catch (e) {
+      $('cargando').hidden = true; $('error').hidden = false;
+      $('error').textContent = 'No se pudo leer el WorkFlow. Vuelve a intentar en un momento.';
+    }
+  }
+
+  function opciones() {
+    var yms = {}, rs = {}, ps = {};
+    T.forEach(function (t) { yms[t[I.ym]] = 1; if (t[I.resp] >= 0) rs[per(t[I.resp])] = 1; ps[plaTxt(t)] = 1; });
+    var L = Object.keys(yms).map(Number).sort(function (a, b) { return b - a; });
+    var hoyYm = Math.floor(HOY / 100), def = L.filter(function (y) { return y <= hoyYm; })[0] || L[0] || '';
+    $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + L.map(function (y) { return '<option value="' + y + '"' + (y === def ? ' selected' : '') + '>' + esc(mesTxt(y)) + '</option>'; }).join('');
+    $('f-est').innerHTML = '<option value="">Todos los estatus</option><option value="abiertas">Abiertas (por iniciar y en proceso)</option>' + ORDEN_EST.map(function (e) { return '<option value="' + e + '">' + esc(estTxt(e)) + '</option>'; }).join('');
+    $('f-resp').innerHTML = '<option value="">Todos los responsables</option>' + Object.keys(rs).sort().map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    $('f-pla').innerHTML = '<option value="">Todas las plantillas</option>' + Object.keys(ps).sort().map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+  }
+
+  function filtrados(sinEstatus) {
+    var q = norm($('f-buscar').value.trim()), ym = +$('f-mes').value || 0, es = $('f-est').value, r = $('f-resp').value, pl = $('f-pla').value;
+    return T.filter(function (t) {
+      if (ym && t[I.ym] !== ym) return false;
+      if (!sinEstatus && es) { if (es === 'abiertas') { if (t[I.est] !== 4 && t[I.est] !== 5) return false; } else if (t[I.est] !== +es) return false; }
+      if (r && per(t[I.resp]) !== r) return false;
+      if (pl && plaTxt(t) !== pl) return false;
+      if (q) { var e = emp(t); if (norm([e[1], e[2], e[3], actTxt(t), plaTxt(t)].join(' ')).indexOf(q) < 0) return false; }
+      return true;
+    });
+  }
+
+  function pinta() {
+    var base = filtrados(true), cuenta = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, docs = 0;
+    base.forEach(function (t) { cuenta[t[I.est]] = (cuenta[t[I.est]] || 0) + 1; if (t[I.docs]) docs++; });
+    $('k-tot').textContent = base.length; $('k-tot-s').textContent = docs + ' con documentos';
+    $('k-pi').textContent = cuenta[5]; $('k-pi-s').textContent = base.length ? Math.round(100 * cuenta[5] / base.length) + ' %' : ' ';
+    $('k-ep').textContent = cuenta[4]; $('k-ep-s').textContent = base.length ? Math.round(100 * cuenta[4] / base.length) + ' %' : ' ';
+    $('k-te').textContent = cuenta[2]; $('k-te-s').textContent = (cuenta[3] ? cuenta[3] + ' rechazadas · ' : '') + (base.length ? Math.round(100 * cuenta[2] / base.length) + ' %' : '');
+    var L = filtrados(false);
+    $('lista-sub').textContent = L.length === 1 ? '1 actividad' : L.length + ' actividades';
+    $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (t) {
+      var e = emp(t);
+      return '<tr class="fila" tabindex="0" data-id="' + esc(t[I.id]) + '"><td><div class="rs">' + esc(e[1]) + '</div><div class="rfc">' + esc(e[2]) + (e[3] ? ' · ' + esc(e[3]) : '') + '</div></td>'
+        + '<td><div>' + esc(actTxt(t)) + '</div><div class="rfc">' + esc(plaTxt(t)) + ' · ' + esc(mesTxt(t[I.ym])) + '</div></td>'
+        + '<td>' + chipEst(t[I.est]) + '</td>'
+        + '<td>' + (esc(per(t[I.resp])) || '<span class="no">Sin responsable</span>') + (t[I.aut] >= 0 ? '<div class="rfc">Autoriza: ' + esc(per(t[I.aut])) + '</div>' : '') + '</td>'
+        + '<td>' + venceHtml(t) + '</td>'
+        + '<td>' + (t[I.docs] ? '<span class="clip">' + esc(t[I.docs]) + (t[I.docs] === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>') + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = L.length > 0;
+    $('mas').hidden = L.length <= mostrar;
+  }
+
+  /* ---------- ficha de la actividad ---------- */
+  function sec(tit, cuerpo, nota, id) { return '<section class="sec"' + (id ? ' id="' + id + '"' : '') + '><h3>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</h3>' + cuerpo + '</section>'; }
+  function siNo(v) { return v ? '<span class="si">Sí</span>' : '<span class="no">No</span>'; }
+  function abre(id) {
+    var t = POR_ID[id]; if (!t) return;
+    ABIERTA = id;
+    var e = emp(t), bit = t[I.bit] || [];
+    var h = '<div class="cab"><div><div class="rfc">' + esc(e[3]) + ' · ' + esc(plaTxt(t)) + '</div><h2 id="f-tit">' + esc(actTxt(t)) + '</h2><div class="rfc">' + esc(e[1]) + ' · ' + esc(e[2]) + ' · ' + esc(mesTxt(t[I.ym])) + '</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar la ficha">Cerrar</button></div><div class="cuerpo">';
+    var req = [t[I.reqArch] ? 'Archivo para terminarla' : '', t[I.reqSec] ? 'El paso anterior terminado' : ''].filter(Boolean).join(' · ');
+    h += sec('La actividad', '<div class="in"><dl class="dl">'
+      + '<dt>Estatus</dt><dd>' + chipEst(t[I.est]) + '</dd>'
+      + '<dt>Responsable</dt><dd>' + (esc(per(t[I.resp])) || '<span class="no">Sin responsable</span>') + '</dd>'
+      + '<dt>Autoriza</dt><dd>' + (esc(per(t[I.aut])) || '<span class="no">Nadie (la termina el responsable)</span>') + '</dd>'
+      + '<dt>Contador asignado</dt><dd>' + (esc(per(t[I.cont])) || '<span class="no">Sin contador asignado</span>') + '</dd>'
+      + '<dt>Vence</dt><dd>' + venceHtml(t) + (t[I.venPro] && t[I.venPro] !== t[I.vence] ? ' <span class="no">· Profase en el Access: ' + esc(fechaN(t[I.venPro])) + '</span>' : '') + '</dd>'
+      + '<dt>Terminada</dt><dd>' + (t[I.term] ? esc(fechaHora(t[I.term])) : '<span class="no">Todavía no</span>') + (t[I.perdon] ? ' <span class="tag az">Marcada «a tiempo» a mano</span>' : '') + '</dd>'
+      + '<dt>Paso</dt><dd>' + esc(t[I.sec] || '—') + ' de la plantilla ' + esc(plaTxt(t)) + '</dd>'
+      + '<dt>Requiere</dt><dd>' + (esc(req) || '<span class="no">Nada especial</span>') + '</dd></dl></div>');
+    if (t[I.coment]) h += sec('Comentario', '<div class="coment">' + esc(t[I.coment]) + '</div>');
+    h += sec('Bitácora', bit.length ? '<ul class="bit">' + bit.slice().reverse().map(function (b) {
+      return '<li>' + chipEst(b[0]) + '<span class="q">' + (esc(per(b[1])) || 'Sin dato') + '</span><span class="c">' + esc(fechaHora(b[2])) + '</span></li>';
+    }).join('') + '</ul>' : '<div class="vacio">Sin cambios de estatus anotados (la bitácora del Access empieza en agosto de 2025).</div>', bit.length ? String(bit.length) : '');
+    h += '<section class="sec" id="docs-sec"><h3>Documentos <small id="docs-n"></small></h3><div id="docs-in"><div class="vacio">' + (t[I.docs] ? 'Revisando…' : 'Sin documentos.') + '</div></div></section>';
+    var otras = T.filter(function (x) { return x[I.emp] === t[I.emp] && x[I.ym] === t[I.ym] && x[I.id] !== t[I.id]; });
+    if (otras.length) h += sec('Otras actividades del cliente en ' + mesTxt(t[I.ym]), '<ul class="lista">' + otras.map(function (x) {
+      return '<li><button type="button" class="link" data-id="' + esc(x[I.id]) + '">' + esc(actTxt(x)) + '</button> ' + chipEst(x[I.est]) + '<div class="d">' + esc(plaTxt(x)) + ' · ' + (esc(per(x[I.resp])) || 'sin responsable') + '</div></li>';
+    }).join('') + '</ul>', String(otras.length));
+    h += '</div>';
+    $('ficha').innerHTML = h;
+    $('velo').hidden = false;
+    $('ficha').scrollTop = 0;
+    try { $('cerrar').focus(); } catch (er) {}
+    if (t[I.docs]) pintaDocs(t);
+  }
+  function cierra() { ABIERTA = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
+
+  /* ---------- documentos (portal/sql/29_access_wf.sql: la base decide cuáles ve cada quien) ---------- */
+  var DOCS = {};
+  async function pintaDocs(t) {
+    var id = t[I.id], r;
+    try { r = await P.sb.from('wf_docs').select('id,nombre,descripcion,comentario,enviado,fecha_envio,subio,fecha,bytes,ruta_sp,en_portal').eq('wfra', id).order('id'); } catch (er) { r = { error: er }; }
+    if (ABIERTA !== id || !$('docs-in')) return;
+    if (r.error) { $('docs-in').innerHTML = '<div class="vacio">No se pudo leer la lista. Cierra la ficha y vuelve a abrirla en un momento.</div>'; return; }
+    var L = r.data || [];
+    $('docs-n').textContent = L.length ? String(L.length) : '';
+    if (!L.length) { $('docs-in').innerHTML = '<div class="vacio">Sin documentos.</div>'; return; }
+    L.forEach(function (d) { DOCS[d.id] = d; });
+    $('docs-in').innerHTML = L.map(function (d) {
+      var info = [d.subio ? 'Lo subió ' + d.subio : '', d.fecha ? fechaIso(d.fecha) : '', d.bytes ? tamano(d.bytes) : ''].filter(Boolean).join(' · ');
+      var acc;
+      if (d.bytes && d.en_portal) acc = (esPdf(d) ? '<button class="btn" type="button" data-dver="' + esc(d.id) + '">Ver</button>' : '') + '<button class="btn" type="button" data-dbaja="' + esc(d.id) + '">Bajar</button>';
+      else if (/^https:\/\//i.test(d.ruta_sp || '')) acc = '<a class="btn" href="' + esc(d.ruta_sp) + '" target="_blank" rel="noopener noreferrer">Abrir en SharePoint</a>';
+      else if (d.bytes) acc = '<span class="no">Llega con la próxima actualización</span>';
+      else acc = '<span class="no">Sin archivo</span>';
+      return '<div class="doc"><div class="izq"><div class="t">' + esc(d.nombre) + '</div>'
+        + (d.descripcion && d.descripcion !== d.nombre ? '<div class="d">' + esc(d.descripcion) + '</div>' : '')
+        + (d.comentario ? '<div class="d">Comentario: ' + esc(d.comentario) + '</div>' : '')
+        + '<div class="d">' + esc(info) + (d.enviado ? ' · <span class="tag az">Enviado al cliente' + (d.fecha_envio ? ' ' + esc(fechaIso(d.fecha_envio)) : '') + '</span>' : '') + '</div></div>'
+        + '<div class="acc">' + acc + '</div></div>';
+    }).join('') + '<div class="aviso">Los PDF salen con la marca PROFASE (el signo de fondo y una línea abajo); los demás archivos, tal cual se subieron al Access.</div>';
+  }
+  function esPdf(d) { return /\.pdf$/i.test(d.nombre || ''); }
+  async function bytesDe(d) {
+    var r = await P.sb.storage.from('wfdocs').download(String(d.id));
+    if (r.error || !r.data) throw new Error('sin archivo');
+    var b = new Uint8Array(await r.data.arrayBuffer());
+    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b); if (m) b = m; }
+    return b;
+  }
+  function nombreSeguro(n) { return String(n || 'documento').replace(/[\\/:*?"<>|]/g, '_'); }
+  async function baja(btn) {
+    var d = DOCS[+btn.getAttribute('data-dbaja')]; if (!d) return;
+    var t0 = btn.textContent; btn.disabled = true; btn.textContent = 'Bajando…';
+    try {
+      var b = await bytesDe(d);
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([b], { type: esPdf(d) ? 'application/pdf' : 'application/octet-stream' }));
+      a.download = nombreSeguro(d.nombre); document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      try { P.registrar('descarga', 'Access › WorkFlow · ' + d.nombre); } catch (er) {}
+      btn.textContent = 'Listo';
+    } catch (er) { btn.textContent = 'No se pudo'; }
+    setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 2000);
+  }
+  async function ver(btn) {
+    var d = DOCS[+btn.getAttribute('data-dver')]; if (!d) return;
+    var w = window.open('', '_blank');
+    var t0 = btn.textContent; btn.disabled = true; btn.textContent = 'Abriendo…';
+    try {
+      var b = await bytesDe(d), u = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
+      if (w) w.location.href = u; else { var a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+      try { P.registrar('descarga', 'Access › WorkFlow (ver) · ' + d.nombre); } catch (er) {}
+      setTimeout(function () { URL.revokeObjectURL(u); }, 120000);
+      btn.textContent = t0;
+    } catch (er) { if (w) w.close(); btn.textContent = 'No se pudo'; setTimeout(function () { btn.textContent = t0; }, 2000); }
+    btn.disabled = false;
+  }
+
+  /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
+  async function excel(b) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = filtrados(false);
+      var wb = MK.libro(EX, 'WorkFlow · Access');
+      var ws = wb.addWorksheet('WorkFlow');
+      var head = ['Cliente', 'RFC', 'Grupo', 'Plantilla', 'Actividad', 'Mes', 'Estatus', 'Responsable', 'Autoriza', 'Contador asignado', 'Vence', 'Terminada', 'Comentario', 'Documentos'];
+      ws.columns = [40, 15, 24, 22, 34, 14, 12, 24, 24, 24, 13, 18, 34, 11].map(function (w) { return { width: w }; });
+      var f = MK.encabezado(wb, ws, head.length, { titulo: 'WorkFlow (Access)', lineas: ['Datos al ' + ($('hora').textContent.replace(/^Datos al /, '') || fechaN(HOY)), L.length + ' actividades con los filtros de la pantalla'] });
+      ws.getRow(f).values = head; MK.cabecera(ws, f, 1, head.length);
+      L.forEach(function (t, i) { var e = emp(t); ws.getRow(f + 1 + i).values = [e[1], e[2], e[3], plaTxt(t), actTxt(t), mesTxt(t[I.ym]), estTxt(t[I.est]), per(t[I.resp]), per(t[I.aut]), per(t[I.cont]), fechaN(t[I.vence]), fechaHora(t[I.term]), t[I.coment], t[I.docs] || 0]; });
+      if (L.length) MK.cuerpo(ws, f + 1, f + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f }];
+      MK.impresion(ws, { repetir: f });
+      await MK.guardar(wb, 'WorkFlow Access PROFASE.xlsx');
+    } catch (e) { $('error').hidden = false; $('error').textContent = 'No se pudo armar el Excel. Vuelve a intentar.'; setTimeout(function () { $('error').hidden = true; }, 6000); }
+    b.disabled = false;
+  }
+
+  ['f-buscar', 'f-mes', 'f-est', 'f-resp', 'f-pla'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
+  $('x-lista').onclick = function () { excel(this); };
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-dbaja],[data-dver]');
+    if (b) { if (b.hasAttribute('data-dbaja')) baja(b); else ver(b); return; }
+    var t = ev.target.closest('[data-id]');
+    if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
+    if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('velo').hidden) cierra();
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) abre(+ev.target.getAttribute('data-id'));
+  });
+  carga();
+})();
+</script>
+</body></html>
