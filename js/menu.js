@@ -37,6 +37,7 @@
   var MODS = [
     { k: 'wf', t: 'Workflow', d: 'El avance del trabajo de cada cliente y de cada contador.', subs: [
       { k: 'panel', v: 'wf', t: 'Panel', tc: 'Mi panel', d: 'Obligaciones, vencimientos y pausas.' },
+      { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
       { k: 'clientes', v: 'cli', t: 'Clientes', d: 'Cada cliente y su avance.' },
       { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' }] },
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
