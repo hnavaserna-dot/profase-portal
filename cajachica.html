@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Caja chica</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9347a9efdb"></script></head><body>
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Caja chica</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9347a9efdb"></script><script src="js/marca.js?v=25633be8aa"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -777,25 +777,49 @@ th.r,td.r{text-align:right}
     });
   }
 
-  // ---------- exportar ----------
-  function csv(v){ var s=String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
-  $('exportBtn').addEventListener('click', function(){
+  // ---------- exportar (Excel con la marca PROFASE: js/marca.js) ----------
+  $('exportBtn').addEventListener('click', async function(){
     if(!dl) return;
-    var rows=visibles();
-    var head=['Fecha','Quién hizo el gasto','Capturó','Cliente','RFC cliente','Grupo','Categoría','Concepto','Importe','Deducible','Forma de pago','RFC proveedor','Folio fiscal','Origen','Destino','Km','Vehículo','Estatus','Autorizó','Fecha de autorización','Fecha de reembolso'];
-    var lines=[head.map(csv).join(',')], total=0;
-    rows.forEach(function(m){
-      total+=Number(m.importe)||0;
-      lines.push([m.fecha, m.persona||'', m.porNombre||'', m.cliente||'', m.clienteRfc||'', m.clienteGrupo||'',
-        catOf(m.categoria).label, m.descripcion||'', (Number(m.importe)||0).toFixed(2),
-        m.categoria==='kilometraje' ? '' : (m.deducible===false?'No':'Sí'), pagoOf(m.pago).label, m.rfc||'', m.folio||'',
-        m.origen||'', m.destino||'', Number(m.km)||0, m.vehiculo||'', estOf(m.estatus).label,
-        m.autorizadoPorNombre||'', m.autorizadoEn||'', m.reembolsadoEn||''].map(csv).join(','));
-    });
-    lines.push(['','','','','','','','TOTAL',total.toFixed(2)].map(csv).join(','));
-    Promise.resolve(dl.save({filename:'caja-chica-'+state.periodo+'.csv', data:'﻿'+lines.join('\r\n')}))
-      .then(function(){ toast('Archivo descargado'); })
-      .catch(function(err){ toast('No se pudo exportar: '+falla(err)); });
+    var btn=this, MK=window.PROFASE_MARCA;
+    btn.disabled=true;
+    try{
+      var EX=await MK.excelJS();
+      var rows=visibles(), C=MK.colores, total=0, km=0;
+      var head=['Fecha','Quién hizo el gasto','Capturó','Cliente','RFC cliente','Grupo','Categoría','Concepto','Importe','Deducible','Forma de pago','RFC proveedor','Folio fiscal','Origen','Destino','Km','Vehículo','Estatus','Autorizó','Fecha de autorización','Fecha de reembolso'];
+      rows.forEach(function(m){ total+=Number(m.importe)||0; km+=Number(m.km)||0; });
+      var wb=MK.libro(EX, 'Caja chica · '+nombreMes(state.periodo));
+      var ws=wb.addWorksheet('Caja chica');
+      ws.columns=[13,22,20,36,15,18,27,36,13,10,16,15,38,20,20,8,16,13,20,20,18].map(function(w){ return {width:w}; });
+      var cuando=new Date().toLocaleString('es-MX',{timeZone:'America/Monterrey',dateStyle:'medium',timeStyle:'short'});
+      var g=MK.encabezado(wb, ws, head.length, {titulo:'Caja chica · '+nombreMes(state.periodo),
+        lineas:[rows.length+(rows.length===1?' gasto':' gastos')+' · total '+money(total)+(km?' · '+km+' km':''), 'Exportado el '+cuando+' (hora de Monterrey)']});
+      head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
+      MK.cabecera(ws, g, 1, head.length, {derecha:[9,16]});
+      var dia=function(t){ var p=String(t||'').slice(0,10).split('-'); return p.length===3 ? new Date(Date.UTC(+p[0],+p[1]-1,+p[2])) : (t||null); };
+      rows.forEach(function(m,k){
+        var r=ws.getRow(g+1+k);
+        r.values=[dia(m.fecha), m.persona||'', m.porNombre||'', m.cliente||'', m.clienteRfc||'', m.clienteGrupo||'',
+          catOf(m.categoria).label, m.descripcion||'', Number(m.importe)||0,
+          m.categoria==='kilometraje' ? '' : (m.deducible===false?'No':'Sí'), pagoOf(m.pago).label, m.rfc||'', m.folio||'',
+          m.origen||'', m.destino||'', Number(m.km)||0, m.vehiculo||'', estOf(m.estatus).label,
+          m.autorizadoPorNombre||'', dia(m.autorizadoEn), dia(m.reembolsadoEn)];
+        r.getCell(1).numFmt='dd-mmm-yyyy'; r.getCell(9).numFmt='$#,##0.00'; r.getCell(16).numFmt='#,##0';
+        r.getCell(20).numFmt='dd-mmm-yyyy'; r.getCell(21).numFmt='dd-mmm-yyyy';
+      });
+      var ft=g+1+rows.length, rt=ws.getRow(ft);
+      rt.getCell(8).value='TOTAL'; rt.getCell(9).value=total; rt.getCell(9).numFmt='$#,##0.00';
+      rt.getCell(16).value=km; rt.getCell(16).numFmt='#,##0';
+      MK.cuerpo(ws, g+1, ft, 1, head.length);
+      for(var c=1;c<=head.length;c++){ var x=rt.getCell(c); x.font={name:MK.fuente,size:10,bold:true,color:{argb:C.tinta}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.azulClaro}}; }
+      if(rows.length) ws.autoFilter={from:{row:g,column:1},to:{row:g+rows.length,column:head.length}};
+      ws.views=[{state:'frozen',ySplit:g,showGridLines:false}];
+      MK.impresion(ws, {repetir:g});
+      var datos=await wb.xlsx.writeBuffer();
+      await dl.save({filename:'Caja chica '+nombreMes(state.periodo)+'.xlsx',
+        data:new Blob([datos],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})});
+      toast('Archivo descargado');
+    }catch(err){ toast('No se pudo exportar: '+falla(err)); }
+    btn.disabled=false;
   });
 
   // ---------- arranque ----------

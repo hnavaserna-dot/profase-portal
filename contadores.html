@@ -14,7 +14,7 @@
 #w-just{flex:none}
 #w-just .tablebox{flex:none;min-height:0;max-height:300px;margin-bottom:12px}
 .vsw button:not([data-view="wf"]):not([data-view="var"]):not([data-view="car"]):not([data-view="quo"]):not([data-view="af"]),#w-corte{display:none!important}
-</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9347a9efdb"></script></head><body>
+</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9347a9efdb"></script><script src="js/marca.js?v=25633be8aa"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
@@ -1054,10 +1054,6 @@ ROOT.querySelectorAll('.wtab').forEach(t=>t.onclick=()=>{if(t.dataset.p==='mes'&
 /* ---- Descargar Excel de lo que se está viendo (para mandárselo al equipo) ---- */
 let DL=null;
 (async()=>{try{DL=await window.claude?.use?.('downloads')}catch(e){DL=null}document.querySelectorAll('#v-wf .wxl').forEach(b=>b.hidden=!DL)})();
-function cargarXLSX(){
-  if(window.XLSX)return Promise.resolve(window.XLSX);
-  return new Promise((ok,ko)=>{const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';sc.onload=()=>window.XLSX?ok(window.XLSX):ko(new Error('xlsx'));sc.onerror=()=>ko(new Error('xlsx'));document.head.appendChild(sc)});
-}
 function datosExport(){
   const list=R.filter(o=>pass(o));
   const det=state.tab==='mes'&&state.det;
@@ -1085,40 +1081,64 @@ function resAct(it){
   return [...Ma.values()].sort((a,b)=>b.t-a.t||b.v-a.v||a.tar.localeCompare(b.tar,'es'));
 }
 async function descargarExcel(btn){
+  /* Excel con la marca PROFASE (signo, nombre, subtítulo y línea azul; encabezados en azul institucional): js/marca.js */
   if(!DL||!D)return;
   const txt=btn.textContent;btn.disabled=true;btn.textContent='Preparando…';
   const fin=(m)=>{btn.textContent=m||txt;btn.disabled=false;if(m)setTimeout(()=>{btn.textContent=txt},4000)};
-  let X;try{X=await cargarXLSX()}catch(e){fin('No se pudo preparar');return}
+  const MK=window.PROFASE_MARCA;
+  let EX;try{EX=await MK.excelJS()}catch(e){fin('No se pudo preparar');return}
   const {it,soloV,periodo,filtros,md}=datosExport();
   const asof=W('asof').textContent;
   const tot=it.reduce((a,x)=>a+x.pen,0),totV=it.reduce((a,x)=>a+(x.ven?x.pen:0),0);
-  const n2date=v=>v?new Date(Math.floor(v/10000),Math.floor(v/100)%100-1,v%100):'';
-  const atr=x=>x.v&&x.v<ASOF?Math.round((n2d(ASOF)-n2d(x.v))/864e5):'';
-  const titulo='WorkFlow PROFASE · '+periodo+' · '+DSM[md];
-  const enc=['Departamento','Responsable','Contador asignado','Cliente','Grupo','Actividad','Plantilla','Periodo','Vencimiento','Días de atraso','Situación','Tareas'];
-  const aoa=[[titulo],['Datos al '+asof+' · '+tot+' tareas'+(soloV?'':' ('+totV+' vencidas)')],[filtros.length?'Filtros: '+filtros.join(' · '):'Sin filtros: todas mis tareas'],['Vencida = pendiente cuya fecha de vencimiento ya pasó. Cada actividad se mide con la fecha SAT o Profase de WorkFlow, o con un plazo calculado (DIOT, cálculo de SIPARE e ISN, pago de honorarios); las aclaraciones no tienen vencimiento. En pausa = detenida por causa del cliente.'],enc];
-  for(const x of it)aoa.push([x.dep,x.resp,x.con,x.cli,x.grp,x.tar,x.pla,ymL(x.ym),n2date(x.v),x.term?'':atr(x),x.term?terTxt(x.sat,x.pen).replace(/^t/,'T'):x.pz?'En pausa':x.ven?'Vencida':'En plazo',x.pen]);
-  const ws=X.utils.aoa_to_sheet(aoa,{cellDates:true,dateNF:'dd-mmm-yyyy'});
-  ws['!cols']=[{wch:16},{wch:24},{wch:24},{wch:40},{wch:28},{wch:34},{wch:30},{wch:15},{wch:13},{wch:14},{wch:11},{wch:8}];
-  if(it.length)ws['!autofilter']={ref:'A5:L'+(5+it.length)};
-  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:11}},{s:{r:1,c:0},e:{r:1,c:11}},{s:{r:2,c:0},e:{r:2,c:11}}];
-  // Resumen por departamento y responsable
+  const atr=x=>x.v&&x.v<ASOF?Math.round((n2d(ASOF)-n2d(x.v))/864e5):null;
+  const titulo='WorkFlow · '+periodo+' · '+DSM[md];
+  const filTxt=filtros.length?'Filtros: '+filtros.join(' · '):'Sin filtros: todas mis tareas';
+  const notaV='Vencida = pendiente cuya fecha de vencimiento ya pasó. Cada actividad se mide con la fecha SAT o Profase de WorkFlow, o con un plazo calculado (DIOT, cálculo de SIPARE e ISN, pago de honorarios); las aclaraciones no tienen vencimiento.';
+  const C=MK.colores,F=MK.fuente,NUM='#,##0';
+  const wb=MK.libro(EX,titulo);
+  // Resumen por departamento y responsable, y por actividad
+  const ws2=wb.addWorksheet('Resumen',{views:[{showGridLines:false}]});
+  ws2.columns=[22,26,10,10,10,3,38,13,10,10,10].map(w=>({width:w}));
+  let f=MK.encabezado(wb,ws2,11,{titulo,lineas:['Datos al '+asof,filTxt,notaV]});
+  [[1,'Por departamento y responsable'],[7,'Por actividad']].forEach(([c,t])=>{const x=ws2.getCell(f,c);x.value=t;x.font={name:F,size:11,bold:true,color:{argb:C.azul}}});
+  const fh=f+1;
+  ['Departamento','Responsable','Clientes','Tareas','Vencidas'].forEach((t,i)=>ws2.getCell(fh,1+i).value=t);
+  ['Actividad','Responsables','Clientes','Tareas','Vencidas'].forEach((t,i)=>ws2.getCell(fh,7+i).value=t);
+  MK.cabecera(ws2,fh,1,5,{derecha:[3,4,5]});MK.cabecera(ws2,fh,7,11,{derecha:[8,9,10,11]});
+  const pon=(r,c1,vals,est)=>vals.forEach((v,i)=>{const x=ws2.getCell(r,c1+i);x.value=v;x.font={name:F,size:10,bold:!!(est&&est.neg),color:{argb:C.tinta}};x.border=MK.borde();if(typeof v==='number')x.numFmt=NUM;if(est&&est.fondo)x.fill={type:'pattern',pattern:'solid',fgColor:{argb:est.fondo}}});
+  const rojo=(r,c,v)=>{if(v){const x=ws2.getCell(r,c);x.font=Object.assign({},x.font,{color:{argb:C.rojo}})}};
   const M=new Map();for(const x of it){const k=x.depI+'|'+x.resp;if(!M.has(k))M.set(k,{depI:x.depI,dep:x.dep,resp:x.resp,t:0,v:0,cl:new Set()});const m=M.get(k);m.t+=x.pen;if(x.ven)m.v+=x.pen;m.cl.add(x.cli)}
-  const res=[[titulo],['Datos al '+asof],[filtros.length?'Filtros: '+filtros.join(' · '):'Sin filtros: todas mis tareas'],['Vencida = pendiente cuya fecha de vencimiento ya pasó. Cada actividad se mide con la fecha SAT o Profase de WorkFlow, o con un plazo calculado (DIOT, cálculo de SIPARE e ISN, pago de honorarios); las aclaraciones no tienen vencimiento.'],['Por departamento y responsable','','','','','','Por actividad'],['Departamento','Responsable','Clientes','Tareas','Vencidas','','Actividad','Responsables','Clientes','Tareas','Vencidas']];
   const ms=[...M.values()].sort((a,b)=>a.depI-b.depI||b.t-a.t);
-  let dPrev=null,dt=0,dv=0;
-  const cierre=()=>{if(dPrev!==null)res.push(['Total '+dPrev,'','',dt,dv],[])};
-  for(const m of ms){if(m.dep!==dPrev){cierre();dPrev=m.dep;dt=0;dv=0}res.push([m.dep,m.resp,m.cl.size,m.t,m.v]);dt+=m.t;dv+=m.v}
-  cierre();res.push(['Total general','','',tot,totV]);
-  const filA=[...resAct(it).map(a=>[a.tar,a.rs.size,a.cl.size,a.t,a.v]),['Total',new Set(it.map(x=>x.resp)).size,new Set(it.map(x=>x.cli)).size,tot,totV]];
-  filA.forEach((f,i)=>{const r=6+i;while(res.length<=r)res.push([]);const row=res[r];while(row.length<6)row.push('');row.push(...f)});
-  const ws2=X.utils.aoa_to_sheet(res);ws2['!cols']=[{wch:22},{wch:26},{wch:10},{wch:10},{wch:10},{wch:3},{wch:38},{wch:13},{wch:10},{wch:10},{wch:10}];
-  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws2,'Resumen');X.utils.book_append_sheet(wb,ws,'Detalle');
-  const buf=X.write(wb,{bookType:'xlsx',type:'array'});
+  let r=fh+1,dPrev=null,dt=0,dv=0;
+  const cierre=()=>{if(dPrev!==null){pon(r,1,['Total '+dPrev,'','',dt,dv],{neg:1,fondo:C.azulClaro});rojo(r,5,dv);r+=2}};
+  for(const m of ms){if(m.dep!==dPrev){cierre();dPrev=m.dep;dt=0;dv=0}pon(r,1,[m.dep,m.resp,m.cl.size,m.t,m.v]);rojo(r,5,m.v);r++;dt+=m.t;dv+=m.v}
+  cierre();pon(r,1,['Total general','','',tot,totV],{neg:1,fondo:C.azulClaro});rojo(r,5,totV);
+  let ra=fh+1;
+  for(const a of resAct(it)){pon(ra,7,[a.tar,a.rs.size,a.cl.size,a.t,a.v]);rojo(ra,11,a.v);ra++}
+  pon(ra,7,['Total',new Set(it.map(x=>x.resp)).size,new Set(it.map(x=>x.cli)).size,tot,totV],{neg:1,fondo:C.azulClaro});rojo(ra,11,totV);
+  MK.impresion(ws2);
+  // Detalle
+  const ws=wb.addWorksheet('Detalle');
+  ws.columns=[16,24,24,40,28,34,30,15,13,14,11,8].map(w=>({width:w}));
+  const g=MK.encabezado(wb,ws,12,{titulo,lineas:['Datos al '+asof+' · '+tot+' tareas'+(soloV?'':' ('+totV+' vencidas)'),filTxt,notaV+' En pausa = detenida por causa del cliente.']});
+  ['Departamento','Responsable','Contador asignado','Cliente','Grupo','Actividad','Plantilla','Periodo','Vencimiento','Días de atraso','Situación','Tareas'].forEach((t,i)=>ws.getCell(g,1+i).value=t);
+  MK.cabecera(ws,g,1,12,{derecha:[10,12]});
+  const B=MK.borde(),fN={name:F,size:10,color:{argb:C.tinta}},fV={name:F,size:10,bold:true,color:{argb:C.rojo}};
+  it.forEach((x,i)=>{
+    const row=ws.getRow(g+1+i),a=x.term?null:atr(x);
+    row.values=[x.dep,x.resp,x.con,x.cli,x.grp,x.tar,x.pla,ymL(x.ym),x.v?n2d(x.v):null,a,x.term?terTxt(x.sat,x.pen).replace(/^t/,'T'):x.pz?'En pausa':x.ven?'Vencida':'En plazo',x.pen];
+    for(let c=1;c<=12;c++){const cel=row.getCell(c);cel.font=fN;cel.border=B}
+    row.getCell(9).numFmt='dd-mmm-yyyy';row.getCell(12).numFmt=NUM;
+    if(x.ven&&!x.term){row.getCell(10).font=fV;row.getCell(11).font=fV}
+  });
+  if(it.length)ws.autoFilter={from:{row:g,column:1},to:{row:g+it.length,column:12}};
+  ws.views=[{state:'frozen',ySplit:g,showGridLines:false}];
+  MK.impresion(ws,{repetir:g});
+  let buf;try{buf=await wb.xlsx.writeBuffer()}catch(e){fin('No se pudo preparar');return}
   const hoy=dS(ASOF)+'-'+String(Math.floor(ASOF/10000)).slice(2);
   const depN=state.dep.size?' - '+[...state.dep].sort((a,b)=>a-b).map(i=>DEPS[i]).join(', '):'';
   const nombre=('WorkFlow '+(periodo==='Todos los periodos'?'':periodo.toLowerCase()+' ')+DSF[md]+depN+' ('+hoy+').xlsx').replace(/[\\/:*?"<>|]/g,'-');
-  try{await DL.save({filename:nombre,data:new Blob([buf])});fin('Listo')}
+  try{await DL.save({filename:nombre,data:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})});fin('Listo')}
   catch(e){const c=e&&e.code;fin(c==='declined'?null:c==='rate_limited'?'Espera un momento':'No se pudo descargar')}
 }
 
@@ -1744,7 +1764,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','var');
     const t=document.getElementById('vtitle');if(t)t.textContent='Bitácora de variaciones';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='var'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','variaciones.html?v=09b679e734');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','variaciones.html?v=2f0d4161cb');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -1795,7 +1815,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','car');
     const t=document.getElementById('vtitle');if(t)t.textContent='Cartera de clientes';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='car'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=0ebe019965');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=952e9d7e0a');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
