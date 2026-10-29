@@ -1,0 +1,558 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · SuperConta</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=15fa566633"></script><script src="js/marca.js?v=cce53f0db1"></script>
+<style>
+/* Portal PROFASE · SuperConta (29-oct-2026; pedido de Fernando Cadengo, decisiones de Daniel: docs/chat-empresa/README.md).
+   Se le pregunta en palabras («¿cuánto nos deben?», «¿qué le falta a tal contador?») y contesta con cifras y tablas.
+   - La pregunta va a la función «superconta» de Supabase (supabase/functions/superconta), que usa a Claude y lee la
+     copia de cada 3 horas (sc_*) CON EL USUARIO DE QUIEN PREGUNTA: lo que cada quien ve lo deciden las reglas de la
+     base (portal/sql/36_superconta.sql), igual que en el resto del portal. Aquí no se lee ninguna tabla de datos.
+   - Las preguntas quedan guardadas (sc_preguntas) y solo la dirección las ve.
+   - «Mi personaje»: cada quien escoge monito o monita (sc_mi_personaje); quien es de solo consulta no guarda nada.
+   - El logo SC y los personajes van solo aquí y en el botón flotante (excepción de Daniel a la regla de la marca);
+     lo que se baja en Excel lleva solo la marca PROFASE (js/marca.js). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-2:#2B4C86; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#C9D5EA;
+  --accent:#F07A1E; --accent-2:#FF9A4D; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8;
+  --yo:#1F3864; --yo-ink:#FFFFFF; --cifra:#1F3864;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-2:#1F3A68; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#A9B9D6;
+  --accent:#FF8F3F; --accent-2:#FFB27A; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022;
+  --yo:#FF8F3F; --yo-ink:#1B0E02; --cifra:#FFB27A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-2:#1F3A68; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#A9B9D6;
+  --accent:#FF8F3F; --accent-2:#FFB27A; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022;
+  --yo:#FF8F3F; --yo-ink:#1B0E02; --cifra:#FFB27A; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,textarea,input{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.marco{flex:1;min-height:0;width:100%;max-width:1320px;margin:0 auto;display:flex;gap:16px;padding:16px}
+.chat{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+
+/* encabezado con el personaje */
+.hero{position:relative;flex:none;display:flex;align-items:flex-end;gap:16px;padding:14px 18px 0;color:#fff;overflow:hidden;
+  background:linear-gradient(120deg,#1F3864 0%,#2B4C86 62%,#F07A1E 140%)}
+.hero .cuerpo{height:148px;width:auto;flex:none;display:block;margin-bottom:-1px;border-radius:10px 10px 0 0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+.hero .txt{min-width:0;padding:0 70px 14px 0}
+.hero h1{font-size:30px;font-weight:800;letter-spacing:-.01em}
+.hero h1 span{color:#FF9A4D}
+.hero p{margin:4px 0 0;color:#DCE5F3;max-width:560px}
+.hero .corto{display:none}
+.hero .sc-emblema{position:absolute;right:14px;top:12px;height:48px;width:auto;border-radius:8px}
+.hbtns{display:none;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hbtn{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.hbtn img{width:20px;height:20px;border-radius:50%;object-fit:cover;background:#fff}
+.hbtn:hover{background:rgba(255,255,255,.22)}
+.corto-b{display:none}
+
+/* la conversación */
+.msgs{flex:1;min-height:0;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;background:var(--surface-2);overscroll-behavior:contain}
+.m{display:flex;gap:10px;max-width:860px;min-width:0}
+.m .av{width:38px;height:38px;border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--accent);background:#fff}
+.m .av.sc{object-fit:contain;padding:3px}
+.burb{background:var(--surface);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:10px 14px;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.m.yo{align-self:flex-end;flex-direction:row-reverse;max-width:min(680px,100%)}
+.m.yo .burb{background:var(--yo);color:var(--yo-ink);border:0;border-radius:14px 4px 14px 14px;white-space:pre-wrap}
+.m.yo .ini{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--accent);color:#fff;font-weight:700;font-size:13px;border:2px solid var(--navy)}
+.m.resp{width:100%}
+.m.resp .burb{flex:1}
+.burb p{margin:0 0 6px}
+.burb p:last-child{margin-bottom:0}
+.burb ul{margin:4px 0 6px;padding-left:20px}
+.cifra{font-family:var(--f-display);font-size:28px;font-weight:800;color:var(--cifra);line-height:1.1;font-variant-numeric:tabular-nums;margin:2px 0 0}
+.cifra-n{color:var(--muted);font-size:13px;margin:0 0 8px}
+.atajos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.atajo{background:var(--accent-soft);color:var(--accent-ink);border:1px solid rgba(240,122,30,.35);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;text-align:left}
+.atajo:hover{border-color:var(--accent)}
+.atajo[disabled]{opacity:.55;cursor:default}
+.tt{font-weight:700;font-size:13px;margin:12px 0 4px}
+.tabla{overflow-x:auto;border:1px solid var(--line);border-radius:10px;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{background:#1F3864;color:#fff;font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;background:var(--navy-soft)}
+tbody tr:last-child td{border-bottom:0}
+.tnota{color:var(--muted);font-size:12px;margin:4px 0 0}
+.mas{margin-top:6px}
+.acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.xls{background:#1D6F42;border-color:#1D6F42;color:#fff}
+.nota{font-size:12px;color:var(--muted);margin-top:8px}
+.err .burb{border-color:var(--red);background:var(--red-soft)}
+.escribe{display:flex;gap:8px;align-items:center;color:var(--muted);font-style:italic}
+.escribe i{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;animation:brinca 1.2s infinite ease-in-out}
+.escribe i:nth-child(2){animation-delay:.15s}.escribe i:nth-child(3){animation-delay:.3s}
+@keyframes brinca{0%,80%,100%{opacity:.35;transform:none}40%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion: reduce){.escribe i{animation:none}}
+
+/* donde se escribe */
+.caja{flex:none;border-top:1px solid var(--line);padding:12px;display:flex;gap:10px;align-items:flex-end;background:var(--surface)}
+.caja textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px;font-size:15px;line-height:1.35;background:var(--surface-2);color:var(--ink);min-height:44px;max-height:140px}
+.caja textarea::placeholder{color:var(--muted)}
+.caja button{flex:none;background:var(--accent);color:#fff;border:0;border-radius:12px;height:44px;padding:0 18px;font-weight:700;font-size:15px;cursor:pointer}
+.caja button[disabled]{opacity:.6;cursor:default}
+.pie{flex:none;font-size:11.5px;color:var(--muted);padding:0 14px 10px;background:var(--surface)}
+
+/* lado derecho */
+.lado{width:290px;flex:none;display:flex;flex-direction:column;gap:14px;overflow-y:auto;min-height:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h3{font-family:var(--f-body);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+.card ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.ej{display:block;width:100%;text-align:left;padding:7px 10px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;font-size:13px;cursor:pointer}
+.ej:hover{border-color:var(--line-strong)}
+.pj{display:flex;gap:10px}
+.pj button{flex:1;text-align:center;border:2px solid var(--line);border-radius:12px;padding:8px 4px;font-size:12.5px;background:var(--surface);cursor:pointer;min-width:0}
+.pj button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.pj button[disabled]{cursor:default}
+.pj img{width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 6px}
+.card .nota{margin-top:8px}
+.barra{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:8px 0 4px}
+.barra i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.gasto{font-family:var(--f-display);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.card .btn{width:100%;margin-top:10px}
+
+/* panel (preguntas del equipo y, en el celular, «Mi personaje») */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.panel{background:var(--bg);width:min(720px,100%);height:100%;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.18)}
+.panel.chico{width:min(420px,100%)}
+.panel .cab{flex:none;background:#1F3864;color:#fff;border-bottom:4px solid #F07A1E;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.panel .cab h2{font-size:21px;font-weight:750}
+.panel .cab p{margin:2px 0 0;color:#C9D5EA;font-size:12.5px}
+.panel .cab .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+.panel .cuerpo-p{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 28px}
+.buscar{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:15px;background:var(--surface);margin-bottom:12px}
+.pqs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.pq{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.pq .c{font-size:12.5px;color:var(--muted)}
+.pq .c b{color:var(--ink)}
+.pq .q{font-weight:600;margin:3px 0 0;overflow-wrap:anywhere}
+.pq details{margin-top:6px}
+.pq summary{cursor:pointer;color:var(--accent-ink);font-size:13px;font-weight:600}
+.pq .r{margin-top:6px;overflow-wrap:anywhere;font-size:13.5px}
+.pq .r p{margin:0 0 4px}.pq .r ul{margin:2px 0 4px;padding-left:20px}
+.pq .e{color:var(--red);font-size:13px;margin-top:4px}
+.vacio{color:var(--muted);padding:12px 0}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+
+@media (max-width:1100px){.lado{display:none}.hbtns{display:flex}}
+@media (max-width:760px){
+  .marco{padding:0}.chat{border:0;border-radius:0}
+  .hero{padding:10px 14px 0;gap:12px}.hero .cuerpo{height:84px}.hero .txt{padding:0 44px 10px 0}
+  .hero h1{font-size:23px}.hero .largo{display:none}.hero .corto{display:block;font-size:13px}.hero .sc-emblema{height:30px;top:10px;right:10px}
+  .hbtns{margin-top:8px;flex-wrap:nowrap}.hbtn{padding:4px 10px;font-size:12.5px}.hbtn img{width:18px;height:18px}
+  .largo-b{display:none}.corto-b{display:inline}
+  .msgs{padding:12px}.m .av,.m.yo .ini{width:32px;height:32px}
+  .atajos{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.atajos::-webkit-scrollbar{display:none}.atajo{flex:none;white-space:nowrap}
+  .caja{padding:10px}.caja textarea{font-size:16px}.caja button{padding:0 14px}
+  .cifra{font-size:24px}
+}
+</style>
+</head>
+<body>
+<div class="marco">
+  <section class="chat" aria-label="SuperConta">
+    <header class="hero">
+      <img class="cuerpo" id="cuerpo" alt="" hidden>
+      <div class="txt">
+        <h1>Super<span>Conta</span></h1>
+        <p class="largo">Tu asistente de PROFASE. Pregúntame de cobranza, WorkFlow, clientes y su información fiscal.</p>
+        <p class="corto">Tu asistente de PROFASE</p>
+        <div class="hbtns">
+          <button type="button" class="hbtn" id="h-pj"><img id="h-pj-img" alt="">Mi personaje</button>
+          <button type="button" class="hbtn" id="h-eq" aria-label="Preguntas del equipo" hidden><span class="largo-b">Preguntas del equipo</span><span class="corto-b">Preguntas</span></button>
+        </div>
+      </div>
+      <img class="sc-emblema" src="img/superconta/sc-logo.png" alt="SuperConta">
+    </header>
+    <div class="msgs" id="msgs" role="log" aria-live="polite" aria-label="Conversación con SuperConta">
+      <div class="cargando" id="cargando">Cargando…</div>
+    </div>
+    <form class="caja" id="caja" autocomplete="off">
+      <textarea id="q" rows="1" maxlength="800" placeholder="Escríbele a SuperConta…" aria-label="Escríbele a SuperConta" disabled></textarea>
+      <button type="submit" id="enviar" disabled>Enviar</button>
+    </form>
+    <div class="pie"><span id="pie-txt">SuperConta solo consulta, no cambia nada. Cada quien ve lo que ya ve en el portal. No contesta de comisiones, nómina ni gastos.</span> <span id="datos-al"></span></div>
+  </section>
+  <aside class="lado" aria-label="SuperConta: personaje y ejemplos">
+    <div class="card" id="c-pj"><h3>Mi personaje</h3><div class="pj" id="pj-lado"></div><div class="nota" id="pj-nota">Cada quien lo puede cambiar.</div></div>
+    <div class="card"><h3>Pregúntale</h3><ul id="ejemplos"></ul><div class="nota">Pica uno y complétalo con el cliente, la persona o la fecha.</div></div>
+    <div class="card" id="c-dir" hidden><h3>SuperConta este mes</h3>
+      <div class="gasto" id="g-usd">US$ 0.00</div><div class="barra"><i id="g-bar" style="width:0%"></i></div>
+      <div class="nota" id="g-nota"></div>
+      <button type="button" class="btn" id="v-eq">Preguntas del equipo</button></div>
+  </aside>
+</div>
+
+<div class="velo" id="velo-eq" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="eq-t">
+    <div class="cab"><div><h2 id="eq-t">Preguntas a SuperConta</h2><p id="eq-sub">Solo las ve la dirección.</p></div><button type="button" class="btn" id="eq-x">Cerrar</button></div>
+    <div class="cuerpo-p">
+      <input class="buscar" id="eq-buscar" type="search" placeholder="Buscar por persona o pregunta" aria-label="Buscar por persona o pregunta">
+      <ul class="pqs" id="eq-lista"></ul>
+      <div class="vacio" id="eq-vacio" hidden>Todavía nadie le ha preguntado a SuperConta.</div>
+      <button type="button" class="btn mas" id="eq-mas" hidden>Ver más</button>
+    </div>
+  </div>
+</div>
+<div class="velo" id="velo-pj" hidden>
+  <div class="panel chico" role="dialog" aria-modal="true" aria-labelledby="pj-t">
+    <div class="cab"><div><h2 id="pj-t">Mi personaje</h2><p>El que te contesta en SuperConta.</p></div><button type="button" class="btn" id="pj-x">Cerrar</button></div>
+    <div class="cuerpo-p"><div class="pj" id="pj-panel"></div><div class="nota" id="pj-nota2"></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var ZONA = 'America/Monterrey';
+  var IMG = { H: 'img/superconta/sc-hombre.png', M: 'img/superconta/sc-mujer.png', SC: 'img/superconta/sc-logo.png' };
+  var CUERPO = { H: 'img/superconta/sc-hombre-cuerpo.png', M: 'img/superconta/sc-mujer-cuerpo.png' };
+  var CORTO = { 'daniel.nava': 'Héctor Daniel' };   // en la oficina le dicen Daniel; aquí, como él pidió que lo llamen
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var ATAJOS = {
+    direccion: ['¿Cuánto nos deben?', '¿Quién pagó hoy?', '¿Cuánto cobramos este mes?', '¿Qué actividades están vencidas?', '¿A quién se le vence la e.firma este mes?'],
+    gerente: ['¿Cuánto nos deben?', '¿Quién pagó hoy?', '¿Qué vence esta semana?', 'Sellos por vencer', 'Facturas de más de 90 días'],
+    contador: ['¿Qué actividades están vencidas?', '¿Qué vence esta semana?', '¿A quién se le vence la e.firma?', 'Sellos por vencer']
+  };
+  var EJEMPLOS = {
+    cobro: ['¿Cuánto nos debe ', '¿Quién pagó el ', '¿Cuánto cobramos en '],
+    todos: ['¿Qué le falta a ', '¿Qué actividades están vencidas de ', '¿A quién se le vence la e.firma en ', '¿Qué facturó en el mes el cliente ', '¿Qué obligaciones tiene ']
+  };
+  var YO = null, PJ = '', ocupado = false, HIST = [], RESP = [], ini = 'YO';
+  var EQ = { desde: 0, items: [], fin: false };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function fechaHora(s) {
+    if (!s) return '';
+    try { return new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(s)).replace(/\./g, ''); } catch (e) { return String(s); }
+  }
+  function usd(n) { return 'US$ ' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function cara(pj) { return IMG[pj] || IMG.SC; }
+  function abajo() { var m = $('msgs'); m.scrollTop = m.scrollHeight; }
+
+  /* ---------- texto de SuperConta: escapado; solo **negritas** y listas «- » ---------- */
+  function formato(t) {
+    var out = [], lista = [];
+    function cierra() { if (lista.length) { out.push('<ul>' + lista.join('') + '</ul>'); lista = []; } }
+    function linea(s) { return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
+    String(t || '').split(/\n/).forEach(function (l) {
+      var s = l.trim();
+      if (/^[-•]\s+/.test(s)) { lista.push('<li>' + linea(s.replace(/^[-•]\s+/, '')) + '</li>'); return; }
+      cierra();
+      if (s) out.push('<p>' + linea(s) + '</p>');
+    });
+    cierra();
+    return out.join('');
+  }
+
+  /* ---------- columnas y valores de las tablas ---------- */
+  var NOMBRES = { razon: 'Razón social', rfc: 'RFC', dias: 'Días', iva: 'IVA', iva_16: 'IVA 16 %', cfdi: 'CFDI', uuid: 'UUID', mes: 'Mes',
+    periodo: 'Periodo', fecha_mes: 'Mes', fecha_anio: 'Año', vence_efirma: 'Vence e.firma', vence_sellos: 'Vence sellos', ult_pago: 'Último pago',
+    ult_recordatorio_grupo: 'Último recordatorio', rfc_proveedor: 'RFC del proveedor', rfc_contraparte: 'RFC de la contraparte',
+    no_contabilizados: 'No contabilizados', total_no_contabilizado: 'Total no contabilizado', en_proceso_desde: 'En proceso desde',
+    terminado_el: 'Terminado el', contador_asignado: 'Contador asignado', renglones: 'Renglones', id_empresa: 'Id', alias_decomsa: 'Alias',
+    inicio_operaciones: 'Inicio de operaciones', estatus_que_puso: 'Estatus que puso', estatus_hoy: 'Estatus hoy', se_factura_a: 'Se factura a',
+    recibe_recordatorio: 'Recibe recordatorio', precio_desde: 'Precio desde' };
+  function titulo(c) {
+    if (NOMBRES[c]) return NOMBRES[c];
+    var t = String(c).replace(/_mes$/, ' (mes)').replace(/_anio$/, ' (año)').replace(/_/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function esDinero(c) { return /saldo|total|monto|importe|pagad|precio|subtotal|(^|_)iva|cargos|abonos|cobrad|facturad|adeudo|debe/i.test(c) && !/^no_|cfdi$|^cuenta$/i.test(c); }
+  function esMes(c) { return /^(mes|periodo)$|_mes$/.test(c); }
+  function sinMiles(c) { return /anio|año|folio|(^|_)id($|_)|secuencia|cuenta/i.test(c); }
+  function valor(c, v) {
+    if (v == null || v === '') return { t: '—', n: false };
+    if (typeof v === 'boolean') return { t: v ? 'Sí' : 'No', n: false };
+    if (typeof v === 'number') {
+      if (esDinero(c)) return { t: '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n: true, x: v, d: true };
+      if (sinMiles(c)) return { t: String(v), n: true, x: v };
+      return { t: v.toLocaleString('es-MX', { maximumFractionDigits: 2 }), n: true, x: v };
+    }
+    var s = String(v), m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return { t: esMes(c) || /_mes$/.test(c) ? MESES[+m[2] - 1] + ' ' + m[1] : (+m[3]) + ' ' + MESES[+m[2] - 1] + ' ' + m[1], n: false };
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return { t: fechaHora(s), n: false };
+    return { t: s, n: false };
+  }
+
+  function tablaHTML(tb, todas) {
+    var cols = tb.columnas || [], filas = tb.filas || [], med = tb.medidas || [], tot = tb.totales;
+    var muestra = todas ? filas : filas.slice(0, 8);
+    var der = cols.map(function (c, i) { return filas.some(function (f) { return typeof f[i] === 'number'; }); });
+    var h = '<div class="tabla"><table><thead><tr>' + cols.map(function (c, i) { return '<th' + (der[i] ? ' class="n"' : '') + '>' + esc(titulo(c)) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    h += muestra.map(function (f) {
+      return '<tr>' + cols.map(function (c, i) { var v = valor(c, f[i]); return '<td' + (v.n ? ' class="n"' : '') + '>' + esc(v.t) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    if (Array.isArray(tot) && tot.length && med.length && cols.length > med.length) {
+      var desde = cols.length - med.length;
+      h += '<tr class="tot">' + cols.map(function (c, i) {
+        if (i === 0) return '<td>Total</td>';
+        if (i < desde) return '<td></td>';
+        var v = valor(c, tot[i - desde]); return '<td class="n">' + esc(v.t) + '</td>';
+      }).join('') + '</tr>';
+    }
+    h += '</tbody></table></div>';
+    var notas = [];
+    if (tb.hay_mas || (tb.n && tb.n > filas.length)) notas.push('Se muestran ' + filas.length.toLocaleString('es-MX') + ' de ' + Number(tb.n || 0).toLocaleString('es-MX') + ' renglones. Pídele que lo acote (por cliente, persona o fechas) para ver menos.');
+    if (notas.length) h += '<div class="tnota">' + esc(notas.join(' ')) + '</div>';
+    return h;
+  }
+
+  /* ---------- mensajes ---------- */
+  function avatarSC() { return '<img class="av' + (PJ ? '' : ' sc') + '" data-av="1" src="' + esc(cara(PJ)) + '" alt="">'; }
+  function agrega(html, cls) {
+    var d = document.createElement('div'); d.className = 'm' + (cls ? ' ' + cls : ''); d.innerHTML = html;
+    $('msgs').appendChild(d); return d;
+  }
+  function agregaYo(t) { agrega('<span class="ini" aria-hidden="true">' + esc(ini) + '</span><div class="burb">' + esc(t) + '</div>', 'yo'); abajo(); }
+  function agregaEspera() {
+    var d = agrega(avatarSC() + '<div class="burb escribe">SuperConta está buscando <i></i><i></i><i></i></div>');
+    var t0 = Date.now(), s = d.querySelector('.escribe');
+    d._t = setInterval(function () {
+      var seg = Math.round((Date.now() - t0) / 1000);
+      if (seg >= 12) s.firstChild.nodeValue = 'Sigo buscando (' + seg + ' s) ';
+    }, 1000);
+    abajo(); return d;
+  }
+  function quita(d) { if (d) { clearInterval(d._t); d.remove(); } }
+  function botonesAtajo(lista) {
+    return '<div class="atajos">' + lista.map(function (a) { return '<button type="button" class="atajo">' + esc(a) + '</button>'; }).join('') + '</div>';
+  }
+  function saludo() {
+    var nom = CORTO[YO.usuario] || String(YO.nombre || '').trim().split(/\s+/)[0] || '';
+    agrega(avatarSC() + '<div class="burb">¡Hola' + (nom ? ', ' + esc(nom) : '') + '! Soy SuperConta. ¿En qué te ayudo hoy?' + botonesAtajo(ATAJOS[YO.nivel] || ATAJOS.contador) + '</div>');
+  }
+  function agregaRespuesta(d, preg) {
+    var k = RESP.length; RESP.push({ pregunta: preg, d: d });
+    var h = avatarSC() + '<div class="burb">';
+    if (d.cifra) h += '<div class="cifra">' + esc(d.cifra) + '</div>' + (d.cifra_nota ? '<div class="cifra-n">' + esc(d.cifra_nota) + '</div>' : '');
+    h += formato(d.texto);
+    (d.tablas || []).forEach(function (tb, i) {
+      h += '<div class="tt">' + esc(tb.titulo || 'Resultado') + '</div><div data-tb="' + i + '">' + tablaHTML(tb, false) + '</div>';
+      if ((tb.filas || []).length > 8) h += '<button type="button" class="btn mas" data-ver="' + i + '">Ver los ' + tb.filas.length.toLocaleString('es-MX') + ' renglones</button>';
+    });
+    if ((d.tablas || []).length) h += '<div class="acc"><button type="button" class="btn xls" data-xls="' + k + '">Bajar en Excel</button></div>';
+    if ((d.sugerencias || []).length) h += botonesAtajo(d.sugerencias);
+    h += '<div class="nota">' + esc(d.datos ? 'Datos al ' + fechaHora(d.datos) + ' (se copian cada 3 horas).' : 'Datos de la última copia (cada 3 horas).') + '</div></div>';
+    var el = agrega(h, 'resp');
+    el.querySelectorAll('[data-ver]').forEach(function (b) {
+      b.onclick = function () { var i = +b.dataset.ver; el.querySelector('[data-tb="' + i + '"]').innerHTML = tablaHTML(d.tablas[i], true); b.remove(); };
+    });
+    var m = $('msgs'); m.scrollTop = Math.max(0, el.offsetTop - m.offsetTop - 12);
+  }
+  function agregaError(t) { agrega(avatarSC() + '<div class="burb">' + esc(t) + '</div>', 'err'); abajo(); }
+
+  /* ---------- preguntar ---------- */
+  async function pregunta(txt) {
+    txt = String(txt || '').trim();
+    if (!txt || ocupado || !YO) return;
+    ocupado = true; listo(false);
+    agregaYo(txt);
+    var esp = agregaEspera(), d = null;
+    try {
+      var r = await P.sb.functions.invoke('superconta', { body: { pregunta: txt, historial: HIST.slice(-8) } });
+      d = r.data;
+      if (r.error) {
+        d = null;
+        try { d = await r.error.context.json(); } catch (e) { d = null; }
+      }
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { d = null; } }
+    } catch (e) { d = null; }
+    quita(esp);
+    if (d && d.ok) {
+      agregaRespuesta(d, txt);
+      HIST.push({ rol: 'usuario', texto: txt }, { rol: 'superconta', texto: String(d.texto || '') });
+      HIST = HIST.slice(-8);
+      if (d.gasto && YO.nivel === 'direccion') pintaGasto(d.gasto.usd_mes, d.gasto.tope);
+    } else {
+      agregaError(d && d.error ? d.error : 'SuperConta no pudo contestar ahorita. Revisa tu internet e intenta otra vez en un momento.');
+    }
+    ocupado = false; listo(true);
+  }
+  function listo(si) {
+    $('q').disabled = !si; $('enviar').disabled = !si;
+    document.querySelectorAll('.atajo').forEach(function (b) { b.disabled = !si; });
+    if (si && matchMedia('(hover: hover)').matches) $('q').focus();
+  }
+  function crece() { var t = $('q'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, 140) + 'px'; }
+  $('caja').addEventListener('submit', function (e) { e.preventDefault(); var t = $('q').value; $('q').value = ''; crece(); pregunta(t); });
+  $('q').addEventListener('input', crece);
+  $('q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover: hover)').matches) { e.preventDefault(); $('caja').requestSubmit(); }
+  });
+  $('msgs').addEventListener('click', function (e) {
+    var a = e.target.closest('.atajo'); if (a && !a.disabled) { pregunta(a.textContent); return; }
+    var x = e.target.closest('[data-xls]'); if (x) excel(x, +x.dataset.xls);
+  });
+
+  /* ---------- Excel (solo con la marca PROFASE: js/marca.js) ---------- */
+  async function excel(b, k) {
+    var R = RESP[k]; if (!R) return;
+    b.disabled = true; var txt = b.textContent; b.textContent = 'Armando el Excel…';
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'SuperConta');
+      var usados = {};
+      R.d.tablas.forEach(function (tb, i) {
+        var cols = tb.columnas || [], filas = tb.filas || [];
+        var nom = String(tb.titulo || 'Resultado').replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || ('Tabla ' + (i + 1));
+        while (usados[nom.toLowerCase()]) nom = nom.slice(0, 25) + ' ' + (i + 1);
+        usados[nom.toLowerCase()] = 1;
+        var ws = wb.addWorksheet(nom);
+        ws.columns = cols.map(function (c, j) {
+          var w = Math.max(titulo(c).length, 8);
+          filas.slice(0, 200).forEach(function (f) { w = Math.max(w, Math.min(String(valor(c, f[j]).t).length, 48)); });
+          return { width: w + 2 };
+        });
+        var lineas = ['Pregunta a SuperConta: «' + R.pregunta + '»', R.d.datos ? 'Datos al ' + fechaHora(R.d.datos) : ''];
+        if (tb.hay_mas || (tb.n && tb.n > filas.length)) lineas.push('Se muestran ' + filas.length + ' de ' + tb.n + ' renglones.');
+        var f0 = MK.encabezado(wb, ws, cols.length, { titulo: tb.titulo || 'Resultado', lineas: lineas });
+        ws.getRow(f0).values = cols.map(titulo);
+        MK.cabecera(ws, f0, 1, cols.length);
+        filas.forEach(function (f, r) {
+          ws.getRow(f0 + 1 + r).values = cols.map(function (c, j) { var v = valor(c, f[j]); return v.n ? v.x : (v.t === '—' ? '' : v.t); });
+        });
+        var fin = f0 + filas.length, med = tb.medidas || [], rt = null;
+        if (Array.isArray(tb.totales) && tb.totales.length && med.length && cols.length > med.length) {
+          fin++; var desde = cols.length - med.length; rt = ws.getRow(fin);
+          rt.getCell(1).value = 'Total';
+          tb.totales.forEach(function (x, j) { rt.getCell(desde + 1 + j).value = x; });
+        }
+        if (fin > f0) MK.cuerpo(ws, f0 + 1, fin, 1, cols.length);
+        if (rt) for (var c = 1; c <= cols.length; c++) rt.getCell(c).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1F3864' } };
+        cols.forEach(function (c, j) { if (esDinero(c)) ws.getColumn(j + 1).numFmt = '$#,##0.00'; });
+        ws.views = [{ state: 'frozen', ySplit: f0 }];
+        MK.impresion(ws, { repetir: f0 });
+      });
+      await MK.guardar(wb, 'SuperConta PROFASE.xlsx');
+    } catch (e) {
+      agregaError('No se pudo armar el Excel. Vuelve a intentar.');
+    } finally { b.disabled = false; b.textContent = txt; }
+  }
+
+  /* ---------- Mi personaje ---------- */
+  function pintaPJ() {
+    var src = cara(PJ);
+    document.querySelectorAll('img[data-av]').forEach(function (i) { i.src = src; i.classList.toggle('sc', !PJ); });
+    $('h-pj-img').src = src;
+    if (CUERPO[PJ]) { $('cuerpo').src = CUERPO[PJ]; $('cuerpo').hidden = false; } else $('cuerpo').hidden = true;
+    var bloqueado = !!(YO && YO.consulta) || P.consulta;
+    var h = ['H', 'M'].map(function (k) {
+      return '<button type="button" data-pj="' + k + '" aria-pressed="' + (PJ === k) + '"' + (bloqueado ? ' disabled' : '') + '><img src="' + IMG[k] + '" alt="">' + (k === 'H' ? 'SuperConta' : 'SuperConta') + '<br><span class="nota">' + (k === 'H' ? 'Él' : 'Ella') + '</span></button>';
+    }).join('');
+    $('pj-lado').innerHTML = h; $('pj-panel').innerHTML = h;
+    var nota = bloqueado ? 'Tu usuario es de solo consulta: tu personaje lo ponen Daniel o Fernando.' : 'Cada quien lo puede cambiar.';
+    $('pj-nota').textContent = nota; $('pj-nota2').textContent = nota;
+    try { if (window.parent !== window && window.parent.__scPersonaje) window.parent.__scPersonaje(PJ); } catch (e) { /* otra página */ }
+  }
+  async function cambiaPJ(k) {
+    if (!YO || YO.consulta || P.consulta || k === PJ) return;
+    var antes = PJ; PJ = k; pintaPJ();
+    try {
+      var r = await P.sb.rpc('sc_mi_personaje', { p_personaje: k });
+      if (r.error) throw r.error;
+    } catch (e) { PJ = antes; pintaPJ(); agregaError('No se pudo guardar tu personaje. Vuelve a intentar.'); }
+  }
+  document.addEventListener('click', function (e) { var b = e.target.closest('[data-pj]'); if (b && !b.disabled) cambiaPJ(b.dataset.pj); });
+  function abre(id) { $(id).hidden = false; }
+  function cierra(id) { $(id).hidden = true; }
+  $('h-pj').onclick = function () { abre('velo-pj'); };
+  $('pj-x').onclick = function () { cierra('velo-pj'); };
+
+  /* ---------- dirección: gasto del mes y preguntas del equipo ---------- */
+  function pintaGasto(g, tope) {
+    g = Number(g || 0); tope = Number(tope || 0);
+    $('c-dir').hidden = false; $('h-eq').hidden = false;
+    $('g-usd').textContent = usd(g);
+    $('g-bar').style.width = (tope ? Math.min(100, g / tope * 100) : 0).toFixed(1) + '%';
+    $('g-nota').textContent = 'de ' + usd(tope) + ' de tope al mes (los créditos del plan de Claude). Te avisa al 80 % y al 100 %.';
+    $('eq-sub').textContent = 'Solo las ve la dirección. Este mes: ' + usd(g) + ' de ' + usd(tope) + '.';
+  }
+  async function cargaEquipo(mas) {
+    if (!mas) { EQ = { desde: 0, items: [], fin: false }; $('eq-lista').innerHTML = '<li class="vacio">Cargando…</li>'; }
+    try {
+      var q = await P.sb.from('sc_preguntas').select('id,hora,usuario,nombre,nivel,pregunta,respuesta,usd,error')
+        .order('hora', { ascending: false }).range(EQ.desde, EQ.desde + 49);
+      if (q.error) throw q.error;
+      EQ.items = EQ.items.concat(q.data || []); EQ.desde += 50; EQ.fin = (q.data || []).length < 50;
+    } catch (e) { EQ.fin = true; }
+    pintaEquipo();
+  }
+  function pintaEquipo() {
+    var b = norm($('eq-buscar').value);
+    var L = EQ.items.filter(function (x) { return !b || norm(x.nombre + ' ' + x.usuario + ' ' + x.pregunta).indexOf(b) >= 0; });
+    $('eq-lista').innerHTML = L.map(function (x) {
+      return '<li class="pq"><div class="c"><b>' + esc(x.nombre || x.usuario) + '</b> · ' + esc(fechaHora(x.hora)) + (x.usd != null ? ' · ' + esc(usd(x.usd)) : '') + '</div>'
+        + '<div class="q">' + esc(x.pregunta) + '</div>'
+        + (x.error ? '<div class="e">No contestó: ' + esc(x.error) + '</div>' : '')
+        + (x.respuesta ? '<details><summary>Ver la respuesta</summary><div class="r">' + formato(x.respuesta) + '</div></details>' : '') + '</li>';
+    }).join('');
+    $('eq-vacio').hidden = EQ.items.length > 0;
+    $('eq-mas').hidden = EQ.fin;
+  }
+  $('v-eq').onclick = $('h-eq').onclick = function () { abre('velo-eq'); cargaEquipo(false); };
+  $('eq-x').onclick = function () { cierra('velo-eq'); };
+  $('eq-mas').onclick = function () { cargaEquipo(true); };
+  $('eq-buscar').addEventListener('input', pintaEquipo);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cierra('velo-eq'); cierra('velo-pj'); } });
+  ['velo-eq', 'velo-pj'].forEach(function (id) { $(id).addEventListener('click', function (e) { if (e.target === $(id)) cierra(id); }); });
+
+  /* ---------- ejemplos del lado ---------- */
+  function ejemplos() {
+    var L = (YO.nivel === 'contador' ? [] : EJEMPLOS.cobro).concat(EJEMPLOS.todos);
+    $('ejemplos').innerHTML = L.map(function (t) { return '<li><button type="button" class="ej">' + esc(t.trim()) + '…</button></li>'; }).join('');
+    $('ejemplos').querySelectorAll('.ej').forEach(function (b, i) {
+      b.onclick = function () { var q = $('q'); q.value = L[i]; crece(); q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch (e) { /* nada */ } };
+    });
+  }
+
+  /* ---------- arranque ---------- */
+  (async function () {
+    try {
+      var p = await P.listo; if (!p) return;
+      var r = await P.sb.rpc('sc_yo');
+      YO = r.error ? null : r.data;
+      $('cargando').remove();
+      if (!YO || !YO.puede) {
+        agrega('<img class="av sc" src="' + IMG.SC + '" alt=""><div class="burb">SuperConta todavía no está habilitado para tu usuario. Quién lo usa lo decide Daniel.</div>');
+        $('c-pj').hidden = true; $('h-pj').hidden = true;
+        return;
+      }
+      PJ = YO.personaje === 'H' || YO.personaje === 'M' ? YO.personaje : '';
+      ini = String(YO.nombre || YO.usuario || 'YO').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'YO';
+      pintaPJ(); ejemplos();
+      if (YO.datos) $('datos-al').textContent = 'Datos al ' + fechaHora(YO.datos) + '.';
+      if (YO.nivel === 'direccion' && YO.gasto != null) pintaGasto(YO.gasto, YO.tope);
+      saludo();
+      listo(true);
+    } catch (e) {
+      var c = $('cargando'); if (c) c.textContent = 'No se pudo abrir SuperConta. Recarga la página.';
+    }
+  })();
+})();
+</script>
+</body></html>

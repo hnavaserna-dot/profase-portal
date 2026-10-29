@@ -77,7 +77,7 @@
     // Funciones de la base que guardan algo; las de solo leer y la bitácora de accesos siguen igual
     var ESCRIBEN = { cot_guardar: 1, cot_estatus: 1, af_cargar: 1, caja_generar_corte: 1, caja_cancelar_corte: 1, solicitar_actualizacion: 1,
       cambios_mandar: 1, cambios_autorizar: 1, cambios_rechazar: 1, cambios_comentar: 1, cambios_deshacer: 1, cambios_sql_listo: 1, cambios_visto: 1,
-      cli_felicitar: 1 };
+      cli_felicitar: 1, sc_mi_personaje: 1 };
     sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
     if (sb.storage && sb.storage.from) {
       var cubeta = sb.storage.from.bind(sb.storage);
