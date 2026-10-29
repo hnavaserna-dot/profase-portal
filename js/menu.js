@@ -13,7 +13,11 @@
    - El signo PROFASE es siempre el logo oficial, con sus colores (regla de Daniel, 29-oct-2026). En temporadas se le
      pone al lado un adorno aparte (js/temporada.js: arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el
      14 de febrero, banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
-     solo color de la propuesta #3; el menú de arriba de esa propuesta se quedó igual. */
+     solo color de la propuesta #3; el menú de arriba de esa propuesta se quedó igual.
+   - Riel de íconos (29-oct-2026, propuesta de Gabriel): en computadora el menú arranca como una tira de íconos grandes
+     con su nombre corto e «Inicio» arriba; al picar o pasar el mouse sale la tarjeta del módulo, como en el celular
+     (qué es y cada opción con su explicación). En el celular arranca con el menú arriba. Cada quien puede cambiarlo
+     («Mostrar menú», «Menú arriba») y su navegador lo recuerda. */
 (function () {
   'use strict';
   var ROL = document.documentElement.getAttribute('data-rol') || '';
@@ -67,7 +71,8 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CSS = ':root{--pm-sw:248px;--pm-rail:64px;--pm-top:0px}'
+  var CORTO = { wf: 'Workflow', rep: 'Reportes', adm: 'Admin', quo: 'QUO', access: 'Access', mas: 'Más' };
+  var CSS = ':root{--pm-sw:248px;--pm-rail:88px;--pm-top:0px}'
     + '.pm-oculto{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}'
     + '#v-quo .qsub{display:none!important}'
     + '.pm-ham{flex:none;width:38px;height:38px;border:0;background:none;border-radius:8px;cursor:pointer;display:grid;place-items:center;color:var(--navy,#1F3864);margin-left:-6px;padding:0}'
@@ -97,7 +102,8 @@
     // aviso de una pestaña (data-aviso en su botón; por ahora «Cambios al portal»): número junto al nombre y punto en el módulo
     + '.pm-av{display:inline-block;min-width:19px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--accent,#F07A1E);color:#fff;font-size:11.5px;font-weight:700;line-height:19px;text-align:center;vertical-align:1px}'
     + '.pm-mb{position:relative}.pm-mod.con-aviso>.pm-mb::after{content:"";position:absolute;left:24px;top:8px;width:8px;height:8px;border-radius:50%;background:var(--accent,#F07A1E);box-shadow:0 0 0 2px var(--navy,#1F3864)}'
-    + '.pm-fly{display:none}'
+    + '.pm-fly{display:none}.pm-fd,.pm-sd,.pm-ct{display:none}'
+    + '.pm-inicio{margin-bottom:6px}'
     + '.pm-pie{border-top:1px solid rgba(255,255,255,.12);padding:8px}'
     + '.pm-pie button{width:100%;display:flex;align-items:center;gap:12px;border:0;background:none;color:#A9BBD8;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;text-align:left}'
     + '.pm-pie button:hover{background:rgba(255,255,255,.1);color:#fff}'
@@ -131,16 +137,28 @@
     + 'body.pm{padding-left:var(--pm-sw)!important}body.pm header.band{margin-left:calc(-1 * var(--pm-sw))}'
     + 'body.pm.pm-mini{padding-left:var(--pm-rail)!important}body.pm.pm-mini header.band{margin-left:calc(-1 * var(--pm-rail))}'
     + 'body.pm-mini .pm-side{width:var(--pm-rail)}'
-    + 'body.pm-mini .pm-lbl,body.pm-mini .pm-car{display:none}'
-    + 'body.pm-mini .pm-mb{justify-content:center;padding:11px 0}'
-    + 'body.pm-mini .pm-pie button{justify-content:center}body.pm-mini .pm-pmini svg{transform:rotate(180deg)}'
-    + 'body.pm-mini .pm-lista{overflow:visible}'
-    + 'body.pm-mini .pm-subs{display:none!important;position:absolute;left:calc(100% + 6px);top:0;min-width:220px;background:var(--navy,#1F3864);border-radius:10px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.3);margin:0;z-index:31}'
+    + 'body.pm-mini .pm-car{display:none}'
+    + 'body.pm-mini .pm-lista{overflow:visible;padding:10px 10px}'
+    + 'body.pm-mini .pm-mod{margin-bottom:6px}'
+    + 'body.pm-mini .pm-mb{flex-direction:column;justify-content:center;gap:5px;padding:10px 0 8px;border-radius:14px}'
+    + 'body.pm-mini .pm-mb .pm-ic{width:26px;height:26px}'
+    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#A9BBD8}'
+    + 'body.pm-mini .pm-mb .pm-lbl .pm-lg{display:none}body.pm-mini .pm-mb .pm-lbl .pm-ct{display:inline}'
+    + 'body.pm-mini .pm-mod.on>.pm-mb{background:rgba(240,122,30,.18);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}body.pm-mini .pm-mod.on>.pm-mb .pm-lbl{color:#fff}'
+    + 'body.pm-mini .pm-mod.con-aviso>.pm-mb::after{left:auto;right:14px;top:8px}'
+    + 'body.pm-mini .pm-inicio{width:52px;height:52px;margin:2px auto 10px;padding:0;border-radius:50%;background:#2C4A80;box-shadow:0 6px 16px rgba(0,0,0,.3)}'
+    + 'body.pm-mini .pm-inicio .pm-lbl{display:none}body.pm-mini .pm-inicio:hover{background:#365A99}'
+    + 'body.pm-mini .pm-pie button{justify-content:center}body.pm-mini .pm-pie .pm-lbl{display:none}body.pm-mini .pm-pmini svg{transform:rotate(180deg)}'
+    // la tarjeta del módulo, igual que la del menú arriba
+    + 'body.pm-mini .pm-subs{display:none!important;position:absolute;left:calc(100% + 10px);top:-6px;width:320px;background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-left:3px solid var(--accent,#F07A1E);border-radius:14px;padding:14px 12px 10px;box-shadow:0 18px 44px rgba(10,18,32,.3);margin:0;z-index:31}'
     + 'body.pm-mini .pm-mod:hover .pm-subs,body.pm-mini .pm-mod:focus-within .pm-subs,body.pm-mini .pm-mod.fly .pm-subs{display:block!important}'
-    + 'body.pm-mini .pm-subs::before{content:"";position:absolute;left:-8px;top:0;bottom:0;width:8px}'
-    + 'body.pm-mini .pm-fly{display:block;padding:6px 10px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A9BBD8}'
-    + 'body.pm-mini .pm-subs a{border-left:0;padding-left:10px;border-radius:7px}'
-    + 'body.pm-mini .pm-subs a[aria-current="page"]{border-left:0;box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}'
+    + 'body.pm-mini .pm-subs::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:14px}'
+    + 'body.pm-mini .pm-fly{display:block;padding:0 6px 10px;font-size:15px;font-weight:700;color:var(--ink,#132036);letter-spacing:0;text-transform:none}'
+    + 'body.pm-mini .pm-fly .pm-fd{display:block;font-size:12.5px;font-weight:400;color:var(--muted,#5A6577);margin-top:2px}'
+    + 'body.pm-mini .pm-subs a{border-left:0;padding:8px 10px;border-radius:9px;color:var(--ink,#132036);white-space:normal;font-weight:600;font-size:13.5px}'
+    + 'body.pm-mini .pm-subs a:hover{background:var(--navy-soft,#E6ECF6);color:var(--ink,#132036)}'
+    + 'body.pm-mini .pm-subs a .pm-sd{display:block;font-size:12px;font-weight:400;color:var(--muted,#5A6577)}'
+    + 'body.pm-mini .pm-subs a[aria-current="page"]{border-left:0;color:var(--ink,#132036);background:var(--accent-soft,#FDEBDC);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}'
     + '}'
     + '@media (max-width:900px){'
     + '.pm-side{top:0;width:min(290px,85vw);transform:translateX(-105%);transition:transform .2s ease;z-index:46;box-shadow:none}'
@@ -225,14 +243,15 @@
       if (on && abiertos[m.k] !== true) { abiertos[m.k] = true; guarda = true; }
       h += '<div class="pm-mod' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" data-open="' + open + '">'
         + '<button type="button" class="pm-mb" aria-expanded="' + open + '" title="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, 'pm-ic')
-        + '<span class="pm-lbl">' + esc(m.t) + '</span>' + svg(FLECHA, 'pm-car') + '</button>'
-        + '<ul class="pm-subs"><li class="pm-fly" aria-hidden="true">' + esc(m.t) + '</li>'
+        + '<span class="pm-lbl"><span class="pm-lg">' + esc(m.t) + '</span><span class="pm-ct">' + esc(CORTO[m.k] || m.t) + '</span></span>' + svg(FLECHA, 'pm-car') + '</button>'
+        + '<ul class="pm-subs"><li class="pm-fly" aria-hidden="true">' + esc(m.t) + '<span class="pm-fd">' + esc(m.d || '') + '</span></li>'
         + x.subs.map(function (s) {
           var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
           return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s))
-            + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + '</a></li>';
+            + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + (s.d ? '<span class="pm-sd">' + esc(s.d) + '</span>' : '') + '</a></li>';
         }).join('') + '</ul></div>';
     });
+    if (h) h = '<div class="pm-mod"><button type="button" class="pm-mb pm-inicio" title="Inicio" aria-label="Inicio">' + svg(IC.home, 'pm-ic') + '<span class="pm-lbl">Inicio</span></button></div>' + h;
     if (guarda) store.set('portal.menu.abiertos', JSON.stringify(abiertos));
     if (lista.innerHTML !== h) lista.innerHTML = h;
     pintaArriba(act);
@@ -277,7 +296,8 @@
   function abrePop(k) { popAbierto = k; pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }
   function arriba(v) {
     if (v !== undefined) store.set('portal.menu.modo', v ? 'arriba' : 'lado');
-    var on = store.get('portal.menu.modo') === 'arriba';
+    var m = store.get('portal.menu.modo');
+    var on = m ? m === 'arriba' : movil();   // sin escoger: en el celular, arriba; en computadora, el riel
     document.body.classList.toggle('pm-arriba', on);
     if (on) abre(false);
     popAbierto = '';
@@ -285,9 +305,10 @@
     setTimeout(alto, 50);
   }
 
+  function estaMini() { return store.get('portal.menu.mini') !== '0'; }   // sin escoger: el riel de íconos
   function mini(v) {
     if (v !== undefined) store.set('portal.menu.mini', v ? '1' : '0');
-    var on = store.get('portal.menu.mini') === '1';
+    var on = estaMini();
     document.body.classList.toggle('pm-mini', on);
     var l = side.querySelector('.pm-pmini .pm-lbl');
     if (l) l.textContent = on ? 'Mostrar menú' : 'Ocultar menú';
@@ -335,8 +356,8 @@
     document.body.appendChild(scrim);
     lista = side.querySelector('.pm-lista');
 
-    ham.onclick = function () { if (movil()) abre(!document.body.classList.contains('pm-abierto')); else mini(store.get('portal.menu.mini') !== '1'); };
-    side.querySelector('.pm-pmini').onclick = function () { mini(store.get('portal.menu.mini') !== '1'); };
+    ham.onclick = function () { if (movil()) abre(!document.body.classList.contains('pm-abierto')); else mini(!estaMini()); };
+    side.querySelector('.pm-pmini').onclick = function () { mini(!estaMini()); };
     side.querySelector('.pm-parr').onclick = function () { arriba(true); };
 
     top = document.createElement('nav');
@@ -363,6 +384,7 @@
     lista.addEventListener('click', function (e) {
       var a = e.target.closest('a[data-k]');
       if (a) { e.preventDefault(); ir(a.dataset.k); return; }
+      if (e.target.closest('.pm-inicio')) { var ini = inicio(); if (ini) ir(ini.k); return; }
       var mb = e.target.closest('.pm-mb');
       if (!mb) return;
       var mod = mb.parentNode;
