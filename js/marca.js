@@ -75,6 +75,9 @@
       x.font = { name: FUENTE, size: 9, color: { argb: C.gris } };
       f++;
     });
+    // lo anota en la hoja para armar el PDF del mismo libro (Excel y PDF siempre juntos)
+    var mk = ws.__mk || (ws.__mk = { cab: [] });
+    mk.titulo = op.titulo || ''; mk.lineas = (op.lineas || []).filter(function (l) { return l != null && l !== ''; }); mk.inicio = f + 1;
     return f + 1;
   }
 
@@ -82,6 +85,7 @@
   function cabecera(ws, fila, desde, hasta, op) {
     op = op || {};
     var r = ws.getRow(fila); r.height = op.alto || 22;
+    (ws.__mk || (ws.__mk = { cab: [] })).cab.push({ fila: fila, desde: desde, hasta: hasta });
     for (var c = desde; c <= hasta; c++) {
       var x = r.getCell(c);
       x.font = { name: FUENTE, size: 10, bold: true, color: { argb: C.blanco } };
@@ -117,10 +121,19 @@
       evenFooter: '&L&"Arial,Italic"&8&K888888PROFASE · ' + SUB + '&R&"Arial"&8&K888888Página &P de &N' };
   }
 
-  /* Guarda el libro: con la descarga del portal si existe, si no con una liga directa */
+  /* Guarda el libro: con la descarga del portal si existe, si no con una liga directa. Si se picó el botón «PDF»
+     gemelo (abajo), sale el PDF del mismo libro, con la marca PROFASE, en lugar del Excel. */
   async function guardar(wb, nombre) {
+    if (PIDE_PDF && Date.now() - PIDE_PDF < 180000) {
+      PIDE_PDF = 0;
+      var doc = await pdfDeLibro(wb);
+      return bajar(doc.output('blob'), String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '') + '.pdf');
+    }
+    PIDE_PDF = 0;
     var datos = await wb.xlsx.writeBuffer();
-    var blob = new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return bajar(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre);
+  }
+  async function bajar(blob, nombre) {
     var dl = null;
     try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) { dl = null; }
     if (dl) { await dl.save({ filename: nombre, data: blob }); return; }
@@ -214,8 +227,189 @@
     } catch (e) { return null; }
   }
 
+  /* ---------- Excel y PDF siempre juntos (regla de Daniel, 29-oct-2026, 15:58: «en eso y en los demás lugares donde
+     se exporte a excel y a pdf; esos 2 botones siempre van juntos») ----------
+     Cada botón de Excel lleva data-excel; aquí se le pone al lado su botón «PDF». Al picarlo, la página arma el mismo
+     libro de siempre (mismos filtros y columnas) y guardar() lo baja como PDF con la marca PROFASE (encabezado y marca
+     de agua en cada hoja, tablas con el estilo de tablaPDF()). La página no tiene que hacer nada más que usar libro(),
+     encabezado(), cabecera() y guardar(). */
+  var PIDE_PDF = 0, DISPARO = false, MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function decimales(fmt) { var m = /\.(0+)/.exec(fmt || ''); return m ? m[1].length : null; }
+  function numTxt(v, fmt) {
+    fmt = String(fmt || '');
+    if (/%/.test(fmt)) { var dp = decimales(fmt); return (v * 100).toLocaleString('es-MX', { minimumFractionDigits: dp || 0, maximumFractionDigits: dp == null ? 1 : dp }) + ' %'; }
+    var d = decimales(fmt), miles = /#,##|\$/.test(fmt);
+    if (!fmt || fmt === 'General') {
+      if (Number.isInteger(v)) return String(v);
+      return v.toLocaleString('es-MX', { maximumFractionDigits: 2, useGrouping: false });
+    }
+    var t = Math.abs(v).toLocaleString('es-MX', { minimumFractionDigits: d == null ? 0 : d, maximumFractionDigits: d == null ? 2 : d, useGrouping: miles });
+    return (v < 0 ? '-' : '') + (/\$/.test(fmt) ? '$' : '') + t;
+  }
+  function fechaTxt(x, fmt) {
+    var t = x.getUTCDate() + ' ' + MESES[x.getUTCMonth()] + ' ' + x.getUTCFullYear();
+    if (/h/i.test(fmt || '')) t += ' ' + String(x.getUTCHours()).padStart(2, '0') + ':' + String(x.getUTCMinutes()).padStart(2, '0');
+    return t;
+  }
+  function textoCelda(cell, col) {
+    var v = cell.value, fmt = cell.numFmt || (col && col.numFmt) || '';
+    if (v == null) return '';
+    if (v instanceof Date) return fechaTxt(v, fmt);
+    if (typeof v === 'object') {
+      if (v.richText) return v.richText.map(function (t) { return t.text; }).join('');
+      if (v.text != null) return String(v.text && v.text.richText ? v.text.richText.map(function (t) { return t.text; }).join('') : v.text);
+      if ('result' in v) v = v.result; else return '';
+      if (v == null) return '';
+      if (v instanceof Date) return fechaTxt(v, fmt);
+      if (typeof v === 'object') return '';
+    }
+    if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+    if (typeof v === 'number') return numTxt(v, fmt);
+    return String(v);
+  }
+  function esNumero(cell) {
+    var v = cell.value;
+    if (v && typeof v === 'object' && 'result' in v) v = v.result;
+    return typeof v === 'number';
+  }
+  function filaDe(ws, r) {
+    var row = ws.getRow(r), out = [];
+    row.eachCell({ includeEmpty: false }, function (c, n) { var t = textoCelda(c, ws.getColumn(n)); if (t !== '') out.push({ n: n, t: t, c: c }); });
+    return out;
+  }
+  function esCabecera(ws, r, mk, vals) {
+    if (mk.cab.some(function (x) { return x.fila === r; })) return true;
+    if (vals.length < 2) return false;
+    return vals.every(function (x) { var f = x.c.fill, a = f && f.fgColor && String(f.fgColor.argb || ''); return /1F3864$/i.test(a) && x.c.font && x.c.font.bold; });
+  }
+  /* Lo que trae cada hoja: el título y las líneas del encabezado, textos sueltos y tablas (cabecera + renglones) */
+  function bloquesDe(ws) {
+    var mk = ws.__mk || { cab: [] }, ini = mk.inicio || 1, out = [], tabla = null, hubo = false;
+    var sin = ((ws.__pdf && ws.__pdf.sin) || []).map(function (x) { return String(x).toLowerCase(); });
+    function lee(cab) {
+      out = []; tabla = null;
+      for (var r = ini; r <= ws.rowCount; r++) {
+        var vals = filaDe(ws, r);
+        if (!vals.length) { tabla = null; continue; }
+        if (esCabecera(ws, r, mk, vals) || (cab && !hubo && vals.length >= 2)) {
+          hubo = true;
+          var c1 = vals[0].n, c2 = vals[vals.length - 1].n, x = mk.cab.filter(function (k) { return k.fila === r; })[0];
+          if (x) { c1 = x.desde; c2 = x.hasta; }
+          tabla = { cols: [], head: [], body: [], num: {} };
+          for (var c = c1; c <= c2; c++) {
+            var h = textoCelda(ws.getRow(r).getCell(c), ws.getColumn(c));
+            if (ws.getColumn(c).hidden || sin.some(function (x) { return h.toLowerCase().indexOf(x) === 0; })) continue;
+            tabla.cols.push(c); tabla.head.push(h);
+          }
+          out.push(tabla); continue;
+        }
+        if (ws.getRow(r).hidden) continue;
+        if (tabla) {
+          var fila = [];
+          tabla.cols.forEach(function (k, j) {
+            var cel = ws.getRow(r).getCell(k);
+            fila.push(textoCelda(cel, ws.getColumn(k)));
+            if (esNumero(cel)) tabla.num[j] = (tabla.num[j] || 0) + 1;
+          });
+          tabla.body.push(fila); continue;
+        }
+        out.push({ texto: vals.map(function (x) { return x.t; }).join('   '), negrita: !!(vals[0].c.font && vals[0].c.font.bold) });
+      }
+    }
+    lee(false);
+    if (!hubo) lee(true);   // hojas armadas sin cabecera(): el primer renglón con varias columnas es la cabecera
+    return { titulo: mk.titulo || '', lineas: mk.lineas || [], bloques: out };
+  }
+  /* El PDF de un libro de Excel ya armado (todas sus hojas visibles), con la marca PROFASE */
+  async function pdfDeLibro(wb) {
+    var jsPDF = await pdfJS();
+    var hojas = wb.worksheets.filter(function (ws) { return ws.state !== 'hidden' && ws.state !== 'veryHidden' && !(ws.__pdf && ws.__pdf.omitir); }).map(bloquesDe);
+    var anchas = hojas.some(function (h) { return h.bloques.some(function (b) { return b.head && b.head.length > 6; }); });
+    var doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: anchas ? 'landscape' : 'portrait' });
+    var y = marcaPDF(doc), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 36, ancho = W - 2 * M;
+    function cabe(alto) { if (y + alto > H - 40) { doc.addPage(); y = 66; } }
+    function escribe(t, tam, estilo, color, sep) {
+      doc.setFont('helvetica', estilo); doc.setFontSize(tam); doc.setTextColor(color[0], color[1], color[2]);
+      doc.splitTextToSize(String(t), ancho).forEach(function (l) { cabe(tam + 3); doc.text(l, M, y); y += tam + 3; });
+      y += sep || 0;
+    }
+    hojas.forEach(function (h, i) {
+      if (i > 0) { doc.addPage(); y = 66; }
+      if (h.titulo) escribe(h.titulo, 13, 'bold', [31, 56, 100], 2);
+      h.lineas.forEach(function (l) { escribe(l, 8.5, 'normal', [90, 101, 119]); });
+      y += 6;
+      h.bloques.forEach(function (b) {
+        if (!b.head) { escribe(b.texto, b.negrita ? 10 : 9, b.negrita ? 'bold' : 'normal', [19, 32, 54], 2); return; }
+        if (!b.body.length && !b.head.join('')) return;
+        var n = b.head.length, tam = n > 9 ? 6.5 : n > 6 ? 7.5 : 8.5, cols = {}, ancha = n > 10;
+        Object.keys(b.num).forEach(function (k) { if (b.num[k] * 2 >= b.body.length) cols[k] = { halign: 'right' }; });
+        cabe(40);
+        doc.autoTable(Object.assign(tablaPDF(), {
+          startY: y, head: [b.head], body: b.body, columnStyles: cols,
+          styles: Object.assign(tablaPDF().styles, { fontSize: tam, cellPadding: n > 9 ? 2 : 3, minCellWidth: ancha ? 34 : 0 }),
+          horizontalPageBreak: ancha, horizontalPageBreakRepeat: ancha ? 0 : null,
+          didParseCell: function (d) { if (d.section === 'body' && /^total/i.test(String(d.row.raw[0] || ''))) d.cell.styles.fontStyle = 'bold'; }
+        }));
+        y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 14;
+      });
+    });
+    var total = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= total; p++) {
+      doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(122, 133, 151);
+      doc.text('PROFASE · ' + SUB + ' · Página ' + p + ' de ' + total, W / 2, H - 18, { align: 'center' });
+    }
+    return doc;
+  }
+  /* El botón «PDF» al lado de cada botón de Excel (data-excel), con su mismo aspecto, y que se esconde, se apaga y se
+     mueve con él. Lo que el Excel hace con sus filtros, el PDF lo hace igual: pica el mismo botón en modo PDF. */
+  function gemelo(b) {
+    var t = document.createElement('button');
+    t.type = 'button'; t.className = b.className; t.setAttribute('data-pdf-de', '');
+    var txt = (b.getAttribute('data-excel') || '').trim() || (b.textContent || '').trim();
+    t.textContent = /excel/i.test(txt) ? txt.replace(/excel/i, 'PDF') : 'PDF';
+    if (b.title) t.title = b.title.replace(/excel/ig, 'PDF');
+    t.__excel = b; b.__pdf = t; b.setAttribute('data-par', '');
+    b.addEventListener('click', function () { if (!DISPARO) PIDE_PDF = 0; }, true);
+    t.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (b.disabled || t.disabled) return;
+      PIDE_PDF = Date.now(); DISPARO = true;
+      try { b.click(); } finally { DISPARO = false; }
+    });
+    new MutationObserver(function () { espejo(b, t); }).observe(b, { attributes: true, attributeFilter: ['hidden', 'disabled', 'style', 'class'] });
+    espejo(b, t);
+    b.insertAdjacentElement('afterend', t);
+  }
+  function espejo(b, t) {
+    if (t.hidden !== b.hidden) t.hidden = b.hidden;
+    if (t.disabled !== b.disabled) t.disabled = b.disabled;
+    if (t.style.display !== b.style.display) t.style.display = b.style.display;
+    if (t.className !== b.className) t.className = b.className;
+  }
+  function empareja() {
+    document.querySelectorAll('[data-excel]:not([data-par])').forEach(gemelo);
+    document.querySelectorAll('[data-pdf-de]').forEach(function (t) {
+      var b = t.__excel;
+      if (!b || !b.isConnected) { t.remove(); return; }
+      if (b.nextElementSibling !== t) b.insertAdjacentElement('afterend', t);
+    });
+  }
+  var pendiente = false;
+  function vigila() {
+    var st = document.createElement('style');
+    st.textContent = '[data-pdf-de].xls,[data-pdf-de].xlbtn{background:#1F3864!important;border-color:#1F3864!important;color:#fff!important}';
+    document.head.appendChild(st);
+    empareja();
+    new MutationObserver(function () {
+      if (pendiente) return; pendiente = true;
+      (window.requestAnimationFrame || setTimeout)(function () { pendiente = false; empareja(); });
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', vigila); else vigila();
+
   window.PROFASE_MARCA = { logo: LOGO, marcaAgua: MARCA_AGUA, tablaPDF: tablaPDF, colores: C, fuente: FUENTE, subtitulo: SUB,
     excelJS: excelJS, libro: libro, encabezado: encabezado, cabecera: cabecera, cuerpo: cuerpo, borde: borde,
     impresion: impresion, guardar: guardar,
-    pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF };
+    pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF,
+    pdfDeLibro: pdfDeLibro, empareja: empareja };
 })();

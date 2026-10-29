@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=cce53f0db1"></script><script src="js/filtros.js"></script></head><body>
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ed7ecbee5f"></script><script src="js/marca.js?v=5cd70eec54"></script><script src="js/filtros.js"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -607,7 +607,7 @@ table.rtab{min-width:1200px}
     <div class="acts">
       <button class="btn-2" id="ayudaBtn" aria-expanded="false">Instrucciones</button>
       <button class="btn-2" id="criteriosBtn" title="Reglas que definen qué variación entra a la bitácora">Criterios de la bitácora</button>
-      <button class="btn-2" id="exportarBtn" title="Descarga en Excel las variaciones marcadas o las filtradas, con su seguimiento e historial">Exportar Excel</button>
+      <button class="btn-2" id="exportarBtn" title="Descarga en Excel o en PDF las variaciones marcadas o las filtradas, con su seguimiento e historial">Exportar</button>
       <button class="btn-2" id="importarBtn" title="Lee un Excel exportado de esta bitácora y actualiza estatus y comentarios">Importar Excel</button>
       <input type="file" id="importarArch" accept=".xlsx,.xlsm,.xls" hidden>
       <button class="btn-2" id="limpiar" hidden>Limpiar filtros</button>
@@ -2223,7 +2223,7 @@ function pintarBulk(){
   bar.hidden = false;
   bar.innerHTML = `<b>${fNum.format(n)} ${n===1?"marcada":"marcadas"}</b><span class="sep"></span>
     ${puedeI()?`<button class="btn-2" id="bkI">Estatus Gerencia Contable</button><span class="sep"></span>`:""}
-    <button class="btn-2" id="bkE">Exportar Excel</button>
+    <button class="btn-2" id="bkE">Exportar</button>
     <button class="btn-2" id="bkX">Quitar selección</button>`;
   document.getElementById("bkE").onclick = mExportar;
   const c = document.getElementById("bkC"), i = document.getElementById("bkI");
@@ -3072,6 +3072,8 @@ async function hojaXL(wb, nombre, filas, cols, formatos, op){
   const ed = op.editables ? editablesXL() : new Set();
   const MK = window.PROFASE_MARCA;
   const ws = wb.addWorksheet(nombre);
+  // en el PDF (siempre junto al Excel) no van las columnas que solo sirven para regresar el Excel (el ID y la liga)
+  ws.__pdf = {sin:["ID (no modificar)", "ID hallazgo", "Liga al hallazgo"], omitir: nombre==="Catálogos"};
   ws.columns = cols.map(c=>({key:c, width: Math.min(c===XH.com?60:48, Math.max(10, c.length+2,
     ...filas.slice(0,200).map(r=>String(r[c]==null?"":r[c]).length+1)))}));
   // marca PROFASE arriba (js/marca.js); los encabezados van en el renglón h
@@ -3178,6 +3180,7 @@ async function exportar(lista, conHist){
     ["Cuentas acreedoras (pasivo y capital): la variación se mide sobre el saldo, (saldo final − saldo inicial) ÷ |saldo inicial|; «Mes anterior» es el saldo inicial, «Mes evaluado» el saldo final y «Cambio» el aumento del mes (abonos − cargos: positivo aumentó, negativo disminuyó). Un saldo final negativo se marca «Saldo contrario a su naturaleza»."]
   ];
   const wi = wb.addWorksheet("Instrucciones", {views:[{showGridLines:false}]});
+  wi.__pdf = {omitir:true};   // cómo editar el Excel y regresarlo: no aplica al PDF
   wi.getColumn(1).width = 120;
   const i0 = MK.encabezado(wb, wi, 1, {titulo:"Bitácora de variaciones DECOMSA", lineas:["Exportado el "+cuando, fNum.format(lista.length)+" variaciones · año "+S.anio+" · criterio vigente: "+textoCrit(CRIT)]});
   ins.forEach((l,k)=>{ const c = wi.getCell(i0+k, 1); c.value = l[0]; c.alignment = {wrapText:true}; c.font = {name:MK.fuente, size:10}; });
@@ -3186,20 +3189,13 @@ async function exportar(lista, conHist){
   wi.getCell(i0+1,1).font = {name:MK.fuente, size:10, bold:true, color:{argb:XL_COLOR.txtEd}};
   MK.impresion(wi);
 
-  const datos = await wb.xlsx.writeBuffer();
+  // con PROFASE_MARCA.guardar(): el mismo libro sale en Excel o, con su botón «PDF» al lado, en PDF (siempre juntos)
   const nombre = "Bitacora variaciones DECOMSA "+new Date().toLocaleDateString("en-CA",{timeZone:TZ})+".xlsx";
-  const dl = window.claude ? await claude.use("downloads").catch(()=>null) : null;
-  const blob = new Blob([datos], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  if(dl){
-    try{ await dl.save({filename:nombre, data:blob}); return "Listo: se descargó «"+nombre+"»."; }
-    catch(e){
-      if(e && e.code==="declined") return "Descarga cancelada.";
-      return "No se pudo descargar ("+((e&&e.code)||"error")+").";
-    }
+  try{ await MK.guardar(wb, nombre); return "Listo: se descargó."; }
+  catch(e){
+    if(e && e.code==="declined") return "Descarga cancelada.";
+    return "No se pudo descargar ("+((e&&e.code)||e&&e.message||"error")+").";
   }
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre;
-  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  return "Listo: se descargó «"+nombre+"».";
 }
 
 function mExportar(){
@@ -3207,7 +3203,7 @@ function mExportar(){
   const marc = [...S.marcadas].map(r=>PORRID.get(r)).filter(Boolean);
   let alc = marc.length ? "marc" : "vis", hist = true;
   const {scrim} = modal({
-    kick:"Descarga", titulo:"Exportar a Excel",
+    kick:"Descarga", titulo:"Exportar a Excel o PDF",
     cuerpo:`<div class="field"><span class="lb">Qué variaciones</span>
         <div class="chips" id="xAlc">
           <button class="chip${alc==="marc"?" on":""}" data-v="marc"${marc.length?"":" disabled"}>Marcadas · ${fNum.format(marc.length)}</button>
@@ -3223,7 +3219,7 @@ function mExportar(){
       <p class="saved" id="xSaved"></p>`,
     pie:`<p id="xN"></p>
       <div class="acts"><button class="btn-2" data-cancelar>Cancelar</button>
-      <button class="btn-1" id="xOk">Descargar Excel</button></div>`
+      <button class="btn-1" id="xOk" data-excel>Descargar Excel</button></div>`
   });
   const q = s => scrim.querySelector(s);
   const cuenta = ()=>{ const n = alc==="marc" ? marc.length : vis.length;
@@ -3234,9 +3230,9 @@ function mExportar(){
     scrim.querySelectorAll("#xHist .chip").forEach(x=>x.classList.toggle("on", x===b)); });
   q("#xOk").addEventListener("click", async ()=>{
     const ok = q("#xOk"), av = q("#xSaved");
-    ok.disabled = true; av.textContent = "Armando el Excel…";
+    ok.disabled = true; av.textContent = "Armando el archivo…";
     try{ av.textContent = await exportar(alc==="marc" ? marc : vis, hist); }
-    catch(e){ av.textContent = "No se pudo armar el Excel ("+(e.message||e)+")."; }
+    catch(e){ av.textContent = "No se pudo armar el archivo ("+(e.message||e)+")."; }
     ok.disabled = false;
   });
   cuenta();
