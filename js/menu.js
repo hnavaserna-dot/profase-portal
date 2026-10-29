@@ -56,7 +56,8 @@
     // Lo que se pasa del Access, por etapas (29-oct-2026, pedido de Daniel; Fernando Cadengo dirá cómo acomodarlo)
     { k: 'access', t: 'Access', d: 'Lo que se pasa del Access, por etapas.', subs: [
       { k: 'access-clientes', v: 'axcli', t: 'Clientes', d: 'La base de clientes del Access.' },
-      { k: 'access-wf', v: 'axwf', t: 'WorkFlow', d: 'Cada actividad como en el Access: estatus, bitácora y documentos.' }] }
+      { k: 'access-wf', v: 'axwf', t: 'WorkFlow', d: 'Cada actividad como en el Access: estatus, bitácora y documentos.' },
+      { k: 'access-facturas', v: 'axfac', t: 'Facturas', d: 'Facturas, pagos y recordatorios de pago (dirección y gerentes).' }] }
   ];
   // Una pestaña nueva que todavía no tenga lugar en el menú sale en «Más», para que nunca se pierda
   var MAS = { k: 'mas', t: 'Más', d: 'Pestañas nuevas que todavía no tienen lugar en el menú.', subs: [] };
