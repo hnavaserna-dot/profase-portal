@@ -176,8 +176,8 @@
     + '@media (max-width:600px){.pt-chicos button:last-child{display:none}.pt-chicos button{width:24px;height:24px}}'
     + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *{animation:none!important}.pt-nieve{display:none}}';
   function ponCss() {
-    if (document.getElementById('pt-css')) return;
-    var st = document.createElement('style'); st.id = 'pt-css'; st.textContent = CSS; (document.head || document.documentElement).appendChild(st);
+    if (document.getElementById('ptemp-css')) return;
+    var st = document.createElement('style'); st.id = 'ptemp-css'; st.textContent = CSS; (document.head || document.documentElement).appendChild(st);
   }
   function reacciona(el, clase) {
     if (!clase) return;
