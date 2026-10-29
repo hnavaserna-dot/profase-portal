@@ -12,7 +12,8 @@
   // El director (Daniel) también puede abrir la vista de los gerentes
   var TAMBIEN = { gerente: ['director'] };
   // Páginas que no son de un rol: las abre quien tenga permiso en la base, sea gerente, contador o director
-  var LIBRE = { cotizador: 'cot_puede' };
+  // (cot_lee: quien usa el cotizador, o quien tiene la vista del equipo en consulta, que solo lo ve)
+  var LIBRE = { cotizador: 'cot_lee' };
   var ROL = document.documentElement.getAttribute('data-rol') || '';
   var CADA = 20000; // revisa cambios cada 20 s mientras la página está a la vista
 
@@ -51,6 +52,7 @@
      cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
      para que no salga un error raro; las páginas además esconden sus botones de guardar con P.consulta. ---- */
   var MSG_CONSULTA = 'Tu usuario es de solo consulta: puedes ver todo, pero no cambiar nada.';
+  var MSG_EQUIPO = 'La vista del equipo es de solo consulta para ti: para capturar lo tuyo regresa a «Mi vista».';
   P.MSG_CONSULTA = MSG_CONSULTA;
   function errConsulta() { var x = new Error(MSG_CONSULTA); x.code = 'not_granted'; return x; }
   // Respuesta de Supabase que dice «no se puede», y que aguanta .eq(), .select() y demás antes del await
@@ -506,17 +508,34 @@
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
     // «todos»: páginas que abre cualquier rol (la bitácora de variaciones, dentro de su pestaña)
     // LIBRE: páginas que abre quien tenga permiso en la base (el cotizador), sea del rol que sea
+    // Vista del equipo en solo consulta (29-oct-2026, pedido de Fernando Cadengo; portal/sql/31_consulta_equipo.sql):
+    // un contador de la tabla consulta_equipo (Gabriel Cavazos) también abre la vista de los gerentes, solo para ver.
+    // La base es la que cuida: él sigue siendo contador, así que no escribe lo de los gerentes aunque la página lo intente.
+    P.equipo = false;
+    if (p.rol === 'contador') {
+      try { var eq = await sb.rpc('es_consulta_equipo'); P.equipo = !eq.error && eq.data === true; } catch (e) { P.equipo = false; }
+    }
     if (LIBRE[ROL]) {
       var ok = await sb.rpc(LIBRE[ROL]);
       if (ok.error || ok.data !== true) { location.replace(P.paginaDe(p.rol)); throw new Error('sin permiso'); }
-    } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
+    } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0 && !(ROL === 'gerente' && P.equipo)) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
     try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
+    // En la vista del equipo (la página de los gerentes y sus pestañas) y en el cotizador, quien la tiene en consulta
+    // solo ve; en su propia vista de contador todo sigue igual.
+    if (!P.consulta && P.equipo && (ROL === 'gerente' || ROL === 'cotizador' || enVistaEquipo())) {
+      P.consulta = true; MSG_CONSULTA = MSG_EQUIPO; P.MSG_CONSULTA = MSG_EQUIPO;
+    }
     if (P.consulta) document.documentElement.classList.add('pu-consulta');
     return p;
   })();
   P.listo.catch(function () {});
+  // ¿Esta pestaña está dentro de la vista de los gerentes? (las pestañas van en un marco de la misma página)
+  function enVistaEquipo() {
+    try { return window.top !== window.self && window.top.document.documentElement.getAttribute('data-rol') === 'gerente'; }
+    catch (e) { return false; }
+  }
   sb.auth.onAuthStateChange(function (ev) {
     if (!ROL || ev !== 'SIGNED_OUT' || cerrando) return;
     // si la sesión se cerró en otra pestaña por inactividad, la entrada lo dice
@@ -976,6 +995,9 @@
     // El director brinca entre su vista (con EQUILIBRIO) y la del equipo
     var otra = p.rol !== 'director' ? '' : ROL === 'director'
       ? '<a role="menuitem" href="gerentes.html">' + ic('vista') + 'Vista del equipo</a>' : '<a role="menuitem" href="director.html">' + ic('vista') + 'Mi vista</a>';
+    // quien tiene la vista del equipo en consulta (31_consulta_equipo.sql) brinca entre su vista y la de los gerentes
+    if (P.equipo) otra = ROL === 'contador'
+      ? '<a role="menuitem" href="gerentes.html">' + ic('vista') + 'Vista del equipo (consulta)</a>' : '<a role="menuitem" href="contadores.html">' + ic('vista') + 'Mi vista</a>';
     pu.innerHTML = '<button class="pu-btn" type="button" id="pu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="pu-dd">'
       + '<span class="pu-av" data-pu-av></span><span class="pu-nom">' + esc(p.nombre) + '</span>' + ic('car', 'pu-car') + '</button>'
       + '<div class="pu-dd" id="pu-dd" role="menu" hidden>'
