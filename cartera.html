@@ -282,6 +282,9 @@ tbody tr.click:hover{background:var(--surface-3)}
 .minibtn:hover{border-color:var(--ink-3)}
 .wbtns .xlbtn{margin-top:0;height:30px;white-space:nowrap;align-self:center}
 .wbtns .xlbtn:disabled{opacity:.7;cursor:default}
+.topacc{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.topacc .xlgen{margin-top:0;white-space:nowrap}
+.topacc .xlgen:disabled{opacity:.7;cursor:default}
 .mlist{overflow:auto;min-height:0}
 /* lista de documentos en columnas fijas: contraparte · tipo · fecha · atraso · saldo · total · estatus */
 .dhead,.drow{grid-template-columns:minmax(0,2.2fr) 104px 92px 84px minmax(110px,.8fr) minmax(110px,.8fr) 150px 14px}
@@ -767,7 +770,9 @@ function filtros(){
     S.age=new Set(AGES.map(a=>a.k)); S.mon=new Set(D.monedas); S.cont=new Set(); S.reg=new Set(); S.soloAlerta=false;
     S.desde=D._min; S.hasta=D._max; S.grupo=null; S.cliente=null; S.doc=null; render();
   };
-  top.appendChild(lim); b.appendChild(top);
+  const acc=el('div','topacc');
+  acc.appendChild(botonGeneral()); acc.appendChild(lim);
+  top.appendChild(acc); b.appendChild(top);
 
   const row=el('div','selrow');
   const bus=el('label','fld');
@@ -1506,9 +1511,9 @@ const colL=i=>String.fromCharCode(65+i);
 function filaRCX(cols,r,c,n){
   const f=r.fecha?xd(r.fecha):null, cp=D.cp[r.cp]||['',''];
   const id=/^\d+$/.test(r.quo)?Number(r.quo):r.quo;
-  const fc=cols.indexOf(cols===RCX_FAC?'FECHA CFDI':'Fecha');
+  const fc=cols.indexOf(cols.includes('FECHA CFDI')?'FECHA CFDI':'Fecha');
   const atraso=f?{formula:'IF('+colL(fc)+n+'="","",TODAY()-INT('+colL(fc)+n+'))',result:r.dias}:null;
-  const v={'CLIENTE RFC':c[2],'Cliente RFC':c[2],'QUO ID':id,'Id':id,'RFC':cp[0],'RAZON SOCIAL':cp[1],'Nombre':cp[1],
+  const v={'GRUPO':c[3]||'Sin grupo','Grupo':c[3]||'Sin grupo','CLIENTE':c[1],'Cliente':c[1],'CLIENTE RFC':c[2],'Cliente RFC':c[2],'QUO ID':id,'Id':id,'RFC':cp[0],'RAZON SOCIAL':cp[1],'Nombre':cp[1],
     'Tercero':r.ter?'SI':'','TIPO':sinGuion(r.tipo),'Tipo':sinGuion(r.tipo),'TOTAL CFDI':r.total,'Total':r.total,
     'SALDO CFDI':r.saldo,'Saldo':r.saldo,'FECHA CFDI':f,'Fecha':f,'DIAS DE ATRASO':atraso,'Días de Atraso':atraso,
     'MÉTODO DE PAGO':sinGuion(r.mp),'Estatus':sinGuion(r.est),'FechaCancelacion':null,'UUID':r.uuid,'uuid':r.uuid,
@@ -1517,10 +1522,13 @@ function filaRCX(cols,r,c,n){
     'satTQ_MiFecha':r.mif?xd(r.mif):null,'Rol Tercer':r.rol||''};
   return cols.map(k=>v[k]);
 }
-function hojaRCX(wb,h,c,docs,corte){
+/* el reporte general (todos los clientes) lleva al inicio el grupo y el cliente de cada renglón */
+const RCX_GEN={fac:['GRUPO','CLIENTE'],otro:['Grupo','Cliente'],ancho:[26,48]};
+function hojaRCX(wb,h,c,docs,corte,gen){
   const ws=wb.addWorksheet(h.nombre);
-  const nc=h.cols.length;
-  h.ancho.forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const cols=gen?(h.cols===RCX_FAC?RCX_GEN.fac:RCX_GEN.otro).concat(h.cols):h.cols;
+  const nc=cols.length;
+  (gen?RCX_GEN.ancho.concat(h.ancho):h.ancho).forEach((w,i)=>ws.getColumn(i+1).width=w);
   const azul='FF014F8E', gris='FFE7EBF0', fuente='Aptos Narrow';
   ws.mergeCells('A1:B1');
   const t=ws.getCell('A1'); t.value=h.titulo; t.font={name:fuente,bold:true,size:14,color:{argb:azul}}; t.alignment={vertical:'middle'};
@@ -1528,12 +1536,13 @@ function hojaRCX(wb,h,c,docs,corte){
   const nota=ws.getCell('D1');
   nota.value='* Días de atraso se recalculan solos al abrir el libro (contra la fecha de hoy)';
   nota.font={name:fuente,italic:true,size:8,color:{argb:'FF808080'}};
-  [['A3',h.rs||'Razón Social'],['B3','RFC'],['C3','Fecha Corte']].forEach(([a,v])=>{
+  const cab=gen?[['Alcance','Todos los clientes'],['Empresas',gen.empresas]]:[[h.rs||'Razón Social',c[1]],['RFC',c[2]]];
+  [['A3',cab[0][0]],['B3',cab[1][0]],['C3','Fecha Corte']].forEach(([a,v])=>{
     const x=ws.getCell(a); x.value=v; x.font={name:fuente,bold:true,size:10,color:{argb:azul}};
     x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.border={bottom:{style:'thin',color:{argb:azul}}};
     x.alignment={horizontal:'center',vertical:'middle'};
   });
-  [['A4',c[1]],['B4',c[2]],['C4',corte]].forEach(([a,v])=>{
+  [['A4',cab[0][1]],['B4',cab[1][1]],['C4',corte]].forEach(([a,v])=>{
     const x=ws.getCell(a); x.value=v; x.font={name:fuente,size:11};
     x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.alignment={horizontal:'center',vertical:'middle'};
   });
@@ -1541,9 +1550,9 @@ function hojaRCX(wb,h,c,docs,corte){
   ws.getRow(5).height=5.1;
   for(let i=1;i<=nc;i++) ws.getCell(5,i).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFF7F26'}};
   ws.getRow(6).height=27.95;
-  const filas=docs.map((r,k)=>filaRCX(h.cols,r,c,7+k));
+  const filas=docs.map((r,k)=>filaRCX(cols,r,gen?D.cli[r.cli]:c,7+k));
   ws.addTable({name:h.tabla,ref:'A6',headerRow:true,style:{theme:'TableStyleMedium2',showRowStripes:true},
-    columns:h.cols.map(n=>({name:n,filterButton:true})),rows:filas.length?filas:[h.cols.map(()=>null)]});
+    columns:cols.map(n=>({name:n,filterButton:true})),rows:filas.length?filas:[cols.map(()=>null)]});
   const hdr=ws.getRow(6);
   for(let i=1;i<=nc;i++){ const x=hdr.getCell(i);
     x.font={name:fuente,bold:true,color:{argb:'FFFFFFFF'}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:azul}};
@@ -1554,7 +1563,7 @@ function hojaRCX(wb,h,c,docs,corte){
     'Tipo de Comprobante','Tipo','TIPO','satTQ_MiFecha']);
   for(let n=7;n<7+Math.max(1,filas.length);n++){
     const row=ws.getRow(n);
-    h.cols.forEach((k,i)=>{ const x=row.getCell(i+1);
+    cols.forEach((k,i)=>{ const x=row.getCell(i+1);
       if(fmt[k]) x.numFmt=fmt[k]; if(centro.has(k)) x.alignment={horizontal:'center'}; });
   }
   ws.views=[{state:'frozen',ySplit:6}];
@@ -1580,6 +1589,9 @@ async function exportaReporteCxcCxp(ci){
   const et=sel.hojas.map(h=>h.etq);
   const que=et.length>1?et.slice(0,-1).join(' ')+' y '+et[et.length-1]:et[0];
   const nombre=(mm+' Reporte '+que+' '+c[1]).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx';
+  return descargaXlsx(datos,nombre);
+}
+async function descargaXlsx(datos,nombre){
   const blob=new Blob([datos],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const dl=window.claude&&claude.use?await claude.use('downloads').catch(()=>null):null;
   if(dl){
@@ -1589,6 +1601,135 @@ async function exportaReporteCxcCxp(ci){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nombre;
   document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
   return 'Descargado ✓';
+}
+/* ── reporte general: todos los grupos y todos los clientes que ve el usuario, con los filtros de la pantalla
+   principal (rubros, periodo, contador, más filtros y búsqueda; el grupo abierto no cuenta). Mismas hojas que el
+   reporte de cada cliente, con el grupo y el cliente en cada renglón, y una hoja «Resumen» por grupo y por cliente ── */
+let GEN_TXT=null;
+const GEN_LAB='Exportar a Excel · general';
+function botonGeneral(){
+  const b=el('button','minibtn xlgen',GEN_TXT||GEN_LAB); b.type='button'; b.id='xlgen'; b.disabled=!!GEN_TXT;
+  b.title='Descarga en Excel todos los grupos y todas las empresas, con los filtros de esta pantalla, '+
+    'en el formato del reporte CXC CXP y con una hoja de resumen';
+  b.onclick=async()=>{
+    if(GEN_TXT) return;
+    const pon=t=>{ GEN_TXT=t; const x=document.getElementById('xlgen'); if(x){ x.textContent=t||GEN_LAB; x.disabled=!!t; } };
+    let fin;
+    try{ fin=await exportaGeneral(pon); }
+    catch(e){ fin='No se pudo exportar'; const x=document.getElementById('xlgen'); if(x) x.title=String(e&&e.message||e); }
+    pon(fin); setTimeout(()=>pon(null),2500);
+  };
+  return b;
+}
+function seleccionGeneral(){
+  const docs=ROWS.filter(r=>S.mod.has(r.mod)&&pasa(r,false));
+  return {docs,hojas:RCX_HOJAS.filter(h=>h.mods.some(m=>S.mod.has(m)))};
+}
+function textoFiltros(){
+  const p=['Rubros: '+[...S.mod].sort((a,b)=>a-b).map(i=>MOD_SHORT[i]).join(', ')];
+  p.push('Periodo del CFDI: '+((S.desde===D._min&&S.hasta===D._max)?'todo el histórico':fmtD(S.desde)+' a '+fmtD(S.hasta)));
+  if(S.cont.size) p.push('Contador: '+[...S.cont].join(', '));
+  if(S.mp.size<3) p.push('Método de pago: '+[...S.mp].map(k=>k==='—'?'sin dato':k).join(', '));
+  p.push('Estatus: '+([...S.est].join(', ')||'ninguno'));
+  if(S.mon.size<D.monedas.length) p.push('Moneda: '+[...S.mon].join(', '));
+  if(S.age.size<AGES.length) p.push('Antigüedad: '+AGES.filter(a=>S.age.has(a.k)).map(a=>a.c).join(', '));
+  if(S.reg.size) p.push('Régimen: '+[...S.reg].join(', '));
+  if(S.soloAlerta) p.push('Sólo saldo mayor al total del CFDI');
+  if(S.q) p.push('Búsqueda: «'+S.q+'»');
+  return p.join(' · ');
+}
+// saldos por grupo y por cliente, con las mismas cuentas que la tabla de la pantalla
+function hojaResumen(wb,docs,corte){
+  const ws=wb.addWorksheet('Resumen');
+  const azul='FF014F8E', gris='FFE7EBF0', fuente='Aptos Narrow';
+  const MV=MOD_SHORT.map((l,i)=>i).filter(i=>S.mod.has(i));
+  const neto=m=>m.reduce((a,v,i)=>i===TER?a:a+(ES_CLI[i]?v:-v),0);
+  const nuevo=()=>({m:MOD_SHORT.map(()=>0),n:0,vieja:0,hijos:new Set(),cps:new Set(),cont:new Set()});
+  const porG=new Map(), porC=new Map();
+  docs.forEach(r=>{
+    const c=D.cli[r.cli], g=c[3]||'Sin grupo';
+    if(!porG.has(g)) porG.set(g,Object.assign(nuevo(),{nom:g}));
+    if(!porC.has(r.cli)) porC.set(r.cli,Object.assign(nuevo(),{g,nom:c[1],rfc:c[2]}));
+    [porG.get(g),porC.get(r.cli)].forEach(o=>{
+      o.m[r.mod]+=r.saldo; o.n++; if(r.dias!=null&&r.dias>o.vieja) o.vieja=r.dias;
+      o.hijos.add(r.cli); o.cps.add(r.cp); r.cont.forEach(x=>o.cont.add(x));
+    });
+  });
+  const es=(a,b)=>String(a).localeCompare(String(b),'es');
+  const grupos=[...porG.values()].sort((a,b)=>es(a.nom,b.nom));
+  const clientes=[...porC.values()].sort((a,b)=>es(a.g,b.g)||es(a.nom,b.nom));
+  const nc=4+MV.length+3;
+  [26,48,16,40].concat(MV.map(()=>17),[18,10,14]).forEach((w,i)=>ws.getColumn(i+1).width=w);
+  ws.mergeCells('A1:B1');
+  const t=ws.getCell('A1'); t.value='RESUMEN DE CARTERA'; t.font={name:fuente,bold:true,size:14,color:{argb:azul}};
+  ws.getRow(1).height=21;
+  const fl=ws.getCell('A2'); fl.value='Filtros: '+textoFiltros();
+  fl.font={name:fuente,italic:true,size:9,color:{argb:'FF808080'}};
+  [['A3','Alcance'],['B3','Empresas'],['C3','Fecha Corte'],['D3','Documentos']].forEach(([a,v])=>{
+    const x=ws.getCell(a); x.value=v; x.font={name:fuente,bold:true,size:10,color:{argb:azul}};
+    x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.border={bottom:{style:'thin',color:{argb:azul}}};
+    x.alignment={horizontal:'center',vertical:'middle'};
+  });
+  [['A4','Todos los clientes'],['B4',clientes.length],['C4',corte],['D4',docs.length]].forEach(([a,v])=>{
+    const x=ws.getCell(a); x.value=v; x.font={name:fuente,size:11};
+    x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.alignment={horizontal:'center',vertical:'middle'};
+  });
+  ws.getCell('C4').numFmt='dd/mm/yyyy'; ws.getCell('D4').numFmt='#,##0';
+  ws.getRow(5).height=5.1;
+  for(let i=1;i<=nc;i++) ws.getCell(5,i).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFF7F26'}};
+  const fin=['Neto','Docs','Más antiguo (días)'], ENT=new Set(['Clientes','Contrapartes']);
+  const tabla=(fila,nombre,lab,cab,list,celdas)=>{
+    const s=ws.getCell(fila,1); s.value=lab; s.font={name:fuente,bold:true,size:12,color:{argb:azul}};
+    const hdr=fila+1, cols=cab.concat(MV.map(i=>MOD_SHORT[i]),fin);
+    ws.addTable({name:nombre,ref:'A'+hdr,headerRow:true,totalsRow:true,style:{theme:'TableStyleMedium2',showRowStripes:true},
+      columns:cols.map((n,i)=>i===0?{name:n,filterButton:true,totalsRowLabel:'Total'}
+        :{name:n,filterButton:true,totalsRowFunction:i<cab.length?'none':n==='Más antiguo (días)'?'max':'sum'}),
+      rows:list.map(o=>celdas(o).concat(MV.map(i=>o.m[i]),[neto(o.m),o.n,o.vieja||null]))});
+    const h=ws.getRow(hdr); ws.getRow(hdr).height=27.95;
+    for(let i=1;i<=cols.length;i++){ const x=h.getCell(i);
+      x.font={name:fuente,bold:true,color:{argb:'FFFFFFFF'}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:azul}};
+      x.alignment={horizontal:'center',vertical:'middle',wrapText:true}; }
+    for(let n=hdr+1;n<=hdr+list.length+1;n++){ const row=ws.getRow(n);
+      cols.forEach((k,i)=>{ const x=row.getCell(i+1);
+        if(i>=cab.length&&i<cols.length-2) x.numFmt=RCX_MON;
+        else if(i>=cols.length-2||ENT.has(k)) x.numFmt='#,##0';
+        if(n===hdr+list.length+1) x.font={name:fuente,bold:true}; }); }
+    return hdr+list.length+1;
+  };
+  let f=tabla(7,'TablaGrupos','Por grupo',['Grupo','Clientes','Contrapartes','Contadores asignados'],grupos,
+    o=>[o.nom,o.hijos.size,o.cps.size,[...o.cont].join(', ')]);
+  tabla(f+3,'TablaClientes','Por cliente',['Grupo','Cliente','RFC','Contador asignado'],clientes,
+    o=>[o.g,o.nom,o.rfc,[...o.cont].join(', ')]);
+  ws.views=[{state:'frozen',ySplit:5}];
+}
+async function exportaGeneral(paso){
+  const espera=()=>new Promise(r=>setTimeout(r,30));
+  paso('Preparando…'); await espera();
+  const EX=await cargaExcelJS();
+  let sel=seleccionGeneral();
+  if(!sel.docs.length||!sel.hojas.length) throw new Error('Ningún documento cumple con los filtros');
+  paso('Bajando UUID…'); await espera();
+  await cargaUuids([...new Set(sel.docs.map(r=>D.cli[r.cli][2]))]);
+  sel=seleccionGeneral();
+  const corte=xd(M.generado||iso(TODAY));
+  const es=(a,b)=>String(a||'').localeCompare(String(b||''),'es');
+  const orden=(a,b)=>{ const x=D.cli[a.cli], y=D.cli[b.cli];
+    return es(x[3],y[3])||es(x[1],y[1])||(a.fecha||'').localeCompare(b.fecha||'')||String(a.quo).localeCompare(String(b.quo)); };
+  const docs=sel.docs.slice().sort(orden);
+  const empresas=new Set(docs.map(r=>r.cli)).size;
+  const wb=new EX.Workbook(); wb.creator='Portal PROFASE'; wb.created=new Date();
+  paso('Armando resumen…'); await espera();
+  hojaResumen(wb,docs,corte);
+  for(const h of sel.hojas){
+    paso('Armando '+h.nombre+'…'); await espera();
+    hojaRCX(wb,h,null,docs.filter(r=>h.mods.includes(r.mod)),corte,{empresas});
+  }
+  paso('Guardando archivo…'); await espera();
+  const datos=await wb.xlsx.writeBuffer();
+  const mm=String(TODAY.getMonth()+1).padStart(2,'0');
+  const et=sel.hojas.map(h=>h.etq);
+  const que=et.length>1?et.slice(0,-1).join(' ')+' y '+et[et.length-1]:et[0];
+  return descargaXlsx(datos,(mm+' Reporte '+que+' General').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx');
 }
 </script>
 </body></html>
