@@ -388,6 +388,32 @@
     setInterval(revisaInactividad, 30000);
   }
 
+  /* ---- Cierre temporal (30-oct-2026, pedido de Daniel: «Saca a todos del CRM con ese aviso y cuando quede ya les
+     avisamos»). Al abrir, portal/cierre.js (escrito al principio de cada página) ya revisa cierre.json; aquí, en la
+     página de arriba que ya está abierta, se revisa cada minuto mientras está a la vista y al volver a ella. Si dice
+     "cerrado": true, se guarda a dónde iba y se lleva a cerrado.html, que lo regresa solo al reabrir. No pasa por la
+     base (cierre.json vive en profase-portal), así que funciona aunque la base no conteste. A media llamada del chat
+     espera a que cuelgue. ---- */
+  (function () {
+    if (window.parent !== window) return;
+    if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+    var ultimaC = 0;
+    function revisaCierre() {
+      if (document.hidden || Date.now() - ultimaC < 20000) return;
+      try { if (P.enLlamada && P.enLlamada()) return; } catch (e) { /* sigue */ }
+      ultimaC = Date.now();
+      fetch('/cierre.json?t=' + Date.now(), { cache: 'no-store', credentials: 'omit' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j || j.cerrado !== true) return;
+          try { sessionStorage.setItem('profase-regreso', location.pathname + location.search + location.hash); } catch (e) { /* nada */ }
+          location.replace('/cerrado.html');
+        }, function () { /* sin red: se revisa después */ });
+    }
+    setInterval(revisaCierre, 60000);
+    document.addEventListener('visibilitychange', revisaCierre);
+  })();
+
   /* ---- Versión nueva (29-oct-2026, pedido de Daniel): cada cambio que se publica (lo suba Daniel, Fernando o una
      propuesta autorizada) le llega a quien tenga el portal abierto, sin que tenga que refrescar a mano.
      construir.py deja en version.json la huella de lo publicado y la misma huella en <meta name="portal-version"> de
