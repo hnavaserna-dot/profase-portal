@@ -225,6 +225,9 @@
     + '@media (prefers-reduced-motion:reduce){.pm-side,.pm-car,.pm-pie svg{transition:none}}';
 
   var sw, side, lista, hdr, titulo, crumb, top, pendiente = 0, listo = false, quoObs = null, popAbierto = '', popHecho = '', hecho = '', hechoArriba = '', cerrarAlPintar = false;
+  // Mientras el recorrido general (bienvenida_tab.js) explica un módulo, su tarjeta se queda abierta aunque el mouse
+  // salga del menú o se pique «Siguiente» (ver ensena() y suelta(), abajo)
+  var retiene = false;
 
   function movil() { return matchMedia('(max-width:900px)').matches; }
   function boton(v) { return sw.querySelector('button[data-view="' + v + '"]'); }
@@ -488,7 +491,7 @@
       if (b) abrePop(popAbierto === b.dataset.m ? '' : b.dataset.m);
     });
     // el ícono picado se vuelve a pintar (ya no está en la página): ese clic no cuenta como «afuera»
-    document.addEventListener('click', function (e) { if (popAbierto && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
+    document.addEventListener('click', function (e) { if (popAbierto && !retiene && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
     side.querySelector('.pm-cab button').onclick = function () { abre(false); };
     if (window.PROFASE_TEMPORADA) window.PROFASE_TEMPORADA.pon(logo);   // js/temporada.js
     scrim.onclick = function () { abre(false); };
@@ -518,7 +521,7 @@
       try { ab = JSON.parse(store.get('portal.menu.abiertos') || '{}') || {}; } catch (er) { ab = {}; }
       ab[mod.dataset.m] = o; store.set('portal.menu.abiertos', JSON.stringify(ab));
     });
-    lista.addEventListener('mouseleave', function () { sobre = null; cierraFly(); });
+    lista.addEventListener('mouseleave', function () { sobre = null; if (!retiene) cierraFly(); });
     // al llegar a otro ícono del riel, su tarjeta se acomoda dentro de la pantalla y se cierran las demás
     lista.addEventListener('mouseover', function (e) {
       var m = e.target.closest('.pm-mod');
@@ -531,7 +534,7 @@
     });
     lista.addEventListener('focusin', function (e) { colocaTarjeta(e.target.closest('.pm-mod')); });
     lista.addEventListener('scroll', recoloca, { passive: true });
-    document.addEventListener('click', function (e) { if (e.target.isConnected && !side.contains(e.target)) cierraFly(); });
+    document.addEventListener('click', function (e) { if (!retiene && e.target.isConnected && !side.contains(e.target)) cierraFly(); });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
     new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso'] });
@@ -567,9 +570,50 @@
       setTimeout(intenta, 250);
     })();
   }
+  // Recorrido general del portal (bienvenida_tab.js; Daniel, 30-oct-2026: «hagas un recorrido de todo a cada usuario para
+  // que sepan»): qué módulos y opciones ve esta persona, y abrir la tarjeta de un módulo donde esté su menú (riel, menú
+  // completo, menú arriba o ☰ del celular) para iluminarla. No cambia de pantalla ni de sección.
+  function datosModulos() {
+    return modulos().map(function (x) {
+      return { k: x.m.k, t: x.m.t, d: x.m.d || '', subs: x.subs.map(function (s) { return { k: s.k, t: nombre(s), d: s.d || '' }; }) };
+    });
+  }
+  function ensena(k) {
+    if (!sw || !lista) return null;
+    retiene = true;
+    if (document.body.classList.contains('pm-arriba')) {
+      abrePop(k);
+      var p = top.querySelector('.pm-pop');
+      return p && !p.hidden ? p : null;
+    }
+    var m = lista.querySelector('.pm-mod[data-m="' + k + '"]');
+    if (!m) return null;
+    if (enRiel()) {
+      cierraFly();
+      m.classList.add('fly'); side.classList.add('pm-fly-on');
+      colocaTarjeta(m);
+      return m.querySelector('.pm-subs');
+    }
+    if (movil()) abre(true);
+    m.dataset.open = 'true';
+    var mb = m.querySelector('.pm-mb'); if (mb) mb.setAttribute('aria-expanded', 'true');
+    try { m.scrollIntoView({ block: 'nearest' }); } catch (e) { /* se queda donde está */ }
+    return m;
+  }
+  function suelta() {
+    retiene = false;
+    if (!sw || !lista) return;
+    cierraFly();
+    if (popAbierto) abrePop('');
+    if (movil()) abre(false);
+    pinta();
+  }
   window.PORTAL_MENU = {
     ir: function (k) { return !!sw && ir(k); },
-    ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); }
+    ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); },
+    modulos: function () { return sw ? datosModulos() : []; },
+    ensena: ensena,
+    suelta: suelta
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca);
   else arranca();
