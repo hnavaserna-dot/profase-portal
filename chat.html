@@ -45,7 +45,12 @@
    grupos, contestar citando, corregir (24 h) y eliminar lo propio, reacciones, buscar, archivos del chat, silenciar,
    fijar, «escribiendo…» y «en línea» (tiempo real; si no llega, pregunta cada pocos segundos).
    Estatus (30-oct-2026, pedido de Daniel): punto verde En línea, amarillo Ausente, rojo No disponible y gris Desconectado
-   (la última vez, solo a la dirección y a los gerentes); lo calcula chat_tab.js (window.__chatEstado) y aquí solo se pinta. */
+   (la última vez, solo a la dirección y a los gerentes); lo calcula chat_tab.js (window.__chatEstado) y aquí solo se pinta.
+   «Equipo conectado» (30-oct-2026, 16:26, Daniel: «quisiera esto solo yo y HNR; por el momento»): una franja arriba de
+   las conversaciones con cuántos están en línea y, al picarla, todo el equipo por estatus (en línea, ausentes, no
+   disponibles y desconectados con su última vez). Solo sale si la base dice que sí (chat_veo_conectados(),
+   portal/sql/65_chat_conectados.sql; hoy daniel.nava y hnava). Quién la ve solo lo decide Daniel: si Fernando la pide
+   para alguien, va como petición a Daniel (docs/peticiones). No dice quién escogió «Aparecer desconectado». */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --surface-3:#E4E9F1; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-2:#2B4C86; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6;
@@ -112,6 +117,26 @@ button{cursor:pointer}
 .chips::-webkit-scrollbar{display:none}
 .chips button{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
 .chips button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
+/* «Equipo conectado»: solo a quien la base se lo ofrece (chat_veo_conectados) */
+.eq-bar{flex:none;display:flex;align-items:center;gap:8px;margin:0 14px 10px;padding:7px 10px 7px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;text-align:left;min-width:0;cursor:pointer}
+.eq-bar[hidden]{display:none}
+.eq-bar:hover{border-color:var(--navy-2)}
+.eq-bar[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy-2)}
+.eq-bar .eq-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.eq-bar .eq-t b,.eq-bar .eq-t small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eq-bar .eq-t b{color:var(--ink);font-weight:700;font-size:13.5px}
+.eq-bar .eq-t small{color:var(--muted);font-size:12px}
+.eq-bar .eq-ver{flex:none;display:inline-flex;align-items:center;gap:3px;font-weight:700;color:var(--accent-ink);white-space:nowrap}
+.eq-bar .eq-ver .ic{width:15px;height:15px}
+.eq-sec{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.eq-sec b{color:var(--ink)}
+.eq-sec .pe{width:10px;height:10px}
+.eq-rol{flex:none;font-size:12px;color:var(--muted)}
+.ci-u.eq-e span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ci-u.eq-e[data-e="linea"]{color:var(--ok);font-weight:600}
+.ci-u.eq-e[data-e="ausente"]{color:var(--ausente-ink);font-weight:600}
+.ci-u.eq-e[data-e="nd"]{color:var(--nd);font-weight:600}
+.eq-nota{padding:14px 18px 22px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.45}
 .convs{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--line);overscroll-behavior:contain}
 .inv{flex:none;display:flex;gap:10px;align-items:flex-start;margin:0 14px 10px;padding:10px 10px 10px 12px;border-radius:12px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);font-size:13px;line-height:1.4}
 .inv[hidden]{display:none}
@@ -488,6 +513,7 @@ audio.ad-med{width:280px;max-width:100%}
     </div>
     <div class="busca"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Buscar chat o persona" aria-label="Buscar chat o persona" autocomplete="off"></div>
     <div class="chips" role="group" aria-label="Qué ver"><button type="button" data-f="todo" aria-pressed="true">Todos</button><button type="button" data-f="sin" aria-pressed="false">Sin leer</button><button type="button" data-f="grupos" aria-pressed="false">Grupos</button><button type="button" data-f="personas" aria-pressed="false">Personas</button></div>
+    <button type="button" class="eq-bar" id="eq-bar" hidden aria-pressed="false" aria-controls="convs"><span class="pe" data-e="off"></span><span class="eq-t" id="eq-t">Equipo conectado</span><span class="eq-ver" id="eq-ver">Ver todos</span></button>
     <div class="inv" id="push-inv" hidden role="region" aria-label="Avisos del chat"></div>
     <div class="convs" id="convs" role="list"></div>
   </section>
@@ -596,6 +622,7 @@ audio.ad-med{width:280px;max-width:100%}
   var YO = null, DIR = new Map(), FOTOS = {}, CONVS = [], FILTRO = 'todo', ACT = null, RT = false, RTC = null, CC = null;
   var PEND = [], RESP = null, EDIT = null, ENVIANDO = false, MANDAR_AL_SUBIR = false, URLS = new Map(), TEMP = [], nTemp = 0;
   var ESCRIBEN = {}, ultEscribo = 0;
+  var VEO_EQ = false, FILTRO_ANTES = 'todo';   // «Equipo conectado»: solo si la base dice que sí (chat_veo_conectados)
   var tactil = window.matchMedia && matchMedia('(pointer:coarse)').matches;
   var guarda = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -710,6 +737,9 @@ audio.ad-med{width:280px;max-width:100%}
       (d || []).forEach(function (x) { DIR.set(x.usuario, x); });
     } catch (e) { /* sin directorio: salen los usuarios */ }
     try { FOTOS = await P.fotosDe(Array.from(DIR.values()).map(function (x) { return x.uid; }).filter(Boolean)); } catch (e) { FOTOS = {}; }
+    // «Equipo conectado»: hoy solo Daniel y su papá (65_chat_conectados.sql); sin esa función en la base, no sale
+    try { VEO_EQ = (await rpc('chat_veo_conectados')) === true; } catch (e) { VEO_EQ = false; }
+    $('#eq-bar').hidden = !VEO_EQ;
     await cargaLista();
     conectaRT();
     setInterval(tic, 3000);
@@ -745,6 +775,8 @@ audio.ad-med{width:280px;max-width:100%}
   }
   function sinAcentos(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
   function pintaLista() {
+    pintaEq();
+    if (FILTRO === 'equipo' && VEO_EQ) { pintaEquipo(); return; }
     var q = sinAcentos($('#q').value.trim()), html = '';
     var ls = CONVS.filter(function (c) {
       if (FILTRO === 'sin' && !(c.no_leidos > 0)) return false;
@@ -783,8 +815,73 @@ audio.ad-med{width:280px;max-width:100%}
   });
   $('#q').addEventListener('input', pintaLista);
   document.querySelectorAll('.chips button').forEach(function (b) {
-    b.onclick = function () { FILTRO = b.dataset.f; document.querySelectorAll('.chips button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); pintaLista(); };
+    b.onclick = function () { FILTRO = b.dataset.f; document.querySelectorAll('.chips button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); buscaTxt(); pintaLista(); };
   });
+
+  // ---------------------------------------------------------------- «Equipo conectado» (solo dirección, por ahora)
+  // Lo mismo que ya da el chat a todos (los puntos de colores) y la última vez que la base ya le da a la dirección, en
+  // una sola lista. Quien escogió «Aparecer desconectado» sale desconectado, como para todos.
+  var GRUPOS_EQ = [['linea', 'En línea'], ['ausente', 'Ausentes'], ['nd', 'No disponibles'], ['off', 'Desconectados'], ['nuevo', 'Todavía no entran al portal']];
+  var FLECHA = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  function equipoDe() {
+    return personas().map(function (x) { return { x: x, st: x.registrado === false ? { e: 'nuevo' } : estadoDe(x.usuario) }; });
+  }
+  function pintaEq() {
+    var b = $('#eq-bar'); if (!b || !YO || !VEO_EQ) return;
+    var n = { linea: 0, ausente: 0, nd: 0, off: 0 };
+    equipoDe().forEach(function (p) { if (n[p.st.e] != null) n[p.st.e]++; });
+    var mas = [];
+    if (n.ausente) mas.push(n.ausente + (n.ausente === 1 ? ' ausente' : ' ausentes'));
+    if (n.nd) mas.push(n.nd + (n.nd === 1 ? ' no disponible' : ' no disponibles'));
+    var on = FILTRO === 'equipo';
+    $('#eq-t').innerHTML = '<b>' + n.linea + ' en línea</b>' + (mas.length ? '<small>' + esc(mas.join(' · ')) + '</small>' : '');
+    b.querySelector('.pe').setAttribute('data-e', n.linea ? 'linea' : n.ausente ? 'ausente' : 'off');
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('#eq-ver').innerHTML = on ? IC.tache + 'Mis chats' : 'Ver todos' + FLECHA;
+    b.setAttribute('aria-label', 'Equipo conectado: ' + n.linea + ' en línea' + (mas.length ? ', ' + mas.join(', ') : '') + '. ' + (on ? 'Regresar a mis conversaciones' : 'Ver a todo el equipo'));
+    b.title = on ? 'Regresar a mis conversaciones' : 'Ver quién del equipo está conectado';
+  }
+  function pintaEquipo() {
+    var q = sinAcentos($('#q').value.trim()), html = '';
+    var ls = equipoDe().filter(function (p) { return !q || sinAcentos(p.x.nombre).indexOf(q) >= 0; });
+    GRUPOS_EQ.forEach(function (g) {
+      var gr = ls.filter(function (p) { return p.st.e === g[0]; });
+      if (!gr.length) return;
+      gr.sort(function (a, b) {
+        if (g[0] === 'off') { var va = Date.parse(a.st.visto || '') || 0, vb = Date.parse(b.st.visto || '') || 0; if (va !== vb) return vb - va; }
+        return String(a.x.nombre || '').localeCompare(String(b.x.nombre || ''), 'es');
+      });
+      html += '<div class="eq-sec">' + (g[0] === 'nuevo' ? '' : '<span class="pe" data-e="' + g[0] + '"></span>') + esc(g[1]) + ' <b>' + gr.length + '</b></div>';
+      gr.forEach(function (p) {
+        var x = p.x, rol = rolTxt(x.rol), est = g[0] === 'nuevo' ? 'Todavía no entra al portal' : txtEstado(p.st);
+        if (g[0] === 'off') est = est.replace(/^Desconectado · últ\. vez /, 'Última vez ');   // ya va en «Desconectados»
+        html += '<button type="button" class="ci eq-p" data-p="' + esc(x.usuario) + '" title="Escribirle a ' + esc(x.nombre) + '">'
+          + '<span class="avw">' + avU(x.usuario) + punto(x.usuario) + '</span>'
+          + '<span class="ci-tx"><span class="ci-l1"><b class="ci-n">' + esc(x.nombre) + '</b>' + (rol ? '<span class="eq-rol">' + esc(rol) + '</span>' : '') + '</span>'
+          + '<span class="ci-l2"><span class="ci-u eq-e" data-e="' + g[0] + '"><span>' + esc(est) + '</span></span></span></span></button>';
+      });
+    });
+    if (!html) html = '<div class="lista-vacia">' + (q ? 'Nadie del equipo se llama así.' : 'Todavía no hay nadie más en el portal.') + '</div>';
+    else html += '<div class="eq-nota">Se actualiza solo. Pica a alguien para escribirle.<br>Esta lista solo la ve la dirección.</div>';
+    $('#convs').innerHTML = html;
+  }
+  function buscaTxt() {
+    var t = FILTRO === 'equipo' ? 'Buscar a alguien del equipo' : 'Buscar chat o persona';
+    $('#q').placeholder = t; $('#q').setAttribute('aria-label', t);
+  }
+  function ponEquipo(on) {
+    if (!VEO_EQ) return false;
+    if (on && FILTRO !== 'equipo') { FILTRO_ANTES = FILTRO; FILTRO = 'equipo'; }
+    else if (!on && FILTRO === 'equipo') FILTRO = FILTRO_ANTES || 'todo';
+    document.querySelectorAll('.chips button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.f === FILTRO ? 'true' : 'false'); });
+    buscaTxt();
+    pintaLista();
+    $('#convs').scrollTop = 0;
+    return true;
+  }
+  $('#eq-bar').onclick = function () { ponEquipo(FILTRO !== 'equipo'); };
+  // para el recorrido guiado de «Equipo conectado» (chat_tab.js)
+  window.__chatEquipo = ponEquipo;
 
   // ---------------------------------------------------------------- abrir una conversación
   async function abre(id, desde) {
