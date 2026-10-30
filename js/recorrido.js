@@ -31,6 +31,10 @@
     + '.rc-pie .rc-sig{background:#F07A1E;border-color:#F07A1E;color:#fff}'
     + '.rc-pie .rc-salta{border:0;background:none;color:var(--muted,#5A6577);font-weight:600;padding:8px 4px}'
     + '.rc-pie button:focus-visible{outline:2px solid #1F3864;outline-offset:2px}'
+    + '.rc-espera{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--surface,#fff);color:var(--ink,#132036);border-radius:999px;padding:10px 18px;font-size:14.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px}'
+    + '.rc-espera i{width:16px;height:16px;border-radius:50%;border:2.5px solid #C4CDDA;border-top-color:#F07A1E;animation:rc-gira .8s linear infinite}'
+    + '@keyframes rc-gira{to{transform:rotate(360deg)}}'
+    + ':root[data-theme="dark"] .rc-espera{background:var(--surface,#141C2B);color:var(--ink,#E5EAF2)}'
     + '.rc-flecha{position:fixed;width:42px;height:42px;color:#F07A1E;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));pointer-events:none}'
     + '.rc-flecha svg{width:100%;height:100%;display:block}'
     + '.rc-flecha.arriba svg{animation:rc-sube 1s ease-in-out infinite}.rc-flecha.abajo svg{animation:rc-baja 1s ease-in-out infinite}'
@@ -40,7 +44,7 @@
     + ':root[data-theme="dark"] .rc-globo{background:var(--surface,#141C2B);color:var(--ink,#E5EAF2)}'
     + ':root[data-theme="dark"] .rc-ic{background:#2B4C86}'
     + '@media (max-width:600px){.rc-globo h3{font-size:18px}.rc-globo p{font-size:14px}.rc-pie button{padding:8px 11px}}'
-    + '@media (prefers-reduced-motion: reduce){.rc-luz,.rc-globo{transition:none}.rc-luz::after,.rc-flecha svg{animation:none!important}}';
+    + '@media (prefers-reduced-motion: reduce){.rc-luz,.rc-globo{transition:none}.rc-luz::after,.rc-flecha svg,.rc-espera i{animation:none!important}}';
   var FLECHA = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 4 11h5v10h6V11h5z"/></svg>';
   var ICONOS = {
     candado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
@@ -76,11 +80,12 @@
     if (!document.getElementById('rc-css')) { var st = document.createElement('style'); st.id = 'rc-css'; st.textContent = CSS; document.head.appendChild(st); }
     var pasos = def.pasos, i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
     var capa = document.createElement('div'); capa.className = 'rc-capa';
-    capa.innerHTML = '<div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div>'
+    capa.innerHTML = '<div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
       + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p>'
       + '<div class="rc-pie"><button type="button" class="rc-salta">Saltar</button><span class="rc-n" aria-live="polite"></span><button type="button" class="rc-atras">Atrás</button><button type="button" class="rc-sig">Siguiente</button></div></div>';
     document.body.appendChild(capa);
     var luz = capa.querySelector('.rc-luz'), flecha = capa.querySelector('.rc-flecha'), globo = capa.querySelector('.rc-globo');
+    var espera = capa.querySelector('.rc-espera');
     var bAtras = capa.querySelector('.rc-atras'), bSig = capa.querySelector('.rc-sig'), bSalta = capa.querySelector('.rc-salta');
     return new Promise(function (listo) {
       function termina(como) {
@@ -135,7 +140,12 @@
         i = n;
         var p = pasos[i];
         globo.style.visibility = 'hidden'; luz.hidden = true; flecha.hidden = true;
-        if (p.antes) { try { await Promise.race([p.antes(), new Promise(function (ok) { setTimeout(ok, 8000); })]); } catch (e) { /* sigue */ } }
+        if (p.antes) {
+          // mientras se abre lo que sigue (por ejemplo, el chat), la pantalla se oscurece y dice «Un momento…»
+          capa.classList.add('sin-luz'); espera.hidden = false;
+          try { await Promise.race([p.antes(), new Promise(function (ok) { setTimeout(ok, 6000); })]); } catch (e) { /* sigue */ }
+          espera.hidden = true;
+        }
         if (!activo || i !== n) return;
         el = null;
         if (p.el) {
