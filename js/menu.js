@@ -50,6 +50,8 @@
     { k: 'adm', t: 'Administración', d: 'El día a día del despacho.', subs: [
       { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
       { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo cobrado y lo pendiente.' },
+      { k: 'facturacion', v: 'fac', t: 'Facturación', d: 'Alta y control de facturas.' },   // etapa 5 del Access (29-oct-2026)
+      { k: 'pagos', v: 'pag', t: 'Pagos', d: 'Pagos de los clientes y su reparto a facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven

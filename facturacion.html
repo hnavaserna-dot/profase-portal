@@ -1,0 +1,635 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Facturación</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=1011842073"></script><script src="js/marca.js?v=1462cf2e83"></script>
+<style>
+/* Portal PROFASE · Administración › Facturación (etapa 5 de la migración del Access, 29-oct-2026): alta masiva del mes
+   (propuesta con los servicios contratados y su precio vigente), alta y cambio a mano, folios y bajas con motivo, como
+   «Administrar Facturas» del Access y con sus errores corregidos. Todo pasa por las funciones de la base
+   (portal/sql/52_facturacion.sql), que deciden qué compañía ve y factura cada quien (decisión de Daniel): la dirección
+   todo; DECOMSA la ven los gerentes y la facturan Cadengo y Elisa Mata; la otra compañía solo quien Daniel dijo.
+   Los nombres de las compañías llegan de la base. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:720px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px;overflow-wrap:anywhere}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.ojo .v{color:var(--accent-ink)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:22px}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
+.filtros input{width:230px}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 12px;white-space:nowrap}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr.fila{cursor:pointer}
+tr.fila:hover td{background:var(--navy-soft)}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.rfc{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.vence{white-space:nowrap}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
+.pie{color:var(--muted);font-size:12px;margin:0 0 24px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.practica{border-left:4px solid var(--accent)}
+.nota.bien{background:var(--ok-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.no{color:var(--muted)}
+/* Panel a la derecha; en celular, pantalla completa */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(820px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .cab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
+.ficha .cab .rfc{color:var(--band-dim)}
+.ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sec>h3 small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted)}
+.sec .in{padding:12px 14px}
+.sec table{font-size:13px}
+.sec td,.sec th{padding:6px 10px}
+.lista{margin:0;padding:0;list-style:none}
+.lista li{padding:8px 14px;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600}
+.lista .d{color:var(--muted);font-size:12.5px}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
+.tag.ojo{background:var(--amber-soft);color:var(--amber)}
+.tag.az{background:var(--navy-soft);color:var(--ink)}
+.tot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;padding:10px 14px;border-top:1px solid var(--line)}
+.tot .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tot .f{font-weight:700}
+.acciones{display:flex;flex-wrap:wrap;gap:8px}
+.lista li.con{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;align-items:start}
+.lista li.con .t{overflow-wrap:anywhere}
+/* Formularios */
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label,.campo .l{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea,.linea input,.linea select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.chk{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.chk input{width:auto}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.lineas{display:grid}
+.linea{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1.6fr) 130px auto;gap:8px 10px;align-items:start;padding:10px 14px;border-top:1px solid var(--line)}
+.linea:first-child{border-top:0}
+.linea.fuera{opacity:.6}
+.linea .who{min-width:0}
+.linea .precio{text-align:right}
+.linea .quita{align-self:center}
+.linea.man{grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1.2fr) 120px auto}
+.pagan{margin:0;padding:0;list-style:none}
+.pagan li{display:grid;grid-template-columns:minmax(0,1fr) auto 150px;gap:6px 12px;align-items:center;padding:8px 14px;border-top:1px solid var(--line)}
+.pagan li:first-child{border-top:0}
+.pagan input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;width:100%}
+@media (max-width:640px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.linea input,.linea select,.pagan input{font-size:16px}
+  .filtros input,.filtros select{width:100%}
+  .filtros{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  .linea,.linea.man{grid-template-columns:auto minmax(0,1fr)}
+  .linea>*{grid-column:2}
+  .linea>.inc{grid-column:1;grid-row:1}
+  .linea.man>*{grid-column:1/-1}
+  .linea .precio{text-align:left}
+  .pagan li{grid-template-columns:minmax(0,1fr) auto}
+  .pagan li input{grid-column:1/-1}
+  #lista thead{display:none}
+  #lista tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+  #lista td{border:0;padding:0;min-width:0}
+  #lista td:nth-child(1){grid-column:1}
+  #lista td:nth-child(2){grid-column:1/-1;order:3}
+  #lista td:nth-child(3){grid-column:2;grid-row:1;text-align:right}
+  #lista td:nth-child(4),#lista td:nth-child(5),#lista td:nth-child(6){grid-column:1/-1;font-size:12.5px;order:4;text-align:left}
+  #lista td:nth-child(4)::before{content:"Fecha: ";color:var(--muted)}
+  #lista td:nth-child(5)::before{content:"Total: ";color:var(--muted)}
+  #lista td:nth-child(6)::before{content:"Saldo: ";color:var(--muted)}
+  .ficha .cab h2{font-size:18px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">Administración</div>
+    <h1>Facturación</h1>
+    <p id="subt">Alta del mes con los servicios contratados de cada cliente, alta y cambio a mano, folios y bajas. Todo queda con quién lo hizo y cuándo.</p>
+  </div>
+  <div class="acts">
+    <button class="btn acento" type="button" id="b-generar" hidden>Generar del mes</button>
+    <button class="btn" type="button" id="b-nueva" hidden>Nueva factura</button>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota practica" id="practica" hidden><strong>Modo práctica:</strong> lo que captures aquí se borra con la siguiente copia del Access, cada 3 horas, hasta el cambio del martes 3 de noviembre.</div>
+  <div class="nota" id="error" hidden></div>
+  <div class="nota bien" id="aviso" hidden></div>
+  <div class="cargando" id="cargando">Cargando las facturas…</div>
+
+  <div id="principal" hidden>
+    <section class="kpis" aria-label="Resumen">
+      <div class="kpi"><div class="l">Facturas</div><div class="v num" id="k-n">–</div><div class="s" id="k-n-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Facturado</div><div class="v num" id="k-tot">–</div><div class="s">con IVA</div></div>
+      <div class="kpi"><div class="l">Cobrado</div><div class="v num" id="k-cob">–</div><div class="s" id="k-cob-s">&nbsp;</div></div>
+      <div class="kpi" id="k-sal-c"><div class="l">Saldo</div><div class="v num" id="k-sal">–</div><div class="s" id="k-sal-s">&nbsp;</div></div>
+    </section>
+    <section class="card" aria-labelledby="h-lista">
+      <header>
+        <div><h2 id="h-lista">Facturas</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio, concepto)" aria-label="Buscar">
+          <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
+          <select id="f-anio" aria-label="Año de la factura"></select>
+          <select id="f-mes" aria-label="Mes de la factura"></select>
+          <select id="f-est" aria-label="Estado"><option value="">Pagadas y con saldo</option><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="sinfolio">Sin folio</option></select>
+          <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
+        </div>
+      </header>
+      <div class="tabla"><table id="lista"><thead><tr><th>Folio</th><th>Cliente</th><th>Estado</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
+      <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
+    </section>
+    <p class="pie">Total = conceptos más IVA (las de efectivo, sin IVA). Saldo = total menos lo aplicado de pagos y notas de crédito; menos de $1 cuenta como pagada, como en la Cobranza. Los pagos se capturan en Administración › Pagos.</p>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var PAGINA = 150, mostrar = PAGINA;
+  var EST = null, CIAS = {}, F = [], POR_ID = {}, CONSULTA = false;
+  var EMP = {}, CAT = {};          // por compañía: razones sociales y catálogo (se piden una vez)
+  var G = null, M = null;          // lo que se está generando o capturando a mano
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(s)).replace(/\./g, ''); } catch (e) { return fecha(s); } }
+  function dinero(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function dineroCorto(n) { n = Number(n || 0); return Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toLocaleString('es-MX', { maximumFractionDigits: 2 }) + ' M' : '$' + Math.round(n).toLocaleString('es-MX'); }
+  function hoy() { var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function num(v) { var n = parseFloat(String(v == null ? '' : v).replace(/[$,\s]/g, '')); return isFinite(n) ? n : 0; }
+  function r2(n) { return Math.round(n * 100) / 100; }
+  function cia(id) { return (CIAS[id] && CIAS[id].nombre) || ('Compañía ' + id); }
+  function puedeAlta(id) { return !CONSULTA && !!(CIAS[id] && CIAS[id].fac_alta); }
+  function ciasAlta() { return Object.keys(CIAS).map(Number).filter(puedeAlta); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function chipEst(f) { return f.pagada ? '<span class="chip ok">Pagada</span>' : (f.pagado > 0 ? '<span class="chip ojo">Abonada</span>' : '<span class="chip mal">Sin pago</span>'); }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = false; }
+
+  async function carga() {
+    try {
+      var p = await P.listo; if (!p) return;
+      CONSULTA = !!P.consulta;
+      EST = await rpc('fac_estado');
+      CIAS = {};
+      (EST && EST.companias || []).forEach(function (c) { if (c.fac_ver) CIAS[c.id] = c; });
+      if (!Object.keys(CIAS).length) {
+        $('cargando').hidden = true;
+        error('Esta sección es de quien factura (la dirección, los gerentes y a quien Daniel se lo dio).');
+        return;
+      }
+      $('practica').hidden = !(EST && EST.modo === 'practica');
+      $('b-generar').hidden = $('b-nueva').hidden = !ciasAlta().length;
+      await recarga();
+      $('cargando').hidden = true; $('principal').hidden = false;
+    } catch (e) {
+      $('cargando').hidden = true;
+      error('No se pudieron leer las facturas: ' + falla(e));
+    }
+  }
+  async function recarga() {
+    F = await rpc('fac_lista', { p_pantalla: 'facturas', p: {} }) || [];
+    POR_ID = {}; F.forEach(function (f) { POR_ID[f.id] = f; });
+    opciones(); pinta();
+  }
+
+  function opciones() {
+    var C = Object.keys(CIAS).map(Number).sort(function (a, b) { return a - b; });
+    var c0 = $('f-cia').value;
+    $('f-cia').hidden = C.length < 2;
+    $('f-cia').innerHTML = '<option value="">Todas las compañías</option>' + C.map(function (c) { return '<option value="' + c + '">' + esc(cia(c)) + '</option>'; }).join('');
+    if (c0) $('f-cia').value = c0;
+    var anios = {}; F.forEach(function (f) { if (f.fecha) anios[f.fecha.slice(0, 4)] = 1; });
+    anios[hoy().slice(0, 4)] = 1;
+    var A = Object.keys(anios).sort().reverse(), a0 = $('f-anio').value;
+    $('f-anio').innerHTML = '<option value="">Todos los años</option>' + A.map(function (a) { return '<option value="' + esc(a) + '">' + esc(a) + '</option>'; }).join('');
+    $('f-anio').value = a0 || A[0];
+    var m0 = $('f-mes').value;
+    $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + MESES_L.map(function (m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
+    $('f-mes').value = m0;
+  }
+
+  function filtradas() {
+    var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = $('f-est').value;
+    return F.filter(function (f) {
+      if (c && String(f.compania) !== c) return false;
+      if (a && (f.fecha || '').slice(0, 4) !== a) return false;
+      if (m && +(f.fecha || '').slice(5, 7) !== m) return false;
+      if (e === 'saldo' && f.pagada) return false;
+      if (e === 'pagada' && !f.pagada) return false;
+      if (e === 'sinfolio' && f.folio) return false;
+      if (q && norm([f.razon, f.rfc, f.grupo, f.folio, f.conceptos].join(' ')).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+
+  function pinta() {
+    var L = filtradas(), tot = 0, cob = 0, sal = 0, conSaldo = 0, varias = !$('f-cia').hidden;
+    L.forEach(function (f) { tot += f.total; cob += f.pagado; if (!f.pagada) { sal += f.saldo; conSaldo++; } });
+    $('k-n').textContent = L.length; $('k-n-s').textContent = conSaldo + ' con saldo';
+    $('k-tot').textContent = dineroCorto(tot); $('k-cob').textContent = dineroCorto(cob);
+    $('k-cob-s').textContent = tot ? Math.round(100 * cob / tot) + ' % de lo facturado' : ' ';
+    $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = conSaldo === 1 ? '1 factura' : conSaldo + ' facturas';
+    $('k-sal-c').className = 'kpi' + (sal >= 1 ? ' ojo' : '');
+    $('lista-sub').textContent = L.length === 1 ? '1 factura' : L.length + ' facturas';
+    $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (f) {
+      return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '</td>'
+        + '<td><div class="rs">' + esc(f.razon) + '</div><div class="rfc">' + esc(f.grupo) + (f.conceptos ? ' · ' + esc(f.conceptos) : '') + '</div></td>'
+        + '<td>' + chipEst(f) + '</td><td class="vence">' + esc(fecha(f.fecha)) + '</td>'
+        + '<td class="monto">' + esc(dinero(f.total)) + '</td><td class="monto">' + (f.pagada ? '<span class="no">—</span>' : esc(dinero(f.saldo))) + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = L.length > 0;
+    $('mas').hidden = L.length <= mostrar;
+  }
+
+  /* ---------- panel ---------- */
+  function cab(sup, tit, sub) {
+    return '<div class="cab"><div><div class="rfc">' + esc(sup) + '</div><h2 id="f-tit">' + esc(tit) + '</h2>' + (sub ? '<div class="rfc">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div>';
+  }
+  function sec(tit, cuerpo, nota) { return '<section class="sec"><h3>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</h3>' + cuerpo + '</section>'; }
+  function abre(h) { $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0; try { $('cerrar').focus(); } catch (er) {} }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; G = null; M = null; }
+  function msgEn(id, clase, t) { var el = $(id); if (!el) return; el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; }
+
+  async function abreFactura(id) {
+    abre(cab('Factura', 'Cargando…') + '<div class="cuerpo"><div class="cargando">Cargando la factura…</div></div>');
+    var d;
+    try { d = await rpc('fac_detalle', { p_pantalla: 'facturas', p_id: id }); } catch (e) { abre(cab('Factura', 'No se pudo abrir') + '<div class="cuerpo"><div class="msg mal">' + esc(falla(e)) + '</div></div>'); return; }
+    var f = d.factura, base = POR_ID[id] || {};
+    var h = cab(cia(f.compania) + (base.grupo ? ' · ' + base.grupo : ''), 'Factura ' + (f.folio || 'sin folio'), (f.razon || '') + ' · ' + (f.rfc || '') + ' · ' + fecha(f.fecha)) + '<div class="cuerpo">';
+    if (puedeAlta(f.compania)) {
+      h += '<div class="acciones"><button class="btn" type="button" id="a-editar" data-f="' + f.id + '">Editar</button><button class="btn" type="button" id="a-folio" data-f="' + f.id + '">' + (f.folio ? 'Cambiar folio' : 'Poner folio') + '</button>'
+        + (d.pagos.length ? '' : '<button class="btn peligro" type="button" id="a-borra" data-f="' + f.id + '">Borrar</button>') + '</div><div id="a-zona"></div>';
+    }
+    h += sec('Conceptos', (d.conceptos.length ? '<ul class="lista">'
+      + d.conceptos.map(function (c) { return '<li class="con"><div><div class="t">' + esc(c.concepto) + '</div><div class="d">' + esc(c.razon) + '</div></div><div class="monto">' + esc(dinero(c.precio)) + '</div></li>'; }).join('')
+      + '</ul>' : '<div class="vacio">Sin conceptos.</div>')
+      + '<div class="tot"><span>Subtotal</span><span class="r">' + esc(dinero(f.sub)) + '</span><span>IVA' + (f.efectivo ? ' (en efectivo, sin IVA)' : '') + '</span><span class="r">' + esc(dinero(f.iva)) + '</span><span class="f">Total</span><span class="r f">' + esc(dinero(f.total)) + '</span></div>', String(d.conceptos.length));
+    h += sec('Pagos aplicados', (d.pagos.length ? '<ul class="lista">' + d.pagos.map(function (p) {
+      return '<li><div class="t">' + esc(dinero(p.aplicado)) + (p.nota_credito ? ' <span class="tag az">Nota de crédito' + (p.folio_nc ? ' ' + esc(p.folio_nc) : '') + '</span>' : '') + '</div><div class="d">' + esc(fecha(p.fecha)) + ' · pago ' + esc(p.pago_id) + ' de ' + esc(dinero(p.monto_pago)) + '</div></li>';
+    }).join('') + '</ul>' : '<div class="vacio">Sin pagos aplicados.</div>')
+      + '<div class="tot"><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span><span class="f">Saldo</span><span class="r f">' + esc(dinero(f.pagada ? 0 : f.saldo)) + '</span></div>', String(d.pagos.length));
+    var hi = d.historia || [];
+    h += sec('Historia', hi.length ? '<ul class="lista">' + hi.map(function (x) { return '<li><div class="t">' + esc(x.que) + '</div><div class="d">' + esc(x.usuario) + ' · ' + esc(fechaHora(x.cuando)) + (x.motivo ? ' · ' + esc(x.motivo) : '') + '</div></li>'; }).join('') + '</ul>'
+      : '<div class="vacio">' + (f.origen === 'portal' || f.creado_por ? 'Sin cambios anotados.' : 'Viene del Access (antes del portal no se anotaba quién hizo cada cosa).') + '</div>');
+    h += '</div>';
+    abre(h);
+  }
+
+  function zonaFolio(id) {
+    var f = POR_ID[id] || {};
+    $('a-zona').innerHTML = '<section class="sec"><h3>Folio</h3><div class="in"><div class="campos"><div class="campo"><label for="z-folio">Folio de la factura</label><input id="z-folio" maxlength="20" value="' + esc(f.folio || '') + '" autocomplete="off"></div></div>'
+      + '<div class="msg" id="z-msg" hidden></div><div class="acciones" style="margin-top:10px"><button class="btn acento" type="button" id="z-folio-ok" data-f="' + id + '">Guardar folio</button></div></div></section>';
+    $('z-folio').focus();
+  }
+  async function guardaFolio(id, b) {
+    b.disabled = true;
+    try { await rpc('fac_folio', { p_id: id, p_folio: $('z-folio').value.trim() }); await recarga(); avisa('Folio guardado.'); abreFactura(id); }
+    catch (e) { msgEn('z-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+  function zonaBorra(id) {
+    $('a-zona').innerHTML = '<section class="sec"><h3>Borrar la factura</h3><div class="in"><div class="campo"><label for="z-motivo">Motivo (queda anotado)</label><textarea id="z-motivo" maxlength="300"></textarea></div>'
+      + '<div class="msg" id="z-msg" hidden></div><div class="acciones" style="margin-top:10px"><button class="btn peligro" type="button" id="z-borra-ok" data-f="' + id + '">Borrar la factura</button></div></div></section>';
+    $('z-motivo').focus();
+  }
+  async function borra(id, b) {
+    var mot = $('z-motivo').value.trim();
+    if (!mot) { msgEn('z-msg', 'mal', 'Escribe el motivo para borrar la factura.'); return; }
+    if (!window.confirm('¿Borrar esta factura? Se quitan también sus conceptos.')) return;
+    b.disabled = true;
+    try { await rpc('fac_borra', { p_id: id, p_motivo: mot }); await recarga(); cierra(); avisa('Factura borrada.'); }
+    catch (e) { msgEn('z-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+
+  async function empresas(c) { if (!EMP[c]) EMP[c] = await rpc('fac_empresas', { p_pantalla: 'facturas', p_compania: c }) || []; return EMP[c]; }
+  async function catalogo(c) { if (!CAT[c]) CAT[c] = await rpc('fac_catalogo', { p_compania: c }) || []; return CAT[c]; }
+  function opcCias(sel) { return ciasAlta().map(function (c) { return '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + esc(cia(c)) + '</option>'; }).join(''); }
+
+  /* ---------- Generar del mes ---------- */
+  function abreGenerar() {
+    var C = ciasAlta(); if (!C.length) return;
+    G = { cia: C[0], lineas: [], folios: {} };
+    var h = cab('Alta del mes', 'Generar facturas', 'Con los servicios contratados del grupo y su precio vigente') + '<div class="cuerpo">'
+      + sec('Qué se factura', '<div class="in"><div class="campos">'
+        + '<div class="campo"' + (C.length < 2 ? ' hidden' : '') + '><label for="g-cia">Compañía que cobra</label><select id="g-cia">' + opcCias(G.cia) + '</select></div>'
+        + '<div class="campo"><label for="g-fecha">Fecha de la factura</label><input id="g-fecha" type="date" value="' + hoy() + '"></div>'
+        + '<div class="campo"><label for="g-buscar">Buscar grupo</label><input id="g-buscar" type="search" placeholder="Nombre del grupo o razón social" autocomplete="off"></div>'
+        + '<div class="campo"><label for="g-grupo">Grupo</label><select id="g-grupo"><option value="">Cargando…</option></select></div>'
+        + '<div class="campo ancho"><label for="g-modo">Cómo se arman</label><select id="g-modo"><option value="razon">Una factura por razón social que paga (con todos sus conceptos)</option><option value="concepto">Una factura por razón social y por servicio</option></select></div>'
+        + '</div><div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="g-ver">Ver propuesta</button></div></div>')
+      + '<div id="g-prop"></div></div>';
+    abre(h);
+    cargaGrupos();
+  }
+  async function cargaGrupos() {
+    try {
+      var E = await empresas(G.cia), q = norm($('g-buscar') ? $('g-buscar').value.trim() : ''), vistos = {}, L = [];
+      E.forEach(function (e) {
+        if (!e.grupo_id) return;
+        var g = vistos[e.grupo_id]; if (!g) { g = vistos[e.grupo_id] = { id: e.grupo_id, nombre: e.grupo || ('Grupo ' + e.grupo_id), txt: '' }; L.push(g); }
+        g.txt += ' ' + e.razon + ' ' + e.rfc;
+      });
+      L = L.filter(function (g) { return !q || norm(g.nombre + g.txt).indexOf(q) >= 0; }).sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
+      $('g-grupo').innerHTML = L.length ? L.map(function (g) { return '<option value="' + g.id + '">' + esc(g.nombre) + '</option>'; }).join('') : '<option value="">Ningún grupo</option>';
+    } catch (e) { $('g-grupo').innerHTML = '<option value="">No se pudieron leer los grupos</option>'; }
+  }
+  async function verPropuesta(b) {
+    var g = +$('g-grupo').value, f = $('g-fecha').value;
+    if (!g || !f) { $('g-prop').innerHTML = '<div class="msg mal">Escoge el grupo y la fecha.</div>'; return; }
+    b.disabled = true; $('g-prop').innerHTML = '<div class="cargando">Armando la propuesta…</div>';
+    try {
+      var L = await rpc('fac_propuesta', { p_compania: G.cia, p_grupo_id: g, p_fecha: f }) || [];
+      G.grupo = g; G.fecha = f; G.modo = $('g-modo').value; G.folios = {};
+      G.lineas = L.map(function (x) { return Object.assign({}, x, { precio: Number(x.precio || 0), incluir: !!x.incluir }); });
+      pintaPropuesta();
+    } catch (e) { $('g-prop').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
+    b.disabled = false;
+  }
+  function pagan() {
+    var por = {}, orden = [];
+    G.lineas.forEach(function (l) {
+      if (!l.incluir) return;
+      var k = G.modo === 'concepto' ? l.paga_id + '|' + l.servicio_id : String(l.paga_id);
+      var p = por[k]; if (!p) { p = por[k] = { k: k, paga_id: l.paga_id, paga: l.paga, servicio: G.modo === 'concepto' ? l.servicio : '', n: 0, lista: 0, sub: 0 }; orden.push(p); }
+      p.n++; p.lista += Number(l.precio_lista || 0); p.sub += Number(l.precio || 0);
+    });
+    return orden.filter(function (p) { return p.sub > 0; });
+  }
+  function pintaPropuesta() {
+    if (!G.lineas.length) { $('g-prop').innerHTML = '<div class="msg ojo">Este grupo no tiene servicios contratados en esa compañía.</div>'; return; }
+    var rep = G.lineas.filter(function (l) { return l.ya_facturado && l.incluir; }).length;
+    var h = sec('Conceptos', '<div class="lineas" id="g-lineas">' + G.lineas.map(function (l, i) {
+      var tags = (l.ya_facturado ? '<span class="tag ojo">Ya facturado ese mes</span>' : '') + (!l.vigente ? '<span class="tag">Fuera de vigencia</span>' : '') + (l.cortesia ? '<span class="tag">Cortesía</span>' : '') + (l.especial ? '<span class="tag az">Especial</span>' : '')
+        + (l.paga_id !== l.empresa_id ? '<span class="tag az">Lo paga ' + esc(l.paga) + '</span>' : '');
+      return '<div class="linea' + (l.incluir ? '' : ' fuera') + '" data-i="' + i + '"><label class="chk inc"><input type="checkbox" data-g="inc" data-i="' + i + '"' + (l.incluir ? ' checked' : '') + ' aria-label="Incluir"></label>'
+        + '<div class="who"><div class="rs">' + esc(l.servicio) + '</div><div class="rfc">' + esc(l.razon) + ' · lista ' + esc(dinero(l.precio_lista)) + '</div><div>' + tags + '</div></div>'
+        + '<input data-g="con" data-i="' + i + '" value="' + esc(l.concepto) + '" aria-label="Concepto en la factura" maxlength="500">'
+        + '<input class="precio num" data-g="pre" data-i="' + i + '" value="' + esc(r2(l.precio).toFixed(2)) + '" inputmode="decimal" aria-label="Precio sin IVA">'
+        + '<span></span></div>';
+    }).join('') + '</div>', G.lineas.length + ' servicios')
+      + '<div id="g-pagan"></div>'
+      + (rep ? '<div class="msg ojo">' + rep + (rep === 1 ? ' concepto ya está facturado' : ' conceptos ya están facturados') + ' ese mes. Revisa antes de generar.</div>' : '')
+      + '<div class="msg" id="g-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="g-genera">Generar facturas</button></div>';
+    $('g-prop').innerHTML = h;
+    pintaPagan();
+  }
+  function pintaPagan() {
+    var L = pagan(), tot = 0;
+    L.forEach(function (p) { tot += p.sub; });
+    $('g-pagan').innerHTML = sec(G.modo === 'concepto' ? 'Facturas que se van a generar (una por razón social y servicio)' : 'Facturar a', (L.length ? '<ul class="pagan">' + L.map(function (p) {
+      return '<li><div><div class="rs">' + esc(p.paga) + '</div><div class="rfc">' + (p.servicio ? esc(p.servicio) + ' · ' : '') + p.n + (p.n === 1 ? ' concepto' : ' conceptos') + (Math.abs(p.lista - p.sub) > .005 ? ' · lista ' + esc(dinero(p.lista)) : '') + '</div></div>'
+        + '<div class="monto">' + esc(dinero(p.sub)) + '</div>'
+        + (G.modo === 'concepto' ? '<span class="rfc">El folio se pone después</span>' : '<input data-g="folio" data-k="' + esc(p.k) + '" value="' + esc(G.folios[p.k] || '') + '" placeholder="Folio (opcional)" aria-label="Folio" maxlength="20">') + '</li>';
+    }).join('') + '</ul>' : '<div class="vacio">Nada incluido con precio.</div>')
+      + '<div class="tot"><span>Subtotal</span><span class="r">' + esc(dinero(tot)) + '</span><span>IVA</span><span class="r">' + esc(dinero(tot * .16)) + '</span><span class="f">Total</span><span class="r f">' + esc(dinero(tot * 1.16)) + '</span></div>', L.length === 1 ? '1 factura' : L.length + ' facturas');
+  }
+  async function genera(b, repetidas) {
+    var L = pagan();
+    if (!L.length) { msgEn('g-msg', 'mal', 'No hay nada incluido con precio para facturar.'); return; }
+    if (!repetidas && !window.confirm('Se van a generar ' + L.length + (L.length === 1 ? ' factura' : ' facturas') + ' con fecha ' + fecha(G.fecha) + '. ¿Continuar?')) return;
+    var lineas = G.lineas.filter(function (l) { return l.incluir && Number(l.precio) > 0; }).map(function (l) {
+      return { empresa_id: l.empresa_id, servicio_id: l.servicio_id, concepto: l.concepto, precio: r2(Number(l.precio)), paga_id: l.paga_id,
+               folio: G.modo === 'concepto' ? null : (G.folios[String(l.paga_id)] || null) };
+    });
+    b.disabled = true; msgEn('g-msg', 'ojo', 'Generando…');
+    try {
+      var r = await rpc('fac_genera', { p: { compania: G.cia, fecha: G.fecha, modo: G.modo, repetidas: !!repetidas, lineas: lineas } });
+      await recarga();
+      cierra();
+      avisa('Listo: ' + r.n + (r.n === 1 ? ' factura generada.' : ' facturas generadas.'));
+    } catch (e) {
+      var m = falla(e);
+      b.disabled = false;
+      if (!repetidas && /ya hay .*facturad/i.test(m) && window.confirm(m + '\n\n¿Generar de todos modos?')) return genera(b, true);
+      msgEn('g-msg', 'mal', m);
+    }
+  }
+
+  /* ---------- Alta y cambio a mano ---------- */
+  async function abreManual(id) {
+    var d = null;
+    if (id) { try { d = await rpc('fac_detalle', { p_pantalla: 'facturas', p_id: id }); } catch (e) { error(falla(e)); return; } }
+    var C = ciasAlta(); if (!C.length) return;
+    var f = d ? d.factura : null;
+    M = { id: id || null, cia: f ? f.compania : C[0], empresa: f ? f.empresa_id : null, conceptos: [] };
+    if (d) M.conceptos = d.conceptos.map(function (c) { return { servicio_id: c.servicio_id, concepto: c.concepto, empresa_id: c.empresa_id, precio: Number(c.precio) }; });
+    var h = cab(id ? 'Cambiar factura' : 'Alta a mano', id ? 'Factura ' + (f.folio || 'sin folio') : 'Nueva factura', id ? 'Los conceptos se reemplazan juntos al guardar' : '') + '<div class="cuerpo">'
+      + sec('Datos de la factura', '<div class="in"><div class="campos">'
+        + '<div class="campo"' + (C.length < 2 && !id ? ' hidden' : '') + '><label for="m-cia">Compañía que cobra</label><select id="m-cia"' + (id ? ' disabled' : '') + '>' + (id ? '<option value="' + M.cia + '">' + esc(cia(M.cia)) + '</option>' : opcCias(M.cia)) + '</select></div>'
+        + '<div class="campo"><label for="m-fecha">Fecha</label><input id="m-fecha" type="date" value="' + esc(f ? f.fecha : hoy()) + '"></div>'
+        + '<div class="campo"><label for="m-buscar">Buscar razón social</label><input id="m-buscar" type="search" placeholder="Nombre, RFC o grupo" autocomplete="off"></div>'
+        + '<div class="campo"><label for="m-emp">A quién se factura</label><select id="m-emp"><option value="">Cargando…</option></select></div>'
+        + '<div class="campo"><label for="m-folio">Folio</label><input id="m-folio" maxlength="20" value="' + esc(f ? (f.folio || '') : '') + '" placeholder="Se puede poner después" autocomplete="off"></div>'
+        + '<div class="campo"><span class="l">Forma de pago</span><label class="chk"><input id="m-efe" type="checkbox"' + (f && f.efectivo ? ' checked' : '') + '> En efectivo (sin IVA)</label></div>'
+        + '</div></div>')
+      + sec('Conceptos', '<div class="lineas" id="m-lineas"></div><div class="in"><button class="btn" type="button" id="m-agrega">Agregar concepto</button></div><div id="m-tot"></div>')
+      + (id ? sec('Motivo del cambio', '<div class="in"><div class="campo"><label for="m-motivo">Opcional; queda anotado</label><textarea id="m-motivo" maxlength="300"></textarea></div></div>') : '')
+      + '<div class="msg" id="m-msg" hidden></div><div class="acciones"><button class="btn acento" type="button" id="m-guarda">Guardar factura</button></div></div>';
+    abre(h);
+    await cargaManual();
+    if (!M.conceptos.length) agregaConcepto();
+    pintaConceptos();
+  }
+  async function cargaManual() {
+    try {
+      var E = await empresas(M.cia), q = norm($('m-buscar').value.trim()), sel = M.empresa;
+      var L = E.filter(function (e) { return e.id === sel || !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0; });
+      $('m-emp').innerHTML = '<option value="">Escoge la razón social</option>' + L.map(function (e) { return '<option value="' + e.id + '"' + (e.id === sel ? ' selected' : '') + '>' + esc(e.razon) + ' · ' + esc(e.rfc) + '</option>'; }).join('');
+      await catalogo(M.cia);
+    } catch (e) { msgEn('m-msg', 'mal', falla(e)); }
+  }
+  function delGrupo() {
+    var E = EMP[M.cia] || [], yo = E.filter(function (e) { return e.id === M.empresa; })[0];
+    return yo && yo.grupo_id ? E.filter(function (e) { return e.grupo_id === yo.grupo_id; }) : (yo ? [yo] : []);
+  }
+  function agregaConcepto() { M.conceptos.push({ servicio_id: null, concepto: '', empresa_id: M.empresa, precio: 0 }); }
+  function pintaConceptos() {
+    var S = CAT[M.cia] || [], E = delGrupo();
+    $('m-lineas').innerHTML = M.conceptos.length ? M.conceptos.map(function (c, i) {
+      var emps = E.slice(); if (c.empresa_id && !emps.some(function (e) { return e.id === c.empresa_id; })) emps.push({ id: c.empresa_id, razon: 'Razón social ' + c.empresa_id });
+      return '<div class="linea man" data-i="' + i + '">'
+        + '<select data-m="srv" data-i="' + i + '" aria-label="Servicio"><option value="">Servicio…</option>' + S.map(function (s) { return '<option value="' + s.id + '"' + (s.id === c.servicio_id ? ' selected' : '') + '>' + esc(s.descripcion) + (s.especial ? ' (especial)' : '') + '</option>'; }).join('') + '</select>'
+        + '<input data-m="con" data-i="' + i + '" value="' + esc(c.concepto) + '" placeholder="Concepto en la factura" aria-label="Concepto" maxlength="500">'
+        + '<select data-m="emp" data-i="' + i + '" aria-label="Razón social que recibió el servicio">' + (emps.length ? emps.map(function (e) { return '<option value="' + e.id + '"' + (e.id === c.empresa_id ? ' selected' : '') + '>' + esc(e.razon) + '</option>'; }).join('') : '<option value="">Escoge primero a quién se factura</option>') + '</select>'
+        + '<input class="precio num" data-m="pre" data-i="' + i + '" value="' + esc(r2(c.precio).toFixed(2)) + '" inputmode="decimal" aria-label="Precio sin IVA">'
+        + '<button class="btn chico quita" type="button" data-m="quita" data-i="' + i + '" aria-label="Quitar concepto">Quitar</button></div>';
+    }).join('') : '<div class="vacio">Agrega mínimo un concepto.</div>';
+    totManual();
+  }
+  function totManual() {
+    var sub = 0; M.conceptos.forEach(function (c) { sub += Number(c.precio || 0); });
+    var efe = $('m-efe') && $('m-efe').checked, iva = efe ? 0 : sub * .16;
+    $('m-tot').innerHTML = '<div class="tot"><span>Subtotal</span><span class="r">' + esc(dinero(sub)) + '</span><span>IVA' + (efe ? ' (en efectivo, sin IVA)' : '') + '</span><span class="r">' + esc(dinero(iva)) + '</span><span class="f">Total</span><span class="r f">' + esc(dinero(sub + iva)) + '</span></div>';
+  }
+  async function guardaManual(b) {
+    var emp = +$('m-emp').value;
+    if (!emp) { msgEn('m-msg', 'mal', 'Escoge a quién se factura.'); return; }
+    if (!$('m-fecha').value) { msgEn('m-msg', 'mal', 'Pon la fecha de la factura.'); return; }
+    var C = M.conceptos.filter(function (c) { return c.servicio_id || c.concepto || c.precio; });
+    if (!C.length) { msgEn('m-msg', 'mal', 'Agrega mínimo un concepto.'); return; }
+    if (C.some(function (c) { return !c.servicio_id || !String(c.concepto || '').trim(); })) { msgEn('m-msg', 'mal', 'Cada concepto lleva su servicio y su texto.'); return; }
+    var p = { compania: M.cia, empresa_id: emp, folio: $('m-folio').value.trim(), fecha: $('m-fecha').value, efectivo: $('m-efe').checked,
+              conceptos: C.map(function (c) { return { servicio_id: c.servicio_id, concepto: String(c.concepto).trim(), empresa_id: c.empresa_id || emp, precio: r2(Number(c.precio || 0)) }; }) };
+    if (M.id) { p.id = M.id; p.motivo = $('m-motivo') ? $('m-motivo').value.trim() : ''; }
+    b.disabled = true; msgEn('m-msg', 'ojo', 'Guardando…');
+    try { var r = await rpc('fac_guarda', { p: p }); await recarga(); avisa(M.id ? 'Factura cambiada.' : 'Factura dada de alta.'); abreFactura(r.id); }
+    catch (e) { msgEn('m-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+
+  /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
+  async function excel(b) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = filtradas(), wb = MK.libro(EX, 'Facturación');
+      var ws = wb.addWorksheet('Facturas');
+      var head = ['Folio', 'Fecha', 'Compañía', 'Grupo', 'Razón social', 'RFC', 'Conceptos', 'Subtotal', 'IVA', 'Total', 'Pagado', 'Saldo', 'Estado'];
+      ws.columns = [12, 13, 14, 22, 40, 15, 36, 13, 12, 13, 13, 13, 11].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: 'Facturación', lineas: ['Al ' + fecha(hoy()), L.length + ' facturas con los filtros de la pantalla'] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (f, i) { ws.getRow(f0 + 1 + i).values = [f.folio || '', fecha(f.fecha), cia(f.compania), f.grupo, f.razon, f.rfc, f.conceptos || '', f.sub, f.iva, f.total, f.pagado, f.pagada ? 0 : f.saldo, f.pagada ? 'Pagada' : (f.pagado > 0 ? 'Abonada' : 'Sin pago')]; });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      [8, 9, 10, 11, 12].forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00'; });
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Facturacion PROFASE.xlsx');
+    } catch (e) { error('No se pudo armar el Excel. Vuelve a intentar.'); setTimeout(function () { $('error').hidden = true; }, 6000); }
+    b.disabled = false;
+  }
+
+  /* ---------- eventos ---------- */
+  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
+  $('x-fac').onclick = function () { excel(this); };
+  $('b-generar').onclick = abreGenerar;
+  $('b-nueva').onclick = function () { abreManual(null); };
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var fila = t.closest && t.closest('tr.fila[data-id]');
+    if (fila) { abreFactura(+fila.getAttribute('data-id')); return; }
+    if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
+    if (t.id === 'a-editar') { abreManual(+t.getAttribute('data-f')); return; }
+    if (t.id === 'a-folio') { zonaFolio(+t.getAttribute('data-f')); return; }
+    if (t.id === 'a-borra') { zonaBorra(+t.getAttribute('data-f')); return; }
+    if (t.id === 'z-folio-ok') { guardaFolio(+t.getAttribute('data-f'), t); return; }
+    if (t.id === 'z-borra-ok') { borra(+t.getAttribute('data-f'), t); return; }
+    if (t.id === 'g-ver') { verPropuesta(t); return; }
+    if (t.id === 'g-genera') { genera(t, false); return; }
+    if (t.id === 'm-agrega') { agregaConcepto(); pintaConceptos(); return; }
+    if (t.id === 'm-guarda') { guardaManual(t); return; }
+    if (t.getAttribute && t.getAttribute('data-m') === 'quita') { M.conceptos.splice(+t.getAttribute('data-i'), 1); pintaConceptos(); return; }
+  });
+  document.addEventListener('input', function (ev) {
+    var t = ev.target, i = +t.getAttribute('data-i');
+    if (G && t.getAttribute('data-g') === 'con') { G.lineas[i].concepto = t.value; return; }
+    if (G && t.getAttribute('data-g') === 'pre') { G.lineas[i].precio = num(t.value); pintaPagan(); return; }
+    if (G && t.getAttribute('data-g') === 'folio') { G.folios[t.getAttribute('data-k')] = t.value.trim(); return; }
+    if (G && t.id === 'g-buscar') { cargaGrupos(); return; }
+    if (M && t.getAttribute('data-m') === 'con') { M.conceptos[i].concepto = t.value; return; }
+    if (M && t.getAttribute('data-m') === 'pre') { M.conceptos[i].precio = num(t.value); totManual(); return; }
+    if (M && t.id === 'm-buscar') { cargaManual(); return; }
+  });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target, i = +t.getAttribute('data-i');
+    if (G && t.getAttribute('data-g') === 'inc') { G.lineas[i].incluir = t.checked; t.closest('.linea').classList.toggle('fuera', !t.checked); pintaPagan(); return; }
+    if (G && t.id === 'g-cia') { G.cia = +t.value; $('g-prop').innerHTML = ''; cargaGrupos(); return; }
+    if (G && t.id === 'g-modo') { G.modo = t.value; if (G.lineas.length && $('g-pagan')) pintaPagan(); return; }
+    if (M && t.id === 'm-cia') { M.cia = +t.value; M.empresa = null; M.conceptos = []; agregaConcepto(); cargaManual().then(pintaConceptos); return; }
+    if (M && t.id === 'm-emp') { M.empresa = +t.value || null; M.conceptos.forEach(function (c) { if (!c.empresa_id || !delGrupo().some(function (e) { return e.id === c.empresa_id; })) c.empresa_id = M.empresa; }); pintaConceptos(); return; }
+    if (M && t.id === 'm-efe') { totManual(); return; }
+    if (M && t.getAttribute('data-m') === 'srv') {
+      var s = (CAT[M.cia] || []).filter(function (x) { return x.id === +t.value; })[0], c = M.conceptos[i];
+      c.servicio_id = s ? s.id : null;
+      if (s) { c.concepto = s.concepto; if (!c.precio) c.precio = Number(s.precio || 0); }
+      pintaConceptos(); return;
+    }
+    if (M && t.getAttribute('data-m') === 'emp') { M.conceptos[i].empresa_id = +t.value || null; return; }
+    if (M && t.getAttribute('data-m') === 'pre') { t.value = r2(num(t.value)).toFixed(2); return; }
+    if (G && t.getAttribute('data-g') === 'pre') { t.value = r2(num(t.value)).toFixed(2); return; }
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('velo').hidden) cierra();
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) ev.target.click();
+  });
+  carga();
+})();
+</script>
+</body></html>
