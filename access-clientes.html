@@ -135,6 +135,13 @@ tr.fila:hover td{background:var(--navy-soft)}
 .cred .sub{padding:8px 14px 2px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-top:1px solid var(--line)}
 .cred .aviso{padding:9px 14px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface-2)}
 .cred .btn{padding:6px 11px}
+.cred .forma{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0 2px;min-width:0;max-width:100%}
+.cred .forma>*{max-width:100%}
+.cred .forma select,.cred .forma input[type=file]{flex:1 1 100%;width:100%}
+.cred .forma input,.cred .forma select{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);min-width:0;flex:1 1 170px}
+.cred .forma .msg{flex:1 1 100%;font-size:12.5px;color:var(--muted)}
+.cred .forma .msg.mal{color:#B42318}
+@media (max-width:700px){.cred .forma input,.cred .forma select{font-size:16px}}
 @media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
 /* En celular cada cliente es una tarjeta; las tablas de la ficha se deslizan dentro de su recuadro */
 @media (max-width:640px){
@@ -444,7 +451,15 @@ tr.fila:hover td{background:var(--navy-soft)}
      Las tablas cifradas no se leen desde la página: cred_resumen() dice qué hay (sin ningún valor), cred_ver() da una
      contraseña y cred_archivo() un archivo, solo a la dirección, los gerentes y el contador del cliente. Cada vista y
      cada descarga queda en la bitácora de Accesos. Lo que se ve se esconde solo al minuto y nunca se guarda. */
-  var CRED = null, OCULTA = {}, SEG = 60;
+  /* Capturar y cambiar (portal/sql/57_credenciales_portal.sql; decisión de Daniel, 29-oct-2026): los mismos que las ven
+     (la dirección, los gerentes y el contador del cliente) con cred_guarda(), cred_sube_archivo() y cred_borra_archivo();
+     cada cambio queda en Accesos sin el valor. Lo tecleado no se guarda en el navegador: se manda y se borra de la forma.
+     Desde el cambio del martes 3 de noviembre se capturan solo aquí (cli_modo() = 'portal'). Solo consulta: sin botones. */
+  var CRED = null, OCULTA = {}, SEG = 60, MODO_CLI = null;
+  var CAMPOS = { ciec: [['ciec', 'CIEC']], fiel: [['fiel', 'Contraseña de la e.firma']], sellos: [['sellos', 'Contraseña de los sellos']],
+                 quo: [['quo_uc', 'Usuario de Contabilita'], ['quo_pc', 'Contraseña de Contabilita'], ['quo_uf', 'Usuario de Facturita'], ['quo_pf', 'Contraseña de Facturita']] };
+  var TIPOS = ['e.firma · Llave privada (.key)', 'e.firma · Certificado (.cer)', 'e.firma · Acuse de renovación', 'Sellos · Llave privada (.key)', 'Sellos · Certificado (.cer)', 'Sellos · Acuse'];
+  function puedeCambiar() { return !P.consulta; }
   var QUE = [['ciec', 'CIEC', 'Contraseña del SAT'], ['fiel', 'Contraseña de la e.firma', 'La de la llave privada (.key)'],
              ['sellos', 'Contraseña de los sellos', 'La de la llave privada de los sellos (CSD)'], ['quo', 'QUO', 'Usuarios de Contabilita y Facturita']];
   async function pintaCred(e) {
@@ -455,11 +470,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (!CRED || CRED.id !== e.id || !$('cred-in')) return;
     if (r.error) { caja.innerHTML = '<div class="vacio">No se pudo revisar. Cierra la ficha y vuelve a abrirla en un momento.</div>'; return; }
     var R = r.data;
+    if (MODO_CLI == null) { try { var m = await P.sb.rpc('cli_modo'); MODO_CLI = (m && m.data) || 'practica'; } catch (er) { MODO_CLI = 'practica'; } }
+    if (!CRED || CRED.id !== e.id || !$('cred-in')) return;
     if (!R) { caja.innerHTML = '<div class="vacio">Las contraseñas y los archivos de este cliente los ven la dirección, los gerentes y su contador (responsable, quien autoriza o contador asignado en el WorkFlow).</div>'; return; }
     var h = QUE.map(function (q) {
       var hay = !!R[q[0]];
       return '<div class="fc"><div class="izq"><div class="t">' + esc(q[1]) + '</div><div class="d">' + esc(q[2]) + '</div><div id="cv-' + q[0] + '"></div></div><div class="acc">'
-        + (hay ? '<button class="btn" type="button" data-cver="' + q[0] + '" aria-controls="cv-' + q[0] + '">Ver</button>' : '<span class="no">No está capturada en el Access</span>') + '</div></div>';
+        + (hay ? '<button class="btn" type="button" data-cver="' + q[0] + '" aria-controls="cv-' + q[0] + '">Ver</button>' : '<span class="no">No está capturada</span>')
+        + (puedeCambiar() ? '<button class="btn" type="button" data-ccambia="' + q[0] + '">' + (hay ? 'Cambiar' : 'Capturar') + '</button>' : '') + '</div>'
+        + '<div class="forma" id="cf-' + q[0] + '" hidden></div></div>';
     }).join('');
     var A = R.archivos || [];
     [['e.firma', 'Archivos de la e.firma'], ['Sellos', 'Archivos de los sellos']].forEach(function (g) {
@@ -467,15 +486,79 @@ tr.fila:hover td{background:var(--navy-soft)}
       h += '<div class="sub">' + esc(g[1]) + ' · ' + L.length + '</div>';
       h += L.length ? L.map(function (a) {
         return '<div class="fc"><div class="izq"><div class="t">' + esc(String(a.tipo).slice(g[0].length + 3)) + '</div><div class="d">' + esc(a.nombre) + (a.fecha ? ' · ' + esc(fecha(a.fecha)) : '') + '</div></div>'
-          + '<div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button></div></div>';
-      }).join('') : '<div class="fc"><span class="no">Ninguno en el Access.</span></div>';
+          + '<div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button>' + quitaBtn(a) + '</div>' + quitaForma(a) + '</div>';
+      }).join('') : '<div class="fc"><span class="no">Ninguno.</span></div>';
     });
+    if (puedeCambiar()) h += '<div class="fc"><div class="izq"><div class="t">Subir un archivo</div><div class="d">Llave, certificado o acuse de la e.firma o de los sellos (hasta 3 MB)</div></div>'
+      + '<div class="acc"><button class="btn" type="button" data-csube="1">Subir</button></div>'
+      + '<div class="forma" id="cf-subir" hidden><select id="cs-tipo" aria-label="Qué archivo es">' + TIPOS.map(function (t) { return '<option>' + esc(t) + '</option>'; }).join('') + '</select>'
+      + '<input type="date" id="cs-fecha" aria-label="Fecha del archivo"><input type="file" id="cs-arch" aria-label="Archivo">'
+      + '<button class="btn" type="button" data-csubeok="1">Guardar archivo</button><div class="msg" id="cs-msg"></div></div></div>';
     var otros = A.filter(function (a) { return !/^(e\.firma|Sellos) ·/.test(String(a.tipo || '')); });
     if (otros.length) h += '<div class="sub">Otros archivos · ' + otros.length + '</div>' + otros.map(function (a) {
-      return '<div class="fc"><div class="izq"><div class="t">' + esc(a.tipo) + '</div><div class="d">' + esc(a.nombre) + '</div></div><div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button></div></div>';
+      return '<div class="fc"><div class="izq"><div class="t">' + esc(a.tipo) + '</div><div class="d">' + esc(a.nombre) + '</div></div><div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button>' + quitaBtn(a) + '</div>' + quitaForma(a) + '</div>';
     }).join('');
-    h += '<div class="aviso">Lo que ves se esconde solo al minuto. Cada vez que alguien ve una contraseña o baja un archivo queda anotado en Accesos (lo revisa la dirección). Los archivos se bajan tal cual vienen del SAT. Se siguen capturando y cambiando en el Access; aquí llegan con la actualización de cada 3 horas.</div>';
+    h += '<div class="aviso">Lo que ves se esconde solo al minuto. Cada vez que alguien ve, cambia o sube una contraseña o un archivo queda anotado en Accesos (lo revisa la dirección). Los archivos se bajan tal cual vienen del SAT. '
+      + (MODO_CLI === 'portal' ? 'Se capturan y cambian aquí; el Access ya no se usa para esto.' : 'Hasta el cambio del martes 3 de noviembre se siguen capturando en el Access y llegan aquí cada 3 horas; lo que cambies aquí antes de eso se borra con la siguiente copia.') + '</div>';
     caja.innerHTML = h;
+  }
+  function quitaBtn(a) { return puedeCambiar() ? '<button class="btn" type="button" data-cquita="' + esc(a.id) + '">Quitar</button>' : ''; }
+  function quitaForma(a) {
+    return puedeCambiar() ? '<div class="forma" id="cq-' + esc(a.id) + '" hidden><input type="text" id="cqm-' + esc(a.id) + '" placeholder="Motivo (por ejemplo: ya venció)" aria-label="Motivo" autocomplete="off">'
+      + '<button class="btn" type="button" data-cquitaok="' + esc(a.id) + '">Quitar archivo</button><div class="msg" id="cqx-' + esc(a.id) + '"></div></div>' : '';
+  }
+  function abreCambio(q) {
+    var f = $('cf-' + q); if (!f) return;
+    if (!f.hidden) { f.hidden = true; f.innerHTML = ''; return; }
+    f.innerHTML = CAMPOS[q].map(function (c) { return '<input type="text" data-ccampo="' + c[0] + '" placeholder="' + esc(c[1]) + '" aria-label="' + esc(c[1]) + '" autocomplete="off" autocapitalize="off" spellcheck="false">'; }).join('')
+      + '<button class="btn" type="button" data-cguarda="' + q + '">Guardar</button><div class="msg">Si dejas un campo vacío, ese dato se quita.</div>';
+    f.hidden = false;
+    try { f.querySelector('input').focus(); } catch (er) {}
+  }
+  async function guardaCambio(b) {
+    var q = b.getAttribute('data-cguarda'), f = $('cf-' + q); if (!f || !CRED) return;
+    var msg = f.querySelector('.msg'); b.disabled = true;
+    try {
+      var ins = f.querySelectorAll('[data-ccampo]');
+      for (var i = 0; i < ins.length; i++) {
+        var r = await P.sb.rpc('cred_guarda', { p_rfc: CRED.rfc, p_que: ins[i].getAttribute('data-ccampo'), p_valor: ins[i].value });
+        if (r.error) throw r.error;
+      }
+      f.innerHTML = ''; f.hidden = true;
+      var e = { rfc: CRED.rfc, id: CRED.id }; esconde(q); await pintaCred(e);
+    } catch (er) {
+      msg.className = 'msg mal'; msg.textContent = 'No se guardó: ' + String((er && er.message) || 'vuelve a intentar').replace(/^sin permiso$/, 'no tienes permiso para este cliente');
+      b.disabled = false;
+    }
+  }
+  function leeB64(file) {
+    return new Promise(function (ok, mal) {
+      var rd = new FileReader();
+      rd.onload = function () { ok(String(rd.result).replace(/^data:[^,]*,/, '')); };
+      rd.onerror = function () { mal(new Error('no se pudo leer el archivo')); };
+      rd.readAsDataURL(file);
+    });
+  }
+  async function subeArchivo(b) {
+    var msg = $('cs-msg'), arch = $('cs-arch'); if (!CRED || !arch) return;
+    var file = arch.files && arch.files[0];
+    if (!file) { msg.className = 'msg mal'; msg.textContent = 'Escoge el archivo.'; return; }
+    if (file.size > 3 * 1024 * 1024) { msg.className = 'msg mal'; msg.textContent = 'El archivo pasa de 3 MB.'; return; }
+    b.disabled = true; msg.className = 'msg'; msg.textContent = 'Subiendo…';
+    try {
+      var r = await P.sb.rpc('cred_sube_archivo', { p_rfc: CRED.rfc, p_tipo: $('cs-tipo').value, p_nombre: file.name, p_fecha: $('cs-fecha').value || null, p_b64: await leeB64(file) });
+      if (r.error) throw r.error;
+      var e = { rfc: CRED.rfc, id: CRED.id }; await pintaCred(e);
+    } catch (er) { msg.className = 'msg mal'; msg.textContent = 'No se subió: ' + String((er && er.message) || 'vuelve a intentar'); b.disabled = false; }
+  }
+  async function quitaArchivo(b) {
+    var id = +b.getAttribute('data-cquitaok'), mot = $('cqm-' + id), msg = $('cqx-' + id); if (!id || !CRED) return;
+    b.disabled = true;
+    try {
+      var r = await P.sb.rpc('cred_borra_archivo', { p_id: id, p_motivo: mot ? mot.value : '' });
+      if (r.error) throw r.error;
+      var e = { rfc: CRED.rfc, id: CRED.id }; await pintaCred(e);
+    } catch (er) { msg.className = 'msg mal'; msg.textContent = 'No se quitó: ' + String((er && er.message) || 'vuelve a intentar'); b.disabled = false; }
   }
   function escondeTodo() { Object.keys(OCULTA).forEach(function (k) { clearTimeout(OCULTA[k]); esconde(k); }); OCULTA = {}; }
   function esconde(q) {
@@ -580,8 +663,16 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('x-cli').onclick = function () { excelClientes(this); };
   $('x-fir').onclick = function () { excelFirmas(this); };
   document.addEventListener('click', function (ev) {
-    var cb = ev.target.closest('[data-cver],[data-ccopia],[data-carch]');
-    if (cb) { if (cb.hasAttribute('data-cver')) verCred(cb); else if (cb.hasAttribute('data-ccopia')) copia(cb); else bajaArch(cb); return; }
+    var cb = ev.target.closest('[data-cver],[data-ccopia],[data-carch],[data-ccambia],[data-cguarda],[data-csube],[data-csubeok],[data-cquita],[data-cquitaok]');
+    if (cb) {
+      if (cb.hasAttribute('data-cver')) verCred(cb); else if (cb.hasAttribute('data-ccopia')) copia(cb);
+      else if (cb.hasAttribute('data-carch')) bajaArch(cb); else if (cb.hasAttribute('data-ccambia')) abreCambio(cb.getAttribute('data-ccambia'));
+      else if (cb.hasAttribute('data-cguarda')) guardaCambio(cb); else if (cb.hasAttribute('data-csube')) { var f = $('cf-subir'); if (f) f.hidden = !f.hidden; }
+      else if (cb.hasAttribute('data-csubeok')) subeArchivo(cb);
+      else if (cb.hasAttribute('data-cquita')) { var g = $('cq-' + cb.getAttribute('data-cquita')); if (g) g.hidden = !g.hidden; }
+      else quitaArchivo(cb);
+      return;
+    }
     var t = ev.target.closest('[data-id]');
     if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
