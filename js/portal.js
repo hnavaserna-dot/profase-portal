@@ -80,7 +80,9 @@
       cli_felicitar: 1, sc_mi_personaje: 1,
       fac_genera: 1, fac_guarda: 1, fac_folio: 1, fac_borra: 1, pag_guarda: 1, pag_edita: 1, pag_borra: 1, pag_quita: 1,   // etapa 5 (52_facturacion.sql)
       cli_guarda: 1, cli_borra: 1,   // etapa 4 (55_clientes_ficha.sql)
-      rec_guarda: 1, rec_estatus: 1, rec_borra: 1, rec_destinatario: 1 };   // etapa 5 (56_recordatorios.sql)
+      rec_guarda: 1, rec_estatus: 1, rec_borra: 1, rec_destinatario: 1,   // etapa 5 (56_recordatorios.sql)
+      cdir_marca: 1, cdir_guarda_factura: 1, cdir_ajustes: 1, cdir_catalogo_guarda: 1, cdir_catalogo_borra: 1,   // comisiones de dirección
+      cdir_empleado_guarda: 1, cdir_guarda: 1, cdir_borra: 1, cdir_trae: 1 };   // (64_comisiones_direccion.sql)
     sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
     // funciones del servidor que mandan algo (recordatorios de pago desde cumplimiento@): en solo consulta, no
     // (sb.functions se arma de nuevo cada vez que se pide: se envuelve el que se entrega)
