@@ -164,6 +164,10 @@ tr.fila:hover td{background:var(--navy-soft)}
 .msg.ok{background:var(--ok-soft);color:var(--ok)}
 .subir{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
 .subir input[type=file]{max-width:100%;font-size:13px}
+.env-l li .d.mal{color:var(--red)}
+.env-l .para{overflow-wrap:anywhere}
+.env-chk{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.env-chk input{width:18px;height:18px}
 .btn.peligro{color:var(--red);border-color:var(--red-soft)}
 .form .dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
 .form label.radio{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:inherit;margin:6px 0 0}
@@ -253,6 +257,7 @@ tr.fila:hover td{background:var(--navy-soft)}
           <button class="btn" type="button" id="limpia">Quitar filtros</button>
         </div></details>
         <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
+        <button class="btn" type="button" id="env-abre" hidden>Enviar al cliente</button>
         <button class="btn acento" type="button" id="gen-abre" hidden>Generar el mes</button>
       </div>
     </header>
@@ -276,6 +281,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var ROL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
   var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
+  var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1 }, ENVD = {}, ENV_IDS = [];
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   var HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -310,6 +316,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       MODO = m.data && m.data.valor ? m.data.valor : 'practica';
       $('practica').hidden = MODO !== 'practica';
       try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
+      try { var es = await P.sb.rpc('env_estado'); if (!es.error && es.data) ENV = es.data; } catch (e) { ENV = { visible: false, modo: 'apagado' }; }
       var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
@@ -318,6 +325,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       periodos();
       if (window.matchMedia('(min-width: 900px)').matches) $('masf').open = true;
       $('gen-abre').hidden = !(jefe() && !CONSULTA);
+      $('env-abre').hidden = !(ENV.visible && !CONSULTA);
       await cargaPeriodo();
       $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
     } catch (e) {
@@ -472,6 +480,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     var sube = edita && (!a.reservado || VEO_RES);
     h += '<section class="sec" id="docs-sec"><h3>Documentos <small id="docs-n"></small></h3><div id="docs-in"><div class="vacio">Revisando…</div></div>'
       + (sube ? '<div class="subir"><input type="file" id="fe-arch" multiple aria-label="Escoger documentos"><button class="btn" type="button" id="fe-sube">Subir</button><span class="rfc" id="fe-sube-msg"></span></div>' : '') + '</section>';
+    var envia = ENV.visible && !CONSULTA && ENVIABLES[a.actividad_id];
+    if (envia) h += '<section class="sec" id="env-sec"><h3>Envío al cliente <small id="env-n"></small></h3>'
+      + '<div class="subir"><button class="btn acento" type="button" id="env-uno">Revisar y enviar al cliente</button><span class="rfc">' + esc(envNota()) + '</span></div>'
+      + '<div id="env-uno-res"></div><div id="env-hist"><div class="vacio">Revisando…</div></div></section>';
     h += '<section class="sec" id="bit-sec"><h3>Bitácora <small id="bit-n"></small></h3><div id="bit-in"><div class="vacio">Revisando…</div></div></section>';
     var otras = A.filter(function (x) { return x.empresa_id === a.empresa_id && x.periodo === a.periodo && x.id !== a.id; });
     if (otras.length) h += sec('Otras actividades del cliente en ' + mesTxt(a.periodo), '<ul class="lista">' + otras.map(function (x) {
@@ -482,7 +494,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
-    leeComentario(a); pintaDocs(a); pintaBit(a);
+    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a);
   }
   function cierra() { ABIERTA = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
   function msg(t, ok) { var m = $('fe-msg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
@@ -528,6 +540,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   async function pintaDocs(a) {
     var r;
     try { r = await P.sb.from('wf_docs').select('id,nombre,descripcion,comentario,enviado,fecha_envio,subio,subio_usuario,origen,fecha,bytes,ruta_sp,en_portal').eq('wfra', a.id).order('id'); } catch (er) { r = { error: er }; }
+    if (ENVIABLES[a.actividad_id]) { try { var ev = await P.sb.rpc('env_docs_enviados', { p_wfra: a.id }); (ev.data || []).forEach(function (x) { ENVD[x.doc] = x.fecha; }); } catch (er) {} }
     if (ABIERTA !== a.id || !$('docs-in')) return;
     if (r.error) { $('docs-in').innerHTML = '<div class="vacio">No se pudo leer la lista. Cierra la ficha y vuelve a abrirla.</div>'; return; }
     var L = r.data || [];
@@ -546,7 +559,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       return '<div class="doc"><div class="izq"><div class="t">' + esc(d.nombre) + '</div>'
         + (d.descripcion && d.descripcion !== d.nombre ? '<div class="d">' + esc(d.descripcion) + '</div>' : '')
         + (d.comentario ? '<div class="d">Comentario: ' + esc(d.comentario) + '</div>' : '')
-        + '<div class="d">' + esc(info) + (d.enviado ? ' · <span class="tag az">Enviado al cliente' + (d.fecha_envio ? ' ' + esc(fechaHora(d.fecha_envio)) : '') + '</span>' : '') + '</div></div>'
+        + '<div class="d">' + esc(info) + (d.enviado || ENVD[d.id] ? ' · <span class="tag az">Enviado al cliente' + ((d.fecha_envio || ENVD[d.id]) ? ' ' + esc(fechaHora(d.fecha_envio || ENVD[d.id])) : '') + '</span>' : '') + '</div></div>'
         + '<div class="acc">' + acc + '</div></div>';
     }).join('') + '<div class="aviso">«Ver» abre el PDF aquí mismo. Los PDF se ven y se bajan con la marca PROFASE (el signo de fondo y una línea abajo); los demás archivos, tal cual se subieron.</div>';
   }
@@ -610,6 +623,119 @@ tr.fila:hover td{background:var(--navy-soft)}
       out.textContent = hechos === 1 ? 'Listo: se subió 1 documento.' : 'Listo: se subieron ' + hechos + ' documentos.';
     } catch (er) { out.textContent = (hechos ? 'Se subieron ' + hechos + '. ' : '') + falla(er); }
     a.n_docs = (a.n_docs || 0) + hechos; inp.value = ''; b.disabled = false; pinta(); pintaDocs(a);
+  }
+
+  /* ---------- Envíos al cliente (etapa 3: portal/sql/50_envios.sql y la función «envios»). Línea de captura (22),
+     opinión de cumplimiento (19), declaración (37) y acuse anual (129), desde cumplimiento@, como el Access. ---------- */
+  function envNota() {
+    if (ENV.modo === 'apagado') return 'Todavía no está conectado el buzón de cumplimiento: por ahora solo se puede revisar qué se mandaría.';
+    if (ENV.modo === 'prueba') return 'Prueba: los correos llegan solo al correo de prueba y no se marcan como enviados.';
+    if (ENV.wf_modo !== 'portal') return 'Se manda desde aquí cuando el WorkFlow ya se trabaje en el portal.';
+    return 'Sale de cumplimiento@profase.com.mx a los contactos del cliente que reciben documentos, con copia a correos_access@.';
+  }
+  function envPuedeMandar() { return ENV.modo === 'prueba' || (ENV.modo === 'real' && ENV.wf_modo === 'portal'); }
+  async function envPrepara(ids) {
+    var items = [];
+    for (var i = 0; i < ids.length; i += 500) {
+      var r = await P.sb.rpc('env_preparar', { p_ids: ids.slice(i, i + 500) });
+      if (r.error) throw r.error;
+      items = items.concat((r.data && r.data.items) || []);
+    }
+    return items;
+  }
+  async function envManda(ids, unSolo, avance) {
+    var res = [];
+    for (var i = 0; i < ids.length; i += 25) {
+      var r = await P.sb.functions.invoke('envios', { body: { ids: ids.slice(i, i + 25), unSolo: unSolo } });
+      var d = r.data;
+      if (r.error) { d = null; try { d = await r.error.context.json(); } catch (e) { d = null; } }
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { d = null; } }
+      if (!d || !d.ok) throw new Error(d && d.error ? d.error : 'No se pudo mandar. Revisa tu internet e intenta otra vez.');
+      res = res.concat(d.resultados || []);
+      if (avance) avance(Math.min(ids.length, i + 25), ids.length);
+    }
+    return res;
+  }
+  function envItem(x) {
+    return '<li><div class="t">' + esc(x.rs) + '</div><div class="d">' + esc(x.actividad) + ' · ' + esc(mesTxt(x.periodo)) + (x.complementaria ? ' · <span class="tag az">Complementaria</span>' : '') + '</div>'
+      + (x.error ? '<div class="d mal">' + esc(x.error) + '</div>'
+        : '<div class="d para">Para: ' + esc((x.para || []).join(', ')) + ' · ' + (x.docs || []).length + ' documento' + ((x.docs || []).length === 1 ? '' : 's') + ': ' + esc((x.docs || []).map(function (d) { return d.nombre; }).join(', ')) + '</div>')
+      + '</li>';
+  }
+  function envResumen(res) {
+    var bien = res.filter(function (x) { return x.estado === 'enviado' || x.estado === 'prueba'; }), mal = res.filter(function (x) { return x.estado !== 'enviado' && x.estado !== 'prueba'; });
+    var h = '<div class="msg ' + (mal.length ? 'mal' : 'ok') + '">' + (ENV.modo === 'prueba' ? 'Prueba: ' : '') + bien.length + ' mandado' + (bien.length === 1 ? '' : 's')
+      + (mal.length ? ' · ' + mal.length + ' sin mandar (abajo el porqué)' : '') + '.</div>';
+    if (mal.length) h += '<ul class="lista env-l">' + mal.map(function (x) { return '<li><div class="t">' + esc(x.rs) + '</div><div class="d">' + esc(x.actividad) + '</div><div class="d mal">' + esc(x.detalle || 'No se mandó') + '</div></li>'; }).join('') + '</ul>';
+    return h;
+  }
+  async function pintaEnvios(a) {
+    var r; try { r = await P.sb.rpc('env_historial', { p_wfra: a.id }); } catch (er) { r = { error: er }; }
+    if (ABIERTA !== a.id || !$('env-hist')) return;
+    var L = (r && r.data) || [];
+    $('env-n').textContent = L.length ? String(L.length) : '';
+    $('env-hist').innerHTML = !L.length ? '<div class="vacio">Desde el portal todavía no se ha mandado nada de esta actividad.</div>'
+      : '<ul class="lista env-l">' + L.map(function (e) {
+        var est = e.estado === 'enviado' ? 'Enviado' : e.estado === 'prueba' ? 'Prueba' : 'No se pudo';
+        return '<li><div class="t">' + esc(est) + ' · ' + esc(fechaHora(e.creado)) + ' · ' + esc(e.quien) + '</div><div class="d para">Para: ' + esc((e.para || []).join(', ')) + ' · ' + (e.docs || []).length + ' documento(s)</div>'
+          + (e.detalle ? '<div class="d mal">' + esc(e.detalle) + '</div>' : '') + '</li>';
+      }).join('') + '</ul>';
+  }
+  async function envUno() {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    var box = $('env-uno-res'); box.innerHTML = '<div class="vacio">Revisando qué se mandaría…</div>';
+    try {
+      var it = (await envPrepara([a.id]))[0];
+      if (!it) { box.innerHTML = '<div class="vacio">No se encontró la actividad.</div>'; return; }
+      var listo = !it.error && envPuedeMandar();
+      box.innerHTML = '<ul class="lista env-l">' + envItem(it) + '</ul>'
+        + (listo ? '<div class="subir"><label class="env-chk"><input type="checkbox" id="env-uno-junto" checked> En un solo correo</label><button class="btn acento" type="button" id="env-uno-manda">Mandar</button></div>' : '');
+    } catch (e) { box.innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
+  }
+  async function envUnoManda(btn) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    btn.disabled = true; btn.textContent = 'Mandando…';
+    try {
+      var res = await envManda([a.id], $('env-uno-junto') ? $('env-uno-junto').checked : true);
+      if (ABIERTA !== a.id) return;
+      $('env-uno-res').innerHTML = envResumen(res);
+      pintaDocs(a); pintaEnvios(a);
+    } catch (e) { $('env-uno-res').innerHTML = '<div class="msg mal">' + esc(e.message || falla(e)) + '</div>'; }
+  }
+  function abreEnvios() {
+    if (!ENV.visible || CONSULTA) return;
+    ABIERTA = null; ENV_IDS = [];
+    var L = filtradas().filter(function (a) { return ENVIABLES[a.actividad_id] && a.activa && a.estatus !== 3 && a.estatus !== 6 && (a.n_docs || 0) > 0; });
+    var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Enviar al cliente</h2><div class="rfc">Líneas de captura, opiniones de cumplimiento, declaraciones y acuses anuales del panel como está filtrado, como los envíos del Access</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">'
+      + '<div class="practica" style="margin:0">' + esc(envNota()) + '</div>'
+      + sec('Qué se va a revisar', '<div class="in">' + (L.length ? L.length + ' actividad' + (L.length === 1 ? '' : 'es') + ' de envío con documentos en este filtro. Solo se mandan los documentos que no se han mandado; una segunda línea de captura del mes sale como complementaria; las rechazadas o canceladas no se mandan.' : 'En este filtro no hay líneas de captura, opiniones, declaraciones ni acuses con documentos. Cambia el periodo o los filtros.') + '</div>'
+        + (L.length ? '<div class="subir"><button class="btn acento" type="button" id="env-revisa">Revisar qué se mandaría</button></div>' : ''))
+      + '<div id="env-res"></div></div>';
+    $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
+    ENV_IDS = L.map(function (a) { return a.id; });
+    try { $('cerrar').focus(); } catch (er) {}
+  }
+  async function envRevisa(btn) {
+    btn.disabled = true; $('env-res').innerHTML = '<div class="vacio">Revisando…</div>';
+    try {
+      var it = await envPrepara(ENV_IDS), ok = it.filter(function (x) { return !x.error; }), no = it.filter(function (x) { return x.error; });
+      ENV_IDS = ok.map(function (x) { return x.wfra; });
+      var h = sec('Listas para mandar', ok.length ? '<ul class="lista env-l">' + ok.map(envItem).join('') + '</ul>' : '<div class="vacio">Ninguna.</div>', String(ok.length));
+      if (no.length) h += sec('No se mandan', '<ul class="lista env-l">' + no.map(envItem).join('') + '</ul>', String(no.length));
+      if (ok.length && envPuedeMandar()) h += '<div class="sec"><div class="subir"><label class="env-chk"><input type="checkbox" id="env-junto" checked> Cada cliente en un solo correo</label><button class="btn acento" type="button" id="env-manda">Mandar ' + ok.length + '</button><span class="rfc" id="env-av"></span></div></div>';
+      $('env-res').innerHTML = h;
+    } catch (e) { $('env-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
+    btn.disabled = false;
+  }
+  async function envMandaTodos(btn) {
+    if (!ENV_IDS.length) return;
+    btn.disabled = true; btn.textContent = 'Mandando…';
+    try {
+      var res = await envManda(ENV_IDS, $('env-junto') ? $('env-junto').checked : true, function (n, t) { if ($('env-av')) $('env-av').textContent = n + ' de ' + t; });
+      $('env-res').innerHTML = envResumen(res);
+      ENV_IDS = [];
+    } catch (e) { btn.disabled = false; btn.textContent = 'Volver a intentar'; if ($('env-av')) $('env-av').textContent = e.message || falla(e); }
   }
 
   /* ---------- Generar el mes (como «Generar» del Access; portal/sql/45_wf_generar.sql). Dirección y gerentes. ---------- */
@@ -752,6 +878,11 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'fe-pide') { pideAut(); return; }
     if (ev.target.id === 'fe-sube') { sube(); return; }
     if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
+    if (ev.target.id === 'env-abre') { abreEnvios(); return; }
+    if (ev.target.id === 'env-revisa') { envRevisa(ev.target); return; }
+    if (ev.target.id === 'env-manda') { envMandaTodos(ev.target); return; }
+    if (ev.target.id === 'env-uno') { envUno(); return; }
+    if (ev.target.id === 'env-uno-manda') { envUnoManda(ev.target); return; }
     if (ev.target.id === 'g-revisa') { genera(true); return; }
     if (ev.target.id === 'g-genera') { genera(false); return; }
     var gt = ev.target.closest('[data-gtodos]');
