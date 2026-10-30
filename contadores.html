@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="2cb5df5fc649"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="84a897dffdc3"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -3643,7 +3643,11 @@ initDB=async function(){await initDB0();oirJust()};
    - Cuando llega un mensaje y la persona no está viendo esa conversación: un aviso arriba a la derecha («Ver»), sonido
      (si no lo quitó) y, si lo activó en los ajustes del chat, un aviso del navegador cuando el portal está en otra
      ventana. Los avisos solo dicen quién escribió y el principio del mensaje, y solo a quien está en la conversación.
-   - «En línea»: quién tiene el portal abierto (canal privado «chat:en-linea»); la página del chat lo pregunta aquí.
+   - Estatus (pedido de Daniel, 30-oct-2026: «los quiero manejar… también lo quiero automático»; portal/sql/61_chat_estatus.sql):
+     solos, sin que nadie haga nada: En línea (portal abierto, canal privado «chat:en-linea»), Ausente (15 min sin usarlo)
+     y Desconectado (portal cerrado). A mano, en el menú de la foto o en el Chat: No disponible (1 h, 2 h, hoy o hasta
+     quitarlo; le silencia los avisos del chat) y Aparecer desconectado. La última vez en línea solo la ven la dirección
+     y los gerentes (lo decide la base). La página del chat lo pregunta aquí (window.__chatEstado).
    - Cada quien ve solo sus conversaciones (lo decide la base: portal/sql/58_chat.sql); su papá (hnava) también chatea.
    - Si la base todavía no tiene el chat (sin 58), no aparece nada y el portal sigue igual.
    - Avisos al celular y a la computadora aunque el portal esté cerrado (pedido de Daniel, 30-oct-2026, «la 1»): cada
@@ -3712,7 +3716,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','chat');
     const t=document.getElementById('vtitle');if(t)t.textContent='Chat';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chat'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=cb5346a4f6');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=b35a2f6bc9');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
     alto();
     setTimeout(refresca,1500);
@@ -3791,6 +3795,7 @@ initDB=async function(){await initDB0();oirJust()};
   }
   const ini=s=>{const p=String(s||'').trim().split(/\s+/).filter(Boolean);return((p[0]||'?')[0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase()};
   async function avisa(n){
+    if(miNd())return;   // «No disponible»: sin aviso, sin sonido (el mensaje y el número llegan igual)
     const foto=n.tipo==='directo'||n.autor_uid?await fotoDe(n.autor_uid):null;
     const quien=n.tipo==='directo'?n.autor_nombre:n.conv_nombre,tx=(n.tipo==='directo'?'':String(n.autor_nombre||'').split(' ')[0]+': ')+texto(n);
     // en la página: arriba a la derecha (salvo que ya esté viendo el chat)
@@ -3827,18 +3832,206 @@ initDB=async function(){await initDB0();oirJust()};
     }catch(err){}
   }
 
-  /* --- tiempo real: mensajes nuevos y quién está en línea (si no llega, se pregunta cada 20 s) --- */
-  const ONLINE=new Set();
-  window.__chatEnLinea=u=>ONLINE.has(u);
+  /* --- estatus: En línea, Ausente y Desconectado solos; No disponible y Aparecer desconectado a mano ---
+     PRES: quién tiene el portal abierto y si lo está usando (canal «chat:en-linea»; cada equipo manda a=1 o a=0).
+     EST: lo de la base (chat_estados): lo mío, quién está «No disponible» y, solo a la dirección y a los gerentes, la
+     última vez. Si la base todavía no tiene 61, sigue lo automático y no aparece el selector. */
+  const AUSENTE=15*60*1000,PRES={};
+  let EST={yo:{estado:'auto',hasta:null},u:{},ultima_vez:false},ESTOK=false,CANAL=null,TRK,ACTIVO=true;
+  const MTY='America/Monterrey';
+  const fH=new Intl.DateTimeFormat('es-MX',{timeZone:MTY,hour:'numeric',minute:'2-digit'});
+  const fD=new Intl.DateTimeFormat('en-CA',{timeZone:MTY,year:'numeric',month:'2-digit',day:'2-digit'});
+  const fHH=new Intl.DateTimeFormat('en-GB',{timeZone:MTY,hour:'2-digit',minute:'2-digit',hour12:false});
+  const fS=new Intl.DateTimeFormat('es-MX',{timeZone:MTY,weekday:'long'});
+  const fC=new Intl.DateTimeFormat('es-MX',{timeZone:MTY,day:'numeric',month:'short'});
+  const vigente=h=>!h||Date.parse(h)>Date.now();
+  const ahoraActivo=()=>{try{return Date.now()-P.ultimaActividad()<AUSENTE}catch(err){return true}};
+  const miNd=()=>EST.yo&&EST.yo.estado==='no_disponible'&&vigente(EST.yo.hasta);
+  const miInv=()=>!!(EST.yo&&EST.yo.estado==='invisible');
+  function estadoDe(u){
+    if(u===YO){
+      if(miInv())return {e:'off',inv:true};
+      if(miNd())return {e:'nd',hasta:EST.yo.hasta||null};
+      return {e:ACTIVO?'linea':'ausente'};
+    }
+    const d=EST.u[u]||{},p=PRES[u];
+    if(!p)return {e:'off',visto:d.visto||null};
+    if(d.nd&&vigente(d.hasta))return {e:'nd',hasta:d.hasta||null};
+    return {e:p.activo?'linea':'ausente'};
+  }
+  function alas(t){const h=fH.format(new Date(t));return (/^1:/.test(h)?'la ':'las ')+h}
+  function cuando(t){
+    const d=new Date(t),k=fD.format(d);
+    if(k===fD.format(new Date()))return 'hoy a '+alas(t);
+    if(k===fD.format(new Date(Date.now()-864e5)))return 'ayer a '+alas(t);
+    if(Date.now()-d<6*864e5)return 'el '+fS.format(d)+' a '+alas(t);
+    return 'el '+fC.format(d).replace('.','');
+  }
+  function textoEstado(st){
+    st=st||{};
+    if(st.e==='linea')return 'En línea';
+    if(st.e==='ausente')return 'Ausente';
+    if(st.e==='nd')return 'No disponible'+(!st.hasta?'':fHH.format(new Date(st.hasta))==='00:00'?' por hoy':' hasta '+alas(st.hasta));
+    if(st.inv)return 'Apareces desconectado';
+    return 'Desconectado'+(st.visto?' · últ. vez '+cuando(st.visto):'');
+  }
+  window.__chatEnLinea=u=>estadoDe(u).e!=='off';
+  function avisaCambio(){
+    pintaPropio();
+    try{const w=fr.contentWindow;if(w&&w.__chatPresencia)w.__chatPresencia()}catch(err){}
+  }
+  // lo que este equipo dice en el canal: a=1 usándolo, a=0 ausente; con «Aparecer desconectado», nada
+  async function rastrea(){
+    if(!CANAL)return;
+    const q=miInv()?null:(ACTIVO?1:0);
+    if(q===TRK)return;
+    TRK=q;
+    try{if(q===null)await CANAL.untrack();else await CANAL.track({u:YO,a:q})}catch(err){TRK=undefined}
+  }
   function presencia(){
     try{
       const ch=P.sb.channel('chat:en-linea',{config:{private:true,presence:{key:YO}}});
       ch.on('presence',{event:'sync'},()=>{
-        ONLINE.clear();try{Object.keys(ch.presenceState()||{}).forEach(k=>ONLINE.add(k))}catch(err){}
-        try{const w=fr.contentWindow;if(w&&w.__chatPresencia)w.__chatPresencia()}catch(err){}
-      }).subscribe(async s=>{if(s==='SUBSCRIBED'){try{await ch.track({u:YO})}catch(err){}}});
+        Object.keys(PRES).forEach(k=>delete PRES[k]);
+        try{const st=ch.presenceState()||{};Object.keys(st).forEach(k=>{const m=st[k]||[];PRES[k]={activo:!m.length||m.some(x=>!x||x.a!==0)}})}catch(err){}
+        avisaCambio();
+      }).on('broadcast',{event:'estado'},()=>pideLuego())
+        .subscribe(s=>{if(s==='SUBSCRIBED'){CANAL=ch;TRK=undefined;rastrea()}});
     }catch(err){}
   }
+  async function pideEstados(){
+    try{
+      const r=await P.sb.rpc('chat_estados');
+      if(!r.error&&r.data){EST=r.data;EST.u=EST.u||{};EST.yo=EST.yo||{estado:'auto',hasta:null};ESTOK=true;await rastrea();avisaCambio()}
+    }catch(err){}
+  }
+  let pT=0;
+  const pideLuego=()=>{clearTimeout(pT);pT=setTimeout(pideEstados,300+Math.random()*1200)};
+  // «sigo aquí» cada 2 minutos mientras se usa el portal (para la última vez; con «Aparecer desconectado», no)
+  async function late(){
+    if(!ESTOK||!ACTIVO||miInv())return;
+    try{const r=await P.sb.rpc('chat_estado_late');if(!r.error&&r.data){const antes=JSON.stringify(EST.yo);EST.yo=r.data;if(JSON.stringify(EST.yo)!==antes){await rastrea();avisaCambio()}}}catch(err){}
+  }
+  let VENCE=0;
+  function revisaActivo(){
+    const a=ahoraActivo();
+    if(a!==ACTIVO){ACTIVO=a;rastrea();avisaCambio();if(a)late();return}
+    // si se acabó el tiempo de un «No disponible», se vuelve a pintar
+    const hs=[EST.yo&&EST.yo.hasta].concat(Object.values(EST.u).map(x=>x.hasta)).filter(Boolean).map(Date.parse).filter(t=>t>VENCE);
+    const prox=hs.length?Math.min.apply(null,hs):0;
+    if(prox&&prox<=Date.now()){VENCE=prox;rastrea();avisaCambio()}
+  }
+  async function ponEstado(e,min){
+    const r=await P.sb.rpc('chat_estado_pon',{p_estado:e,p_minutos:min==null||min===''?null:+min});
+    if(r.error)throw new Error('No se pudo cambiar tu estatus; intenta otra vez.');
+    EST.yo=r.data||{estado:e,hasta:null};
+    await rastrea();
+    try{if(CANAL)CANAL.send({type:'broadcast',event:'estado',payload:{u:YO}})}catch(err){}
+    avisaCambio();
+    if(e!=='invisible')late();
+    return EST.yo;
+  }
+
+  /* el selector, en el menú de la foto (arriba a la derecha) */
+  const est=document.createElement('style');
+  est.textContent=':root{--est-linea:#22A06B;--est-ausente:#E5A50A;--est-nd:#D92D20;--est-off:#98A2B3}'
+    +':root[data-theme="dark"]{--est-linea:#3DD68C;--est-ausente:#F5C451;--est-nd:#F97066;--est-off:#7D8AA0}'
+    +'.est-pt{display:inline-block;position:relative;width:12px;height:12px;border-radius:50%;flex:none;background:var(--est-linea)}'
+    +'.est-pt[data-e="ausente"]{background:var(--est-ausente)}'
+    +'.est-pt[data-e="nd"]{background:var(--est-nd)}'
+    +'.est-pt[data-e="nd"]::after{content:"";position:absolute;left:3px;right:3px;top:5px;height:2px;border-radius:1px;background:#fff}'
+    +'.est-pt[data-e="off"]{background:var(--surface,#fff);box-shadow:inset 0 0 0 2px var(--est-off)}'
+    +'.pu-btn{position:relative}'
+    +'.pu-btn>.est-pt{position:absolute;left:26px;top:25px;width:12px;height:12px;outline:2px solid var(--surface,#fff)}'
+    +'.est-blk{border-bottom:1px solid var(--line,#D9DEE7);margin:-2px 0 6px;padding-bottom:4px}'
+    +'.pu-dd .est-act .est-pt,.pu-dd .est-op .est-pt,.est-ndt .est-pt{margin:0 3px}'
+    +'.est-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.25}'
+    +'.est-tx b{font-size:13.5px;font-weight:600;color:var(--ink)}'
+    +'.est-tx small{font-size:12px;color:var(--muted);white-space:normal}'
+    +'.pu-dd .est-act svg.est-car{width:15px;height:15px;color:var(--muted);transition:transform .15s}'
+    +'.est-act[aria-expanded="true"] svg.est-car{transform:rotate(180deg)}'
+    +'.est-ops{padding:0 0 4px}.est-ops[hidden]{display:none}'
+    +'.pu-dd .est-op[aria-checked="true"]{background:var(--navy-soft)}'
+    +'.est-ndt{display:flex;align-items:center;gap:10px;padding:9px 10px 4px}'
+    +'.est-dur{display:flex;flex-wrap:wrap;gap:6px;padding:4px 10px 8px 41px}'
+    +'.pu-dd .est-dur button{width:auto;flex:none;padding:5px 11px;border:1px solid var(--line-strong);border-radius:999px;font-size:12.5px;font-weight:600;background:var(--surface)}'
+    +'.pu-dd .est-dur button[aria-checked="true"]{background:var(--navy);border-color:var(--navy);color:#fff}'
+    +':root[data-theme="dark"] .pu-dd .est-dur button[aria-checked="true"]{background:var(--accent);border-color:var(--accent)}'
+    +'.est-msg{position:fixed;top:var(--cht-top,70px);right:12px;z-index:66;max-width:min(340px,calc(100vw - 24px));background:var(--surface,#fff);color:var(--ink);border:1px solid var(--line-strong);border-left:5px solid var(--accent,#F07A1E);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.18)}'
+    +'@media print{.pu-btn>.est-pt{display:none}}';
+  document.head.appendChild(est);
+  const CAR='<svg class="est-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  const DUR=[[60,'1 hora'],[120,'2 horas'],[-1,'Hoy'],['','Hasta que lo quite']];
+  let BLK=null,PTYO=null;
+  function ponSelector(){
+    const dd=document.getElementById('pu-dd'),btn=document.getElementById('pu-btn');
+    if(!dd||!btn)return false;
+    if(BLK)return true;
+    PTYO=document.createElement('span');PTYO.className='est-pt';PTYO.setAttribute('aria-hidden','true');btn.appendChild(PTYO);
+    BLK=document.createElement('div');BLK.className='est-blk';BLK.hidden=!ESTOK;
+    const op=(e,pt,t,sub)=>'<button type="button" class="est-op" data-op="'+e+'" aria-checked="false"><span class="est-pt" data-e="'+pt+'"></span><span class="est-tx"><b>'+t+'</b><small>'+sub+'</small></span></button>';
+    BLK.innerHTML='<button type="button" role="menuitem" class="est-act" id="est-act" aria-expanded="false" aria-controls="est-ops">'
+      +'<span class="est-pt" data-e="linea"></span><span class="est-tx"><b id="est-yo-t">En línea</b><small id="est-yo-s">Automático · cambiar mi estatus</small></span>'+CAR+'</button>'
+      +'<div class="est-ops" id="est-ops" hidden>'
+      +op('auto','linea','Automático','En línea; Ausente a los 15 min sin usar el portal; Desconectado al cerrarlo')
+      +'<div class="est-ndt"><span class="est-pt" data-e="nd"></span><span class="est-tx"><b>No disponible</b><small>Te silencia los avisos del chat. ¿Por cuánto tiempo?</small></span></div>'
+      +'<div class="est-dur" role="group" aria-label="No disponible por">'+DUR.map(d=>'<button type="button" data-op="no_disponible" data-m="'+d[0]+'" aria-checked="false">'+d[1]+'</button>').join('')+'</div>'
+      +op('invisible','off','Aparecer desconectado','Los demás te ven desconectado; tú sigues viendo todo')
+      +'</div>';
+    const dh=dd.querySelector('.pu-dh');if(dh)dh.after(BLK);else dd.prepend(BLK);
+    const act=BLK.querySelector('#est-act'),ops=BLK.querySelector('#est-ops');
+    abreOps=o=>{
+      ops.hidden=!o;act.setAttribute('aria-expanded',o?'true':'false');
+      // solo las opciones a la vista entran en las flechas del menú
+      ops.querySelectorAll('[data-op]').forEach(x=>{if(o)x.setAttribute('role','menuitem');else x.removeAttribute('role')});
+    };
+    act.onclick=ev=>{ev.stopPropagation();abreOps(ops.hidden)};
+    // al cerrar el menú, las opciones se recogen
+    new MutationObserver(()=>{if(dd.hidden)abreOps(false)}).observe(dd,{attributes:true,attributeFilter:['hidden']});
+    ops.addEventListener('click',async ev=>{
+      const x=ev.target.closest('[data-op]');if(!x)return;
+      try{const y=await ponEstado(x.dataset.op,x.dataset.m);mensaje('Tu estatus: '+textoEstado(estadoDe(YO)).replace(/\.$/,'')+(y.estado==='no_disponible'?'. No te llegarán avisos del chat.':'.'))}
+      catch(err){mensaje(err.message||'No se pudo cambiar tu estatus.')}
+    });
+    pintaPropio();
+    return true;
+  }
+  let abreOps=()=>{};
+  function mensaje(t){
+    document.querySelectorAll('.est-msg').forEach(x=>x.remove());
+    try{const h=document.querySelector('header');if(h)document.documentElement.style.setProperty('--cht-top',Math.round(h.getBoundingClientRect().bottom+8)+'px')}catch(err){}
+    const m=document.createElement('div');m.className='est-msg';m.setAttribute('role','status');m.textContent=t;document.body.appendChild(m);
+    setTimeout(()=>{try{m.remove()}catch(err){}},4500);
+  }
+  function pintaPropio(){
+    if(!PTYO)return;
+    const st=estadoDe(YO),t=textoEstado(st);
+    PTYO.dataset.e=st.e;PTYO.title=t;
+    if(!BLK)return;
+    BLK.hidden=!ESTOK;
+    const y=EST.yo||{},modo=miInv()?'invisible':miNd()?'no_disponible':'auto';
+    BLK.querySelector('#est-act .est-pt').dataset.e=st.e;
+    BLK.querySelector('#est-yo-t').textContent=t;
+    BLK.querySelector('#est-yo-s').textContent=(modo==='auto'?'Automático':modo==='no_disponible'?'Sin avisos del chat':'Solo tú lo sabes')+' · cambiar mi estatus';
+    BLK.querySelectorAll('.est-op').forEach(x=>x.setAttribute('aria-checked',x.dataset.op===modo?'true':'false'));
+    // qué duración está puesta: la que más se parece a lo que falta
+    let cual=null;
+    if(modo==='no_disponible'){
+      if(!y.hasta)cual='';
+      else if(fHH.format(new Date(y.hasta))==='00:00')cual='-1';
+    }
+    BLK.querySelectorAll('.est-dur button').forEach(x=>x.setAttribute('aria-checked',cual!==null&&x.dataset.m===cual?'true':'false'));
+  }
+  // desde la página del chat («● En línea» debajo del título): abre este mismo menú con las opciones a la vista
+  function abreSelector(){
+    const btn=document.getElementById('pu-btn'),dd=document.getElementById('pu-dd');if(!btn||!dd)return;
+    if(btn.getBoundingClientRect().bottom<0)scrollTo(0,0);
+    if(dd.hidden)btn.click();
+    abreOps(true);
+    try{document.getElementById('est-act').focus()}catch(err){}
+  }
+  window.__chatEstado={de:estadoDe,yo:()=>estadoDe(YO),texto:textoEstado,listo:()=>ESTOK,ultimaVez:()=>!!EST.ultima_vez,
+    pon:ponEstado,abre:abreSelector};
   function escucha(){
     try{
       P.sb.channel('chat-aviso-'+YO)
@@ -4043,7 +4236,15 @@ initDB=async function(){await initDB0();oirJust()};
       b.hidden=false;
       for(let i=0;i<50&&!ponIcono();i++)await new Promise(ok=>setTimeout(ok,200));
       SIN=+r.data.total||0;MAXID=+r.data.ultimo_id||0;PRIMERO=false;pinta();
-      escucha();presencia();
+      // primero lo mío (si escogió «Aparecer desconectado», el canal nunca lo enseña en línea), luego el canal
+      ACTIVO=ahoraActivo();
+      escucha();await pideEstados();presencia();
+      for(let i=0;i<50&&!ponSelector();i++)await new Promise(ok=>setTimeout(ok,200));
+      late();
+      ['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,()=>{if(!ACTIVO)setTimeout(revisaActivo,60)},{passive:true}));
+      setInterval(revisaActivo,20000);
+      setInterval(()=>{if(!document.hidden)pideEstados()},60000);
+      setInterval(late,120000);
       setInterval(()=>{if(!document.hidden)refresca()},20000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresca()});
       if(/^#chat$/.test(location.hash))setView('chat');
