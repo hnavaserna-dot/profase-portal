@@ -1,0 +1,882 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Inicio</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=14564a5adc"></script>
+<style>
+/* Portal PROFASE · Inicio (30-oct-2026, pedido de Daniel). Una sola página de tarjetas que contesta «¿qué necesita mi
+   atención hoy?» y cambia según quién entra:
+     · Dirección (Daniel y su papá, en solo consulta): «Cómo va PROFASE»: dinero, cumplimiento SAT, lo que espera su
+       «sí» y riesgos. Solo excepciones, nada de tareas.
+     · Fernando Cadengo: «Mi bandeja»: por autorizar, cobranza, cómo está el portal y lo suyo.
+     · Gerentes: «Mi equipo»: el WorkFlow de su departamento, lo que tienen que confirmar y lo suyo.
+     · Gabriel Cavazos: «Mi trabajo y mis propuestas».
+     · Los demás: «Mi día»: sus pendientes, su avance, sus justificaciones y sus clientes.
+   Cada tarjeta lee con la sesión de quien entró: la base decide qué ve cada quien (si no puede leer algo, la tarjeta no
+   sale). La cobranza de la otra compañía solo existe en el paquete de la dirección, así que solo ahí puede salir; el
+   código no la nombra. Solo lee: lo único que escribe es marcar como leído un aviso propio (notif_leer). Las horas,
+   siempre en hora de Monterrey. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#9A6700; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#9DB4DB; --navy-ink:#0D1320; --navy-soft:#1C2A44;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#E9B949; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#9DB4DB; --navy-ink:#0D1320; --navy-soft:#1C2A44;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#E9B949; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.wrap{max-width:1240px;margin:0 auto;padding:18px 16px 40px}
+
+/* Saludo */
+.hola{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px;margin-bottom:16px}
+.hola h1{font-size:clamp(22px,5.4vw,30px);font-weight:760;color:var(--ink)}
+.hola .que{display:inline-block;margin-bottom:4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
+.hola p{margin:4px 0 0;color:var(--muted);font-size:13.5px}
+.hola .der{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;min-height:36px}
+.btn:hover{border-color:var(--navy)}
+.btn:focus-visible,.ir:focus-visible,.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Tarjetas */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),1fr));grid-auto-flow:row dense;align-items:start}
+@media (min-width:780px){.card.ancha{grid-column:span 2}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px 12px;min-width:0;box-shadow:0 1px 2px rgba(19,32,54,.04)}
+.card header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.card h2{font-size:17px;font-weight:740}
+.card .sub{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.ir{flex:none;border:0;background:none;color:var(--accent-ink);font-weight:700;font-size:12.5px;cursor:pointer;padding:4px 2px;border-radius:6px;white-space:nowrap}
+.ir:hover{text-decoration:underline}
+.cia{margin:12px 0 6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cia:first-of-type{margin-top:0}
+
+/* Números */
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:8px;margin-bottom:10px}
+.kp:last-child{margin-bottom:0}
+.k{background:var(--surface-2);border-radius:10px;padding:9px 11px;min-width:0}
+.k .t{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);overflow-wrap:anywhere}
+.k .v{font-family:var(--f-display);font-weight:760;font-size:clamp(18px,4.6vw,23px);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.k .s{font-size:12px;color:var(--muted);margin-top:1px}
+.k.mal .v{color:var(--red)} .k.ojo .v{color:var(--amber)} .k.bien .v{color:var(--ok)}
+.barra{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
+.barra i{display:block;height:100%;background:var(--ok);border-radius:4px}
+
+/* Listas */
+.tl{margin:12px 0 4px;font-size:12px;font-weight:700;color:var(--muted)}
+.lista{list-style:none;margin:0;padding:0}
+.lista li+li{border-top:1px solid var(--line)}
+.fila{width:100%;display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:8px 2px;cursor:pointer;border-radius:6px;min-height:40px}
+.fila:hover{background:var(--surface-2)}
+.fila.quieta{cursor:default}.fila.quieta:hover{background:none}
+.pt{flex:none;width:9px;height:9px;border-radius:50%;background:var(--line-strong)}
+.pt.mal{background:var(--red)} .pt.ojo{background:var(--amber)} .pt.bien{background:var(--ok)} .pt.az{background:var(--navy)} .pt.na{background:var(--accent)}
+.fila .tx{flex:1;min-width:0}
+.fila .a{display:block;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fila .b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;color:var(--muted);font-size:12px;overflow:hidden;overflow-wrap:anywhere}
+.fila .n{flex:none;font-weight:700;font-size:13px;text-align:right;white-space:nowrap}
+.fila .n.mal{color:var(--red)} .fila .n.ojo{color:var(--amber)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:600;background:var(--surface-2);color:var(--ink)}
+.chip b{font-family:var(--f-display);font-size:15px}
+.chip.mal{background:var(--red-soft);color:var(--red)} .chip.ojo{background:var(--amber-soft);color:var(--amber)} .chip.bien{background:var(--ok-soft);color:var(--ok)}
+
+/* Tabla chica del equipo */
+.eq{width:100%;border-collapse:collapse;font-size:13px}
+.eq th{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--line)}
+.eq th:first-child,.eq td:first-child{text-align:left;padding-left:0}
+.eq td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.eq td:first-child{white-space:normal;font-weight:600}
+.eq tr:last-child td{border-bottom:0}
+.eq .mal{color:var(--red);font-weight:700}
+.tabla{overflow-x:auto;max-width:100%}
+
+.aldia{display:flex;align-items:center;gap:8px;color:var(--ok);font-weight:600;font-size:13.5px;padding:6px 0}
+.aldia svg{width:18px;height:18px;flex:none}
+.nota{color:var(--muted);font-size:12px;margin:8px 0 0}
+.falla{color:var(--muted);font-size:13px}
+.carga .esq{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--surface-2),var(--line),var(--surface-2));background-size:200% 100%;animation:brilla 1.2s infinite;margin:8px 0}
+.carga .esq.g{height:52px}
+@keyframes brilla{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.carga .esq{animation:none}}
+@media (max-width:520px){.wrap{padding:14px 12px 32px}.card{padding:12px 13px 10px}.card h2{font-size:16px}}
+</style></head><body>
+<div class="wrap">
+  <section class="hola" aria-live="polite">
+    <div>
+      <span class="que" id="que">Inicio</span>
+      <h1 id="hola">Bienvenido</h1>
+      <p id="fecha"></p>
+    </div>
+    <div class="der"><span id="datos"></span><button type="button" class="btn" id="recarga">Volver a cargar</button></div>
+  </section>
+  <div class="grid" id="grid"></div>
+  <p class="nota" id="pie" hidden></p>
+</div>
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var ZONA = 'America/Monterrey';
+  var MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var MESC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  var OK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  /* ---------- utilerías ---------- */
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+  function slug(t) { return norm(String(t)).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 150) || 'x'; }
+  function fi(n) { return Math.round(+n || 0).toLocaleString('es-MX'); }
+  function fm(n) { var v = Math.round(+n || 0); return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('es-MX'); }
+  function fp(x) { return x == null || !isFinite(x) ? '—' : (x * 100).toFixed(x >= 0.995 || x === 0 ? 0 : 1) + ' %'; }
+  function bonito(s) {
+    var chicas = { de: 1, del: 1, la: 1, las: 1, los: 1, y: 1 };
+    return String(s || '').trim().toLowerCase().split(/\s+/).map(function (w, i) { return i && chicas[w] ? w : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+  }
+  var fDia = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' });
+  var HOY = '', HOYN = 0, EN7 = '', EN7N = 0, EN90 = '';
+  function masDias(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function n2iso(n) { n = String(n); return n.slice(0, 4) + '-' + n.slice(4, 6) + '-' + n.slice(6, 8); }
+  function iso2n(s) { return +String(s || '').slice(0, 10).replace(/-/g, ''); }
+  function fCorta(iso) { if (!iso) return ''; var p = String(iso).slice(0, 10).split('-'); return p.length < 3 ? String(iso) : (+p[2]) + ' ' + MESC[+p[1] - 1]; }
+  function fCortaA(iso) { if (!iso) return ''; var p = String(iso).slice(0, 10).split('-'); return p.length < 3 ? String(iso) : (+p[2]) + ' ' + MESC[+p[1] - 1] + ' ' + p[0]; }
+  function horaCorta(iso) {
+    try { return new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)).replace(/\./g, ''); }
+    catch (e) { return String(iso || '').slice(0, 16); }
+  }
+  function haceTxt(iso) {
+    var ms = Date.now() - Date.parse(iso); if (!isFinite(ms)) return '';
+    var min = Math.round(ms / 60000);
+    if (min < 2) return 'hace un momento'; if (min < 60) return 'hace ' + min + ' min';
+    var h = Math.round(min / 60); if (h < 24) return 'hace ' + h + (h === 1 ? ' hora' : ' horas');
+    var d = Math.round(h / 24); return 'hace ' + d + (d === 1 ? ' día' : ' días');
+  }
+  function ymL(ym) { return MESL[ym % 100 - 1] + ' ' + (2000 + Math.floor(ym / 100)); }
+  function plural(n, uno, varios) { return fi(n) + ' ' + (n === 1 ? uno : varios); }
+
+  /* ---------- a dónde lleva cada tarjeta: el menú de la página de afuera (js/menu.js) ---------- */
+  function ir(k) {
+    try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU && window.parent.PORTAL_MENU.ir(k)) return; } catch (e) { /* sin menú */ }
+    try { window.top.location.hash = '#' + k; } catch (e) { /* nada */ }
+  }
+  function ve(k) {
+    try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU) return !!window.parent.PORTAL_MENU.ve(k); } catch (e) { /* sin menú */ }
+    return false;
+  }
+
+  /* ---------- lectura (con la sesión de quien entró: la base decide) ---------- */
+  async function todas(armar) {
+    var r = await armar(true).range(0, 999);
+    if (r.error) throw r.error;
+    var out = r.data || [], total = r.count == null ? out.length : r.count, pide = [];
+    for (var de = 1000; de < total; de += 1000) pide.push(armar(false).range(de, de + 999));
+    (await Promise.all(pide)).forEach(function (x) { if (x.error) throw x.error; out = out.concat(x.data || []); });
+    return out;
+  }
+  async function leeDoc(col, id) {
+    var q = await P.sb.from('docs').select('data').eq('col', col).eq('id', id).maybeSingle();
+    if (q.error) throw q.error;
+    return q.data ? q.data.data : null;
+  }
+  async function coleccion(col) {
+    var filas = await todas(function (c) { return P.sb.from('docs').select('id,data', c ? { count: 'exact' } : undefined).eq('col', col).order('id'); });
+    return filas.map(function (f) { return { id: f.id, d: f.data || {} }; });
+  }
+  async function gunzip(b64) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('navegador');
+    var bin = atob(b64), u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    var st = new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return JSON.parse(await new Response(st).text());
+  }
+  // un paquete de la actualización de cada 3 horas (puede venir en varias partes: <base>_0, <base>_1…; el de cada
+  // contador, datos/wfc_<usuario>, viene en un solo documento sin número)
+  async function paquete(col, base, solo) {
+    var p0 = await leeDoc(col, solo ? base : base + '_0');
+    if (!p0 || !p0.b64) return null;
+    var n = Math.max(1, +p0.partes || 1), partes = [p0.b64];
+    for (var i = 1; i < n; i++) {
+      var pi = await leeDoc(col, base + '_' + i);
+      if (!pi || pi.refreshedAt !== p0.refreshedAt) return null;
+      partes.push(pi.b64);
+    }
+    return gunzip(partes.join(''));
+  }
+  async function rpc(fn, args) {
+    var r = await P.sb.rpc(fn, args || {});
+    if (r.error) throw r.error;
+    return r.data;
+  }
+  var MEMO = {};
+  function una(k, f) { if (!MEMO[k]) MEMO[k] = f().catch(function (e) { delete MEMO[k]; throw e; }); return MEMO[k]; }
+
+  /* ---------- quién entró ---------- */
+  var YO = '', ROL = '', PERFIL = '', NOM = '', NOMWF = '', DEP = -1;
+  var DEPS = ['Contabilidad', 'VAX', 'Administración', 'Nóminas', 'Fiscal', 'Sin departamento'];
+  var DEP_DE = { 'fernando barbosa': 0, 'sebastian sanchez': 0, 'felipe hernandez': 0, 'salomon perez': 0, 'erick macias barcelo': 0, 'victor quintos': 0,
+    'johan hernandez': 1, 'susana flores': 1, 'daniela castro': 1, 'fernando gutierrez': 1, 'francisco zaragoza': 1,
+    'fernando cadengo': 2, 'gabriel cavazos': 2, 'elisa mata': 2, 'nefertari garcia': 2,
+    'jesus luna': 3, 'andrea reyna': 3,
+    'francisco rivera': 4, 'liliana lechuga': 4 };
+  // gerente → su departamento (por si su nombre del WorkFlow no viene en el perfil)
+  var DEP_GERENTE = { 'fernando.barbosa': 0, 'fernando.gutierrez': 1, 'fernando.cadengo': 2, 'alex.luna': 3, 'francisco.rivera': 4 };
+  // usuario del portal → departamento (las justificaciones traen el usuario de quien las mandó)
+  var DEP_USUARIO = { 'sebastian.sanchez': 0, 'felipe.hernandez': 0, 'salomon.perez': 0, 'erick.macias': 0, 'victor.quintos': 0,
+    'johan.hernandez': 1, 'susana.flores': 1, 'daniela.castro': 1, 'francisco.zaragoza': 1,
+    'gabriel.cavazos': 2, 'elisa.mata': 2, 'nefertari.garcia': 2, 'andrea.reyna': 3, 'liliana.lechuga': 4 };
+  function depDe(usuario, nombre) {
+    if (DEP_GERENTE[usuario] != null) return DEP_GERENTE[usuario];
+    if (DEP_USUARIO[usuario] != null) return DEP_USUARIO[usuario];
+    var n = norm(nombre); return DEP_DE[n] != null ? DEP_DE[n] : -1;
+  }
+  // personas con dos sombreros: cuentan en Contabilidad en los clientes donde son el contador asignado
+  var DOBLE = { 'gabriel cavazos': 1, 'susana flores': 1 };
+  var MOTIVOS = { 'no-info': 'cliente', 'no-contesta': 'cliente', 'carga': 'despacho', 'revision': 'despacho' };
+  var TITULO = { direccion: 'Cómo va PROFASE', cadengo: 'Mi bandeja', gerente: 'Mi equipo', gabo: 'Mi trabajo y mis propuestas', contador: 'Mi día' };
+
+  function saludo() {
+    var h = +new Intl.DateTimeFormat('en-US', { timeZone: ZONA, hour: 'numeric', hourCycle: 'h23' }).format(new Date());
+    return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  }
+  function nombreCorto(p) {
+    if (p.usuario === 'daniel.nava') return 'Héctor Daniel';
+    var w = String(p.nombre || '').trim().split(/\s+/)[0];
+    return w ? bonito(w) : '';
+  }
+
+  /* ---------- WorkFlow (paquete de cada 3 horas: el mismo del Panel, con las mismas reglas) ---------- */
+  function wfColYId() {
+    if (ROL === 'director') return ['director', 'wf'];
+    if (ROL === 'gerente') return ['datos', 'wf'];
+    return ['datos', 'wfc_' + YO, true];
+  }
+  function cargaWF() {
+    return una('wf', async function () {
+      var ci = wfColYId();
+      var res = await Promise.all([paquete(ci[0], ci[1], ci[2]), coleccion('pausas').catch(function () { return []; }), coleccion('clientes').catch(function () { return []; })]);
+      var D = res[0]; if (!D || !D.rows) return null;
+      var W = { D: D, DIM: D.dims, R: [], cols: D.cols };
+      var ix = {}; D.cols.forEach(function (k, i) { ix[k] = i; });
+      W.R = D.rows.map(function (r) {
+        var o = {}; for (var k in ix) o[k] = r[ix[k]];
+        o.y = 2000 + Math.floor(o.ym / 100); o.m = o.ym % 100; return o;
+      });
+      W.ASOF = iso2n(D.refreshedAt) || HOYN;
+      W.EN7 = iso2n(masDias(n2iso(W.ASOF), 7));
+      W.CUR_Y = Math.floor(W.ASOF / 10000);
+      // pausas: las del cliente (no cuentan) y el cliente en pausa (todo fuera del avance)
+      var CLI = {}; (W.DIM.cli || []).forEach(function (n, i) { CLI[norm(n)] = i; });
+      W.PZK = {}; W.PZKA = {}; W.PZC = {};
+      res[1].forEach(function (x) {
+        var p = x.d; if (!p || !p.activa) return;
+        var i = CLI[norm(p.cli)]; if (i === undefined) return;
+        var cat = MOTIVOS[p.motivoId] || 'cliente';
+        (cat === 'cliente' ? W.PZK : W.PZKA)[(+p.ym) * 10000 + i] = 1;
+      });
+      W.enPausa = 0;
+      res[2].forEach(function (x) {
+        var d = x.d; if (!d) return;
+        var i = CLI[norm(d.cli)]; if (i === undefined) return;
+        if (d.estatus === 'pausado') { W.PZC[i] = 1; W.enPausa++; }
+      });
+      W.pz = function (o) { return !!(W.PZC[o.c] || W.PZK[o.ym * 10000 + o.c]); };
+      W.venc = function (o) { return o.v > 0 && o.v < W.ASOF && !W.pz(o); };
+      var DEPC = {};
+      W.depR = function (r) {
+        if (DEPC[r] === undefined) { var n = norm(W.DIM.resp[r]); DEPC[r] = n in DEP_DE ? DEP_DE[n] : DEPS.length - 1; }
+        return DEPC[r];
+      };
+      W.depO = function (o) {
+        var d = W.depR(o.r); if (!(o.a >= 0) || !W.DIM.con || !W.DIM.con[o.a]) return d;
+        var n = norm(W.DIM.resp[o.r]); return DOBLE[n] && norm(W.DIM.con[o.a]) === n ? 0 : d;
+      };
+      return W;
+    });
+  }
+  // el mes contable que se trabaja: el anterior al de hoy (si todavía no tiene tareas, el último que sí tenga)
+  function mesTrabajo(W, lista) {
+    var y = +HOY.slice(0, 4), m = +HOY.slice(5, 7) - 1; if (!m) { m = 12; y--; }
+    var ym = (y - 2000) * 100 + m, hay = {};
+    lista.forEach(function (o) { if (!W.pz(o)) hay[o.ym] = (hay[o.ym] || 0) + o.ter + o.pen; });
+    if (hay[ym]) return ym;
+    var hoyYm = (+HOY.slice(0, 4) - 2000) * 100 + (+HOY.slice(5, 7));
+    var ks = Object.keys(hay).map(Number).filter(function (k) { return k < hoyYm && hay[k] > 0; }).sort(function (a, b) { return b - a; });
+    return ks.length ? ks[0] : ym;
+  }
+  function resumenWF(W, lista) {
+    var o = { tar: 0, ter: 0, pen: 0, ven: 0, venAnio: 0, venRez: 0, plazo: 0, semana: 0, pausa: 0, satA: 0, terA: 0, mes: 0, mTar: 0, mTer: 0, mPen: 0, mVen: 0, mSat: 0 };
+    var wm = mesTrabajo(W, lista); o.mes = wm;
+    lista.forEach(function (x) {
+      if (W.pz(x)) { o.pausa += x.pen; return; }
+      o.tar += x.ter + x.pen; o.ter += x.ter; o.pen += x.pen;
+      if (x.y === W.CUR_Y) { o.satA += x.sat; o.terA += x.ter; }
+      if (x.ym === wm) { o.mTar += x.ter + x.pen; o.mTer += x.ter; o.mPen += x.pen; o.mSat += x.sat; }
+      if (!x.pen) return;
+      if (W.venc(x)) { o.ven += x.pen; if (x.y >= W.CUR_Y) o.venAnio += x.pen; else o.venRez += x.pen; if (x.ym === wm) o.mVen += x.pen; }
+      else { o.plazo += x.pen; if (x.v && x.v <= W.EN7) o.semana += x.pen; }
+    });
+    return o;
+  }
+
+  /* ---------- Cobranza (paquete de cada 3 horas: el mismo de la pestaña Cobranza) ---------- */
+  function cargaCXC() {
+    return una('cxc', async function () {
+      var D = await paquete(ROL === 'director' ? 'director' : 'datos', 'cxc');
+      if (!D || !D.inv) return null;
+      var ic = D.invCols, pc = D.pagCols;
+      var INV = D.inv.map(function (r) { var o = {}; ic.forEach(function (k, i) { o[k] = r[i]; }); o.y = +String(o.fecha).slice(0, 4); o.m = +String(o.fecha).slice(5, 7); return o; });
+      var PAG = (D.pag || []).map(function (r) { var o = {}; pc.forEach(function (k, i) { o[k] = r[i]; }); return o; });
+      var d = new Date(D.refreshedAt), ref = isNaN(d) ? null : d.getFullYear() * 12 + d.getMonth() + 1;
+      INV.forEach(function (o) { o.meses = (ref || o.y * 12 + o.m) - (o.y * 12 + o.m) + 1; });
+      return { D: D, INV: INV, PAG: PAG };
+    });
+  }
+
+  /* ---------- actividades del Panel de trabajo (al momento) ---------- */
+  var COLS_ACT = 'id,periodo,actividad,rs,grupo,resp_usuario,aut_usuario,empresa_id,estatus,ven_sat,ven_pro,plantilla';
+  function cargaActs() {
+    return una('acts', async function () {
+      function base(c) { return P.sb.from('wf_act').select(COLS_ACT, c ? { count: 'exact' } : undefined).eq('activa', true).in('estatus', [4, 5]).gte('periodo', '2025-01-01'); }
+      var asig = await P.sb.from('wf_asignado').select('empresa_id,usuario').eq('usuario', YO).range(0, 1999);
+      var ids = (!asig.error && asig.data ? asig.data : []).map(function (x) { return x.empresa_id; });
+      var pedidos = [todas(function (c) { return base(c).eq('resp_usuario', YO).order('id'); }),
+                     todas(function (c) { return base(c).eq('aut_usuario', YO).order('id'); })];
+      if (ids.length) pedidos.push(todas(function (c) { return base(c).in('empresa_id', ids.slice(0, 300)).order('id'); }));
+      var res = await Promise.all(pedidos), ya = {}, out = [];
+      res.forEach(function (lista, k) {
+        lista.forEach(function (a) {
+          if (ya[a.id]) { if (k === 1) ya[a.id].autorizo = true; return; }
+          a.rolMio = a.resp_usuario === YO ? 'resp' : a.aut_usuario === YO ? 'aut' : 'asig';
+          a.autorizo = a.aut_usuario === YO;
+          ya[a.id] = a; out.push(a);
+        });
+      });
+      out.forEach(function (a) { a.vence = a.ven_pro || a.ven_sat || ''; });
+      return out;
+    });
+  }
+  function grupoDe(a) { return !a.vence ? 'sin' : a.vence < HOY ? 'ven' : a.vence === HOY ? 'hoy' : a.vence <= EN7 ? 'sem' : 'des'; }
+
+  /* ---------- pintar ---------- */
+  function k(t, v, s, cls) { return '<div class="k' + (cls ? ' ' + cls : '') + '"><div class="t">' + esc(t) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
+  function fila(o) {
+    // o: {pt, a, b, n, ncls, liga, notif}
+    var at = o.liga ? ' data-liga="' + esc(o.liga) + '"' : '';
+    if (o.notif) at += ' data-notif="' + esc(o.notif) + '"';
+    return '<li><button type="button" class="fila' + (o.liga ? '' : ' quieta') + '"' + at + (o.liga ? '' : ' tabindex="-1"') + '><span class="pt ' + (o.pt || '') + '" aria-hidden="true"></span><span class="tx"><span class="a">' + o.a + '</span>'
+      + (o.b ? '<span class="b">' + o.b + '</span>' : '') + '</span>' + (o.n != null && o.n !== '' ? '<span class="n ' + (o.ncls || '') + '">' + o.n + '</span>' : '') + '</button></li>';
+  }
+  function lista(filas) { return filas.length ? '<ul class="lista">' + filas.map(fila).join('') + '</ul>' : ''; }
+  function aldia(txt) { return '<div class="aldia">' + OK_SVG + '<span>' + esc(txt) + '</span></div>'; }
+  function chip(n, txt, cls) { return '<span class="chip ' + (cls || '') + '"><b>' + fi(n) + '</b>' + esc(txt) + '</span>'; }
+  function barra(x) { return '<div class="barra"><i style="width:' + Math.max(0, Math.min(100, (x || 0) * 100)).toFixed(1) + '%"></i></div>'; }
+
+  // Cada tarjeta: {id, t (título), s (subtítulo), liga (sección «Ver todo»), ancha, arma: async → html o null (no sale)}
+  var TARJETAS = [], CORRIDA = 0;
+  function pintaCascarones() {
+    $('grid').innerHTML = TARJETAS.map(function (c) {
+      return '<section class="card carga' + (c.ancha ? ' ancha' : '') + '" id="c-' + c.id + '" aria-busy="true"><header><div><h2>' + esc(c.t) + '</h2>'
+        + (c.s ? '<p class="sub">' + esc(c.s) + '</p>' : '') + '</div>' + (c.liga && ve(c.liga) ? '<button type="button" class="ir" data-liga="' + esc(c.liga) + '">' + esc(c.ligaTxt || 'Ver todo') + ' ›</button>' : '')
+        + '</header><div class="cuerpo"><div class="esq g"></div><div class="esq"></div><div class="esq"></div></div></section>';
+    }).join('');
+  }
+  async function llena(c, corrida) {
+    var el = $('c-' + c.id), html = null;
+    try { html = await c.arma(); }
+    catch (e) {
+      html = String(e && e.message) === 'navegador'
+        ? '<p class="falla">Tu navegador no puede abrir estos datos. Actualízalo (Safari 16.4 o más nuevo, Chrome o Edge).</p>'
+        : '<p class="falla">No se pudo leer esta parte. Vuelve a cargar en un momento.</p>';
+    }
+    if (corrida !== CORRIDA || !el) return;
+    if (html == null) { el.remove(); return; }
+    el.classList.remove('carga'); el.removeAttribute('aria-busy');
+    el.querySelector('.cuerpo').innerHTML = html;
+  }
+  var CARGADO = 0;
+  async function corre() {
+    CORRIDA++; var mia = CORRIDA; MEMO = {}; CARGADO = Date.now();
+    HOY = fDia.format(new Date()); HOYN = iso2n(HOY); EN7 = masDias(HOY, 7); EN7N = iso2n(EN7); EN90 = masDias(HOY, 91);
+    var d = new Date(HOY + 'T12:00:00Z');
+    $('fecha').textContent = (TITULO[PERFIL] || 'Inicio') + ' · ' + DIAS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESL[d.getUTCMonth()];
+    $('hola').textContent = saludo() + (NOM ? ', ' + NOM : '');
+    pintaCascarones();
+    await Promise.all(TARJETAS.map(function (c) { return llena(c, mia); }));
+    if (mia !== CORRIDA) return;
+    if (!$('grid').children.length) $('grid').innerHTML = '<section class="card"><p class="falla">Por ahora no hay nada que mostrarte aquí. Usa el menú para entrar a tus pantallas.</p></section>';
+    try {
+      var m = await leeDoc('datos', 'meta');
+      $('datos').textContent = m && m.refreshedAt ? 'Datos al ' + horaCorta(m.refreshedAt) : '';
+    } catch (e) { $('datos').textContent = ''; }
+  }
+
+  /* ================= TARJETAS ================= */
+
+  // --- Cobranza: por compañía (la dirección ve las dos; el equipo, solo la que su paquete trae) ---
+  function tCobranza(t, s) {
+    return { id: 'cxc', t: t, s: s, liga: 'cobranza', ancha: ROL === 'director', arma: async function () {
+      var C = await cargaCXC(); if (!C) return null;
+      var mesHoy = HOY.slice(0, 7), cias = {}, orden = [];
+      C.INV.forEach(function (o) {
+        if (!(o.saldo > 0)) return;
+        var c = cias[o.cia] || (cias[o.cia] = { saldo: 0, ven: 0, curso: 0, cobrado: 0, grupos: {} });
+        if (orden.indexOf(o.cia) < 0) orden.push(o.cia);
+        c.saldo += o.saldo;
+        if (o.meses >= 2) {
+          c.ven += o.saldo;
+          var g = c.grupos[o.grp] || (c.grupos[o.grp] = { grp: o.grp, ven: 0, max: 0 });
+          g.ven += o.saldo; if (o.meses > g.max) g.max = o.meses;
+        } else c.curso += o.saldo;
+      });
+      C.PAG.forEach(function (p) {
+        if (!p.fechaPago || String(p.fechaPago).slice(0, 7) !== mesHoy) return;
+        var c = cias[p.cia] || (cias[p.cia] = { saldo: 0, ven: 0, curso: 0, cobrado: 0, grupos: {} });
+        if (orden.indexOf(p.cia) < 0) orden.push(p.cia);
+        c.cobrado += +p.pago || 0;
+      });
+      orden.sort();
+      if (!orden.length) return aldia('No hay facturas con saldo.');
+      var h = '', top = [], dos = orden.length > 1, mesTxt = MESL[+HOY.slice(5, 7) - 1];
+      orden.forEach(function (n) {
+        var c = cias[n];
+        if (dos) h += '<h3 class="cia">' + esc(n) + '</h3>';
+        h += '<div class="kp">' + k('Por cobrar', fm(c.saldo), 'con IVA') + k('Vencido', fm(c.ven), 'facturas de meses anteriores', c.ven > 0 ? 'mal' : 'bien')
+          + k('Mes en curso', fm(c.curso), 'por vencer') + k('Cobrado en ' + mesTxt, fm(c.cobrado), '', 'bien') + '</div>';
+        Object.keys(c.grupos).forEach(function (g) { var x = c.grupos[g]; x.cia = n; top.push(x); });
+      });
+      top.sort(function (a, b) { return b.ven - a.ven; });
+      if (top.length) {
+        h += '<p class="tl">Los que más deben de meses anteriores</p>' + lista(top.slice(0, 5).map(function (x) {
+          return { pt: x.max >= 3 ? 'mal' : 'ojo', a: esc(x.grp || 'Sin grupo'), b: (dos ? esc(x.cia) + ' · ' : '') + 'la más vieja es de hace ' + x.max + ' meses',
+                   n: fm(x.ven), ncls: x.max >= 3 ? 'mal' : 'ojo', liga: 'cobranza' };
+        }));
+      } else h += aldia('Nadie debe facturas de meses anteriores.');
+      h += '<p class="nota">Datos al ' + esc(horaCorta(C.D.refreshedAt)) + '. Amarillo: 2 meses; rojo: 3 o más.</p>';
+      return h;
+    } };
+  }
+
+  // --- Cumplimiento SAT de todo el despacho (dirección) ---
+  function tCumplimiento() {
+    return { id: 'sat', t: 'Cumplimiento SAT', s: 'El WorkFlow de todo el despacho', liga: 'panel', ancha: true, arma: async function () {
+      var W = await cargaWF(); if (!W) return null;
+      var o = resumenWF(W, W.R), h = '';
+      h += '<div class="kp">'
+        + k('Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
+        + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + (o.mVen ? ' · ' + fi(o.mVen) + ' vencidas' : '') + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + k('Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
+        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas dentro del plazo')
+        + '</div>';
+      // quién trae más atraso (este año) y qué vence esta semana
+      var porR = {}, porT = {};
+      W.R.forEach(function (x) {
+        if (!x.pen || W.pz(x)) return;
+        if (W.venc(x) && x.y >= W.CUR_Y) porR[x.r] = (porR[x.r] || 0) + x.pen;
+        if (!W.venc(x) && x.v && x.v <= W.EN7) porT[x.t] = (porT[x.t] || 0) + x.pen;
+      });
+      var rs = Object.keys(porR).sort(function (a, b) { return porR[b] - porR[a]; }).slice(0, 5);
+      var ts = Object.keys(porT).sort(function (a, b) { return porT[b] - porT[a]; }).slice(0, 5);
+      h += '<div class="grid" style="gap:4px 18px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))"><div>';
+      h += '<p class="tl">Quién trae más vencidas de ' + W.CUR_Y + '</p>' + (rs.length ? lista(rs.map(function (r) {
+        var d = W.depR(+r); return { pt: 'mal', a: esc(bonito(W.DIM.resp[r])), b: esc(DEPS[d]), n: fi(porR[r]), ncls: 'mal', liga: 'panel' };
+      })) : aldia('Nadie trae vencidas de este año.'));
+      h += '</div><div><p class="tl">Lo que vence en los próximos 7 días</p>' + (ts.length ? lista(ts.map(function (t) {
+        return { pt: 'ojo', a: esc(W.DIM.tar[t]), b: '', n: fi(porT[t]), ncls: 'ojo', liga: 'panel' };
+      })) : aldia('Nada vence en los próximos 7 días.')) + '</div></div>';
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Sin lo que está en pausa por el cliente' + (o.pausa ? ' (' + fi(o.pausa) + ' tareas)' : '') + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      return h;
+    } };
+  }
+
+  // --- WorkFlow de un departamento (gerentes) ---
+  function tEquipo(dep) {
+    return { id: 'equipo', t: 'Mi equipo · ' + DEPS[dep], s: 'El WorkFlow de tu departamento', liga: 'panel', ancha: true, arma: async function () {
+      var W = await cargaWF(); if (!W) return null;
+      var mio = W.R.filter(function (x) { return W.depO(x) === dep; });
+      if (!mio.length) return null;
+      var o = resumenWF(W, mio), h = '';
+      h += '<div class="kp">'
+        + k('Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
+        + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + k('Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
+        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo')
+        + '</div>';
+      var por = {};
+      mio.forEach(function (x) {
+        if (W.pz(x)) return;
+        var p = por[x.r] || (por[x.r] = { r: x.r, pen: 0, ven: 0, sem: 0 });
+        p.pen += x.pen; if (!x.pen) return;
+        if (W.venc(x)) p.ven += x.pen; else if (x.v && x.v <= W.EN7) p.sem += x.pen;
+      });
+      var gente = Object.keys(por).map(function (r) { return por[r]; }).filter(function (p) { return p.pen > 0; })
+        .sort(function (a, b) { return b.ven - a.ven || b.sem - a.sem || b.pen - a.pen; });
+      if (gente.length) {
+        h += '<div class="tabla"><table class="eq"><thead><tr><th scope="col">Colaborador</th><th scope="col">Pendientes</th><th scope="col">Vencidas</th><th scope="col">En 7 días</th></tr></thead><tbody>'
+          + gente.slice(0, 10).map(function (p) {
+            return '<tr><td>' + esc(bonito(W.DIM.resp[p.r])) + '</td><td>' + fi(p.pen) + '</td><td class="' + (p.ven ? 'mal' : '') + '">' + fi(p.ven) + '</td><td>' + fi(p.sem) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      } else h += aldia('Tu equipo no tiene pendientes.');
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      return h;
+    } };
+  }
+
+  // --- Mis pendientes del Panel de trabajo (al momento) ---
+  function tPendientes(t, s) {
+    return { id: 'pend', t: t, s: s, liga: 'workflow-trabajo', ancha: PERFIL === 'contador' || PERFIL === 'gabo', arma: async function () {
+      var A = await cargaActs();
+      if (!A.length) return PERFIL === 'contador' ? null : aldia('No tienes actividades abiertas.');
+      var n = { ven: 0, hoy: 0, sem: 0, des: 0, sin: 0 }, porAut = [];
+      A.forEach(function (a) { n[grupoDe(a)]++; if (a.autorizo && a.estatus === 4) porAut.push(a); });
+      var h = '<div class="chips">' + chip(n.ven, ' vencidas', n.ven ? 'mal' : 'bien') + chip(n.hoy, ' vencen hoy', n.hoy ? 'ojo' : '')
+        + chip(n.sem, ' en 7 días', n.sem ? 'ojo' : '') + chip(n.des + n.sin, ' después', '') + '</div>';
+      var hoy = A.filter(function (a) { return grupoDe(a) === 'hoy'; });
+      var ven = A.filter(function (a) { return grupoDe(a) === 'ven'; }).sort(function (a, b) { return a.vence < b.vence ? 1 : -1; });
+      var sem = A.filter(function (a) { return grupoDe(a) === 'sem'; }).sort(function (a, b) { return a.vence < b.vence ? -1 : 1; });
+      var urg = hoy.concat(ven.slice(0, 3), sem).slice(0, 7);
+      var ROLT = { resp: 'Responsable', aut: 'Autorizas', asig: 'Contador asignado' };
+      if (urg.length) h += '<p class="tl">Lo más urgente</p>' + lista(urg.map(function (a) {
+        var g = grupoDe(a);
+        return { pt: g === 'ven' ? 'mal' : 'ojo', a: esc(a.actividad), b: esc(a.rs) + ' · ' + esc(ROLT[a.rolMio]),
+                 n: g === 'hoy' ? 'Hoy' : fCorta(a.vence), ncls: g === 'ven' ? 'mal' : 'ojo', liga: 'workflow-trabajo' };
+      }));
+      else h += aldia('Nada vence hoy ni en los próximos 7 días.');
+      if (porAut.length) {
+        porAut.sort(function (a, b) { return (a.vence || '9') < (b.vence || '9') ? -1 : 1; });
+        h += '<p class="tl">En proceso donde tú autorizas (' + fi(porAut.length) + ')</p>' + lista(porAut.slice(0, 3).map(function (a) {
+          return { pt: grupoDe(a) === 'ven' ? 'mal' : 'az', a: esc(a.actividad), b: esc(a.rs), n: a.vence ? fCorta(a.vence) : '', ncls: grupoDe(a) === 'ven' ? 'mal' : '', liga: 'workflow-trabajo' };
+        }));
+      }
+      h += '<p class="nota">Del Panel de trabajo, al momento. Vence con la fecha Profase (o la del SAT si no tiene).</p>';
+      return h;
+    } };
+  }
+
+  // --- Mi avance del mes (contadores y Gabo; el mismo paquete de «Mi panel») ---
+  function soloMios(W) {
+    var mi = norm(NOMWF), r = -1;
+    (W.DIM.resp || []).forEach(function (n, i) { if (norm(n) === mi) r = i; });
+    return r < 0 ? null : W.R.filter(function (x) { return x.r === r; });
+  }
+  function tAvance() {
+    return { id: 'avance', t: 'Mi avance', s: 'Donde eres responsable', liga: 'panel', arma: async function () {
+      var W = await cargaWF(); if (!W) return null;
+      var mio = soloMios(W);
+      if (!mio && PERFIL === 'contador') mio = W.R;   // sin su nombre del WorkFlow: todo su paquete (lo mismo de Mi panel)
+      if (!mio || !mio.length) return null;
+      var o = resumenWF(W, mio);
+      var h = '<div class="kp">' + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mTer) + ' de ' + fi(o.mTar) + ' terminadas' + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + k('Vencidas contra el SAT', fi(o.ven), o.venRez ? fi(o.venRez) + ' de años anteriores' : 'contando todos los meses', o.ven ? 'mal' : 'bien')
+        + k('Vencen en 7 días', fi(o.semana), 'en plazo todavía', o.semana ? 'ojo' : '')
+        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo') + '</div>';
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      return h;
+    } };
+  }
+
+  // --- Justificaciones: clientes con atraso sin justificar (contadores) ---
+  function tJustificar() {
+    return { id: 'just', t: 'Atrasos por justificar', s: 'Clientes con vencidas que todavía no justificas', liga: 'panel', arma: async function () {
+      var res = await Promise.all([cargaWF(), coleccion('justificaciones').catch(function () { return []; })]);
+      var W = res[0]; if (!W) return null;
+      var mio = W.R, r = -1, mi = norm(NOMWF);
+      (W.DIM.resp || []).forEach(function (n, i) { if (norm(n) === mi) r = i; });
+      if (PERFIL === 'gabo') { if (r < 0) return null; mio = W.R.filter(function (x) { return x.r === r; }); }
+      var J = {}; res[1].forEach(function (x) { J[x.id] = x.d; });
+      var pares = {};
+      mio.forEach(function (x) {
+        if (!x.pen || !W.venc(x) || W.PZKA[x.ym * 10000 + x.c]) return;
+        var key = x.ym * 100000 + x.c;
+        (pares[key] || (pares[key] = { ym: x.ym, c: x.c, n: 0 })).n += x.pen;
+      });
+      var sin = [], rech = [];
+      Object.keys(pares).forEach(function (kk) {
+        var p = pares[kk], cli = W.DIM.cli[p.c], j = J[YO + '|' + p.ym + '|' + slug(cli)];
+        if (!j) sin.push(p); else if (j.estado === 'rechazada') rech.push(p);
+      });
+      if (!sin.length && !rech.length) return aldia('No tienes atrasos sin justificar.');
+      sin.sort(function (a, b) { return b.ym - a.ym || b.n - a.n; });
+      var h = '<div class="chips">' + chip(sin.length, sin.length === 1 ? ' cliente y mes sin justificar' : ' clientes y meses sin justificar', sin.length ? 'ojo' : '')
+        + (rech.length ? chip(rech.length, rech.length === 1 ? ' justificación rechazada' : ' justificaciones rechazadas', 'mal') : '') + '</div>';
+      h += lista(rech.slice(0, 3).map(function (p) { return { pt: 'mal', a: esc(W.DIM.cli[p.c]), b: esc(ymL(p.ym)) + ' · tu gerente la rechazó', n: plural(p.n, 'vencida', 'vencidas'), ncls: 'mal', liga: 'panel' }; })
+        .concat(sin.slice(0, 5).map(function (p) { return { pt: 'ojo', a: esc(W.DIM.cli[p.c]), b: esc(ymL(p.ym)), n: plural(p.n, 'vencida', 'vencidas'), ncls: 'ojo', liga: 'panel' }; })));
+      h += '<p class="nota">Para justificar: en Mi panel abre el mes contable, agrupa por cliente y pica «Justificar».</p>';
+      return h;
+    } };
+  }
+
+  // --- Lo que espera tu «sí» (dirección) / Por autorizar (Cadengo) / Por confirmar (gerentes) ---
+  async function justPorConfirmar() {
+    var js = await coleccion('justificaciones');
+    return js.map(function (x) { return x.d; }).filter(function (j) { return j && j.estado === 'propuesta'; })
+      .sort(function (a, b) { return String(a.at || '').localeCompare(String(b.at || '')); });
+  }
+  async function cajaPendiente() {
+    var cs = await coleccion('caja');
+    var o = { reg: 0, regM: 0, pag: 0, pagM: 0, mes: 0, mesM: 0 }, mesHoy = HOY.slice(0, 7);
+    var propio = { efectivo: 1, tarjeta_personal: 1 };
+    cs.forEach(function (x) {
+      var m = x.d || {}, imp = +m.importe || 0;
+      if (m.estatus === 'registrado') { o.reg++; o.regM += imp; }
+      if (m.estatus === 'autorizado' && propio[m.pago]) { o.pag++; o.pagM += imp; }
+      if (m.estatus !== 'rechazado' && String(m.periodo || m.fecha || '').slice(0, 7) === mesHoy) { o.mes++; o.mesM += imp; }
+    });
+    return o;
+  }
+  async function propuestasPorAutorizar() {
+    var rol = await rpc('cambios_rol').catch(function () { return null; });
+    if (!rol || rol === 'propone') return null;
+    var r = await P.sb.from('propuestas').select('id,titulo,estado,semaforo,actualizada').eq('estado', 'por_autorizar').order('actualizada', { ascending: false }).limit(20);
+    if (r.error) return null;
+    return r.data || [];
+  }
+  function diasDesde(iso) { var t = Date.parse(iso); return isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : 0; }
+
+  function tRevisar() {
+    return { id: 'rev', t: 'Lo que espera un «sí»', s: 'Decisiones y revisiones pendientes', arma: async function () {
+      var res = await Promise.all([propuestasPorAutorizar().catch(function () { return null; }), justPorConfirmar().catch(function () { return null; }),
+        cajaPendiente().catch(function () { return null; }), cargaWF().catch(function () { return null; }), rpc('sc_yo').catch(function () { return null; })]);
+      var props = res[0], js = res[1], caja = res[2], W = res[3], sc = res[4], f = [];
+      if (props) f.push({ pt: props.length ? 'na' : 'bien', a: 'Propuestas de cambios al portal', b: props.length ? esc(props[0].titulo) + (props.length > 1 ? ' y ' + (props.length - 1) + ' más' : '') : 'Ninguna por autorizar',
+                          n: props.length ? fi(props.length) : '✓', liga: 'cambios' });
+      if (js) {
+        var viejas = js.filter(function (j) { return diasDesde(j.at) >= 3; }).length;
+        f.push({ pt: viejas ? 'mal' : js.length ? 'ojo' : 'bien', a: 'Justificaciones sin confirmar', b: js.length ? (viejas ? fi(viejas) + ' llevan 3 días o más esperando a su gerente' : 'Los gerentes las tienen al día') : 'Ninguna esperando',
+                n: js.length ? fi(js.length) : '✓', ncls: viejas ? 'mal' : '', liga: 'panel' });
+      }
+      if (caja) f.push({ pt: caja.reg ? 'ojo' : 'bien', a: 'Caja chica', b: (caja.reg ? fm(caja.regM) + ' por autorizar' : 'Nada por autorizar') + ' · gastado en el mes: ' + fm(caja.mesM),
+                         n: caja.reg ? fi(caja.reg) : '✓', liga: 'cajachica' });
+      if (W) f.push({ pt: W.enPausa ? 'az' : 'bien', a: 'Clientes en pausa', b: W.enPausa ? 'Fuera del avance del WorkFlow' : 'Ninguno', n: W.enPausa ? fi(W.enPausa) : '✓', liga: 'clientes' });
+      if (sc && sc.puede && sc.gasto != null && sc.tope) {
+        var x = sc.gasto / sc.tope;
+        f.push({ pt: x >= 1 ? 'mal' : x >= 0.8 ? 'ojo' : 'bien', a: 'SuperConta', b: 'Gasto del mes contra el tope de US$' + fi(sc.tope), n: 'US$' + (+sc.gasto).toFixed(2), ncls: x >= 0.8 ? 'ojo' : '', liga: 'superconta' });
+      }
+      if (!f.length) return null;
+      return lista(f);
+    } };
+  }
+
+  function tPorAutorizar() {
+    return { id: 'aut', t: 'Por autorizar', s: 'Lo que espera tu visto bueno', arma: async function () {
+      var res = await Promise.all([cajaPendiente().catch(function () { return null; }), propuestasPorAutorizar().catch(function () { return null; }),
+        justPorConfirmar().catch(function () { return null; }), rpc('cambios_avisos').catch(function () { return 0; })]);
+      var caja = res[0], props = res[1], js = res[2], f = [];
+      if (caja) {
+        f.push({ pt: caja.reg ? 'ojo' : 'bien', a: 'Caja chica por autorizar', b: caja.reg ? fm(caja.regM) + ' en total' : 'Nada por autorizar', n: caja.reg ? fi(caja.reg) : '✓', liga: 'cajachica' });
+        f.push({ pt: caja.pag ? 'az' : 'bien', a: 'Caja chica por pagar en corte', b: caja.pag ? fm(caja.pagM) + ' autorizados que pagó alguien de su bolsa' : 'Nada pendiente de reembolso', n: caja.pag ? fi(caja.pag) : '✓', liga: 'cajachica' });
+      }
+      if (props) f.push({ pt: props.length ? 'na' : 'bien', a: 'Propuestas de Gabo', b: props.length ? esc(props[0].titulo) + (props.length > 1 ? ' y ' + (props.length - 1) + ' más' : '') : (+res[3] ? 'Hay novedades en sus propuestas' : 'Ninguna por autorizar'),
+                          n: props.length ? fi(props.length) : (+res[3] ? fi(res[3]) : '✓'), liga: 'cambios' });
+      if (js) {
+        f.push({ pt: js.length ? 'ojo' : 'bien', a: 'Justificaciones por confirmar', b: js.length ? 'La más vieja es de ' + esc(bonito(js[0].nombre || '')) + ', ' + haceTxt(js[0].at) : 'Ninguna esperando',
+                 n: js.length ? fi(js.length) : '✓', liga: 'panel' });
+      }
+      if (!f.length) return null;
+      return lista(f);
+    } };
+  }
+
+  function tConfirmar(dep) {
+    return { id: 'conf', t: 'Por confirmar', s: 'Lo que tu equipo espera de ti', arma: async function () {
+      var res = await Promise.all([justPorConfirmar().catch(function () { return null; }), rpc('es_gerencia_contable').catch(function () { return false; })]);
+      var js = res[0], f = [], h = '';
+      if (js) {
+        var mios = js.filter(function (j) { return depDe(j.usuario, j.nombre) === dep; }), otros = js.length - mios.length;
+        if (mios.length) h += '<p class="tl">Justificaciones de tu equipo (' + fi(mios.length) + ')</p>' + lista(mios.slice(0, 5).map(function (j) {
+          return { pt: diasDesde(j.at) >= 3 ? 'mal' : 'ojo', a: esc(j.cli || j.cliente || ''), b: esc(bonito(j.nombre || '')) + ' · ' + esc(ymL(+j.ym)) + ' · ' + esc(j.motivo || ''), n: haceTxt(j.at).replace('hace ', ''), liga: 'panel' };
+        }));
+        else h += aldia('Tu equipo no tiene justificaciones esperando.');
+        if (otros) f.push({ pt: 'az', a: 'De otros departamentos', b: 'También las puedes confirmar', n: fi(otros), liga: 'panel' });
+      }
+      if (res[1] === true) {
+        var af = await P.sb.from('docs').select('id', { count: 'exact', head: true }).eq('col', 'af_est').eq('data->>conf', 'propuesta');
+        if (!af.error) f.push({ pt: af.count ? 'ojo' : 'bien', a: 'Activo fijo por confirmar', b: af.count ? 'Lo que marcaron los contadores' : 'Nada esperando', n: af.count ? fi(af.count) : '✓', liga: 'activofijo' });
+      }
+      if (!h && !f.length) return null;
+      return h + lista(f);
+    } };
+  }
+
+  // --- Clientes del equipo con adeudo de 3 meses o más (gerentes; solo lo que ya ven en su Cobranza) ---
+  function tAdeudoEquipo(dep) {
+    return { id: 'adeudo', t: 'Clientes de tu equipo que deben', s: 'Facturas de 3 meses o más', liga: 'cobranza', arma: async function () {
+      var res = await Promise.all([cargaWF(), cargaCXC()]);
+      var W = res[0], C = res[1]; if (!W || !C) return null;
+      var gr = {};
+      W.R.forEach(function (x) { if (W.depO(x) === dep) { var g = (W.DIM.cliGrp || [])[x.c]; if (g != null && W.DIM.grp[g] != null) gr[norm(W.DIM.grp[g])] = 1; } });
+      var por = {};
+      C.INV.forEach(function (o) {
+        if (!(o.saldo > 0) || o.meses < 3 || !gr[norm(o.grp)]) return;
+        var p = por[o.grp] || (por[o.grp] = { grp: o.grp, s: 0, max: 0 }); p.s += o.saldo; if (o.meses > p.max) p.max = o.meses;
+      });
+      var l = Object.keys(por).map(function (g) { return por[g]; }).sort(function (a, b) { return b.s - a.s; });
+      if (!l.length) return aldia('Ningún cliente de tu equipo debe facturas de 3 meses o más.');
+      return '<div class="chips">' + chip(l.length, l.length === 1 ? ' grupo' : ' grupos', 'mal') + '</div>' + lista(l.slice(0, 5).map(function (p) {
+        return { pt: 'mal', a: esc(p.grp), b: 'la más vieja es de hace ' + p.max + ' meses', n: fm(p.s), ncls: 'mal', liga: 'cobranza' };
+      })) + '<p class="nota">Sirve para decidir pausas: un cliente que no paga, no avanza.</p>';
+    } };
+  }
+
+  // --- Mis propuestas (Gabo) ---
+  function tPropuestas() {
+    var EST = { por_autorizar: ['En revisión', 'ojo'], autorizada: ['Publicándose', 'az'], publicada: ['Publicada', 'bien'], rechazada: ['Regresada', 'mal'],
+                retirada: ['Retirada', ''], choca: ['Choca con cambios recientes', 'mal'], error: ['No se pudo publicar', 'mal'], deshecha: ['Deshecha', ''], bloqueada: ['Bloqueada', 'mal'] };
+    return { id: 'props', t: 'Mis propuestas', s: 'Cambios al portal que propusiste', liga: 'cambios', arma: async function () {
+      var rol = await rpc('cambios_rol').catch(function () { return null; });
+      if (rol !== 'propone') return null;
+      var r = await P.sb.from('propuestas').select('id,titulo,estado,actualizada,motivo').eq('proponente', YO).order('actualizada', { ascending: false }).limit(6);
+      if (r.error) return null;
+      var l = r.data || [], nov = +(await rpc('cambios_avisos').catch(function () { return 0; })) || 0;
+      if (!l.length) return aldia('Todavía no tienes propuestas.');
+      return (nov ? '<div class="chips">' + chip(nov, nov === 1 ? ' novedad sin ver' : ' novedades sin ver', 'ojo') + '</div>' : '') + lista(l.map(function (p) {
+        var e = EST[p.estado] || [p.estado, ''];
+        return { pt: e[1], a: '#' + esc(p.id) + ' · ' + esc(p.titulo || 'Sin título'), b: esc(e[0]) + ' · ' + haceTxt(p.actualizada) + (p.estado === 'rechazada' && p.motivo ? ' · «' + esc(p.motivo) + '»' : ''), liga: 'cambios' };
+      }));
+    } };
+  }
+
+  // --- Cómo está el portal (Cadengo, encargado técnico) ---
+  function tPortal() {
+    var MODO = { practica: ['En práctica', 'ojo'], portal: ['En el portal', 'bien'], apagado: ['Apagado', ''], prueba: ['En prueba', 'ojo'], real: ['Encendido', 'bien'] };
+    return { id: 'portal', t: 'Cómo está el portal', s: 'Actualizaciones y en qué va cada parte del Access', arma: async function () {
+      var res = await Promise.all([leeDoc('datos', 'meta').catch(function () { return null; }),
+        P.sb.from('wf_config').select('valor').eq('clave', 'modo').maybeSingle().then(function (r) { return r.error || !r.data ? null : r.data.valor; }, function () { return null; }),
+        rpc('fac_estado').catch(function () { return null; }), rpc('env_estado').catch(function () { return null; }), rpc('rec_estado').catch(function () { return null; })]);
+      var m = res[0], f = [];
+      if (m && m.refreshedAt) {
+        var h = (Date.now() - Date.parse(m.refreshedAt)) / 3600000;
+        f.push({ pt: h > 3.6 ? 'mal' : 'bien', a: 'Última actualización de datos', b: h > 3.6 ? 'Pasaron más de 3 horas: revisa que la actualización no se haya detenido' : 'Se actualiza sola cada 3 horas', n: horaCorta(m.refreshedAt), ncls: h > 3.6 ? 'mal' : '' });
+      }
+      function modo(t, v, txt) { if (!v) return; var x = MODO[v] || [v, '']; f.push({ pt: x[1], a: t, b: txt[v] || '', n: x[0] }); }
+      modo('WorkFlow', res[1], { practica: 'Se trabaja en el Access; lo del portal se borra en cada copia', portal: 'Se trabaja en el portal' });
+      if (res[2] && res[2].modo) modo('Clientes, facturas y pagos', res[2].modo, { practica: 'El cambio al portal es el martes 3', portal: 'Se trabajan en el portal' });
+      if (res[3] && res[3].modo) modo('Envíos al cliente', res[3].modo, { apagado: 'Se mandan desde el correo de cada quien', prueba: 'Todo va al correo de prueba', real: 'Salen de cumplimiento@' });
+      if (res[4] && res[4].modo) modo('Recordatorios de pago', res[4].modo, { apagado: 'Se arman y revisan, no se mandan', prueba: 'Todo va al correo de prueba', real: 'Salen de cumplimiento@' });
+      if (!f.length) return null;
+      return lista(f);
+    } };
+  }
+
+  // --- e.firma y sellos de los clientes (paquete de Access › Clientes) ---
+  function tFirmas(t, s, soloEquipo) {
+    return { id: 'firmas', t: t, s: s, liga: 'access-clientes', arma: async function () {
+      var col = ROL === 'director' ? 'director' : 'access', id = ROL === 'director' ? 'acc_cli' : ROL === 'gerente' ? 'cli_equipo' : 'cli_' + YO;
+      var doc = await leeDoc(col, id); if (!doc || !doc.b64) return null;
+      var D = await gunzip(doc.b64), E = (D.empresas || []).filter(function (e) { return e.est !== 'Inactivo'; });
+      if (soloEquipo != null) {
+        var nombres = {}; Object.keys(DEP_DE).forEach(function (n) { if (DEP_DE[n] === soloEquipo) nombres[n] = 1; });
+        E = E.filter(function (e) { return (e.cias || []).some(function (c) { return (c.cont || []).some(function (n) { return nombres[norm(n)]; }); }); });
+      }
+      var l = [], c = { fm: 0, fo: 0, sm: 0, so: 0 };
+      E.forEach(function (e) {
+        [['fiel', 'vFiel', 'e.firma'], ['sellos', 'vSellos', 'Sellos']].forEach(function (q) {
+          var f = e[q[1]]; if (!e[q[0]] || !f) return;
+          f = String(f).slice(0, 10);
+          if (f <= HOY) { c[q[0] === 'fiel' ? 'fm' : 'sm']++; if (f >= masDias(HOY, -60)) l.push({ e: e, q: q[2], f: f, mal: true }); }
+          else if (f <= EN90) { c[q[0] === 'fiel' ? 'fo' : 'so']++; l.push({ e: e, q: q[2], f: f, mal: false }); }
+        });
+      });
+      if (!c.fm && !c.fo && !c.sm && !c.so) return aldia('Ninguna e.firma ni sello vence en los próximos 3 meses.');
+      l.sort(function (a, b) { return a.f < b.f ? -1 : 1; });
+      var h = '<div class="chips">' + (c.fm ? chip(c.fm, c.fm === 1 ? ' e.firma vencida' : ' e.firmas vencidas', 'mal') : '') + (c.fo ? chip(c.fo, c.fo === 1 ? ' e.firma por vencer' : ' e.firmas por vencer', 'ojo') : '')
+        + (c.sm ? chip(c.sm, c.sm === 1 ? ' sello vencido' : ' sellos vencidos', 'mal') : '') + (c.so ? chip(c.so, c.so === 1 ? ' sello por vencer' : ' sellos por vencer', 'ojo') : '') + '</div>';
+      h += lista(l.slice(0, 5).map(function (x) {
+        var sel = x.q === 'Sellos';
+        return { pt: x.mal ? 'mal' : 'ojo', a: esc(x.e.rs), b: esc(x.q) + (x.mal ? (sel ? ' vencidos el ' : ' vencida el ') : (sel ? ' vencen el ' : ' vence el ')) + fCortaA(x.f), n: '', liga: 'access-clientes' };
+      }));
+      h += '<p class="nota">Por vencer: en los próximos 3 meses. Solo empresas activas e incubadas. Datos al ' + esc(horaCorta(doc.refreshedAt)) + '.</p>';
+      return h;
+    } };
+  }
+
+  // --- Tus pantallas (atajos a lo que cada quien usa, solo si su menú las tiene) ---
+  function tPantallas() {
+    var OPC = [['facturacion', 'Facturación', 'Alta y control de facturas'], ['pagos', 'Pagos', 'Pagos de los clientes y su reparto'],
+               ['recordatorios', 'Recordatorios de pago', 'Saldos a los clientes'], ['base-clientes', 'Base de clientes', 'La ficha de cada cliente'],
+               ['cotizador', 'Cotizador DECOMSA', 'Cotizaciones'], ['cajachica', 'Caja chica', 'Gastos menores'], ['quo-cotizador', 'Cotizador QUO', 'Cotizaciones de Quo Contabilita'],
+               ['quo-membresias', 'Control de membresías', 'Membresías de QUO'], ['variaciones', 'Variaciones', 'Variaciones contables'], ['activofijo', 'Activo fijo', 'Revisión de activo fijo']];
+    return { id: 'pant', t: 'Tus pantallas', s: 'Atajos a lo que usas', arma: async function () {
+      var l = OPC.filter(function (o) { return ve(o[0]); });
+      if (!l.length) return null;
+      return lista(l.map(function (o) { return { pt: 'az', a: esc(o[1]), b: esc(o[2]), n: '›', liga: o[0] }; }));
+    } };
+  }
+
+  // --- Avisos sin leer y chat ---
+  function tAvisos() {
+    return { id: 'avisos', t: 'Avisos y mensajes', s: 'Lo nuevo para ti', liga: 'notificaciones', ligaTxt: 'Ver todos', arma: async function () {
+      var res = await Promise.all([rpc('notif_mias', { p_limite: 5, p_antes: null, p_sin_leer: true }).catch(function () { return null; }),
+        rpc('chat_pendientes', { p_desde: 0 }).catch(function () { return null; })]);
+      var n = res[0], ch = res[1], f = [];
+      if (ch && +ch.total > 0) f.push({ pt: 'na', a: 'Chat', b: plural(+ch.total, 'mensaje sin leer', 'mensajes sin leer'), n: fi(ch.total), liga: 'chat' });
+      if (n && n.items) n.items.forEach(function (x) {
+        f.push({ pt: x.tipo === 'cumple' || x.tipo === 'aniversario' || x.tipo === 'evento' ? 'az' : 'ojo', a: esc(x.titulo), b: esc(x.texto || '') , n: haceTxt(x.creada).replace('hace ', ''), liga: x.liga || 'notificaciones', notif: x.id });
+      });
+      if (!f.length) return aldia('No tienes avisos ni mensajes nuevos.');
+      var mas = n && +n.sin_leer > (n.items || []).length ? '<p class="nota">Tienes ' + plural(+n.sin_leer, 'aviso sin leer', 'avisos sin leer') + ' en total.</p>' : '';
+      return lista(f) + mas;
+    } };
+  }
+
+  /* ---------- quién ve qué tarjetas ---------- */
+  function arma() {
+    if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tCumplimiento(), tRevisar(),
+      tFirmas('e.firma y sellos', 'De todos los clientes'), tAvisos()];
+    else if (PERFIL === 'cadengo') TARJETAS = [tPorAutorizar(), tCobranza('Cobranza DECOMSA', 'Lo que nos deben'), tPortal(), tEquipo(DEP),
+      tPendientes('Mis actividades', 'Donde eres responsable o autorizas'), tAvisos()];
+    else if (PERFIL === 'gerente') TARJETAS = [tEquipo(DEP), tConfirmar(DEP), tPendientes('Mis actividades', 'Donde eres responsable o autorizas'),
+      tAdeudoEquipo(DEP), tFirmas('e.firma y sellos de tu equipo', 'Clientes de tu departamento', DEP), tAvisos()];
+    else if (PERFIL === 'gabo') TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tPropuestas(),
+      tAvance(), tJustificar(), tPantallas(), tAvisos()];
+    else TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tAvance(), tJustificar(),
+      tFirmas('e.firma y sellos de tus clientes', 'Vencidas o por vencer'), tPantallas(), tAvisos()];
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-liga]'); if (!b) return;
+    var id = b.getAttribute('data-notif');
+    if (id) { try { P.sb.rpc('notif_leer', { p_ids: [+id] }); } catch (er) { /* no detiene la liga */ } }
+    ir(b.getAttribute('data-liga'));
+  });
+  $('recarga').onclick = function () { corre(); };
+
+  // La página de afuera la vuelve a cargar al regresar al Inicio, si pasó más de un minuto
+  window.INICIO = { refresca: function () { if (PERFIL && Date.now() - CARGADO > 60000) corre(); } };
+
+  (async function () {
+    try {
+      var p = await P.listo; if (!p) return;
+      YO = p.usuario || ''; ROL = p.rolReal || p.rol || ''; NOM = nombreCorto(p); NOMWF = p.nombre_wf || p.nombre || '';
+      if (YO === 'gabriel.cavazos') { PERFIL = 'gabo'; ROL = 'contador'; }
+      else if (ROL === 'director') PERFIL = 'direccion';
+      else if (ROL === 'gerente') PERFIL = YO === 'fernando.cadengo' ? 'cadengo' : 'gerente';
+      else PERFIL = 'contador';
+      DEP = depDe(YO, NOMWF);
+      if (PERFIL === 'gerente' && DEP < 0) PERFIL = 'contador';
+      $('que').textContent = TITULO[PERFIL];
+      document.title = TITULO[PERFIL] + ' · Portal PROFASE';
+      arma();
+      await corre();
+    } catch (e) {
+      $('grid').innerHTML = '<section class="card"><p class="falla">No se pudo abrir el inicio. Vuelve a cargar en un momento.</p></section>';
+    }
+  })();
+})();
+</script>
+</body></html>

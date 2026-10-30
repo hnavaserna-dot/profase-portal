@@ -78,6 +78,10 @@
   var MAS = { k: 'mas', t: 'Más', d: 'Pestañas nuevas que todavía no tienen lugar en el menú.', subs: [] };
   var ENT = {};
   MODS.forEach(function (m) { m.subs.forEach(function (s) { s.m = m; ENT[s.k] = s; }); });
+  // Inicio (30-oct-2026, pedido de Daniel): la página de tarjetas de cada quien (ini_tab.js). No va dentro de un
+  // módulo: es la casita de arriba del menú, y es donde abre el portal cuando la dirección no pide otra sección.
+  var INI = { k: 'inicio', v: 'ini', t: 'Inicio', d: 'Lo que necesita tu atención hoy.', m: { k: 'ini', t: 'PROFASE', d: '' } };
+  ENT.inicio = INI;
 
   var store = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -202,7 +206,7 @@
 
   // Qué sub módulos ve esta persona (en el orden del menú), más los botones nuevos que no estén en el menú
   function modulos() {
-    var conocidos = {}, out = [];
+    var conocidos = { ini: 1 }, out = [];
     MODS.forEach(function (m) {
       var subs = m.subs.filter(function (s) { conocidos[s.v] = 1; return aLaVista(boton(s.v)) && (!s.q || subQuo(s.q)); });
       if (subs.length) out.push({ m: m, subs: subs });
@@ -268,7 +272,7 @@
             + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + (s.d ? '<span class="pm-sd">' + esc(s.d) + '</span>' : '') + '</a></li>';
         }).join('') + '</ul></div>';
     });
-    if (h) h = '<div class="pm-mod"><button type="button" class="pm-mb pm-inicio" title="Inicio" aria-label="Inicio">' + svg(IC.home, 'pm-ic') + '<span class="pm-lbl">Inicio</span></button></div>' + h;
+    if (h) h = '<div class="pm-mod' + (act === INI ? ' on' : '') + '"><button type="button" class="pm-mb pm-inicio" title="Inicio" aria-label="Inicio"' + (act === INI ? ' aria-current="page"' : '') + '>' + svg(IC.home, 'pm-ic') + '<span class="pm-lbl">Inicio</span></button></div>' + h;
     if (guarda) store.set('portal.menu.abiertos', JSON.stringify(abiertos));
     if (lista.innerHTML !== h) lista.innerHTML = h;
     pintaArriba(act);
@@ -283,7 +287,7 @@
   function luego() { if (!pendiente) pendiente = requestAnimationFrame(pinta); }
 
   // Menú arriba: «Inicio» en medio, la primera mitad de los módulos a la izquierda y el resto a la derecha
-  function inicio() { var m = modulos()[0]; return m ? m.subs[0] : null; }
+  function inicio() { if (aLaVista(boton(INI.v))) return INI; var m = modulos()[0]; return m ? m.subs[0] : null; }
   function pintaArriba(act) {
     if (!top) return;
     var ms = modulos(), mitad = Math.ceil(ms.length / 2), ini = inicio();
@@ -293,7 +297,7 @@
       return '<button type="button" class="pm-tb' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" aria-expanded="' + ab + '" aria-controls="pm-pop" aria-label="' + esc(m.t) + '" title="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, '') + '</button>';
     }
     var h = '<div class="pm-tira"><div class="pm-lado">' + ms.slice(0, mitad).map(tb).join('') + '</div>'
-      + '<button type="button" class="pm-tb pm-home" data-m="home" aria-expanded="' + (popAbierto === 'home') + '" aria-controls="pm-pop" aria-label="Inicio" title="Inicio">' + svg(IC.home, '') + '</button>'
+      + '<button type="button" class="pm-tb pm-home' + (act === INI ? ' on' : '') + '" data-m="home" aria-expanded="' + (popAbierto === 'home') + '" aria-controls="pm-pop" aria-label="Inicio" title="Inicio">' + svg(IC.home, '') + '</button>'
       + '<div class="pm-lado">' + ms.slice(mitad).map(tb).join('') + '</div></div>';
     var pop = '';
     var x = popAbierto === 'home' ? null : ms.filter(function (y) { return y.m.k === popAbierto; })[0];
@@ -385,6 +389,7 @@
       if (a) { e.preventDefault(); ir(a.dataset.k); return; }
       if (e.target.closest('.pm-cambia')) { arriba(false); return; }
       var b = e.target.closest('.pm-tb');
+      if (b && b.dataset.m === 'home' && inicio() === INI) { abrePop(''); ir(INI.k); return; }
       if (b) abrePop(popAbierto === b.dataset.m ? '' : b.dataset.m);
     });
     // el ícono picado se vuelve a pintar (ya no está en la página): ese clic no cuenta como «afuera»
@@ -433,6 +438,8 @@
 
     // Abre la sección de la dirección (#cartera…) en cuanto su pestaña esté a la vista; algunas esperan a la base
     var pedida = location.hash.slice(1), t0 = Date.now();
+    // sin sección pedida, el Inicio (salvo que venga de un aviso del chat, ?chat=…: eso lo abre chat_tab.js)
+    if (!ENT[pedida] && !/[?&]chat=/.test(location.search) && aLaVista(boton(INI.v))) pedida = INI.k;
     pinta();
     if (!pedida || !(ENT[pedida])) { listo = true; pinta(); return; }
     (function intenta() {
@@ -442,6 +449,10 @@
       setTimeout(intenta, 250);
     })();
   }
+  window.PORTAL_MENU = {
+    ir: function (k) { return !!sw && ir(k); },
+    ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); }
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca);
   else arranca();
 })();
