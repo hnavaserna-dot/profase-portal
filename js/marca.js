@@ -84,8 +84,11 @@
     setTimeout(function () { if (MENU === m) document.addEventListener('pointerdown', m.fuera, true); }, 0);
     window.addEventListener('resize', m.cierra); window.addEventListener('scroll', m.cierra, true);
     MENU = m;
+    try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu('marca'); } catch (e) { /* sin aviso */ }
     try { el.querySelector('button').focus(); } catch (e) { /* sin foco */ }
   }
+  // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
+  document.addEventListener('profase-menu', function (e) { if (MENU && e.detail !== 'marca') MENU.cierra(); });
   /* Los botones de bajar (Excel, su PDF de al lado y los que llevan data-descarga): a quien se le ofrece el original,
      primero el menú; luego el mismo botón sigue como siempre, ya sabiendo cómo lo quiere. */
   function interceptaDescargas(ev) {

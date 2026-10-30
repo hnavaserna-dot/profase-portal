@@ -411,7 +411,10 @@
     var y = top.getBoundingClientRect().bottom + 6, h = p.offsetHeight;
     top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, Math.min(y, H - MARGEN - h))) + 'px');
   }
-  function abrePop(k) { popAbierto = k; pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }
+  function abrePop(k) { popAbierto = k; if (k) avisaMenu('pm-pop'); pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }
+  // Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026: «que no se entrelapen»): al abrir la tarjeta del menú
+  // arriba, la del riel o el ☰ del celular se avisa (js/portal.js, PORTAL.abreMenu) y se cierran los demás menús
+  function avisaMenu(q) { try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu(q); } catch (e) { /* sin aviso */ } }
   function arriba(v) {
     if (v !== undefined) store.set('portal.menu.modo', v ? 'arriba' : 'lado');
     var m = store.get('portal.menu.modo');
@@ -434,7 +437,7 @@
     side.querySelector('.pm-parr').setAttribute('aria-label', 'Menú arriba');
     setTimeout(alto, 200);
   }
-  function abre(v) { document.body.classList.toggle('pm-abierto', v); }
+  function abre(v) { document.body.classList.toggle('pm-abierto', v); if (v) avisaMenu('pm-cajon'); }
   // En computadora el menú empieza justo abajo del encabezado
   function alto() {
     var r = hdr.getBoundingClientRect();
@@ -512,7 +515,7 @@
         // en el riel, picar el ícono deja fija su tarjeta (en tableta no hay mouse); solo una a la vez
         var ya = mod.classList.contains('fly');
         cierraFly();
-        if (!ya) { mod.classList.add('fly'); side.classList.add('pm-fly-on'); colocaTarjeta(mod); } else mb.blur();
+        if (!ya) { mod.classList.add('fly'); side.classList.add('pm-fly-on'); colocaTarjeta(mod); avisaMenu('pm-fly'); } else mb.blur();
         return;
       }
       var o = mod.dataset.open !== 'true';
@@ -535,6 +538,14 @@
     lista.addEventListener('focusin', function (e) { colocaTarjeta(e.target.closest('.pm-mod')); });
     lista.addEventListener('scroll', recoloca, { passive: true });
     document.addEventListener('click', function (e) { if (!retiene && e.target.isConnected && !side.contains(e.target)) cierraFly(); });
+    // si se abre otro menú (el de la foto, la campanita, los filtros…) o se toca dentro de una pestaña, se cierran los del menú
+    document.addEventListener('profase-menu', function (e) {
+      if (retiene) return;   // el recorrido general deja abierta la tarjeta que está enseñando
+      var q = e.detail;
+      if (q !== 'pm-pop' && popAbierto) abrePop('');
+      if (q !== 'pm-fly' && lista.querySelector('.pm-mod.fly')) cierraFly();
+      if (q !== 'pm-cajon' && document.body.classList.contains('pm-abierto')) abre(false);
+    });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
     new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso'] });
@@ -592,6 +603,7 @@
       cierraFly();
       m.classList.add('fly'); side.classList.add('pm-fly-on');
       colocaTarjeta(m);
+      avisaMenu('pm-fly');
       return m.querySelector('.pm-subs');
     }
     if (movil()) abre(true);

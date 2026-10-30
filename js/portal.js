@@ -47,6 +47,37 @@
   var P = { sb: sb, DOMINIO: DOMINIO, perfil: null, uid: null, consulta: false };
   window.PORTAL = P;
 
+  /* ---- Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026, 16:40: «corrige este tipo de errores; que no se
+     entrelapen»; el menú de la foto salía encima de la campanita abierta). Cada menú o lista que se despliega (el de la
+     foto, la campanita, las tarjetas del menú, los filtros, «Con marca / Original», las opciones de un mensaje del
+     chat…) avisa al abrirse con P.abreMenu('su-nombre') y escucha el evento 'profase-menu': si se abrió otro, se cierra.
+     El aviso cruza entre la página y sus pestañas (marcos): un toque dentro de una pestaña cierra los menús de afuera
+     y uno afuera cierra los de las pestañas, aunque el clic no llegue del otro lado. ---- */
+  var EV_MENU = 'profase-menu';
+  function avisaMenu(doc, quien) {
+    try { doc.dispatchEvent(new doc.defaultView.CustomEvent(EV_MENU, { detail: quien })); } catch (e) { /* sin marco */ }
+  }
+  function menuAMarcos(quien, doc, nivel) {
+    doc = doc || document; nivel = nivel || 0;
+    if (nivel > 3) return;
+    doc.querySelectorAll('iframe').forEach(function (f) {
+      try {
+        var d = f.contentDocument;
+        if (d && d.defaultView) { avisaMenu(d, quien); menuAMarcos(quien, d, nivel + 1); }
+      } catch (e) { /* marco de otro sitio */ }
+    });
+  }
+  function menuAFuera() {
+    // a la página que contiene esta pestaña y, si es pestaña de otra pestaña (QUO), también a la de más afuera
+    try { for (var w = window, n = 0; w.parent && w.parent !== w && n < 4; w = w.parent, n++) avisaMenu(w.parent.document, 'marco'); } catch (e) { /* otro sitio */ }
+  }
+  P.abreMenu = function (quien) {
+    avisaMenu(document, String(quien || 'menu'));
+    menuAMarcos('afuera');
+    menuAFuera();
+  };
+  document.addEventListener('pointerdown', function () { menuAMarcos('afuera'); menuAFuera(); }, true);
+
   /* ---- Solo consulta (29-oct-2026): Héctor Nava Ramos (usuario hnava), papá de Daniel, ve todo lo que ve Daniel
      pero no cambia nada. El candado de verdad está en la base (portal/sql/19_solo_consulta.sql): ahí se detiene
      cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
@@ -1144,9 +1175,12 @@
       // en celular el menú se pega a la orilla derecha, justo abajo de la foto
       if (o) document.documentElement.style.setProperty('--pu-top', Math.round(btn.getBoundingClientRect().bottom + 8) + 'px');
       dd.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false');
-      if (o) { var f = dd.querySelector('[role="menuitem"]'); if (f) f.focus(); }
+      if (o) { P.abreMenu('pu'); var f = dd.querySelector('[role="menuitem"]'); if (f) f.focus(); }
     }
-    btn.onclick = function (e) { e.stopPropagation(); despliega(dd.hidden); };
+    // un solo menú a la vez: si se abre otro (la campanita, una tarjeta del menú…), este se cierra
+    document.addEventListener(EV_MENU, function (e) { if (e.detail !== 'pu' && !dd.hidden) despliega(false); });
+    // sin stopPropagation: el clic sigue hasta la página para que los demás menús abiertos se cierren
+    btn.onclick = function () { despliega(dd.hidden); };
     document.addEventListener('click', function (e) { if (!dd.hidden && !pu.contains(e.target)) despliega(false); });
     dd.addEventListener('click', function (e) { if (e.target.closest('[role="menuitem"]')) despliega(false); });
     document.addEventListener('keydown', function (e) {

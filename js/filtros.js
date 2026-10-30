@@ -110,8 +110,10 @@
     (document.head || document.documentElement).appendChild(st);
   }
 
+  var NUM = 0;
   function crea(cfg) {
     ponCss();
+    var yo = 'filtros-' + (++NUM);   // su nombre para «un solo menú a la vez» (js/portal.js, PORTAL.abreMenu)
     var raiz = document.createElement('div'); raiz.className = 'pf';
     cfg.donde.appendChild(raiz);
     // En el celular la ventana va directo en la página (hoja desde abajo), fuera de los recuadros que la podrían cortar
@@ -226,7 +228,10 @@
       if (l) { l.innerHTML = filas(c, i); l.scrollTop = 0; }
       if (m) m.innerHTML = mini(c, i);
     }
-    function abre(v) { abierto = v; pinta(); if (v) { var b = zona().querySelector('.pf-pan input,.pf-pan button'); if (b && !celular()) b.focus(); } }
+    function abre(v) {
+      if (v && !abierto) { try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu(yo); } catch (e) { /* sin aviso */ } }
+      abierto = v; pinta(); if (v) { var b = zona().querySelector('.pf-pan input,.pf-pan button'); if (b && !celular()) b.focus(); }
+    }
     function limpiaTodo() {
       qs = {};
       if (cfg.limpiar) cfg.limpiar(); else todos.forEach(function (c) { c.pon(c.tipo === 'texto' ? '' : []); });
@@ -277,6 +282,8 @@
     }
     [raiz, capa].forEach(function (z) { z.addEventListener('click', clic); z.addEventListener('input', escribe); z.addEventListener('keydown', tecla); });
     document.addEventListener('mousedown', function (e) { if (abierto && !raiz.contains(e.target) && !capa.contains(e.target)) abre(false); });
+    // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
+    document.addEventListener('profase-menu', function (e) { if (abierto && e.detail !== yo) abre(false); });
     window.addEventListener('resize', function () { if (!abierto) return; if (celular() !== !!capa.parentNode) pinta(); else ajusta(); });
     pinta();
     return { pinta: pinta, abre: function () { abre(true); }, cierra: function () { abre(false); }, raiz: raiz };
