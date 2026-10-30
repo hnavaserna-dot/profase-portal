@@ -118,6 +118,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
   padding:8px 10px;border-left:3px solid var(--sky);border-radius:0 var(--radius) var(--radius) 0;display:none}
 .ahorro.on{display:block}
 .hint{font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;line-height:1.5}
+.desc-campo{margin:10px 0 0}
 [hidden]{display:none!important}
 
 details.ajustes{border-top:1px solid var(--line);padding-top:11px}
@@ -439,6 +440,16 @@ table.reg tr.editando{background:var(--sky-soft)}
         </div>
       </fieldset>
 
+      <fieldset id="blq-descuento">
+        <legend>Descuento</legend>
+        <div class="choice three" id="desc-tipo"></div>
+        <div class="field desc-campo" id="desc-campo" hidden>
+          <label for="desc-val" id="desc-lab">Porcentaje</label>
+          <input type="number" id="desc-val" min="0" step="0.01" inputmode="decimal" placeholder="0">
+        </div>
+        <p class="hint" id="desc-hint">Se resta del subtotal, antes del IVA (como en la factura).</p>
+      </fieldset>
+
       <fieldset>
         <legend>Quién atendió</legend>
         <div class="field">
@@ -571,6 +582,7 @@ table.reg tr.editando{background:var(--sky-soft)}
             <tbody id="lineas"></tbody>
             <tfoot>
               <tr><td colspan="3" class="lab">Subtotal</td><td class="n" id="subtotal"></td></tr>
+              <tr class="desc" id="desc-fila" hidden><td colspan="3" class="lab" id="desc-flab">Descuento</td><td class="n" id="descm"></td></tr>
               <tr><td colspan="3" class="lab" id="iva-lab">IVA</td><td class="n" id="ivam"></td></tr>
               <tr class="total"><td colspan="3" class="lab">Total</td><td class="n" id="total"></td></tr>
             </tfoot>
@@ -693,6 +705,7 @@ table.reg tr.editando{background:var(--sky-soft)}
 
   var S = { linea:'LITE', plan:0, periodo:'anual',
             usuarios:0, almac:-1, timbres:-1, calcpm:false, cortesia:0,
+            dtipo:'no', dval:0,
             fm:1.25, fa:1.18, iva:0.16, fc:1.18 };
 
   var $ = function(id){ return document.getElementById(id); };
@@ -764,6 +777,15 @@ table.reg tr.editando{background:var(--sky-soft)}
           .concat([{ v:0, t:'Sin cortesía', wide:true }]),
         function(){ return S.cortesia; }, function(v){ S.cortesia = Number(v); });
     }
+
+    /* descuento (30-oct-2026, pedido de Fernando): por porcentaje o por monto, antes del IVA */
+    radios($('desc-tipo'), 'desc-tipo',
+      [{v:'no', t:'Sin descuento'}, {v:'pct', t:'Porcentaje'}, {v:'monto', t:'Monto'}],
+      function(){ return S.dtipo; },
+      function(v){
+        S.dtipo = v; S.dval = 0; $('desc-val').value = '';
+        if (v !== 'no') setTimeout(function(){ try { $('desc-val').focus(); } catch (e) {} }, 0);
+      });
   }
 
   function pintarSelects(){
@@ -822,8 +844,35 @@ table.reg tr.editando{background:var(--sky-soft)}
     /* todo al centavo: así subtotal + IVA siempre da exactamente el total impreso */
     l.forEach(function(x){ x.pu = r2(x.pu); x.imp = r2(x.q * x.pu); });
     var sub = r2(l.reduce(function(a, x){ return a + x.imp; }, 0));
-    var iva = r2(sub * S.iva);
-    return { l:l, sub:sub, iva:iva, tot:r2(sub + iva) };
+    /* el descuento se resta del subtotal, antes del IVA; nunca pasa del 100 % ni del subtotal */
+    var desc = 0, dv = Math.max(0, Number(S.dval) || 0);
+    if (S.dtipo === 'pct') desc = r2(sub * Math.min(100, dv) / 100);
+    else if (S.dtipo === 'monto') desc = r2(Math.min(sub, dv));
+    var base = r2(sub - desc);
+    var iva = r2(base * S.iva);
+    return { l:l, sub:sub, desc:desc, iva:iva, tot:r2(base + iva) };
+  }
+
+  function descEtiqueta(){
+    return S.dtipo === 'pct' ? 'Descuento ' + nf.format(Math.min(100, Math.max(0, Number(S.dval) || 0))) + '%' : 'Descuento';
+  }
+
+  function pintarDescuento(r){
+    var con = (S.dtipo !== 'no');
+    $('desc-campo').hidden = !con;
+    $('desc-lab').textContent = S.dtipo === 'pct' ? 'Porcentaje de descuento (%)' : 'Monto del descuento, antes de IVA ($)';
+    $('desc-val').max = S.dtipo === 'pct' ? '100' : '';
+    var h = 'Se resta del subtotal, antes del IVA (como en la factura).';
+    var dv = Number(S.dval) || 0;
+    if (con && r.desc > 0){
+      h = 'Descuento de ' + money(r.desc) + ' antes de IVA; con IVA el cliente se ahorra ' + money(r2(r.desc * (1 + S.iva))) + '.';
+      if ((S.dtipo === 'pct' && dv > 100) || (S.dtipo === 'monto' && dv > r.sub))
+        h += ' No puede pasar ' + (S.dtipo === 'pct' ? 'del 100 %' : 'del subtotal') + ', así que se tomó el máximo.';
+    }
+    $('desc-hint').textContent = h;
+    $('desc-fila').hidden = !(r.desc > 0);
+    $('desc-flab').textContent = descEtiqueta();
+    $('descm').textContent = '−' + money(r.desc);
   }
 
   function concepto(){
@@ -854,6 +903,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     });
 
     $('subtotal').textContent = money(r.sub);
+    pintarDescuento(r);
     $('iva-lab').textContent  = 'IVA ' + Math.round(S.iva * 100) + '%';
     $('ivam').textContent     = money(r.iva);
     $('total').textContent    = money(r.tot);
@@ -914,6 +964,7 @@ table.reg tr.editando{background:var(--sky-soft)}
       textos.push('Para solicitar factura, envíe sus datos fiscales al correo señalado en la parte inferior derecha de esta cotización (' + CORREO_FIJO + ').');
       textos.push('Recuerde mantenerse como comprador activo para conservar la vigencia de la plataforma de facturación.');
     }
+    if (r.desc > 0) textos.push('El descuento aplica solo para esta cotización y durante su vigencia.');
     textos.push('Precios en pesos mexicanos con IVA incluido en el total.');
     textos.push('El servicio se activa una vez confirmado el pago.');
     textos.forEach(function(t){ var p = document.createElement('p'); p.textContent = t; cond.appendChild(p); });
@@ -1113,8 +1164,10 @@ table.reg tr.editando{background:var(--sky-soft)}
       (($('cli').value || '').trim() ? $('cli').value.trim() + '\n' : '') + '\n' +
       lin + '\n\n' +
       'Subtotal: ' + money(r.sub) + '\n' +
+      (r.desc > 0 ? descEtiqueta() + ': -' + money(r.desc) + '\n' : '') +
       'IVA ' + Math.round(S.iva * 100) + '%: ' + money(r.iva) + '\n' +
       'Total: ' + money(r.tot) + '\n\n' +
+      (r.desc > 0 ? 'El descuento aplica solo para esta cotización y durante su vigencia.\n' : '') +
       (S.timbres >= 0 ? 'Los timbres tienen una vigencia de un año; los no utilizados en ese periodo vencen sin derecho a reembolso.\n' : '') +
       (hayCortesia() ? 'El sistema contable se otorga en cortesía por ' + S.cortesia +
         ' meses; al término se aplicará el precio regular vigente de la membresía de contabilidad.\n' : '') +
@@ -1356,6 +1409,10 @@ table.reg tr.editando{background:var(--sky-soft)}
     var cm = Number(e.cortesia !== undefined ? e.cortesia : parseInt(f.cortesia, 10)) || 0;
     S.cortesia = ([3, 6, 9, 12].indexOf(cm) >= 0) ? cm : 0;
 
+    S.dtipo = (e.dtipo === 'pct' || e.dtipo === 'monto') ? e.dtipo : 'no';
+    S.dval  = (S.dtipo === 'no') ? 0 : Math.max(0, Number(e.dval) || 0);
+    $('desc-val').value = S.dval || '';
+
     $('usuarios').value = S.usuarios;
     $('calcpm').checked = S.calcpm;
 
@@ -1400,6 +1457,8 @@ table.reg tr.editando{background:var(--sky-soft)}
       timbres: (S.timbres >= 0 ? TIMBRES[S.timbres].n : 0),
       concepto: concepto(),
       subtotal: Math.round(r.sub * 100) / 100,
+      descuento: Math.round(r.desc * 100) / 100,
+      descuentoTipo: (r.desc > 0 ? descEtiqueta() : ''),
       iva: Math.round(r.iva * 100) / 100,
       total: Math.round(r.tot * 100) / 100,
       asesor: ($('asesor').value || '').trim(),
@@ -1408,6 +1467,7 @@ table.reg tr.editando{background:var(--sky-soft)}
       estado: {
         linea: S.linea, plan: S.plan, periodo: S.periodo, cortesia: S.cortesia,
         usuarios: S.usuarios, calcpm: S.calcpm,
+        dtipo: S.dtipo, dval: (S.dtipo === 'no' ? 0 : S.dval),
         timbresN: (S.timbres >= 0 ? TIMBRES[S.timbres].n : 0),
         almacXml: (S.almac >= 0 ? ALMAC[S.almac].xml : 0)
       }
@@ -1434,7 +1494,7 @@ table.reg tr.editando{background:var(--sky-soft)}
   function csv(){
     var cab = ['Folio','Fecha','Cliente','RFC','Atención','Correo','Línea','Plan','Periodo','Cortesía',
                'Usuarios','Almacenamiento','Calculadora PM','Timbres','Concepto',
-               'Subtotal','IVA','Total','Atendió','Puesto','Estatus'];
+               'Subtotal','Descuento','IVA','Total','Atendió','Puesto','Estatus'];
     function esc(v){
       var s = (v === null || v === undefined) ? '' : String(v);
       return '"' + s.replace(/"/g, '""') + '"';
@@ -1443,7 +1503,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     filas.forEach(function(f){
       out.push([f.folio, f.fecha ? f.fecha.slice(0,10) : '', f.cliente, f.rfc, f.atencion, f.correo,
                 f.linea, f.plan, f.periodo, f.cortesia, f.usuarios, f.almacenamiento, f.calculadoraPM,
-                f.timbres, f.concepto, f.subtotal, f.iva, f.total, f.asesor, f.puesto, f.estatus].map(esc).join(','));
+                f.timbres, f.concepto, f.subtotal, f.descuento || 0, f.iva, f.total, f.asesor, f.puesto, f.estatus].map(esc).join(','));
     });
     return '\ufeff' + out.join('\r\n');
   }
@@ -1479,6 +1539,11 @@ table.reg tr.editando{background:var(--sky-soft)}
   });
   $('almac').addEventListener('change', function(){ S.almac = Number(this.value); render(); });
   $('calcpm').addEventListener('change', function(){ S.calcpm = this.checked; render(); });
+  $('desc-val').addEventListener('input', function(){
+    var v = Number(this.value);
+    S.dval = (isNaN(v) || v < 0) ? 0 : v;
+    render();
+  });
   ['fm','fa','iva','fc'].forEach(function(id){
     $(id).addEventListener('input', function(){
       var v = Number(this.value);
@@ -1505,6 +1570,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     S.almac = -1; S.calcpm = false; $('calcpm').checked = false;
     if (S.linea !== 'TIMBRES') S.timbres = -1;
     S.cortesia = 0;
+    S.dtipo = 'no'; S.dval = 0; $('desc-val').value = '';
     editando = null; marcarEdicion();
     folioFijado = false;
     refrescarFolio();
