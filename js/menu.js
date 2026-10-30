@@ -438,8 +438,12 @@
 
     // Abre la sección de la dirección (#cartera…) en cuanto su pestaña esté a la vista; algunas esperan a la base
     var pedida = location.hash.slice(1), t0 = Date.now();
-    // sin sección pedida, el Inicio (salvo que venga de un aviso del chat, ?chat=…: eso lo abre chat_tab.js)
-    if (!ENT[pedida] && !/[?&]chat=/.test(location.search) && aLaVista(boton(INI.v))) pedida = INI.k;
+    // Al entrar al portal (la entrada deja la marca «portal.entrada») o sin sección pedida, todos ven primero su Inicio
+    // (regla de Daniel, 30-oct-2026: «siempre que ingreses sesión veas el home, todos»). Al recargar o con una liga a una
+    // sección, se queda en esa. Un aviso del chat (?chat=…) lo abre chat_tab.js.
+    var entrada = false;
+    try { entrada = sessionStorage.getItem('portal.entrada') === '1'; sessionStorage.removeItem('portal.entrada'); } catch (e) { entrada = false; }
+    if ((entrada || !ENT[pedida]) && !/[?&]chat=/.test(location.search) && aLaVista(boton(INI.v))) pedida = INI.k;
     pinta();
     if (!pedida || !(ENT[pedida])) { listo = true; pinta(); return; }
     (function intenta() {
