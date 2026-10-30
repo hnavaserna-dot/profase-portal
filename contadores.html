@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="5c9f759344f0"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="0bcb5549d09b"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -3661,7 +3661,10 @@ initDB=async function(){await initDB0();oirJust()};
    - Recorrido guiado (pedido de Daniel, 30-oct-2026: «hazlo tipo walkthrough… esto es nuevo y flechita; aquí le picas»;
      y «que dirección ni nadie verá las conversaciones, para que se sientan cómodos de usarlo»): a cada quien le sale una
      sola vez, después de la ventana de «Nuevos cambios» (js/recorrido.js; quién ya lo vio: portal/sql/59_recorridos.sql;
-     quien es de solo consulta, en su navegador). Se vuelve a ver desde los ajustes del chat. */
+     quien es de solo consulta, en su navegador). Se vuelve a ver desde los ajustes del chat.
+   - Recorrido del estatus (pedido de Daniel, 30-oct-2026: «si, y recorrido porfavor»): 5 pasos, una sola vez por persona,
+     al cerrar la ventana de «Nuevos cambios» del estatus o, a quien todavía no ve el del chat, justo después de ese.
+     Solo explica los colores y cómo ponerse «No disponible» (Daniel: la última vez no se menciona). */
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const st=document.createElement('style');
@@ -3719,7 +3722,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','chat');
     const t=document.getElementById('vtitle');if(t)t.textContent='Chat';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chat'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=bcd76868eb');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=6afad48ec8');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
     alto();
     setTimeout(refresca,1500);
@@ -4033,6 +4036,10 @@ initDB=async function(){await initDB0();oirJust()};
     abreOps(true);
     try{document.getElementById('est-act').focus()}catch(err){}
   }
+  function cierraSelector(){
+    const btn=document.getElementById('pu-btn'),dd=document.getElementById('pu-dd');
+    if(btn&&dd&&!dd.hidden)btn.click();
+  }
   window.__chatEstado={de:estadoDe,yo:()=>estadoDe(YO),texto:textoEstado,listo:()=>ESTOK,ultimaVez:()=>!!EST.ultima_vez,
     pon:ponEstado,abre:abreSelector};
   function escucha(){
@@ -4189,17 +4196,51 @@ initDB=async function(){await initDB0();oirJust()};
     {etiqueta:'¡Listo!',icono:'candado',titulo:'A platicar',
      texto:'Recuerda: lo que escribas solo lo leen quienes están en esa conversación. Ni la dirección ni nadie más lo ve.'}
   ];
-  const vistoLocal=()=>{try{return (JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[]).indexOf(RID)>=0}catch(err){return false}};
-  async function marcaVisto(){
+  // el del estatus (30-oct-2026)
+  const RID_EST='chat-estatus';
+  const PASOS_EST=[
+    {etiqueta:'Nuevo',icono:'chat',titulo:'Tu estatus en el chat',
+     texto:'Ahora todos ven si estás En línea (verde), Ausente (amarillo) o Desconectado (gris). Se pone solo: verde al abrir el portal, amarillo a los 15 minutos sin usarlo y gris al cerrarlo. No tienes que hacer nada.'},
+    {antes:async()=>{cierraSelector()},el:()=>document.getElementById('pu-btn'),titulo:'Tu punto de color',
+     texto:'Tu foto, aquí arriba a la derecha, lleva el punto de tu estatus. Pícale cuando lo quieras cambiar.'},
+    // primero se deja terminar el clic de «Siguiente» (si no, al llegar arriba cerraría el menú recién abierto)
+    {antes:async()=>{await dormir(60);abreSelector();await dormir(250)},el:()=>{const x=document.querySelector('.est-blk');return x&&!x.hidden?x:null},
+     etiqueta:'Aquí le picas',titulo:'¿En junta o concentrado?',
+     texto:'Ponte «No disponible» por 1 hora, 2 horas, hoy o hasta que lo quites: el chat no te suena ni te avisa (los mensajes sí te llegan) y al acabarse el tiempo regresas solo a Automático. Si prefieres, también puedes «Aparecer desconectado».'},
+    {antes:async()=>{cierraSelector();await aLista()},el:enChat('#mi-est'),titulo:'También desde el chat',
+     texto:'Debajo de «Chat» ves tu estatus y lo cambias sin salir de aquí.'},
+    {antes:async()=>{cierraSelector();await aLista()},el:enChat('#convs'),titulo:'El estatus de los demás',
+     texto:'En la lista y arriba de cada conversación ves el punto de cada quien. Si alguien está «No disponible», te lo dice arriba de donde escribes: tu mensaje le llega, pero sin aviso.'}
+  ];
+  const vistoLocalDe=id=>{try{return (JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[]).indexOf(id)>=0}catch(err){return false}};
+  const vistoLocal=()=>vistoLocalDe(RID);
+  async function marcaVistoDe(id){
     let ok=false;
-    try{const r=await P.sb.rpc('recorrido_visto',{p_recorrido:RID});ok=!r.error&&r.data===true}catch(err){}
-    if(!ok){try{const a=JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[];if(a.indexOf(RID)<0)a.push(RID);localStorage.setItem('profase-recorridos',JSON.stringify(a))}catch(err){}}
+    try{const r=await P.sb.rpc('recorrido_visto',{p_recorrido:id});ok=!r.error&&r.data===true}catch(err){}
+    if(!ok){try{const a=JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[];if(a.indexOf(id)<0)a.push(id);localStorage.setItem('profase-recorridos',JSON.stringify(a))}catch(err){}}
   }
+  const marcaVisto=()=>marcaVistoDe(RID);
+  async function vistosMios(){
+    try{const r=await P.sb.rpc('recorridos_mios');return r.error||!Array.isArray(r.data)?null:r.data}catch(err){return null}   // sin 59: null
+  }
+  async function recorridoEstatus(){
+    if(!ESTOK||!window.PROFASE_RECORRIDO||window.PROFASE_RECORRIDO.activo())return;
+    document.querySelectorAll('.cht-toast,.est-msg').forEach(x=>x.remove());
+    const como=await window.PROFASE_RECORRIDO.corre({pasos:PASOS_EST,fin:'¡Listo!'});
+    cierraSelector();
+    if(como==='fin'||como==='saltado')marcaVistoDe(RID_EST);
+  }
+  window.__chatRecorridoEstatus=recorridoEstatus;
   async function recorrido(){
     if(!window.PROFASE_RECORRIDO||window.PROFASE_RECORRIDO.activo())return;
     document.querySelectorAll('.cht-toast').forEach(x=>x.remove());
     const como=await window.PROFASE_RECORRIDO.corre({pasos:PASOS,fin:'¡A chatear!'});
     if(como==='fin'||como==='saltado')marcaVisto();
+    // quien lo vio completo sigue con el del estatus (si no lo ha visto)
+    if(como==='fin'&&ESTOK&&!vistoLocalDe(RID_EST)){
+      const v=await vistosMios();
+      if(v&&v.indexOf(RID_EST)<0){await dormir(500);await recorridoEstatus()}
+    }
   }
   window.__chatRecorrido=recorrido;
   // ¿hay una ventana encima? (Nuevos cambios, cumpleaños, versión nueva, perfil…): el recorrido espera a que se cierre
@@ -4207,21 +4248,24 @@ initDB=async function(){await initDB0();oirJust()};
     if(d.closest('.rc-capa')||!d.getClientRects().length)return false;
     const cs=getComputedStyle(d);return cs.visibility!=='hidden'&&+cs.opacity>0.05;
   });
-  async function yaLoVio(){
-    try{const r=await P.sb.rpc('recorridos_mios');if(r.error||!Array.isArray(r.data))return true;return r.data.indexOf(RID)>=0||vistoLocal()}   // sin 59: no sale
-    catch(err){return true}
-  }
-  // Arranca solo: al entrar (si nunca lo ha visto) y, sobre todo, al cerrar la ventana de «Nuevos cambios» del chat
+  // Arranca solo: al entrar (si le falta alguno) y, sobre todo, al cerrar la ventana de «Nuevos cambios» del chat.
+  // Primero el del chat (y de ahí sigue el del estatus); si ya vio el del chat, solo el del estatus. Nunca encima de
+  // una ventana ni de otro recorrido (el del Inicio).
   let esperandoRec=false;
+  const otroActivo=()=>!!(window.PROFASE_RECORRIDO&&window.PROFASE_RECORRIDO.activo());
   async function quizaRecorrido(desdeAviso){
-    if(esperandoRec||(window.PROFASE_RECORRIDO&&window.PROFASE_RECORRIDO.activo()))return;
+    if(esperandoRec)return;
     esperandoRec=true;
     try{
-      if(await yaLoVio())return;
+      const v=await vistosMios();if(!v)return;   // sin 59_recorridos.sql: no sale
+      const faltaChat=v.indexOf(RID)<0&&!vistoLocal();
+      const faltaEst=ESTOK&&v.indexOf(RID_EST)<0&&!vistoLocalDe(RID_EST);
+      if(!faltaChat&&!faltaEst)return;
       if(!desdeAviso)await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
-      for(let i=0;i<3600&&(hayVentana()||document.hidden);i++)await dormir(500);
+      for(let i=0;i<3600&&(hayVentana()||document.hidden||otroActivo());i++)await dormir(500);
       await dormir(400);
-      if(!hayVentana()&&!document.hidden)await recorrido();
+      if(hayVentana()||document.hidden||otroActivo())return;
+      if(faltaChat)await recorrido();else await recorridoEstatus();
     }finally{esperandoRec=false}
   }
   addEventListener('profase:novedad-cerrada',ev=>{
