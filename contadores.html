@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="b9ca407b9437"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+<!doctype html><html lang="es" data-rol="contador"><head><meta charset="utf-8"><meta name="portal-version" content="c109f96605da"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -2796,6 +2796,8 @@ initDB=async function(){await initDB0();oirJust()};
     const cierra=async(leer)=>{
       ov.remove();mostrandoNov=false;
       lista.forEach(n=>OCULTAS.add(+n.id));   // en esta sesión ya no vuelve a salir, pase lo que pase
+      // aviso para quien quiera seguir con un recorrido guiado de lo nuevo (el chat, 30-oct-2026)
+      try{window.dispatchEvent(new CustomEvent('profase:novedad-cerrada',{detail:{ligas:lista.map(n=>n.liga||''),leida:!!leer}}))}catch(err){}
       if(leer){await marca(lista.map(n=>n.id));refresca()}
     };
     dlg.querySelector('.ok').onclick=()=>cierra(true);
@@ -3735,16 +3737,31 @@ initDB=async function(){await initDB0();oirJust()};
   }
   window.__chatRecorrido=recorrido;
   // ¿hay una ventana encima? (Nuevos cambios, cumpleaños, versión nueva, perfil…): el recorrido espera a que se cierre
-  const hayVentana=()=>[...document.querySelectorAll('[aria-modal="true"]')].some(d=>d.getClientRects().length);
-  async function quizaRecorrido(){
-    let vistos;
-    try{const r=await P.sb.rpc('recorridos_mios');if(r.error||!Array.isArray(r.data))return;vistos=r.data}catch(err){return}   // sin 59: no sale
-    if(vistos.indexOf(RID)>=0||vistoLocal())return;
-    await dormir(5000);
-    for(let i=0;i<1800&&(hayVentana()||document.hidden);i++)await dormir(1000);
-    await dormir(600);
-    if(!hayVentana())recorrido();
+  const hayVentana=()=>[...document.querySelectorAll('[aria-modal="true"]')].some(d=>{
+    if(d.closest('.rc-capa')||!d.getClientRects().length)return false;
+    const cs=getComputedStyle(d);return cs.visibility!=='hidden'&&+cs.opacity>0.05;
+  });
+  async function yaLoVio(){
+    try{const r=await P.sb.rpc('recorridos_mios');if(r.error||!Array.isArray(r.data))return true;return r.data.indexOf(RID)>=0||vistoLocal()}   // sin 59: no sale
+    catch(err){return true}
   }
+  // Arranca solo: al entrar (si nunca lo ha visto) y, sobre todo, al cerrar la ventana de «Nuevos cambios» del chat
+  let esperandoRec=false;
+  async function quizaRecorrido(desdeAviso){
+    if(esperandoRec||(window.PROFASE_RECORRIDO&&window.PROFASE_RECORRIDO.activo()))return;
+    esperandoRec=true;
+    try{
+      if(await yaLoVio())return;
+      if(!desdeAviso)await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
+      for(let i=0;i<3600&&(hayVentana()||document.hidden);i++)await dormir(500);
+      await dormir(400);
+      if(!hayVentana()&&!document.hidden)await recorrido();
+    }finally{esperandoRec=false}
+  }
+  addEventListener('profase:novedad-cerrada',ev=>{
+    const l=(ev.detail&&ev.detail.ligas)||[];
+    if(l.indexOf('chat')>=0)setTimeout(()=>quizaRecorrido(true),300);
+  });
 
   (async function(){
     try{
