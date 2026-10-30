@@ -7,6 +7,10 @@
      las hojas con PDF.js (js/lib/pdfjs, en el mismo portal). Arriba: «Bajar» y «Cerrar» (también con Esc).
    - Lo que se ve y lo que se baja es lo mismo: el PDF con la marca PROFASE (la página lo sella con
      PROFASE_MARCA.sellaPDF antes de dárselo a este módulo); los demás archivos, tal cual.
+   - «Original» (decisión de Daniel, 30-oct-2026: acuses, estados de cuenta y demás que se entregan o imprimen sin la
+     marca, por ejemplo en una auditoría): a quien la base se lo ofrece (PORTAL.originales; hoy el equipo VAX), «Bajar»
+     un PDF le pregunta con el menú de js/marca.js: «Con marca PROFASE» o «Original (sin marca)», que es el PDF tal cual
+     se subió (sellaPDF lo guarda junto al sellado). «Ver» siempre enseña el de la marca.
    - Rápido: al abrir una ficha con PDF ya se prepara la marca (pdf-lib) y se traen los PDF chicos; al pasar el mouse
      o tocar «Ver» o «Bajar» se adelanta la descarga; lo ya traído se guarda mientras la página está abierta, así que
      «Ver» y luego «Bajar» no lo vuelven a pedir.
@@ -130,13 +134,23 @@
     }
 
     /* ---------- Bajar ---------- */
+    function ofrece(d) {
+      var M = window.PROFASE_MARCA;
+      return !!(M && M.ofreceOriginal && M.eligeMarca && M.ofreceOriginal() && op.esPdf(d));
+    }
+    // el PDF tal cual se subió, si se escogió «Original» y se pudo sellar (si no se pudo, ya es el original)
+    function cual(b, orig) { return orig && b && b.original ? b.original : b; }
     function baja(d, btn) {
       if (!d) return;
+      if (ofrece(d)) { window.PROFASE_MARCA.eligeMarca(btn, function (orig) { bajaComo(d, btn, orig); }, 'el PDF'); return; }
+      bajaComo(d, btn, false);
+    }
+    function bajaComo(d, btn, orig) {
       var t0 = btn ? btn.textContent : '';
       if (btn) btn.disabled = true;
       var aviso = btn ? setTimeout(function () { btn.textContent = 'Bajando…'; }, 120) : 0;
       bytes(d).then(function (b) {
-        guardaArchivo(b, d);
+        guardaArchivo(cual(b, orig), d);
         try { if (op.alBajar) op.alBajar(d); } catch (e) { /* la descarga ya salió */ }
         if (btn) btn.textContent = 'Listo';
       }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); } }).then(function () {
@@ -174,11 +188,15 @@
         var b = ev.target.closest('[data-pv]');
         if (ev.target === el || (b && b.getAttribute('data-pv') === 'cierra')) { cierraCapa(); return; }
         if (b && b.getAttribute('data-pv') === 'baja' && c.bytes) {
-          guardaArchivo(c.bytes, d);
-          try { if (op.alBajar) op.alBajar(d); } catch (e) { /* ya salió */ }
+          var sale = function (orig) {
+            guardaArchivo(cual(c.bytes, orig), d);
+            try { if (op.alBajar) op.alBajar(d); } catch (e) { /* ya salió */ }
+          };
+          if (ofrece(d)) window.PROFASE_MARCA.eligeMarca(b, sale, 'el PDF'); else sale(false);
         }
       });
       c.tecla = function (ev) {
+        if (document.querySelector('.pm-menu')) return;   // el menú de «Original» abierto encima: él atiende las teclas
         if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cierraCapa(); return; }
         if (ev.key === 'Tab') {   // el foco se queda dentro de la vista previa
           var f = Array.prototype.filter.call(el.querySelectorAll('button:not([disabled]),iframe,[tabindex="0"]'), function (x) { return x.offsetParent !== null; });

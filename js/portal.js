@@ -564,6 +564,9 @@
     P.perfil = p; P.uid = s.user.id;
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
     try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
+    // ¿Se le ofrece bajar el «Original» (sin la marca PROFASE)? Decisión de Daniel, 30-oct-2026: hoy solo el equipo
+    // VAX (tabla marca_original, portal/sql/62_marca_original.sql). Lo usan js/marca.js y js/visor.js al bajar.
+    try { var mo = await sb.rpc('puedo_bajar_original'); P.originales = !mo.error && mo.data === true; } catch (e) { P.originales = false; }
     // Vista del equipo como gerente (29-oct-2026, pedido de Fernando; portal/sql/42_equipo_gerente.sql): quien está en
     // equipo_gerente ve la página de los gerentes y sus pestañas como gerente, con los mismos botones; lo que puede
     // guardar lo dice la base (sigue siendo contador; ahí tiene permisos de gerente en lo que pidió Fernando, nunca

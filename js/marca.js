@@ -14,6 +14,95 @@
   var SUB = 'Asesoría Contable, Legal y Fiscal';
   var EXJS = null;
 
+  /* ---------- «Original» (sin la marca PROFASE). Decisión de Daniel, 30-oct-2026, 12:56: «hay cosas que se deben de
+     imprimir sin el branding profase (acuses, estados de cuenta, etc) en caso de que nos caiga auditoría… por el
+     momento quiero que al equipo VAX (a los integrantes) les aparezca en descargar pdf o excel, un sub menú que diga,
+     con branding profase u originales». A quien la base se lo ofrece (PORTAL.originales: tabla marca_original,
+     portal/sql/62_marca_original.sql; hoy el equipo VAX), al picar un botón de Excel o PDF (data-excel, su «PDF» de al
+     lado o data-descarga) le sale un menú chico con «Con marca PROFASE» y «Original (sin marca)». Si escoge el original,
+     el mismo archivo sale sin el signo, sin «PROFASE», sin el subtítulo, sin la marca de agua, sin la marca en el pie y
+     con encabezados de tabla neutros. A todos los demás les sale siempre con la marca, como siempre. Los documentos
+     subidos (acuses, estados de cuenta) los resuelve js/visor.js con el mismo menú (el PDF tal cual se subió). */
+  var ORIGINAL = 0, MENU = null;
+  function ofreceOriginal() { return !!(window.PORTAL && window.PORTAL.originales === true); }
+  // ¿Lo que se está armando ahora va sin la marca? (lo escogió hace menos de 2 minutos en el menú)
+  function sinMarca() { return !!ORIGINAL && Date.now() - ORIGINAL < 120000; }
+  function cierraMenu() {
+    if (!MENU) return;
+    var m = MENU; MENU = null;
+    m.el.remove(); document.removeEventListener('keydown', m.tecla, true); document.removeEventListener('pointerdown', m.fuera, true);
+    window.removeEventListener('resize', m.cierra); window.removeEventListener('scroll', m.cierra, true);
+    try { if (m.btn && m.btn.focus && m.devuelve) m.btn.focus(); } catch (e) { /* sin foco */ }
+  }
+  /* El menú junto al botón: cb(true) = original, cb(false) = con marca. Esc o picar fuera lo cierra sin bajar nada. */
+  function eligeMarca(btn, cb, que) {
+    cierraMenu();
+    if (!document.getElementById('pm-css')) {
+      var st = document.createElement('style'); st.id = 'pm-css';
+      st.textContent = '.pm-menu{position:fixed;z-index:2147483000;min-width:236px;max-width:calc(100vw - 16px);background:var(--surface,#fff);color:var(--ink,#132036);'
+        + 'border:1px solid var(--line-strong,#C4CDDA);border-radius:12px;box-shadow:0 12px 32px rgba(10,18,32,.28);padding:6px;font-family:var(--f-body,Arial,sans-serif)}'
+        + '.pm-menu .pm-t{font-size:12px;color:var(--muted,#5A6577);padding:6px 10px 4px;font-weight:600}'
+        + '.pm-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;min-height:44px;border:0;background:transparent;color:inherit;'
+        + 'text-align:left;padding:8px 10px;border-radius:8px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}'
+        + '.pm-menu button small{font-size:12px;font-weight:400;color:var(--muted,#5A6577)}'
+        + '.pm-menu button:hover,.pm-menu button:focus-visible{background:var(--surface-2,#EEF2F7);outline:none}'
+        + '.pm-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--accent,#F07A1E)}'
+        + '.pm-menu .pm-ic{display:inline-block;width:14px;height:16px;margin-right:7px;vertical-align:-3px;object-fit:contain}'
+        + '.pm-menu .pm-ori .pm-ic{width:11px;height:14px;border:1.5px solid currentColor;border-radius:2px;margin-left:1px;margin-right:9px;box-sizing:border-box}';
+      document.head.appendChild(st);
+    }
+    var el = document.createElement('div');
+    el.className = 'pm-menu'; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', '¿Cómo lo bajo?');
+    el.innerHTML = '<div class="pm-t">' + (que ? 'Bajar ' + que : '¿Cómo lo bajo?') + '</div>'
+      + '<button type="button" role="menuitem" class="pm-con" data-pm="0"><span><img class="pm-ic" src="img/logo.png" alt="">Con marca PROFASE</span><small>Con el signo y la marca, como siempre</small></button>'
+      + '<button type="button" role="menuitem" class="pm-ori" data-pm="1"><span><i class="pm-ic"></i>Original (sin marca)</span><small>Sin la marca PROFASE, para entregar o imprimir</small></button>';
+    document.body.appendChild(el);
+    // junto al botón, sin salirse de la pantalla (abajo si cabe; si no, arriba)
+    var r = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : { left: 8, right: 8, top: 8, bottom: 8 };
+    var w = el.offsetWidth, h = el.offsetHeight, vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
+    var x = Math.max(8, Math.min(r.left, vw - w - 8)), y = r.bottom + 6 + h <= vh - 8 ? r.bottom + 6 : Math.max(8, r.top - h - 6);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    var m = { el: el, btn: btn, devuelve: true };
+    m.cierra = function () { m.devuelve = false; cierraMenu(); };
+    m.tecla = function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cierraMenu(); return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Tab') {
+        var bs = el.querySelectorAll('button'), i = Array.prototype.indexOf.call(bs, document.activeElement);
+        ev.preventDefault(); bs[(i + (ev.key === 'ArrowUp' || (ev.key === 'Tab' && ev.shiftKey) ? bs.length - 1 : 1)) % bs.length].focus();
+      }
+    };
+    m.fuera = function (ev) { if (!el.contains(ev.target)) { m.devuelve = false; cierraMenu(); } };
+    el.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-pm]');
+      if (!b) return;
+      ev.preventDefault(); ev.stopPropagation();
+      var orig = b.getAttribute('data-pm') === '1';
+      m.devuelve = false; cierraMenu();
+      cb(orig);
+    });
+    document.addEventListener('keydown', m.tecla, true);
+    setTimeout(function () { if (MENU === m) document.addEventListener('pointerdown', m.fuera, true); }, 0);
+    window.addEventListener('resize', m.cierra); window.addEventListener('scroll', m.cierra, true);
+    MENU = m;
+    try { el.querySelector('button').focus(); } catch (e) { /* sin foco */ }
+  }
+  /* Los botones de bajar (Excel, su PDF de al lado y los que llevan data-descarga): a quien se le ofrece el original,
+     primero el menú; luego el mismo botón sigue como siempre, ya sabiendo cómo lo quiere. */
+  function interceptaDescargas(ev) {
+    if (DISPARO || !ofreceOriginal()) return;
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-excel],[data-pdf-de],[data-descarga]') : null;
+    if (!b || b.disabled) return;
+    ev.preventDefault(); ev.stopPropagation(); if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    var pdf = b.hasAttribute('data-pdf-de') || /\bpdf\b/i.test(b.getAttribute('data-descarga') || b.textContent || '');
+    eligeMarca(b, function (orig) {
+      ORIGINAL = orig ? Date.now() : 0;
+      if (!b.hasAttribute('data-pdf-de') && b.hasAttribute('data-excel')) PIDE_PDF = 0;
+      DISPARO = true;
+      try { b.click(); } finally { DISPARO = false; }
+    }, pdf ? 'el PDF' : 'el Excel');
+  }
+  document.addEventListener('click', interceptaDescargas, true);
+
   function excelJS() {
     if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
     if (!EXJS) EXJS = new Promise(function (ok, ko) {
@@ -29,6 +118,7 @@
   /* Libro nuevo con las propiedades de PROFASE (autor y compañía que se ven en Archivo › Propiedades) */
   function libro(EX, titulo) {
     var wb = new EX.Workbook();
+    if (sinMarca()) { wb.creator = ''; wb.lastModifiedBy = ''; wb.company = ''; wb.title = titulo || ''; wb.created = new Date(); wb.modified = wb.created; return wb; }
     wb.creator = 'PROFASE'; wb.lastModifiedBy = 'Portal PROFASE';
     wb.company = 'PROFASE · ' + SUB; wb.title = titulo || 'Portal PROFASE';
     wb.created = new Date(); wb.modified = wb.created;
@@ -45,28 +135,35 @@
      en blanco antes de la tabla. */
   function encabezado(wb, ws, ancho, op) {
     op = op || {}; ancho = Math.max(ancho || 1, 1);
-    ws.getRow(1).height = 24; ws.getRow(2).height = 14; ws.getRow(3).height = 5; ws.getRow(4).height = 9;
-    // el signo va anclado de esquina a esquina (como lo guarda el propio Excel), 30 × 34 px dentro de la columna A:
-    // de 5 px a 35 px de ancho y de 6 px (renglón 1, de 32 px) a 40 px (8 px dentro del renglón 2)
-    var E = 9525;
-    ws.addImage(logoDe(wb), { tl: { nativeCol: 0, nativeColOff: 5 * E, nativeRow: 0, nativeRowOff: 6 * E },
-      br: { nativeCol: 0, nativeColOff: 35 * E, nativeRow: 1, nativeRowOff: 8 * E }, editAs: 'oneCell' });
-    var a1 = ws.getCell(1, 1), a2 = ws.getCell(2, 1);
-    a1.value = 'PROFASE';
-    a1.font = { name: FUENTE, size: 16, bold: true, color: { argb: C.azul } };
-    a1.alignment = { vertical: 'bottom', horizontal: 'left', indent: 5 };
-    a2.value = SUB;
-    a2.font = { name: FUENTE, size: 9, italic: true, color: { argb: C.grisClaro } };
-    a2.alignment = { vertical: 'top', horizontal: 'left', indent: 5 };
-    // la línea azul cubre las columnas de la tabla y, como mínimo, el ancho del nombre y el subtítulo
-    for (var c = 1, w = 0; c <= ancho || w < 42; c++) {
-      ws.getCell(3, c).border = { bottom: { style: 'medium', color: { argb: C.azul } } };
-      w += ws.getColumn(c).width || 9;
+    var sm = sinMarca();
+    if (sm) {
+      // original: sin signo, sin «PROFASE», sin subtítulo ni línea azul; los renglones de la marca quedan ocultos
+      // (la celda A con letra hace que Excel guarde el renglón; si no, el renglón vacío no se guarda y no queda oculto)
+      for (var o = 1; o <= 4; o++) { ws.getRow(o).hidden = true; ws.getCell(o, 1).font = { name: FUENTE, size: 10 }; }
+    } else {
+      ws.getRow(1).height = 24; ws.getRow(2).height = 14; ws.getRow(3).height = 5; ws.getRow(4).height = 9;
+      // el signo va anclado de esquina a esquina (como lo guarda el propio Excel), 30 × 34 px dentro de la columna A:
+      // de 5 px a 35 px de ancho y de 6 px (renglón 1, de 32 px) a 40 px (8 px dentro del renglón 2)
+      var E = 9525;
+      ws.addImage(logoDe(wb), { tl: { nativeCol: 0, nativeColOff: 5 * E, nativeRow: 0, nativeRowOff: 6 * E },
+        br: { nativeCol: 0, nativeColOff: 35 * E, nativeRow: 1, nativeRowOff: 8 * E }, editAs: 'oneCell' });
+      var a1 = ws.getCell(1, 1), a2 = ws.getCell(2, 1);
+      a1.value = 'PROFASE';
+      a1.font = { name: FUENTE, size: 16, bold: true, color: { argb: C.azul } };
+      a1.alignment = { vertical: 'bottom', horizontal: 'left', indent: 5 };
+      a2.value = SUB;
+      a2.font = { name: FUENTE, size: 9, italic: true, color: { argb: C.grisClaro } };
+      a2.alignment = { vertical: 'top', horizontal: 'left', indent: 5 };
+      // la línea azul cubre las columnas de la tabla y, como mínimo, el ancho del nombre y el subtítulo
+      for (var c = 1, w = 0; c <= ancho || w < 42; c++) {
+        ws.getCell(3, c).border = { bottom: { style: 'medium', color: { argb: C.azul } } };
+        w += ws.getColumn(c).width || 9;
+      }
     }
     var f = 5;
     if (op.titulo) {
       var t = ws.getCell(f, 1); t.value = op.titulo;
-      t.font = { name: FUENTE, size: 13, bold: true, color: { argb: C.azul } };
+      t.font = { name: FUENTE, size: 13, bold: true, color: { argb: sm ? 'FF000000' : C.azul } };
       ws.getRow(f).height = 19; f++;
     }
     (op.lineas || []).forEach(function (l) {
@@ -86,12 +183,13 @@
     op = op || {};
     var r = ws.getRow(fila); r.height = op.alto || 22;
     (ws.__mk || (ws.__mk = { cab: [] })).cab.push({ fila: fila, desde: desde, hasta: hasta });
+    var sm = sinMarca();
     for (var c = desde; c <= hasta; c++) {
       var x = r.getCell(c);
-      x.font = { name: FUENTE, size: 10, bold: true, color: { argb: C.blanco } };
-      x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.azul } };
+      x.font = { name: FUENTE, size: 10, bold: true, color: { argb: sm ? 'FF000000' : C.blanco } };
+      x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sm ? 'FFD9D9D9' : C.azul } };
       x.alignment = { vertical: 'middle', horizontal: (op.derecha && op.derecha.indexOf(c) >= 0) ? 'right' : 'left', wrapText: true };
-      x.border = borde(C.azul);
+      x.border = borde(sm ? 'FFBFBFBF' : C.azul);
     }
   }
 
@@ -117,21 +215,23 @@
       fitToPage: true, fitToWidth: 1, fitToHeight: 0,
       margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.6, header: 0.25, footer: 0.3 } });
     if (op.repetir) ws.pageSetup.printTitlesRow = op.repetir + ':' + op.repetir;
-    ws.headerFooter = { oddFooter: '&L&"Arial,Italic"&8&K888888PROFASE · ' + SUB + '&R&"Arial"&8&K888888Página &P de &N',
-      evenFooter: '&L&"Arial,Italic"&8&K888888PROFASE · ' + SUB + '&R&"Arial"&8&K888888Página &P de &N' };
+    var pie = sinMarca() ? '&R&"Arial"&8&K888888Página &P de &N' : '&L&"Arial,Italic"&8&K888888PROFASE · ' + SUB + '&R&"Arial"&8&K888888Página &P de &N';
+    ws.headerFooter = { oddFooter: pie, evenFooter: pie };
   }
 
   /* Guarda el libro: con la descarga del portal si existe, si no con una liga directa. Si se picó el botón «PDF»
      gemelo (abajo), sale el PDF del mismo libro, con la marca PROFASE, en lugar del Excel. */
   async function guardar(wb, nombre) {
-    if (PIDE_PDF && Date.now() - PIDE_PDF < 180000) {
+    try {
+      if (PIDE_PDF && Date.now() - PIDE_PDF < 180000) {
+        PIDE_PDF = 0;
+        var doc = await pdfDeLibro(wb);
+        return await bajar(doc.output('blob'), String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '') + '.pdf');
+      }
       PIDE_PDF = 0;
-      var doc = await pdfDeLibro(wb);
-      return bajar(doc.output('blob'), String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '') + '.pdf');
-    }
-    PIDE_PDF = 0;
-    var datos = await wb.xlsx.writeBuffer();
-    return bajar(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre);
+      var datos = await wb.xlsx.writeBuffer();
+      return await bajar(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre);
+    } finally { ORIGINAL = 0; }
   }
   async function bajar(blob, nombre) {
     var dl = null;
@@ -159,6 +259,7 @@
   /* Encabezado del PDF, igual al del WorkFlow: signo + «PROFASE» + subtítulo + línea azul; sin título a la derecha.
      Regresa la altura (en puntos) donde ya se puede escribir. */
   function encabezadoPDF(doc, op) {
+    if (sinMarca()) return 52;
     op = op || {}; var M = op.margen == null ? 36 : op.margen, W = doc.internal.pageSize.getWidth();
     doc.addImage(LOGO, 'PNG', M, 17, 21, 23.4);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(31, 56, 100); doc.text('PROFASE', M + 28, 31, { charSpace: 1.6 });
@@ -169,6 +270,7 @@
   }
   /* Marca de agua: el signo PROFASE al 18 %, centrado y detrás del contenido */
   function marcaAguaPDF(doc) {
+    if (sinMarca()) return;
     var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), MW = 300, MH = MW * 402 / 360;
     doc.addImage(MARCA_AGUA, 'PNG', (W - MW) / 2, (H - MH) / 2 + 10, MW, MH);
   }
@@ -184,6 +286,9 @@
   /* Estilo de tabla (autoTable) de los PDF del portal: encabezado azul institucional y celdas sin relleno, para que
      se vea la marca de agua. Uso: doc.autoTable(Object.assign(PROFASE_MARCA.tablaPDF(), {startY: y, head, body})) */
   function tablaPDF() {
+    if (sinMarca()) return { theme: 'grid', margin: { left: 36, right: 36, top: 44, bottom: 34 },
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 3, overflow: 'linebreak', lineColor: [191, 191, 191], lineWidth: 0.4, textColor: [0, 0, 0] },
+      bodyStyles: { fillColor: false }, headStyles: { fillColor: [217, 217, 217], textColor: 0, fontStyle: 'bold', lineColor: [191, 191, 191] } };
     return { theme: 'grid', margin: { left: 36, right: 36, top: 62, bottom: 34 },
       styles: { font: 'helvetica', fontSize: 8, cellPadding: 3, overflow: 'linebreak', lineColor: [220, 226, 235], lineWidth: 0.4, textColor: [19, 32, 54] },
       bodyStyles: { fillColor: false }, headStyles: { fillColor: [31, 56, 100], textColor: 255, fontStyle: 'bold', lineColor: [31, 56, 100] } };
@@ -239,7 +344,9 @@
       });
       // el nombre del documento como título: el lector de PDF del navegador lo enseña arriba en la vista previa
       if (op && op.titulo) { try { doc.setTitle(String(op.titulo), { showInWindowTitleBar: true }); } catch (e) { /* sin título */ } }
-      return await doc.save({ useObjectStreams: false });   // sin flujos de objetos: se arma en la mitad del tiempo
+      var sellado = await doc.save({ useObjectStreams: false });   // sin flujos de objetos: se arma en la mitad del tiempo
+      try { Object.defineProperty(sellado, 'original', { value: bytes, enumerable: false }); } catch (e) { /* sin original */ }
+      return sellado;
     } catch (e) { return null; }
   }
 
@@ -343,15 +450,16 @@
     var anchas = hojas.some(function (h) { return h.bloques.some(function (b) { return b.head && b.head.length > 6; }); });
     var doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: anchas ? 'landscape' : 'portrait' });
     var y = marcaPDF(doc), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 36, ancho = W - 2 * M;
-    function cabe(alto) { if (y + alto > H - 40) { doc.addPage(); y = 66; } }
+    var y0 = sinMarca() ? 44 : 66;
+    function cabe(alto) { if (y + alto > H - 40) { doc.addPage(); y = y0; } }
     function escribe(t, tam, estilo, color, sep) {
       doc.setFont('helvetica', estilo); doc.setFontSize(tam); doc.setTextColor(color[0], color[1], color[2]);
       doc.splitTextToSize(String(t), ancho).forEach(function (l) { cabe(tam + 3); doc.text(l, M, y); y += tam + 3; });
       y += sep || 0;
     }
     hojas.forEach(function (h, i) {
-      if (i > 0) { doc.addPage(); y = 66; }
-      if (h.titulo) escribe(h.titulo, 13, 'bold', [31, 56, 100], 2);
+      if (i > 0) { doc.addPage(); y = y0; }
+      if (h.titulo) escribe(h.titulo, 13, 'bold', sinMarca() ? [0, 0, 0] : [31, 56, 100], 2);
       h.lineas.forEach(function (l) { escribe(l, 8.5, 'normal', [90, 101, 119]); });
       y += 6;
       h.bloques.forEach(function (b) {
@@ -372,7 +480,7 @@
     var total = doc.internal.getNumberOfPages();
     for (var p = 1; p <= total; p++) {
       doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(122, 133, 151);
-      doc.text('PROFASE · ' + SUB + ' · Página ' + p + ' de ' + total, W / 2, H - 18, { align: 'center' });
+      doc.text((sinMarca() ? '' : 'PROFASE · ' + SUB + ' · ') + 'Página ' + p + ' de ' + total, W / 2, H - 18, { align: 'center' });
     }
     return doc;
   }
@@ -427,5 +535,6 @@
     excelJS: excelJS, libro: libro, encabezado: encabezado, cabecera: cabecera, cuerpo: cuerpo, borde: borde,
     impresion: impresion, guardar: guardar,
     pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF,
-    precargaSello: precargaSello, pdfDeLibro: pdfDeLibro, empareja: empareja };
+    precargaSello: precargaSello, pdfDeLibro: pdfDeLibro, empareja: empareja,
+    sinMarca: sinMarca, ofreceOriginal: ofreceOriginal, eligeMarca: eligeMarca };
 })();
