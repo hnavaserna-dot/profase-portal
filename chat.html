@@ -77,6 +77,15 @@ button{cursor:pointer}
 .chips button{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
 .chips button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
 .convs{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--line);overscroll-behavior:contain}
+.inv{flex:none;display:flex;gap:10px;align-items:flex-start;margin:0 14px 10px;padding:10px 10px 10px 12px;border-radius:12px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);font-size:13px;line-height:1.4}
+.inv[hidden]{display:none}
+.inv .ic{flex:none;width:20px;height:20px;color:var(--accent-ink);margin-top:1px}
+.inv div{flex:1;min-width:0}
+.inv .t{display:block;font-size:13.5px;margin-bottom:2px}
+.inv .bt{height:32px;margin-top:8px}
+.inv .bi{width:30px;height:30px;margin:-4px -4px 0 0}
+.pasos{margin:6px 0 0;padding-left:20px;font-size:13px;color:var(--ink)}
+.pasos li{margin:3px 0}
 .ci{display:flex;gap:11px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;padding:11px 14px;align-items:center;min-width:0}
 .ci:hover{background:var(--surface-2)}
 .ci[aria-current="true"]{background:var(--navy-soft)}
@@ -335,6 +344,7 @@ audio.ad-med{width:280px;max-width:100%}
     </div>
     <div class="busca"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Buscar chat o persona" aria-label="Buscar chat o persona" autocomplete="off"></div>
     <div class="chips" role="group" aria-label="Qué ver"><button type="button" data-f="todo" aria-pressed="true">Todos</button><button type="button" data-f="sin" aria-pressed="false">Sin leer</button><button type="button" data-f="grupos" aria-pressed="false">Grupos</button><button type="button" data-f="personas" aria-pressed="false">Personas</button></div>
+    <div class="inv" id="push-inv" hidden role="region" aria-label="Avisos del chat"></div>
     <div class="convs" id="convs" role="list"></div>
   </section>
 
@@ -536,6 +546,7 @@ audio.ad-med{width:280px;max-width:100%}
     try { pend = a && a.__chatPendiente; if (a) a.__chatPendiente = null; } catch (e) { pend = null; }
     var h = /#c=([0-9a-f-]{36})/.exec(location.hash);
     if (pend) abre(pend); else if (h) abre(h[1]);
+    revisaInv();
   })();
 
   // lo pide la página de arriba (el aviso de un mensaje nuevo, o picar el chat en el menú)
@@ -851,7 +862,7 @@ audio.ad-med{width:280px;max-width:100%}
       if (ACT && ACT.id === id) ACT.lect[YO.usuario] = Math.max(ACT.lect[YO.usuario] || 0, ult);
       var c = CONVS.find(function (x) { return x.id === id; });
       if (c) { c.no_leidos = 0; pintaLista(); }
-      var a = arriba(); try { if (a && a.__chatRefresca) a.__chatRefresca(); } catch (e) { /* sola */ }
+      var a = arriba(); try { if (a && a.__chatRefresca) a.__chatRefresca(); if (a && a.__chatCierraAvisos) a.__chatCierraAvisos(id); } catch (e) { /* sola */ }
     } catch (e) { /* luego */ }
     leyendo = false;
   }
@@ -1477,21 +1488,90 @@ audio.ad-med{width:280px;max-width:100%}
     } catch (e) { aviso(err(e), true); }
   }
 
-  // ---------------------------------------------------------------- ajustes: avisos del navegador y sonido
-  $('#ajustes').onclick = function (ev) {
+  // ---------------------------------------------------------------- avisos al celular y a la computadora (aunque el portal esté cerrado)
+  function PUSH() { var a = arriba(); try { return a && a.__chatPush ? a.__chatPush : null; } catch (e) { return null; } }
+  var IC_CAMP = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+  var PASOS_IPHONE = '<ol class="pasos"><li>Abre <b>crmprofase.com.mx</b> en Safari.</li><li>Pica <b>Compartir</b> (el cuadrito con la flecha; si no lo ves, está en <b>⋯</b>) y luego <b>Agregar a inicio</b>.</li><li>Abre el portal desde ese ícono, entra con tu usuario y activa aquí los avisos.</li></ol>';
+  // pide el permiso aquí mismo, en el toque (Safari y Chrome lo piden así), y luego activa en la página del portal
+  async function activaPush() {
+    var pu = PUSH(); if (!pu) throw new Error('Los avisos no están listos; recarga el portal.');
+    if ('Notification' in window && Notification.permission === 'default') {
+      var per = await Notification.requestPermission();
+      if (per !== 'granted') throw new Error(per === 'denied' ? 'El navegador tiene bloqueados los avisos de este sitio; se activan en sus ajustes.' : 'No se dio permiso para los avisos.');
+    }
+    await pu.activar();
+  }
+  window.__chatRevisaInv = function () { return revisaInv(); };
+  async function revisaInv() {
+    var el = $('#push-inv'), pu = PUSH();
+    if (!el || !pu) return;
+    var st = 'no-soportado';
+    try { st = await pu.estado(); } catch (e) { /* sin avisos */ }
+    if (guarda.get('profase-chat-push-inv') === '0' || (st !== 'no' && st !== 'iphone-sin-app')) { el.hidden = true; return; }
+    if (st === 'no') pu.prepara();
+    el.innerHTML = IC_CAMP + '<div><b class="t">Recibe los mensajes aunque el portal esté cerrado</b>'
+      + (st === 'no' ? 'Te avisa en este ' + (/iPhone|iPad|Android/.test(navigator.userAgent) ? 'celular' : 'equipo') + ' quién te escribió, sin enseñar el mensaje.<br><button type="button" class="bt pri" data-act>Activar avisos</button>'
+        : 'En iPhone, los avisos llegan con el portal en tu pantalla de inicio:' + PASOS_IPHONE)
+      + '</div><button type="button" class="bi" data-x aria-label="Ya no enseñar">' + IC.tache + '</button>';
+    el.hidden = false;
+    el.querySelector('[data-x]').onclick = function () { guarda.set('profase-chat-push-inv', '0'); el.hidden = true; };
+    var b = el.querySelector('[data-act]');
+    if (b) b.onclick = async function () {
+      b.disabled = true; b.textContent = 'Activando…';
+      try { await activaPush(); el.hidden = true; aviso('Listo: aquí te van a llegar los avisos del chat.'); }
+      catch (e) { aviso(err(e), true); b.disabled = false; b.textContent = 'Activar avisos'; }
+    };
+  }
+
+  // ---------------------------------------------------------------- ajustes: avisos y sonido
+  $('#ajustes').onclick = async function (ev) {
     ev.stopPropagation();
+    var pu = PUSH(), st = 'no-soportado';
+    if (pu) { try { st = await pu.estado(); } catch (e) { st = 'no-soportado'; } if (st === 'no') pu.prepara(); }
     var puedeNotif = 'Notification' in window;
     var on = guarda.get('profase-chat-avisos') === '1' && puedeNotif && Notification.permission === 'granted';
     var son = guarda.get('profase-chat-sonido') !== '0';
-    var v = ventana('Ajustes del chat', sw('avisos', 'Avisos en la computadora cuando el portal está en otra ventana', on) + sw('sonido', 'Sonido al llegar un mensaje', son)
-      + '<p class="nota">' + (puedeNotif ? (Notification.permission === 'denied' ? 'Tu navegador tiene bloqueados los avisos de este sitio; se activan en los ajustes del navegador.' : 'Los avisos solo dicen quién te escribió y el principio del mensaje.') : 'Este navegador no muestra avisos fuera de la página.') + '</p>'
-      + '<p class="nota">Los chats silenciados no suenan ni avisan.</p>'
-      + (arriba() && arriba().__chatRecorrido ? '<div class="sec" style="margin-top:12px"><button type="button" class="lnk" data-recorrido>Ver otra vez el recorrido del chat</button></div>' : ''));
+    var cuerpo = '';
+    if (st === 'si' || st === 'no') {
+      cuerpo += sw('push', 'Avisos en este equipo aunque el portal esté cerrado', st === 'si')
+        + '<p class="nota">Llegan al celular o a la computadora como los de cualquier app. Dicen quién te escribió y en qué chat, nunca el mensaje. Se activan en cada equipo.</p>'
+        + '<div class="sec" data-prueba' + (st === 'si' ? '' : ' hidden') + ' style="border:0;padding:6px 0 0"><button type="button" class="lnk" data-mprueba>Mandarme un aviso de prueba</button></div>';
+    } else if (st === 'iphone-sin-app') {
+      cuerpo += '<p style="margin:0 0 4px;font-weight:600">Avisos en el iPhone</p><p class="nota" style="margin:0">Llegan solo con el portal en tu pantalla de inicio:</p>' + PASOS_IPHONE;
+    } else if (st === 'bloqueado') {
+      cuerpo += '<p style="margin:0 0 4px;font-weight:600">Avisos en este equipo</p><p class="nota" style="margin:0">El navegador tiene bloqueados los avisos de este sitio. Se activan en sus ajustes (permisos del sitio › Notificaciones) y luego aquí.</p>';
+    } else {
+      cuerpo += sw('avisos', 'Avisos en la computadora cuando el portal está en otra ventana', on)
+        + '<p class="nota">' + (puedeNotif ? 'Los avisos solo dicen quién te escribió y el principio del mensaje.' : 'Este navegador no muestra avisos fuera de la página.') + '</p>';
+    }
+    cuerpo += '<div class="sec" style="margin-top:10px">' + sw('sonido', 'Sonido al llegar un mensaje', son) + '<p class="nota">Los chats silenciados no suenan ni avisan.</p></div>'
+      + (arriba() && arriba().__chatRecorrido ? '<div class="sec"><button type="button" class="lnk" data-recorrido>Ver otra vez el recorrido del chat</button></div>' : '');
+    var v = ventana('Ajustes del chat', cuerpo);
     var rb = v.el.querySelector('[data-recorrido]');
     if (rb) rb.onclick = function () { v.cierra(); try { arriba().__chatRecorrido(); } catch (e) { /* sin recorrido */ } };
+    var mp = v.el.querySelector('[data-mprueba]');
+    if (mp) mp.onclick = async function () {
+      mp.disabled = true;
+      try { var r = await PUSH().prueba(); aviso(r && r.enviados > 0 ? 'Listo: en unos segundos te llega el aviso de prueba.' : 'No se encontró este equipo; desactiva y vuelve a activar los avisos.', !(r && r.enviados > 0)); }
+      catch (e) { aviso(err(e), true); }
+      mp.disabled = false;
+    };
+    var ocupado = false;
     v.el.addEventListener('click', async function (e) {
-      var x = e.target.closest('[data-sw]'); if (!x) return;
+      var x = e.target.closest('[data-sw]'); if (!x || ocupado) return;
       var val = x.getAttribute('aria-checked') !== 'true';
+      if (x.dataset.sw === 'push') {
+        ocupado = true; x.setAttribute('aria-busy', 'true');
+        try {
+          if (val) { await activaPush(); aviso('Listo: aquí te van a llegar los avisos del chat.'); }
+          else { await PUSH().desactivar(); aviso('Ya no te llegarán avisos en este equipo.'); }
+          x.setAttribute('aria-checked', val ? 'true' : 'false');
+          var pr = v.el.querySelector('[data-prueba]'); if (pr) pr.hidden = !val;
+          var iv = $('#push-inv'); if (iv && val) iv.hidden = true;
+        } catch (er) { aviso(err(er), true); }
+        x.removeAttribute('aria-busy'); ocupado = false;
+        return;
+      }
       if (x.dataset.sw === 'avisos') {
         if (val) {
           if (!puedeNotif) { aviso('Este navegador no muestra avisos.', true); return; }

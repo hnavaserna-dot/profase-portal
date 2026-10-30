@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="gerente"><head><meta charset="utf-8"><meta name="portal-version" content="e524da50f427"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+<!doctype html><html lang="es" data-rol="gerente"><head><meta charset="utf-8"><meta name="portal-version" content="c79ca4dd2afe"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -3550,6 +3550,11 @@ initDB=async function(){await initDB0();oirJust()};
    - «En línea»: quién tiene el portal abierto (canal privado «chat:en-linea»); la página del chat lo pregunta aquí.
    - Cada quien ve solo sus conversaciones (lo decide la base: portal/sql/58_chat.sql); su papá (hnava) también chatea.
    - Si la base todavía no tiene el chat (sin 58), no aparece nada y el portal sigue igual.
+   - Avisos al celular y a la computadora aunque el portal esté cerrado (pedido de Daniel, 30-oct-2026, «la 1»): cada
+     quien los activa en los ajustes del chat (o en la invitación de la lista); el navegador instala /sw.js y guarda su
+     suscripción con chat_push_guarda() (portal/sql/60_chat_push.sql); la base avisa sola a la función «chat-push» al
+     llegar un mensaje. El aviso dice quién escribió y en qué chat, nunca el texto. En iPhone, solo con el portal en la
+     pantalla de inicio. Al picarlo abre el portal en esa conversación (?chat=<id> o mensaje del aviso a la ventana abierta).
    - Recorrido guiado (pedido de Daniel, 30-oct-2026: «hazlo tipo walkthrough… esto es nuevo y flechita; aquí le picas»;
      y «que dirección ni nadie verá las conversaciones, para que se sientan cómodos de usarlo»): a cada quien le sale una
      sola vez, después de la ventana de «Nuevos cambios» (js/recorrido.js; quién ya lo vio: portal/sql/59_recorridos.sql;
@@ -3611,7 +3616,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','chat');
     const t=document.getElementById('vtitle');if(t)t.textContent='Chat';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chat'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=50c696f159');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=9a7bc69b21');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
     alto();
     setTimeout(refresca,1500);
@@ -3647,6 +3652,8 @@ initDB=async function(){await initDB0();oirJust()};
     if(ico){ico.setAttribute('aria-label',SIN>0?'Chat: '+SIN+(SIN===1?' mensaje sin leer':' mensajes sin leer'):'Chat');ico.title=SIN>0?SIN+(SIN===1?' mensaje sin leer':' mensajes sin leer'):'Chat'}
     if(SIN>0){b.dataset.aviso=String(SIN);b.textContent='Chat ('+(SIN>99?'99+':SIN)+')'}else{delete b.dataset.aviso;b.textContent='Chat'}
     document.title=(SIN>0?'('+(SIN>99?'99+':SIN)+') ':'')+TIT0;
+    // el número en el ícono de la app (celular o computadora, si el portal está instalado)
+    try{if(navigator.setAppBadge){if(SIN>0)navigator.setAppBadge(SIN).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}}catch(err){}
   }
   function viendo(conv){
     try{const w=fr.contentWindow;return document.body.getAttribute('data-view')==='chat'&&!document.hidden&&w&&w.__chatActual&&w.__chatActual()===conv}catch(err){return false}
@@ -3704,7 +3711,7 @@ initDB=async function(){await initDB0();oirJust()};
     if(guarda('profase-chat-sonido')!=='0')suena();
     // del navegador: solo si lo activó en los ajustes del chat y el portal no está a la vista
     try{
-      if(guarda('profase-chat-avisos')==='1'&&'Notification' in window&&Notification.permission==='granted'&&(document.hidden||!document.hasFocus())){
+      if(!PUSH_ON&&guarda('profase-chat-avisos')==='1'&&'Notification' in window&&Notification.permission==='granted'&&(document.hidden||!document.hasFocus())){
         const no=new Notification(quien,{body:tx.slice(0,140),tag:'chat-'+n.conv,icon:foto||'img/icono-192.png'});
         no.onclick=()=>{try{window.focus()}catch(err){}abrir(n.conv);no.close()};
       }
@@ -3742,6 +3749,101 @@ initDB=async function(){await initDB0();oirJust()};
         .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensajes'},p=>{if(p&&p.new&&p.new.autor!==YO)window.__chatRefresca()})
         .subscribe();
     }catch(err){}
+  }
+
+  /* --- avisos al celular y a la computadora aunque el portal esté cerrado (Web Push) --- */
+  let PUSH_ON=false;
+  const esIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const comoApp=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(err){return false}};
+  const soportaPush=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  function deB64u(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+  function equipo(){
+    const ua=navigator.userAgent;
+    const que=/iPhone/.test(ua)?'iPhone':/iPad/.test(ua)||(esIOS&&!/iPhone/.test(ua))?'iPad':/Android/.test(ua)?'Android':/Mac/.test(ua)?'Mac':/Windows/.test(ua)?'Windows':'Equipo';
+    const nav=/Edg\//.test(ua)?'Edge':/Chrome\//.test(ua)?'Chrome':/Firefox\//.test(ua)?'Firefox':/Safari\//.test(ua)?'Safari':'';
+    return que+(nav?' · '+nav:'')+(comoApp()?' (app)':'');
+  }
+  async function registro(){return navigator.serviceWorker.getRegistration('/')}
+  async function suscripcion(){try{const r=await registro();return r?await r.pushManager.getSubscription():null}catch(err){return null}}
+  // lo que se deja listo antes de picar «Activar» (Safari pide que la suscripción salga casi junto con el toque)
+  let LISTO=null;
+  function prepara(){
+    if(!soportaPush())return Promise.resolve(null);
+    if(!LISTO)LISTO=(async()=>{
+      const reg=await navigator.serviceWorker.register('/sw.js',{scope:'/'});
+      await navigator.serviceWorker.ready;
+      const llave=await publica();
+      return {reg,llave};
+    })().catch(err=>{LISTO=null;throw err});
+    return LISTO;
+  }
+  async function publica(){
+    let r=await P.sb.rpc('chat_push_publica');
+    if(!r.error&&r.data)return r.data;
+    const f=await P.sb.functions.invoke('chat-push',{body:{llave:true}});
+    if(f.error||!f.data||!f.data.publica)throw new Error('No se pudo preparar los avisos; intenta otra vez en un momento.');
+    return f.data.publica;
+  }
+  async function guardaSus(sub){
+    const j=sub.toJSON();
+    const r=await P.sb.rpc('chat_push_guarda',{p_endpoint:j.endpoint,p_p256dh:j.keys&&j.keys.p256dh,p_auth:j.keys&&j.keys.auth,p_agente:equipo()});
+    if(r.error)throw new Error(r.error.message||'No se pudo guardar');
+    PUSH_ON=true;
+  }
+  window.__chatPush={
+    // 'si', 'no', 'bloqueado', 'iphone-sin-app' o 'no-soportado'
+    estado:async()=>{
+      if(!soportaPush())return esIOS&&!comoApp()?'iphone-sin-app':'no-soportado';
+      if(Notification.permission==='denied')return 'bloqueado';
+      return (await suscripcion())?'si':'no';
+    },
+    activar:async()=>{
+      if(!soportaPush())throw new Error(esIOS&&!comoApp()?'En iPhone primero agrega el portal a tu pantalla de inicio y ábrelo desde ahí.':'Este navegador no recibe avisos.');
+      const yaTenia=Notification.permission==='granted';
+      const per=yaTenia?'granted':await Notification.requestPermission();
+      if(per!=='granted')throw new Error(per==='denied'?'El navegador tiene bloqueados los avisos de este sitio; se activan en sus ajustes.':'No se dio permiso para los avisos.');
+      const {reg,llave}=await prepara();
+      let sub=await reg.pushManager.getSubscription();
+      if(sub){
+        // si la suscripción es de otra llave, se hace de nuevo
+        try{const k=sub.options&&sub.options.applicationServerKey;if(k){const a=new Uint8Array(k),b=deB64u(llave);if(a.length!==b.length||a.some((x,i)=>x!==b[i])){await sub.unsubscribe();sub=null}}}catch(err){}
+      }
+      if(!sub){
+        try{sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:deB64u(llave)})}
+        catch(err){
+          // la primera vez, el permiso se lleva el toque; con el permiso ya dado, se intenta una vez más
+          await navigator.serviceWorker.ready;
+          try{sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:deB64u(llave)})}
+          catch(err2){throw new Error(yaTenia?'No se pudo activar en este equipo; intenta otra vez en un momento.':'El permiso ya quedó; pica «Activar» otra vez para terminar.')}
+        }
+      }
+      await guardaSus(sub);
+      try{localStorage.setItem('profase-chat-push','1')}catch(err){}
+      return true;
+    },
+    desactivar:async()=>{
+      const sub=await suscripcion();
+      if(sub){const e=sub.endpoint;try{await sub.unsubscribe()}catch(err){}try{await P.sb.rpc('chat_push_quita',{p_endpoint:e})}catch(err){}}
+      PUSH_ON=false;
+      try{localStorage.setItem('profase-chat-push','0')}catch(err){}
+      return true;
+    },
+    prueba:async()=>{
+      const f=await P.sb.functions.invoke('chat-push',{body:{prueba:true}});
+      if(f.error){let m='No se pudo mandar la prueba';try{const c=await f.error.context.json();m=c.error||m}catch(err){}throw new Error(m)}
+      return f.data;
+    },
+    prepara:()=>prepara().then(()=>true,()=>false),
+    esIOS:()=>esIOS,comoApp:comoApp
+  };
+  // al abrir un chat, se quitan sus avisos que ya se habían enseñado en el celular o la computadora
+  window.__chatCierraAvisos=async conv=>{try{const r=await registro();if(!r)return;(await r.getNotifications({tag:'chat-'+conv})).forEach(n=>n.close())}catch(err){}};
+  async function arrancaPush(){
+    if(!soportaPush())return;
+    // lo que manda el aviso al picarlo, con el portal ya abierto
+    navigator.serviceWorker.addEventListener('message',ev=>{const d=ev.data||{};if(d.tipo==='chat-abre')abrir(d.conv||null)});
+    // si este equipo ya tenía los avisos, se vuelve a guardar (por si cambió de usuario o se borró)
+    try{const sub=await suscripcion();if(sub&&Notification.permission==='granted')await guardaSus(sub)}catch(err){}
   }
 
   /* --- recorrido guiado del chat (una sola vez por persona) --- */
@@ -3849,6 +3951,12 @@ initDB=async function(){await initDB0();oirJust()};
       setInterval(()=>{if(!document.hidden)refresca()},20000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresca()});
       if(/^#chat$/.test(location.hash))setView('chat');
+      // ?chat=<conversación>: viene de picar un aviso del celular o la computadora
+      try{
+        const u=new URL(location.href),c=u.searchParams.get('chat');
+        if(c&&/^[0-9a-f-]{36}$/i.test(c)){u.searchParams['delete']('chat');history.replaceState(history.state,'',u.pathname+u.search+'#chat');abrir(c)}
+      }catch(err){}
+      arrancaPush();
       quizaRecorrido();
     }catch(err){}
   })();
