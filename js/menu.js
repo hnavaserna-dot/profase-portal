@@ -17,7 +17,13 @@
    - Riel de íconos (29-oct-2026, propuesta de Gabriel): en computadora el menú arranca como una tira de íconos grandes
      con su nombre corto e «Inicio» arriba; al picar o pasar el mouse sale la tarjeta del módulo, como en el celular
      (qué es y cada opción con su explicación). En el celular arranca con el menú arriba. Cada quien puede cambiarlo
-     («Mostrar menú», «Menú arriba») y su navegador lo recuerda. */
+     («Mostrar menú», «Menú arriba») y su navegador lo recuerda.
+   - Submenús siempre completos (pedido de Daniel, 30-oct-2026: «no alcanzo a ver todo el sub menú … siempre se tiene
+     que ver bien»): la tarjeta de cada módulo (en el riel y en el menú arriba) sale junto a su ícono y, si no cabe
+     hacia abajo, sube lo necesario; si es más alta que la pantalla, sus opciones se deslizan dentro de la tarjeta con
+     el título fijo arriba. El riel y el menú se deslizan solos si la pantalla es baja. Los módulos no llevan el
+     globito del navegador («title»), que tapaba la tarjeta, y el menú abierto queda encima de los avisos flotantes.
+     La prueba es herramientas/pruebas/pantallas/prueba_submenus.py (profase-datos). */
 (function () {
   'use strict';
   var ROL = document.documentElement.getAttribute('data-rol') || '';
@@ -92,6 +98,11 @@
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
   var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
+  // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
+  var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
+    + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
+    + 'radial-gradient(farthest-side at 50% 0,rgba(10,18,32,.22),transparent) top/100% 10px no-repeat scroll,'
+    + 'radial-gradient(farthest-side at 50% 100%,rgba(10,18,32,.22),transparent) bottom/100% 10px no-repeat scroll';
   var CSS = ':root{--pm-sw:248px;--pm-rail:88px;--pm-top:0px}'
     + '.pm-oculto{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}'
     + '#v-quo .qsub{display:none!important}'
@@ -114,7 +125,7 @@
     + '.pm-car{width:14px;height:14px;opacity:.7;transition:transform .15s;flex:none;display:block}'
     + '.pm-mod[data-open="true"] .pm-car{transform:rotate(90deg)}'
     + '.pm-mod.on>.pm-mb{color:#fff}.pm-mod.on>.pm-mb .pm-ic{color:var(--accent,#F07A1E)}'
-    + '.pm-subs{list-style:none;margin:2px 0 6px;padding:0 0 0 22px;display:none}'
+    + '.pm-subs{margin:2px 0 6px;padding:0 0 0 22px;display:none}.pm-sl{list-style:none;margin:0;padding:0}'
     + '.pm-mod[data-open="true"] .pm-subs{display:block}'
     + '.pm-subs a{display:block;color:#A9BBD8;text-decoration:none;padding:7px 10px 7px 20px;font-size:13.5px;border-left:2px solid rgba(255,255,255,.14);border-radius:0 7px 7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.pm-subs a:hover{color:#fff;background:rgba(255,255,255,.1)}'
@@ -130,19 +141,22 @@
     // menú arriba: tira de íconos al centro, debajo del encabezado
     + '.pm-top{display:none}'
     + 'body.pm-arriba .pm-side,body.pm-arriba .pm-ham,body.pm-arriba .pm-scrim{display:none!important}'
-    + 'body.pm-arriba .pm-top{display:flex;justify-content:center;position:relative;flex:none;background:var(--surface,#fff);border-bottom:1px solid var(--line,#DCE2EB);padding:8px 12px;z-index:30;font-family:var(--f-body,inherit)}'
-    + '.pm-tira{display:flex;align-items:center;gap:4px}.pm-lado{display:flex;gap:4px}'
-    + '.pm-tb{position:relative;width:52px;height:52px;border:0;border-radius:14px;background:none;color:var(--navy,#1F3864);display:grid;place-items:center;cursor:pointer;padding:0}'
+    + 'body.pm-arriba .pm-top{display:flex;justify-content:center;justify-content:safe center;position:relative;flex:none;background:var(--surface,#fff);border-bottom:1px solid var(--line,#DCE2EB);padding:8px 12px;z-index:30;font-family:var(--f-body,inherit)}'
+    // los íconos se encogen un poco si no caben (en el teléfono, con 8 módulos, la tira se salía por los dos lados)
+    + '.pm-tira{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.pm-lado{display:flex;gap:4px;min-width:0}'
+    + '.pm-tb{position:relative;min-width:0;width:52px;height:52px;border:0;border-radius:14px;background:none;color:var(--navy,#1F3864);display:grid;place-items:center;cursor:pointer;padding:0}'
     + ':root[data-theme="dark"] .pm-tb{color:var(--ink,#E5EAF2)}'
-    + '.pm-tb svg{width:28px;height:28px;display:block}'
+    + '.pm-tb svg{width:28px;height:28px;max-width:calc(100% - 4px);display:block}'
     + '.pm-tb:hover,.pm-tb[aria-expanded="true"]{background:var(--navy-soft,#E6ECF6)}'
     + '.pm-tb.on{color:var(--accent,#F07A1E)!important;box-shadow:inset 0 -3px 0 var(--accent,#F07A1E)}'
-    + '.pm-tb.pm-home{width:60px;height:60px;border-radius:50%;margin:0 10px;background:var(--navy,#1F3864);color:#fff!important;box-shadow:0 4px 14px rgba(19,32,54,.25)}'
+    + '.pm-tb.pm-home{flex:none;width:60px;height:60px;border-radius:50%;margin:0 10px;background:var(--navy,#1F3864);color:#fff!important;box-shadow:0 4px 14px rgba(19,32,54,.25)}'
     + ':root[data-theme="dark"] .pm-tb.pm-home{background:var(--accent,#F07A1E);color:#0D1320!important}'
     + '.pm-tb.pm-home svg{width:30px;height:30px}.pm-tb.pm-home:hover{filter:brightness(1.12)}'
     + '.pm-tb:focus-visible,.pm-pop a:focus-visible,.pm-pop button:focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}'
     + '.pm-tb.con-aviso::after{content:"";position:absolute;right:9px;top:9px;width:9px;height:9px;border-radius:50%;background:var(--accent,#F07A1E);box-shadow:0 0 0 2px var(--surface,#fff)}'
-    + '.pm-pop{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 24px));box-sizing:border-box;background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-top:3px solid var(--accent,#F07A1E);border-radius:12px;box-shadow:0 16px 40px rgba(10,18,32,.22);padding:14px 14px 10px;text-align:left;max-height:calc(100vh - 140px);overflow:auto}'
+    // la tarjeta del menú arriba: debajo de la tira y siempre completa en la pantalla (popArriba() le da su lugar y su alto)
+    + '.pm-pop{position:fixed;top:var(--pm-py,120px);left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 24px));box-sizing:border-box;' + SOMBRAS + ',var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-top:3px solid var(--accent,#F07A1E);border-radius:12px;box-shadow:0 16px 40px rgba(10,18,32,.22);padding:14px 14px 10px;text-align:left;max-height:var(--pm-ph,calc(100vh - 16px));overflow:auto;overscroll-behavior:contain}'
+    + 'body.pm-arriba .pm-top.pm-con-pop{z-index:85}'   // abierta, encima de los avisos flotantes
     + '.pm-pop[hidden]{display:none}'
     + '.pm-pop h2{margin:0 0 2px;font-size:16px;font-weight:700}.pm-pop>p{margin:0 0 10px;color:var(--muted,#5A6577);font-size:13px}'
     + '.pm-pop ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}'
@@ -158,7 +172,9 @@
     + 'body.pm.pm-mini{padding-left:var(--pm-rail)!important}body.pm.pm-mini header.band{margin-left:calc(-1 * var(--pm-rail))}'
     + 'body.pm-mini .pm-side{width:var(--pm-rail)}'
     + 'body.pm-mini .pm-car{display:none}'
-    + 'body.pm-mini .pm-lista{overflow:visible;padding:10px 10px}'
+    // el riel se desliza si la pantalla es baja (las tarjetas van aparte, fijas en la pantalla, y no se recortan)
+    + 'body.pm-mini .pm-lista{overflow-x:hidden;overflow-y:auto;padding:10px 10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent;overscroll-behavior:contain}'
+    + 'body.pm-mini .pm-side:hover,body.pm-mini .pm-side:focus-within,body.pm-mini .pm-side.pm-fly-on{z-index:85}'   // la tarjeta abierta, encima de los avisos flotantes
     + 'body.pm-mini .pm-mod{margin-bottom:6px}'
     + 'body.pm-mini .pm-mb{flex-direction:column;justify-content:center;gap:5px;padding:10px 0 8px;border-radius:14px}'
     + 'body.pm-mini .pm-mb .pm-ic{width:26px;height:26px}'
@@ -170,10 +186,13 @@
     + 'body.pm-mini .pm-inicio .pm-lbl{display:none}body.pm-mini .pm-inicio:hover{background:#365A99}'
     + 'body.pm-mini .pm-pie button{justify-content:center}body.pm-mini .pm-pie .pm-lbl{display:none}body.pm-mini .pm-pmini svg{transform:rotate(180deg)}'
     // la tarjeta del módulo, igual que la del menú arriba
-    + 'body.pm-mini .pm-subs{display:none!important;position:absolute;left:calc(100% + 10px);top:-6px;width:320px;background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-left:3px solid var(--accent,#F07A1E);border-radius:14px;padding:14px 12px 10px;box-shadow:0 18px 44px rgba(10,18,32,.3);margin:0;z-index:31}'
-    + 'body.pm-mini .pm-mod:hover .pm-subs,body.pm-mini .pm-mod:focus-within .pm-subs,body.pm-mini .pm-mod.fly .pm-subs{display:block!important}'
+    // fija en la pantalla: colocaTarjeta() la pone a la altura de su ícono, sin salirse por abajo ni por arriba
+    + 'body.pm-mini .pm-subs{display:none!important;position:fixed;left:var(--pm-fx,98px);top:var(--pm-fy,8px);width:348px;max-width:calc(100vw - var(--pm-fx,98px) - 8px);max-height:var(--pm-fh,calc(100vh - 16px));box-sizing:border-box;flex-direction:column;background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-left:3px solid var(--accent,#F07A1E);border-radius:14px;padding:14px 12px 10px;box-shadow:0 18px 44px rgba(10,18,32,.3);margin:0;z-index:31}'
+    + 'body.pm-mini .pm-mod:hover .pm-subs,body.pm-mini .pm-mod:focus-within .pm-subs,body.pm-mini .pm-mod.fly .pm-subs{display:flex!important}'
+    + 'body.pm-mini .pm-mod.pm-mide .pm-subs{display:flex!important;visibility:hidden!important}'   // solo para medirla
     + 'body.pm-mini .pm-subs::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:14px}'
-    + 'body.pm-mini .pm-fly{display:block;padding:0 6px 10px;font-size:15px;font-weight:700;color:var(--ink,#132036);letter-spacing:0;text-transform:none}'
+    + 'body.pm-mini .pm-sl{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;' + SOMBRAS + '}'   // si no caben, las opciones se deslizan; el título se queda arriba
+    + 'body.pm-mini .pm-fly{display:block;flex:none;padding:0 6px 10px;font-size:15px;font-weight:700;color:var(--ink,#132036);letter-spacing:0;text-transform:none}'
     + 'body.pm-mini .pm-fly .pm-fd{display:block;font-size:12.5px;font-weight:400;color:var(--muted,#5A6577);margin-top:2px}'
     + 'body.pm-mini .pm-subs a{border-left:0;padding:8px 10px;border-radius:9px;color:var(--ink,#132036);white-space:normal;font-weight:600;font-size:13.5px}'
     + 'body.pm-mini .pm-subs a:hover{background:var(--navy-soft,#E6ECF6);color:var(--ink,#132036)}'
@@ -181,10 +200,12 @@
     + 'body.pm-mini .pm-subs a[aria-current="page"]{border-left:0;color:var(--ink,#132036);background:var(--accent-soft,#FDEBDC);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}'
     + '}'
     + '@media (max-width:900px){'
-    + '.pm-side{top:0;width:min(290px,85vw);transform:translateX(-105%);transition:transform .2s ease;z-index:46;box-shadow:none}'
+    // abierto, encima de los avisos flotantes (que antes tapaban las últimas opciones); con las orillas del iPhone
+    + '.pm-side{top:0;width:min(290px,85vw);box-sizing:border-box;padding-left:env(safe-area-inset-left,0px);transform:translateX(-105%);transition:transform .2s ease;z-index:86;box-shadow:none}'
     + 'body.pm-abierto .pm-side{transform:none;box-shadow:8px 0 30px rgba(0,0,0,.3)}'
-    + 'body.pm-abierto .pm-scrim{display:block;position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:45}'
-    + '.pm-cab{display:flex;align-items:center;gap:10px;padding:12px 10px 10px 16px;border-bottom:1px solid rgba(255,255,255,.12)}'
+    + 'body.pm-abierto .pm-scrim{display:block;position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:85}'
+    + '.pm-cab{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) 10px 10px 16px;border-bottom:1px solid rgba(255,255,255,.12)}'
+    + '.pm-pie{padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}'
     + '.pm-cab img{width:30px;height:30px;object-fit:contain;display:block;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box}'
     + '.pm-cab span{flex:1;font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-weight:700;letter-spacing:.16em;color:#fff;font-size:15px}'
     + '.pm-cab button{border:0;background:none;color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;display:grid;place-items:center}'
@@ -193,11 +214,11 @@
     + '}'
     + '@media (max-width:600px){header.band .tag{display:none}.pm-tit h1{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}'   // en el celular el título no se parte a media palabra
     + '@media (min-width:901px){body.pm.pm-arriba{padding-left:0!important}body.pm.pm-arriba header.band{margin-left:0}}'
-    + '@media (max-width:420px){.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
+    + '@media (max-width:420px){.pm-tira,.pm-lado{gap:2px}.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
     + '@media (max-width:370px){.pm-tb{width:44px;height:44px}.pm-tb.pm-home{margin:0 3px}}'   // 360 px: la tira de íconos cabía 3 px de más
     + '@media (prefers-reduced-motion:reduce){.pm-side,.pm-car,.pm-pie svg{transition:none}}';
 
-  var sw, side, lista, hdr, titulo, crumb, top, pendiente = 0, listo = false, quoObs = null, popAbierto = '';
+  var sw, side, lista, hdr, titulo, crumb, top, pendiente = 0, listo = false, quoObs = null, popAbierto = '', popHecho = '', hecho = '', hechoArriba = '', cerrarAlPintar = false;
 
   function movil() { return matchMedia('(max-width:900px)').matches; }
   function boton(v) { return sw.querySelector('button[data-view="' + v + '"]'); }
@@ -248,6 +269,7 @@
     listo = true;
     if (movil()) abre(false);
     popAbierto = '';
+    cierraFly(); cerrarAlPintar = true;   // escogida la opción, su tarjeta se cierra
     pinta();
     return true;
   }
@@ -263,18 +285,34 @@
       // el módulo de la sección abierta se queda abierto aunque luego se elija otro, hasta que lo cierren
       if (on && abiertos[m.k] !== true) { abiertos[m.k] = true; guarda = true; }
       h += '<div class="pm-mod' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" data-open="' + open + '">'
-        + '<button type="button" class="pm-mb" aria-expanded="' + open + '" title="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, 'pm-ic')
+        // sin «title»: el globito del navegador tapaba el nombre y la descripción de la tarjeta (30-oct-2026)
+        + '<button type="button" class="pm-mb" aria-expanded="' + open + '" aria-label="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, 'pm-ic')
         + '<span class="pm-lbl"><span class="pm-lg">' + esc(m.t) + '</span><span class="pm-ct">' + esc(CORTO[m.k] || m.t) + '</span></span>' + svg(FLECHA, 'pm-car') + '</button>'
-        + '<ul class="pm-subs"><li class="pm-fly" aria-hidden="true">' + esc(m.t) + '<span class="pm-fd">' + esc(m.d || '') + '</span></li>'
+        + '<div class="pm-subs"><div class="pm-fly" aria-hidden="true">' + esc(m.t) + '<span class="pm-fd">' + esc(m.d || '') + '</span></div><ul class="pm-sl">'
         + x.subs.map(function (s) {
           var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
           return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s))
             + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + (s.d ? '<span class="pm-sd">' + esc(s.d) + '</span>' : '') + '</a></li>';
-        }).join('') + '</ul></div>';
+        }).join('') + '</ul></div></div>';
     });
     if (h) h = '<div class="pm-mod' + (act === INI ? ' on' : '') + '"><button type="button" class="pm-mb pm-inicio" title="Inicio" aria-label="Inicio"' + (act === INI ? ' aria-current="page"' : '') + '>' + svg(IC.home, 'pm-ic') + '<span class="pm-lbl">Inicio</span></button></div>' + h;
     if (guarda) store.set('portal.menu.abiertos', JSON.stringify(abiertos));
-    if (lista.innerHTML !== h) lista.innerHTML = h;
+    if (h !== hecho) {
+      // Si la tarjeta de un módulo está abierta cuando el menú se vuelve a pintar solo (por ejemplo, porque llegó un
+      // mensaje al Chat y cambió su número), se queda abierta y en el mismo lugar; antes se cerraba bajo el mouse.
+      // Al escoger una opción sí se cierra (ir() pone cerrarAlPintar).
+      var ab = !cerrarAlPintar && enRiel() ? tarjetaAbierta() : null, km = ab && ab.dataset.m;
+      var sl = ab && ab.querySelector('.pm-sl'), st = sl ? sl.scrollTop : 0, rs = lista.scrollTop;
+      lista.innerHTML = h; hecho = h; sobre = null;
+      lista.scrollTop = rs;
+      var nm = km ? lista.querySelector('.pm-mod[data-m="' + km + '"]') : null;
+      if (nm) {
+        nm.classList.add('fly'); side.classList.add('pm-fly-on');
+        colocaTarjeta(nm);
+        var ns = nm.querySelector('.pm-sl'); if (ns) ns.scrollTop = st;
+      } else { side.classList.remove('pm-fly-on'); recoloca(); }
+    }
+    cerrarAlPintar = false;
     pintaArriba(act);
     if (act) {
       crumb.textContent = act.m.t;
@@ -291,13 +329,14 @@
   function pintaArriba(act) {
     if (!top) return;
     var ms = modulos(), mitad = Math.ceil(ms.length / 2), ini = inicio();
+    // con una tarjeta abierta, sin el globito del navegador (taparía la tarjeta); cerrada, sí, para saber qué es cada ícono
     function tb(x) {
       var m = x.m, on = !!act && x.subs.indexOf(act) >= 0, ab = popAbierto === m.k;
       var av = x.subs.some(function (s) { var b = boton(s.v); return b && +b.dataset.aviso > 0; });
-      return '<button type="button" class="pm-tb' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" aria-expanded="' + ab + '" aria-controls="pm-pop" aria-label="' + esc(m.t) + '" title="' + esc(m.t) + '">' + svg(IC[m.k] || IC.mas, '') + '</button>';
+      return '<button type="button" class="pm-tb' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" aria-expanded="' + ab + '" aria-controls="pm-pop" aria-label="' + esc(m.t) + '"' + (popAbierto ? '' : ' title="' + esc(m.t) + '"') + '>' + svg(IC[m.k] || IC.mas, '') + '</button>';
     }
     var h = '<div class="pm-tira"><div class="pm-lado">' + ms.slice(0, mitad).map(tb).join('') + '</div>'
-      + '<button type="button" class="pm-tb pm-home' + (act === INI ? ' on' : '') + '" data-m="home" aria-expanded="' + (popAbierto === 'home') + '" aria-controls="pm-pop" aria-label="Inicio" title="Inicio">' + svg(IC.home, '') + '</button>'
+      + '<button type="button" class="pm-tb pm-home' + (act === INI ? ' on' : '') + '" data-m="home" aria-expanded="' + (popAbierto === 'home') + '" aria-controls="pm-pop" aria-label="Inicio"' + (popAbierto ? '' : ' title="Inicio"') + '>' + svg(IC.home, '') + '</button>'
       + '<div class="pm-lado">' + ms.slice(mitad).map(tb).join('') + '</div></div>';
     var pop = '';
     var x = popAbierto === 'home' ? null : ms.filter(function (y) { return y.m.k === popAbierto; })[0];
@@ -312,7 +351,56 @@
     }
     if (pop) pop += '<button type="button" class="pm-cambia">Usar el menú de la izquierda</button>';
     h += '<div class="pm-pop" id="pm-pop" role="dialog" aria-label="Opciones del menú"' + (pop ? '' : ' hidden') + '>' + pop + '</div>';
-    if (top.innerHTML !== h) top.innerHTML = h;
+    if (h !== hechoArriba) {
+      // la misma tarjeta abierta que se vuelve a pintar sola conserva hasta dónde se deslizó
+      var p0 = top.querySelector('.pm-pop'), st = p0 && popHecho === popAbierto ? p0.scrollTop : 0;
+      top.innerHTML = h; hechoArriba = h;
+      var p1 = top.querySelector('.pm-pop'); if (p1 && st) p1.scrollTop = st;
+    }
+    popHecho = popAbierto;
+    top.classList.toggle('pm-con-pop', !!pop);
+    if (pop) popArriba();
+  }
+
+  // Submenús siempre completos en la pantalla (pedido de Daniel, 30-oct-2026). Los lugares van en variables del riel
+  // (--pm-fx, --pm-fy, --pm-fh) y de la tira de arriba (--pm-py, --pm-ph), fuera de lo que se vuelve a pintar.
+  var MARGEN = 8, sobre = null;
+  function altoPantalla() { return window.innerHeight || document.documentElement.clientHeight; }
+  function enRiel() { var c = document.body.classList; return c.contains('pm-mini') && !c.contains('pm-arriba') && !movil(); }
+  // La tarjeta del módulo en el riel: a la altura de su ícono; si no cabe hacia abajo, sube lo necesario; si es más
+  // alta que la pantalla, ocupa la pantalla y sus opciones se deslizan dentro (el título se queda arriba).
+  function colocaTarjeta(mod) {
+    if (!mod || !side || !enRiel()) return;
+    var t = mod.querySelector('.pm-subs'), b = mod.querySelector('.pm-mb');
+    if (!t || !b) return;
+    var rb = b.getBoundingClientRect(), H = altoPantalla();
+    side.style.setProperty('--pm-fx', Math.round(rb.right + 10) + 'px');
+    side.style.setProperty('--pm-fh', Math.max(120, H - 2 * MARGEN) + 'px');
+    mod.classList.add('pm-mide');
+    var h = t.offsetHeight;
+    mod.classList.remove('pm-mide');
+    side.style.setProperty('--pm-fy', Math.round(Math.max(MARGEN, Math.min(rb.top - 6, H - MARGEN - h))) + 'px');
+  }
+  function tarjetaAbierta() {
+    if (!lista) return null;
+    try { return lista.querySelector('.pm-mod.fly') || lista.querySelector('.pm-mod:hover') || lista.querySelector('.pm-mod:focus-within'); } catch (e) { return null; }
+  }
+  function recoloca() { var m = tarjetaAbierta(); if (m) colocaTarjeta(m); }
+  function cierraFly(salvo) {
+    if (!lista) return;
+    lista.querySelectorAll('.pm-mod.fly').forEach(function (m) { if (m !== salvo) m.classList.remove('fly'); });
+    side.classList.toggle('pm-fly-on', !!lista.querySelector('.pm-mod.fly'));
+  }
+  // La tarjeta del menú arriba: debajo de la tira; si no cabe, sube lo necesario (puede tapar la tira, como una
+  // ventana) y, si es más alta que la pantalla, se desliza por dentro
+  function popArriba() {
+    if (!top) return;
+    var p = top.querySelector('.pm-pop');
+    if (!p || p.hidden) return;
+    var H = altoPantalla();
+    top.style.setProperty('--pm-ph', Math.max(120, H - 2 * MARGEN) + 'px');
+    var y = top.getBoundingClientRect().bottom + 6, h = p.offsetHeight;
+    top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, Math.min(y, H - MARGEN - h))) + 'px');
   }
   function abrePop(k) { popAbierto = k; pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }
   function arriba(v) {
@@ -342,6 +430,7 @@
   function alto() {
     var r = hdr.getBoundingClientRect();
     document.documentElement.style.setProperty('--pm-top', Math.max(0, r.bottom) + 'px');
+    recoloca(); popArriba();   // si el encabezado cambia de alto, las tarjetas abiertas se vuelven a acomodar
   }
 
   function arranca() {
@@ -410,14 +499,33 @@
       var mb = e.target.closest('.pm-mb');
       if (!mb) return;
       var mod = mb.parentNode;
-      if (document.body.classList.contains('pm-mini') && !movil()) { mod.classList.toggle('fly'); return; }
+      if (enRiel()) {
+        // en el riel, picar el ícono deja fija su tarjeta (en tableta no hay mouse); solo una a la vez
+        var ya = mod.classList.contains('fly');
+        cierraFly();
+        if (!ya) { mod.classList.add('fly'); side.classList.add('pm-fly-on'); colocaTarjeta(mod); } else mb.blur();
+        return;
+      }
       var o = mod.dataset.open !== 'true';
       mod.dataset.open = o; mb.setAttribute('aria-expanded', o);
       var ab = {};
       try { ab = JSON.parse(store.get('portal.menu.abiertos') || '{}') || {}; } catch (er) { ab = {}; }
       ab[mod.dataset.m] = o; store.set('portal.menu.abiertos', JSON.stringify(ab));
     });
-    lista.addEventListener('mouseleave', function () { lista.querySelectorAll('.pm-mod.fly').forEach(function (m) { m.classList.remove('fly'); }); });
+    lista.addEventListener('mouseleave', function () { sobre = null; cierraFly(); });
+    // al llegar a otro ícono del riel, su tarjeta se acomoda dentro de la pantalla y se cierran las demás
+    lista.addEventListener('mouseover', function (e) {
+      var m = e.target.closest('.pm-mod');
+      if (!m || m === sobre) return;
+      sobre = m;
+      cierraFly(m);
+      var f = document.activeElement;
+      if (f && f !== document.body && lista.contains(f) && !m.contains(f) && enRiel()) f.blur();
+      colocaTarjeta(m);
+    });
+    lista.addEventListener('focusin', function (e) { colocaTarjeta(e.target.closest('.pm-mod')); });
+    lista.addEventListener('scroll', recoloca, { passive: true });
+    document.addEventListener('click', function (e) { if (e.target.isConnected && !side.contains(e.target)) cierraFly(); });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
     new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso'] });
@@ -431,7 +539,7 @@
     mini();
     arriba();
     alto();
-    addEventListener('resize', function () { alto(); if (!movil()) abre(false); });
+    addEventListener('resize', function () { alto(); if (!movil()) abre(false); recoloca(); popArriba(); });
     addEventListener('scroll', alto, { passive: true });
     if (window.ResizeObserver) new ResizeObserver(alto).observe(hdr);
     addEventListener('hashchange', function () { var k = location.hash.slice(1); var a = activo(); if (k && (!a || a.k !== k)) ir(k); });
