@@ -630,6 +630,7 @@
       if (ok.error || ok.data !== true) { location.replace(P.paginaDe(p.rol)); throw new Error('sin permiso'); }
     } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0 && !(ROL === 'gerente' && P.equipo)) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
+    P.creado = Date.parse(s.user.created_at || '') || 0;   // cuándo creó su acceso (ventana «Pon tu foto de perfil»)
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
     try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
     // ¿Se le ofrece bajar el «Original» (sin la marca PROFASE)? Decisión de Daniel, 30-oct-2026: hoy solo el equipo
@@ -968,6 +969,7 @@
     salir: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
     ojo: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     car: '<path d="m6 9 6 6 6-6"/>',
+    cam: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
     luna: '<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.6 6.6 0 0 0 10.7 10.7z"/>',
     sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'
   };
@@ -1012,7 +1014,7 @@
 
   /* ---- Foto de perfil: cubeta privada «fotos» (portal/sql/14_fotos_perfil.sql), un archivo <id>.jpg por usuario.
      Cada quien sube, cambia o quita solo la suya; todos los del portal las ven. ---- */
-  var FOTO = { url: null };
+  var FOTO = { url: null, sinFoto: false };   // sinFoto: la base contestó y de verdad no tiene foto
   function pintaFoto(p) {
     document.querySelectorAll('[data-pu-av]').forEach(function (a) {
       a.innerHTML = FOTO.url ? '<img alt="" src="' + esc(FOTO.url) + '">' : esc(iniciales(p.nombre));
@@ -1020,9 +1022,12 @@
     var q = document.getElementById('pu-quita'); if (q) q.hidden = !FOTO.url;
   }
   async function cargaFoto(p) {
+    FOTO.sinFoto = false;
     try {
       var l = await sb.storage.from('fotos').list('', { search: P.uid + '.jpg', limit: 1 });
-      if (l.error || !l.data || !l.data.some(function (f) { return f.name === P.uid + '.jpg'; })) { FOTO.url = null; pintaFoto(p); return; }
+      if (l.error || !l.data || !l.data.some(function (f) { return f.name === P.uid + '.jpg'; })) {
+        FOTO.url = null; FOTO.sinFoto = !l.error && Array.isArray(l.data); pintaFoto(p); return;
+      }
       var s = await sb.storage.from('fotos').createSignedUrl(P.uid + '.jpg', 6 * 3600);
       FOTO.url = (!s.error && s.data && s.data.signedUrl) || null;
     } catch (e) { FOTO.url = null; }
@@ -1124,7 +1129,7 @@
         b.disabled = false; b.textContent = 'Guardar foto';
         if (r.error) { falla('pf-msg2', r.error); return; }
         await cargaFoto(p);
-        ver(); msg('pf-msg', 'Listo: tu foto quedó guardada.', 'ok');
+        ver(); msg('pf-msg', 'Listo: tu foto quedó guardada. Así te ve todo el equipo en el portal.', 'ok');
       }, 'image/jpeg', 0.85);
     };
     $('pu-quita').onclick = async function () {
@@ -1134,7 +1139,103 @@
       if (r.error) { falla('pf-msg', r.error); return; }
       FOTO.url = null; pintaFoto(p); msg('pf-msg', 'Listo: se quitó tu foto; se ven tus iniciales.', 'ok');
     };
-    return function () { cerrar(); ov.hidden = false; $('pu-cambia').focus(); };
+    var abre = function () { cerrar(); ov.hidden = false; $('pu-cambia').focus(); };
+    // desde la ventana «Pon tu foto de perfil»: abre Perfil y, en el mismo clic, el selector de la foto
+    abre.elegir = function () { abre(); $('pf-file').click(); };
+    return abre;
+  }
+
+  /* ---- «Pon tu foto de perfil» (pedido de Daniel, 30-oct-2026: «como ya todos se están metiendo; a los que no tengan
+     foto de perfil (primero revisa www.profase.com.mx); pídeles mediante un pop up y guíalos a que carguen una foto»).
+     - Primero se cargaron las fotos de www.profase.com.mx (acción «Fotos de perfil», nube/fotos_perfil.py); esta ventana
+       sale solo a quien sigue sin foto: la base contestó y no hay «<id>.jpg» en la cubeta «fotos».
+     - Nada se lee ni se guarda aparte: la foto se sube igual que desde Perfil (la ventana abre Perfil y el selector).
+     - Una vez al día como máximo (con «Más tarde», Esc o fuera de la ventana, vuelve a salir al día siguiente que entre),
+       hasta que tenga foto. No sale en las primeras 2 horas de una cuenta nueva (si su foto está en www.profase.com.mx,
+       la acción se la pone sola en esa hora) ni en las pruebas automáticas.
+     - Nunca encima de otra ventana ni de un recorrido (Nuevos cambios, bienvenida, chat, cumpleaños…): espera a que no
+       haya ninguna y sale al final, después de ellos. ---- */
+  var CSS_FOTO = '.ov.fp-ov{z-index:80}'
+    + '.dlg.fp-dlg{width:min(480px,100%);border-top-color:var(--accent)}'
+    + '.fp-top{display:flex;justify-content:center;margin:2px 0 10px}'
+    + '.fp-ci{position:relative;display:inline-block}'
+    + '.fp-ci .pu-av.l{width:96px;height:96px;font-size:32px}'
+    + '.fp-cam{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;border:3px solid var(--surface)}'
+    + '.fp-cam svg{width:17px;height:17px;display:block}'
+    + '.dlg.fp-dlg h2{text-align:center}.dlg.fp-dlg .sub{text-align:center;font-size:13.5px;line-height:1.45;margin-bottom:12px}'
+    + '.fp-pasos{list-style:none;counter-reset:fp;margin:0 0 10px;padding:0;display:grid;gap:8px}'
+    + '.fp-pasos li{counter-increment:fp;display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;font-size:13.5px;line-height:1.4;background:var(--navy-soft);border-radius:10px;padding:9px 11px}'
+    + '.fp-pasos li::before{content:counter(fp);width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12.5px}'
+    + ':root[data-theme="dark"] .fp-pasos li::before{background:var(--accent)}'
+    + '.dlg.fp-dlg .dacts{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}'
+    + '.dlg.fp-dlg .dacts .btn{font-size:14px;padding:9px 14px}'
+    + '.dlg.fp-dlg .dacts .btn.pu-ac{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600}'
+    + '.dlg.fp-dlg .dacts .btn svg{width:17px;height:17px;display:block;flex:none}'
+    + '@media (max-width:480px){.dlg.fp-dlg .dacts{flex-direction:column-reverse}.dlg.fp-dlg .dacts .btn{width:100%}}';
+  var FP_LUEGO = 'profase-foto-luego';
+  function hoyMty() {
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); }
+    catch (e) { return new Date().toISOString().slice(0, 10); }
+  }
+  function fotoPospuesta() { try { return localStorage.getItem(FP_LUEGO) === hoyMty(); } catch (e) { return !!FOTO.luego; } }
+  function pospuesta() { FOTO.luego = true; try { localStorage.setItem(FP_LUEGO, hoyMty()); } catch (e) { /* nada */ } }
+  var FP_ABRE = null;
+  function ventanaFoto(p, perfil) {
+    if (FP_ABRE) return FP_ABRE;
+    var st = document.createElement('style'); st.textContent = CSS_FOTO; document.head.appendChild(st);
+    var nom = String(p.nombre || '').trim().split(/\s+/)[0] || '';
+    if (nom && nom === nom.toUpperCase()) nom = nom.charAt(0) + nom.slice(1).toLowerCase();   // «ALEX» → «Alex»
+    var ov = document.createElement('div');
+    ov.className = 'ov fp-ov'; ov.hidden = true;
+    ov.innerHTML = '<div class="dlg fp-dlg" role="dialog" aria-modal="true" aria-labelledby="fp-h" aria-describedby="fp-s">'
+      + '<div class="fp-top"><span class="fp-ci"><span class="pu-av l" data-pu-av></span><span class="fp-cam">' + ic('cam') + '</span></span></div>'
+      + '<h2 id="fp-h">Pon tu foto de perfil</h2>'
+      + '<p class="sub" id="fp-s">' + (nom ? 'Hola, ' + esc(nom) + '. ' : '') + 'Ya casi todo el equipo trabaja en el portal y a ti todavía te ven con tus iniciales. '
+      + 'Tu foto sale junto a tu nombre en el chat, en el Calendario, en la ventana de cumpleaños y aquí arriba. Te toma un minuto:</p>'
+      + '<ol class="fp-pasos">'
+      + '<li><span><b>Escoge tu foto.</b> Pícale a «Escoger mi foto» y escoge la que tú quieras. En la computadora, búscala en tus archivos; en el celular, tómala con la cámara o escógela de tu galería.</span></li>'
+      + '<li><span><b>Acomódala.</b> Arrástrala para que tu cara quede dentro del círculo y usa la barra para acercar o alejar.</span></li>'
+      + '<li><span><b>Guárdala.</b> Pícale a «Guardar foto» y listo: todo el equipo te ve igual en todo el portal.</span></li>'
+      + '</ol>'
+      + '<div class="dacts"><button class="btn" type="button" id="fp-luego">Más tarde</button><button class="btn pu-ac" type="button" id="fp-sube">' + ic('cam') + ' Escoger mi foto</button></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var sube = document.getElementById('fp-sube');
+    function cerrar() { ov.hidden = true; pospuesta(); }
+    document.getElementById('fp-luego').onclick = cerrar;
+    ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) cerrar(); });
+    // en el mismo clic: se cierra esta ventana y se abren Perfil y el selector de la foto (el navegador lo exige así)
+    sube.onclick = function () { cerrar(); perfil.elegir(); };
+    FP_ABRE = function () { pintaFoto(p); ov.hidden = false; sube.focus(); };
+    return FP_ABRE;
+  }
+  var dormir = function (ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); };
+  function hayVentana() {
+    return [].slice.call(document.querySelectorAll('[aria-modal="true"]')).some(function (d) {
+      if ((d.closest && d.closest('.rc-capa')) || !d.getClientRects().length) return false;
+      var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
+    });
+  }
+  function ocupado() {
+    return hayVentana() || document.hidden || !!(window.PROFASE_RECORRIDO && window.PROFASE_RECORRIDO.activo && window.PROFASE_RECORRIDO.activo());
+  }
+  async function pideFoto(p, perfil, prueba) {
+    var falta = function () { return FOTO.sinFoto && !FOTO.url && !fotoPospuesta(); };
+    if (!prueba) {
+      if (navigator.webdriver && !window.__PRUEBA_FOTO) return;    // las pruebas automáticas de los demás no la ven
+      if (P.creado && Date.now() - P.creado < 2 * 3600e3) return;   // cuenta nueva: quizá su foto del sitio va en camino
+      for (var i = 0; i < 40 && !FOTO.sinFoto && !FOTO.url; i++) await dormir(500);
+      if (!falta()) return;
+      // primero lo demás (Nuevos cambios, recorridos, cumpleaños…): espera a que no haya nada encima, un respiro y otra vez
+      await dormir(window.__PRUEBA_FOTO ? 300 : 12000);
+      for (var n = 0; n < 3; n++) {
+        for (var j = 0; j < 21600 && ocupado(); j++) await dormir(500);
+        await dormir(window.__PRUEBA_FOTO ? 200 : 2500);
+      }
+      if (ocupado() || !falta()) return;
+    }
+    ventanaFoto(p, perfil)();
   }
 
   function encabezado(p) {
@@ -1198,6 +1299,8 @@
     pintaFoto(p);
     cargaFoto(p);
     botonActualizar(dd);
+    pideFoto(p, perfil);
+    window.__pideFoto = function () { pideFoto(p, perfil, true); };   // para verla en las pruebas
   }
 
   /* Botón de modo claro / oscuro, a la derecha del nombre: la luna pasa a oscuro y el sol regresa a claro.
