@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="gerente"><head><meta charset="utf-8"><meta name="portal-version" content="0bcb5549d09b"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+<!doctype html><html lang="es" data-rol="gerente"><head><meta charset="utf-8"><meta name="portal-version" content="59ae40a0baa0"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -4480,6 +4480,96 @@ initDB=async function(){await initDB0();oirJust()};
       if(!hayVentana()&&!window.PROFASE_RECORRIDO.activo())recorrido();
     }catch(err){}
   })();
+})();
+
+/* ---- «Original» (sin la marca PROFASE) al bajar: recorrido guiado para quien lo tiene ----
+   Decisión de Daniel, 30-oct-2026: al equipo VAX, al bajar PDF o Excel, «Con marca PROFASE» u «Original (sin marca)»
+   (js/marca.js, js/visor.js, portal/sql/62_marca_original.sql); 13:41: «si con recorrido».
+   - Solo a quien la base le ofrece el original (PORTAL.originales); a los demás no les sale nada.
+   - Una sola vez por persona (recorrido_visto('marca-original'), portal/sql/59_recorridos.sql), después de la ventana
+     de «Nuevos cambios» (liga «panel») o, si ya la cerró, al entrar. Nunca encima de una ventana ni de otro recorrido.
+   - No lee nada más de la base: solo cuáles recorridos ya vio y anotar que vio este. */
+(function(){
+  const RID='marca-original';
+  const dormir=ms=>new Promise(ok=>setTimeout(ok,ms));
+  const visible=x=>x&&x.getClientRects().length&&x.getBoundingClientRect().width>0?x:null;
+  let vistaAntes=null,pestanaAntes=null;
+  const pestana=p=>document.querySelector('#v-wf .wtab[data-p="'+p+'"]');
+  // el WorkFlow, en «Pendientes por responsable», donde están «PDF para imprimir» y «Exportar Excel»
+  async function aWorkflow(){
+    try{
+      const v=document.body.getAttribute('data-view');
+      if(vistaAntes===null)vistaAntes=v||'';
+      if(v!=='wf'&&typeof setView==='function')setView('wf');
+      await dormir(150);
+      const sel=document.querySelector('#v-wf .wtab[aria-selected="true"]');
+      if(pestanaAntes===null)pestanaAntes=sel?sel.getAttribute('data-p'):'';
+      const pe=pestana('pend');if(pe&&pe.getAttribute('aria-selected')!=='true')pe.click();
+    }catch(err){}
+    for(let i=0;i<20&&!(visible(document.getElementById('w-pdf'))||visible(document.getElementById('w-xl')));i++)await dormir(150);
+  }
+  const PASOS=[
+    {etiqueta:'Nuevo',icono:'listo',titulo:'Bajar con marca o en original',
+     texto:'Desde hoy, al bajar un PDF o un Excel del portal puedes escoger cómo lo quieres: con la marca PROFASE, como siempre, o el original, sin la marca, para acuses, estados de cuenta y lo que se entregue o imprima así (por ejemplo, en una auditoría).'},
+    {antes:aWorkflow,el:()=>visible(document.getElementById('w-pdf'))||visible(document.getElementById('w-xl')),etiqueta:'Aquí le picas',
+     titulo:'Pícale a PDF o a Excel',
+     texto:'Aquí y en cualquier pantalla donde bajes un PDF o un Excel te sale un menú chico con las dos opciones. Lo escoges cada vez; si picas fuera del menú o le das Esc, no se baja nada.'},
+    {icono:'listo',titulo:'Las dos opciones',
+     texto:'«Con marca PROFASE»: con el signo y la marca, como siempre. «Original (sin marca)»: el mismo archivo, sin el signo, sin «PROFASE», sin el subtítulo y sin la marca de agua.'},
+    {icono:'listo',titulo:'Acuses, estados de cuenta y documentos',
+     texto:'Al bajar un PDF que se subió (en WorkFlow, en el Panel de trabajo o en el chat), «Original» te da el PDF tal cual se subió. «Ver» siempre lo enseña con la marca.'},
+    {etiqueta:'¡Listo!',icono:'listo',titulo:'Por ahora, solo el equipo VAX',
+     texto:'Esta opción la tienen ustedes, el equipo VAX. Para todos los demás, lo que se baja del portal sigue saliendo con la marca PROFASE.'}
+  ];
+  const vistoLocal=()=>{try{return (JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[]).indexOf(RID)>=0}catch(err){return false}};
+  async function marcaVisto(){
+    let ok=false;
+    try{const r=await window.PORTAL.sb.rpc('recorrido_visto',{p_recorrido:RID});ok=!r.error&&r.data===true}catch(err){}
+    if(!ok){try{const a=JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[];if(a.indexOf(RID)<0)a.push(RID);localStorage.setItem('profase-recorridos',JSON.stringify(a))}catch(err){}}
+  }
+  async function vistosMios(){
+    try{const r=await window.PORTAL.sb.rpc('recorridos_mios');return r.error||!Array.isArray(r.data)?null:r.data}catch(err){return null}
+  }
+  async function recorrido(){
+    if(!window.PROFASE_RECORRIDO||window.PROFASE_RECORRIDO.activo())return;
+    vistaAntes=null;pestanaAntes=null;
+    const como=await window.PROFASE_RECORRIDO.corre({pasos:PASOS,fin:'¡Listo!'});
+    if(como==='fin'||como==='saltado')marcaVisto();
+    // de regreso a donde estaba (su pestaña del WorkFlow y su pantalla)
+    try{
+      if(pestanaAntes&&pestanaAntes!=='pend'){const pe=pestana(pestanaAntes);if(pe)pe.click()}
+      if(vistaAntes&&vistaAntes!=='wf'&&typeof setView==='function')setView(vistaAntes);
+    }catch(err){}
+  }
+  window.__recorridoOriginal=recorrido;
+  const hayVentana=()=>[...document.querySelectorAll('[aria-modal="true"]')].some(d=>{
+    if(d.closest('.rc-capa')||!d.getClientRects().length)return false;
+    const cs=getComputedStyle(d);return cs.visibility!=='hidden'&&+cs.opacity>0.05;
+  });
+  const ocupado=()=>hayVentana()||document.hidden||!!(window.PROFASE_RECORRIDO&&window.PROFASE_RECORRIDO.activo());
+  let esperando=false;
+  async function quiza(desdeAviso){
+    if(esperando)return;
+    esperando=true;
+    try{
+      const P=window.PORTAL;if(!P)return;
+      const p=await P.listo;if(!p||P.originales!==true)return;
+      const v=await vistosMios();if(!v||v.indexOf(RID)>=0||vistoLocal())return;
+      if(!desdeAviso)await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
+      // espera a que no haya ventanas ni otro recorrido (el del chat o el del Inicio); luego un respiro y otra vez
+      for(let n=0;n<2;n++){
+        for(let i=0;i<3600&&ocupado();i++)await dormir(500);
+        await dormir(n?400:1500);
+      }
+      if(ocupado())return;
+      await recorrido();
+    }finally{esperando=false}
+  }
+  addEventListener('profase:novedad-cerrada',ev=>{
+    const l=(ev.detail&&ev.detail.ligas)||[];
+    if(l.indexOf('panel')>=0)setTimeout(()=>quiza(true),2000);
+  });
+  quiza(false);
 })();
 
 setView('wf');
