@@ -99,8 +99,9 @@
       var cubeta = sb.storage.from.bind(sb.storage);
       sb.storage.from = function (b) {
         var s = cubeta(b);
-        // su propia foto de perfil sí la puede poner o quitar
-        if (P.consulta && b !== 'fotos') ['upload', 'update', 'remove', 'move', 'copy', 'uploadToSignedUrl'].forEach(function (m) {
+        // su propia foto de perfil sí la puede poner o quitar, y el chat interno sí lo usa (decisión de Daniel,
+        // 30-oct-2026: su papá «que chatee normal»; la base solo le abre la cubeta «chat»: portal/sql/58_chat.sql)
+        if (P.consulta && b !== 'fotos' && b !== 'chat') ['upload', 'update', 'remove', 'move', 'copy', 'uploadToSignedUrl'].forEach(function (m) {
           if (s[m]) s[m] = function () { return Promise.resolve({ data: null, error: { message: MSG_CONSULTA, statusCode: '403' } }); };
         });
         return s;
@@ -307,7 +308,7 @@
      si la base no responde en 1.5 s, sigue sin anotar. */
   var NOMBRE_PAG = { director: 'Dirección', gerentes: 'Vista del equipo', contadores: 'Mi WorkFlow', cartera: 'Cartera',
     cajachica: 'Caja chica', variaciones: 'Variaciones', activofijo: 'Activo fijo', 'quo-cotizador': 'Cotizador QUO',
-    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos', calendario: 'Calendario', cambios: 'Cambios al portal' };
+    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos', calendario: 'Calendario', cambios: 'Cambios al portal', chat: 'Chat' };
   P.pagina = function () {
     var n = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
     return NOMBRE_PAG[n] || n || 'Portal';

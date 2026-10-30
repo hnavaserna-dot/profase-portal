@@ -31,6 +31,7 @@
     ayuda: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.5"/><path d="M12 16.6h.01"/>',
     access: '<ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/>',
     mas: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    msj: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M8 10.5h8M8 14h5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
   // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO
@@ -40,6 +41,9 @@
       { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
       { k: 'clientes', v: 'cli', t: 'Clientes', d: 'Cada cliente y su avance.' },
       { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' }] },
+    // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
+    { k: 'msj', t: 'Chat', d: 'Mensajes y archivos con el equipo, 1 a 1 y en grupos.', subs: [
+      { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' }] },
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
       { k: 'cartera', v: 'car', t: 'Cartera', d: 'Lo que deben los clientes.' },
       { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
@@ -83,7 +87,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', rep: 'Reportes', adm: 'Admin', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
   var CSS = ':root{--pm-sw:248px;--pm-rail:88px;--pm-top:0px}'
     + '.pm-oculto{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}'
     + '#v-quo .qsub{display:none!important}'
