@@ -6,7 +6,9 @@
    (portal/sql/59_recorridos.sql); eso lo hace la pestaña que lo lanza.
    Uso: PROFASE_RECORRIDO.corre({ pasos: [{ el: () => elemento o null, titulo, texto, etiqueta: 'Nuevo', icono: 'candado',
                                             antes: async () => {} }] }) → promesa: 'fin' o 'saltado'.
-   Un paso sin «el» sale al centro, sin flechita. Si su parte no está a la vista, el paso se brinca. */
+   Un paso sin «el» sale al centro, sin flechita. Si su parte no está a la vista, el paso se brinca.
+   obligatorio: true (regla de Daniel, 30-oct-2026, para los cambios del chat: «que a todos nos obligues a verlo»):
+   sin «Saltar» ni Esc; solo se sale llegando al final. */
 (function () {
   'use strict';
   if (window.PROFASE_RECORRIDO) return;
@@ -162,13 +164,13 @@
         bAtras.hidden = i === 0;
         var ultimo = i === pasos.length - 1;
         bSig.textContent = ultimo ? (def.fin || 'Terminar') : 'Siguiente';
-        bSalta.hidden = ultimo;
+        bSalta.hidden = ultimo || !!def.obligatorio;
         acomoda();
         globo.style.visibility = '';
         try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
       }
       function tecla(ev) {
-        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); termina('saltado'); }
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); if (!def.obligatorio) termina('saltado'); }
         else if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.stopPropagation(); muestra(i + 1, 1); }
         else if (ev.key === 'ArrowLeft' && i > 0) { ev.preventDefault(); ev.stopPropagation(); muestra(i - 1, -1); }
         else if (ev.key === 'Tab') {
@@ -179,7 +181,7 @@
       }
       bSig.onclick = function () { muestra(i + 1, 1); };
       bAtras.onclick = function () { muestra(i - 1, -1); };
-      bSalta.onclick = function () { termina('saltado'); };
+      bSalta.onclick = function () { if (!def.obligatorio) termina('saltado'); };
       addEventListener('resize', acomoda);
       addEventListener('keydown', tecla, true);
       tick = setInterval(function () { if (activo && globo.style.visibility !== 'hidden') acomoda(); }, 500);   // sigue a la parte si algo se mueve

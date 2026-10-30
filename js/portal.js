@@ -451,7 +451,16 @@
       if (el) el.textContent = el.getAttribute('data-mmss') ? Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2) : String(s);
       return s;
     }
+    // a media llamada del chat (portal/llamada_tab.js) no se recarga: se espera a que cuelgue y luego sale la ventana
+    function enLlamada() { try { return !!(P.enLlamada && P.enLlamada()); } catch (e) { return false; } }
+    function esperaLlamada() {
+      var ov = document.getElementById('pv-ov'); if (ov) ov.remove();
+      var t = document.getElementById('pv-toast'); if (t) t.remove();
+      clearInterval(tic);
+      tic = setInterval(function () { if (!enLlamada()) { clearInterval(tic); ventana(); } }, 5000);
+    }
     function ventana() {
+      if (enLlamada()) return esperaLlamada();
       cssModo();
       if (!document.getElementById('pv-css')) { var st = document.createElement('style'); st.id = 'pv-css'; st.textContent = CSS_VERSION; document.head.appendChild(st); }
       var t = document.getElementById('pv-toast'); if (t) t.remove();
@@ -470,7 +479,7 @@
       document.body.appendChild(ov);
       var num = document.getElementById('pv-s');
       clearInterval(tic);
-      tic = setInterval(function () { if (cuenta(fin, num) <= 0) { clearInterval(tic); recarga(nueva, true); } }, 1000);
+      tic = setInterval(function () { if (cuenta(fin, num) <= 0) { clearInterval(tic); if (enLlamada()) return esperaLlamada(); recarga(nueva, true); } }, 1000);
       document.getElementById('pv-ya').onclick = function () { clearInterval(tic); recarga(nueva, false); };
       var esp = document.getElementById('pv-esp');
       if (esp) esp.onclick = function () { clearInterval(tic); ov.remove(); espera(); };

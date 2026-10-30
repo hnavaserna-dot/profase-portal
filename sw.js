@@ -20,6 +20,8 @@ self.addEventListener('push', function (e) {
     renotify: true,
     data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/', conv: d.conv || null }
   };
+  // «te está llamando» (llamadas del chat, 63_chat_llamadas.sql): se queda hasta que la piquen y vibra
+  if (d.llamada === true) { op.requireInteraction = true; op.vibrate = [400, 200, 400, 200, 400]; }
   // Si el portal está abierto y al frente, ya enseña su propio aviso dentro de la página; ahí no se repite.
   // En Apple sí se enseña siempre (Safari quita los avisos a quien recibe sin enseñar).
   var ua = (self.navigator && self.navigator.userAgent) || '';
