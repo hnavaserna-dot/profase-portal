@@ -516,13 +516,37 @@
     location.replace('./');
   };
 
+  /* ---- Seguro de arranque (30-oct-2026, pedido de Daniel: «y un mensaje o algo de que avísenle a Héctor Daniel Nava
+     que se cayó»). Las tres vistas traen escrito en su <head> el seguro (portal/arranque.js de profase-datos; lo pone
+     construir.py): si la página no termina de entrar en 20 s, se recarga sola una vez y, si sigue igual, enseña el
+     aviso de que no se pudo abrir el portal. Aquí se le dice cuándo ya entró (listo) o cuándo ya se sabe que no se
+     pudo (falla), y se vigilan igual las pestañas que van en su marco (en ellas se recarga solo su marco).
+     Antes, si la base no contestaba al leer el perfil, se cerraba la sesión y mandaba a la entrada; ahora, si es por
+     falta de conexión, no se cierra nada: se reintenta. ---- */
+  function seguro() { try { return (window.top || window).PROFASE_ARRANQUE || null; } catch (e) { return null; } }
+  var SEG = ROL ? seguro() : null;
+  if (SEG) { try { SEG.vigila(window); } catch (e) { SEG = null; } }
+  function noCarga(motivo) {
+    if (SEG) { try { SEG.falla(motivo, window); } catch (e) {} }
+    return new Error('no se pudo abrir (' + motivo + ')');
+  }
+  // ¿Error por falta de conexión o porque la base no contestó? (no porque la sesión ya no sirva)
+  function deRed(err) {
+    if (!err) return false;
+    var st = +err.status || 0;
+    return err.name === 'AuthRetryableFetchError' || st === 0 || st >= 500 || /fetch|network|timeout|timed out|tiempo/i.test(String(err.message || ''));
+  }
+
   /* ---- Sesión: las páginas de rol exigen sesión y el rol correcto ---- */
   P.listo = (async function () {
     if (!ROL) return null;
-    var s = (await sb.auth.getSession()).data.session;
+    var gs;
+    try { gs = await sb.auth.getSession(); } catch (e) { throw noCarga('sesión'); }
+    var s = gs && gs.data ? gs.data.session : null;
+    if (!s && gs && gs.error && deRed(gs.error)) throw noCarga('sesión');
     if (!s) { location.replace('./'); throw new Error('sin sesión'); }
     var p = null;
-    try { p = await P.perfilDe(s.user.id); } catch (e) { p = null; }
+    try { p = await P.perfilDe(s.user.id); } catch (e) { throw noCarga('perfil'); }
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
     // «todos»: páginas que abre cualquier rol (la bitácora de variaciones, dentro de su pestaña)
     // LIBRE: páginas que abre quien tenga permiso en la base (el cotizador), sea del rol que sea
@@ -563,6 +587,7 @@
       if (!cajaCaptura) { P.consulta = true; MSG_CONSULTA = MSG_EQUIPO; P.MSG_CONSULTA = MSG_EQUIPO; }
     }
     if (P.consulta) document.documentElement.classList.add('pu-consulta');
+    if (SEG) { try { SEG.listo(window); } catch (e) {} }
     return p;
   })();
   P.listo.catch(function () {});
