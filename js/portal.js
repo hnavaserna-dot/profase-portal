@@ -78,8 +78,23 @@
     var ESCRIBEN = { cot_guardar: 1, cot_estatus: 1, af_cargar: 1, caja_generar_corte: 1, caja_cancelar_corte: 1, solicitar_actualizacion: 1,
       cambios_mandar: 1, cambios_autorizar: 1, cambios_rechazar: 1, cambios_comentar: 1, cambios_deshacer: 1, cambios_sql_listo: 1, cambios_visto: 1,
       cli_felicitar: 1, sc_mi_personaje: 1,
-      fac_genera: 1, fac_guarda: 1, fac_folio: 1, fac_borra: 1, pag_guarda: 1, pag_edita: 1, pag_borra: 1, pag_quita: 1 };   // etapa 5 (52_facturacion.sql)
+      fac_genera: 1, fac_guarda: 1, fac_folio: 1, fac_borra: 1, pag_guarda: 1, pag_edita: 1, pag_borra: 1, pag_quita: 1,   // etapa 5 (52_facturacion.sql)
+      cli_guarda: 1, cli_borra: 1,   // etapa 4 (55_clientes_ficha.sql)
+      rec_guarda: 1, rec_estatus: 1, rec_borra: 1, rec_destinatario: 1 };   // etapa 5 (56_recordatorios.sql)
     sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
+    // funciones del servidor que mandan algo (recordatorios de pago desde cumplimiento@): en solo consulta, no
+    // (sb.functions se arma de nuevo cada vez que se pide: se envuelve el que se entrega)
+    var MANDAN = { recordatorios: 1 };
+    try {
+      var proto = Object.getPrototypeOf(sb), des = proto && Object.getOwnPropertyDescriptor(proto, 'functions');
+      if (des && des.get) Object.defineProperty(sb, 'functions', { configurable: true, get: function () {
+        var f = des.get.call(sb), invoca = f.invoke.bind(f);
+        f.invoke = function (fn) {
+          return P.consulta && MANDAN[fn] ? Promise.resolve({ data: null, error: { message: MSG_CONSULTA, status: 403 } }) : invoca.apply(null, arguments);
+        };
+        return f;
+      } });
+    } catch (e) { /* sin funciones del servidor: nada que cuidar */ }
     if (sb.storage && sb.storage.from) {
       var cubeta = sb.storage.from.bind(sb.storage);
       sb.storage.from = function (b) {

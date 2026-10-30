@@ -52,6 +52,8 @@
       { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo cobrado y lo pendiente.' },
       { k: 'facturacion', v: 'fac', t: 'Facturación', d: 'Alta y control de facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'pagos', v: 'pag', t: 'Pagos', d: 'Pagos de los clientes y su reparto a facturas.' },   // etapa 5 del Access (29-oct-2026)
+      { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026)
+      { k: 'recordatorios', v: 'rec', t: 'Recordatorios de pago', d: 'Recordatorios de saldos a los clientes.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven

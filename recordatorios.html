@@ -1,0 +1,609 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Recordatorios de pago</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=e4b9a385da"></script><script src="js/marca.js?v=1462cf2e83"></script>
+<style>
+/* Portal PROFASE · Administración › Recordatorios de pago (etapa 5 de la migración del Access, 29-oct-2026): como
+   «Recordatorios de Pago» del Access y con sus errores corregidos. Todo pasa por las funciones de la base
+   (portal/sql/56_recordatorios.sql), que deciden quién arma recordatorios de qué compañía (decisión de Daniel: Fernando
+   Cadengo y Elisa Mata, DECOMSA; la otra compañía, la dirección), y el envío solo lo hace la función «recordatorios» de
+   Supabase desde el buzón de cumplimiento (supabase/functions/recordatorios/), nunca la página ni el correo de una
+   persona. Los nombres de las compañías llegan de la base. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:720px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px;overflow-wrap:anywhere}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.ojo .v{color:var(--accent-ink)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:22px}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
+.filtros input{width:230px}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 12px;white-space:nowrap}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr.fila{cursor:pointer}
+tr.fila:hover td{background:var(--navy-soft)}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.rfc{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.vence{white-space:nowrap}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
+.pie{color:var(--muted);font-size:12px;margin:0 0 24px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.practica{border-left:4px solid var(--accent)}
+.nota.bien{background:var(--ok-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.no{color:var(--muted)}
+/* Panel a la derecha; en celular, pantalla completa */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(820px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .cab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
+.ficha .cab .rfc{color:var(--band-dim)}
+.ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sec>h3 small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted)}
+.sec .in{padding:12px 14px}
+.sec table{font-size:13px}
+.sec td,.sec th{padding:6px 10px}
+.lista{margin:0;padding:0;list-style:none}
+.lista li{padding:8px 14px;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600}
+.lista .d{color:var(--muted);font-size:12.5px}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
+.tag.ojo{background:var(--amber-soft);color:var(--amber)}
+.tag.az{background:var(--navy-soft);color:var(--ink)}
+.tot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;padding:10px 14px;border-top:1px solid var(--line)}
+.tot .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tot .f{font-weight:700}
+.acciones{display:flex;flex-wrap:wrap;gap:8px}
+.lista li.con{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;align-items:start}
+.lista li.con .t{overflow-wrap:anywhere}
+/* Formularios */
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label,.campo .l{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea,.linea input,.linea select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.chk{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.chk input{width:auto}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.lineas{display:grid}
+.linea{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1.6fr) 130px auto;gap:8px 10px;align-items:start;padding:10px 14px;border-top:1px solid var(--line)}
+.linea:first-child{border-top:0}
+.linea.fuera{opacity:.6}
+.linea .who{min-width:0}
+.linea .precio{text-align:right}
+.linea .quita{align-self:center}
+.linea.man{grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1.2fr) 120px auto}
+.pagan{margin:0;padding:0;list-style:none}
+.pagan li{display:grid;grid-template-columns:minmax(0,1fr) auto 150px;gap:6px 12px;align-items:center;padding:8px 14px;border-top:1px solid var(--line)}
+.pagan li:first-child{border-top:0}
+.pagan input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;width:100%}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:16px 0 0}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin:16px 0 0}
+.ctrl .campo{min-width:160px}
+.ctrl input[type="number"]{width:120px}
+.checks{margin:0;padding:0;list-style:none}
+.checks li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:start;padding:8px 14px;border-top:1px solid var(--line)}
+.checks li:first-child{border-top:0}
+.checks li.fuera{opacity:.55}
+.checks .t{font-weight:600;overflow-wrap:anywhere}
+.checks .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.checks input[type="checkbox"]{margin-top:3px;width:18px;height:18px}
+.todos{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.previa{background:#fff;color:#1d2433;border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto;max-width:100%}
+.previa table{min-width:520px}
+.res{margin:0;padding:0;list-style:none}
+.res li{padding:8px 14px;border-top:1px solid var(--line)}
+.res li:first-child{border-top:0}
+.agrega{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.agrega input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+@media (max-width:640px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.agrega input{font-size:16px}
+  .filtros input,.filtros select{width:100%}
+  .filtros{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  .ctrl .campo{flex:1 1 140px;min-width:0}
+  .ctrl input[type="number"]{width:100%}
+  .agrega{grid-template-columns:minmax(0,1fr)}
+  #grupos thead,#recs thead,#hist thead{display:none}
+  #grupos tr,#recs tr,#hist tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+  #grupos td,#recs td,#hist td{border:0;padding:0;min-width:0}
+  #grupos td:nth-child(1),#recs td:nth-child(1),#hist td:nth-child(1){grid-column:1}
+  #grupos td:nth-child(2),#recs td:nth-child(2),#hist td:nth-child(2){grid-column:2;grid-row:1;text-align:right}
+  #grupos td:nth-child(n+3),#recs td:nth-child(n+3),#hist td:nth-child(n+3){grid-column:1/-1;font-size:12.5px;text-align:left}
+  .checks li{grid-template-columns:auto minmax(0,1fr)}
+  .checks li>*:nth-child(3){grid-column:2;text-align:left;justify-self:start}
+  .ficha .cab h2{font-size:18px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">Administración</div>
+    <h1>Recordatorios de pago</h1>
+    <p>Recordatorios de saldos a los clientes, como los del Access: se arman por grupo, se revisan y salen del buzón de cumplimiento con el detalle en PDF. Cada envío queda con quién, cuándo y la foto de las facturas.</p>
+  </div>
+  <div class="acts">
+    <button class="btn acento" type="button" id="b-mandar" hidden>Mandar los «Para enviar»</button>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota practica" id="practica" hidden><strong>Modo práctica:</strong> las facturas y los pagos todavía se copian del Access cada 3 horas, hasta el cambio del martes 3 de noviembre; lo que armes aquí se borra con la siguiente copia.</div>
+  <div class="nota" id="modo" hidden></div>
+  <div class="nota" id="error" hidden></div>
+  <div class="nota bien" id="aviso" hidden></div>
+  <div class="cargando" id="cargando">Cargando los recordatorios…</div>
+
+  <div id="principal" hidden>
+    <div class="ctrl">
+      <div class="campo" id="c-cia-c"><label for="c-cia">Compañía</label><select id="c-cia"></select></div>
+      <div class="campo"><label for="c-ant">Antigüedad mínima (días)</label><input id="c-ant" type="number" min="0" step="1" value="0" inputmode="numeric"></div>
+    </div>
+    <div class="tabs" role="group" aria-label="Qué ver">
+      <button type="button" id="t-gru" aria-pressed="true">Grupos con saldo</button>
+      <button type="button" id="t-rec" aria-pressed="false">Recordatorios</button>
+      <button type="button" id="t-his" aria-pressed="false">Historial</button>
+    </div>
+    <section class="kpis" aria-label="Resumen">
+      <div class="kpi ojo"><div class="l">Saldo</div><div class="v num" id="k-sal">–</div><div class="s" id="k-sal-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Grupos con saldo</div><div class="v num" id="k-gru">–</div><div class="s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Para enviar</div><div class="v num" id="k-env">–</div><div class="s" id="k-env-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Mandados</div><div class="v num" id="k-man">–</div><div class="s">últimos 30 días</div></div>
+    </section>
+
+    <section class="card" id="c-gru" aria-labelledby="h-gru">
+      <header>
+        <div><h2 id="h-gru">Grupos con saldo</h2><div class="sub" id="gru-sub">&nbsp;</div></div>
+        <div class="filtros"><input id="f-gbuscar" type="search" placeholder="Buscar grupo" aria-label="Buscar grupo"><button class="btn" type="button" id="x-gru" data-excel>Excel</button></div>
+      </header>
+      <div class="tabla"><table id="grupos"><thead><tr><th>Grupo</th><th class="monto">Saldo</th><th>Facturas</th><th>Más vieja</th><th>Último envío</th><th>Pendientes</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="gru-vacia" hidden>Ningún grupo con saldo con estos filtros.</div>
+    </section>
+
+    <section class="card" id="c-rec" aria-labelledby="h-rec" hidden>
+      <header>
+        <div><h2 id="h-rec">Recordatorios</h2><div class="sub" id="rec-sub">&nbsp;</div></div>
+        <div class="filtros"><select id="f-est" aria-label="Estatus"><option value="">Pendientes (en revisión y para enviar)</option><option value="1">En revisión</option><option value="2">Para enviar</option><option value="0">Archivados</option></select></div>
+      </header>
+      <div class="tabla"><table id="recs"><thead><tr><th>Grupo</th><th>Estatus</th><th class="monto">Saldo hoy</th><th class="monto">Recordado</th><th>Armado</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="rec-vacia" hidden>Ningún recordatorio con este estatus.</div>
+    </section>
+
+    <section class="card" id="c-his" aria-labelledby="h-his" hidden>
+      <header>
+        <div><h2 id="h-his">Historial de envíos</h2><div class="sub" id="his-sub">&nbsp;</div></div>
+        <div class="filtros"><input id="f-desde" type="date" aria-label="Desde"><input id="f-hasta" type="date" aria-label="Hasta"></div>
+      </header>
+      <div class="tabla"><table id="hist"><thead><tr><th>Grupo</th><th>Cómo salió</th><th class="monto">Monto</th><th>Cuándo</th><th>Razones sociales</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="his-vacia" hidden>Ningún envío en esas fechas.</div>
+    </section>
+    <p class="pie">Saldo = total de cada factura menos lo aplicado de pagos y notas de crédito; solo cuentan las de más de $1. Salen con el asunto «Honorarios Pendientes Profase», el texto de siempre, una tabla por razón social y el PDF de saldos con la marca PROFASE, con copia oculta al archivo de correos.</p>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CIA = 0, CONSULTA = false, VISTA = 'gru';
+  var GR = [], RECS = [], HIST = [], PEND = [];
+  var A = null;                      // lo que se está armando: {grupo, nombre, d (rec_grupo), id (si se cambia uno), sel: {f, e, c}}
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var ESTATUS = { 0: 'Archivado', 1: 'En revisión', 2: 'Para enviar' };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(s)).replace(/\./g, ''); } catch (e) { return fecha(s); } }
+  function dinero(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function dineroCorto(n) { n = Number(n || 0); return Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toLocaleString('es-MX', { maximumFractionDigits: 2 }) + ' M' : '$' + Math.round(n).toLocaleString('es-MX'); }
+  function hoy() { var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function haceDias(n) { var d = new Date(Date.now() - n * 864e5); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function cia(id) { var c = (EST && EST.companias || []).filter(function (x) { return x.id === id; })[0]; return c ? c.nombre : 'Compañía ' + id; }
+  function escribe() { return !CONSULTA; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = false; }
+  function chip(e) { return '<span class="chip ' + (e === 2 ? 'ojo' : e === 0 ? 'ok' : '') + '">' + esc(ESTATUS[e] || '') + '</span>'; }
+  function ant() { var n = parseInt($('c-ant').value, 10); return isFinite(n) && n > 0 ? n : 0; }
+
+  /* ---------- carga ---------- */
+  async function carga() {
+    try {
+      var p = await P.listo; if (!p) return;
+      CONSULTA = !!P.consulta;
+      EST = await rpc('rec_estado');
+      var C = EST && EST.companias || [];
+      if (!C.length) { $('cargando').hidden = true; error('Los recordatorios de pago los arman Fernando Cadengo, Elisa Mata y la dirección.'); return; }
+      CIA = C[0].id;
+      $('c-cia').innerHTML = C.map(function (c) { return '<option value="' + c.id + '">' + esc(c.nombre) + '</option>'; }).join('');
+      $('c-cia-c').hidden = C.length < 2;
+      $('practica').hidden = EST.fac_modo !== 'practica';
+      var m = EST.modo;
+      $('modo').hidden = m === 'real';
+      $('modo').innerHTML = m === 'prueba' ? '<strong>Modo prueba:</strong> lo que mandes llega solo al correo de prueba, con «[PRUEBA]», y no se archiva.'
+        : '<strong>Todavía no se mandan correos:</strong> puedes armar y revisar los recordatorios; se encienden cuando quede conectado el buzón ' + esc(EST.remitente || '') + '.';
+      $('b-mandar').hidden = !escribe();
+      $('b-mandar').textContent = m === 'prueba' ? 'Mandar a prueba los «Para enviar»' : 'Mandar los «Para enviar»';
+      $('f-desde').value = haceDias(90); $('f-hasta').value = hoy();
+      await recarga();
+      $('cargando').hidden = true; $('principal').hidden = false;
+    } catch (e) { $('cargando').hidden = true; error('No se pudieron leer los recordatorios: ' + falla(e)); }
+  }
+  async function recarga() {
+    var r = await Promise.all([rpc('rec_grupos', { p_compania: CIA, p_antiguedad: ant() }), rpc('rec_lista', { p_compania: CIA, p_estatus: $('f-est').value === '' ? null : +$('f-est').value }),
+      rpc('rec_lista', { p_compania: CIA, p_estatus: 2 }), rpc('rec_historial', { p_compania: CIA, p_desde: $('f-desde').value || null, p_hasta: $('f-hasta').value || null })]);
+    GR = r[0] || []; RECS = r[1] || []; PEND = r[2] || []; HIST = r[3] || [];
+    pinta();
+  }
+
+  /* ---------- listas ---------- */
+  function pinta() {
+    var sal = 0, fac = 0; GR.forEach(function (g) { sal += Number(g.saldo || 0); fac += g.facturas; });
+    var mes = haceDias(30), man = HIST.filter(function (h) { return h.estado === 'enviado' && String(h.fecha).slice(0, 10) >= mes; }).length;
+    $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = fac === 1 ? '1 factura' : fac + ' facturas';
+    $('k-gru').textContent = GR.length; $('k-env').textContent = PEND.length;
+    $('k-env-s').textContent = PEND.length ? dineroCorto(PEND.reduce(function (a, x) { return a + Number(x.monto_hoy || 0); }, 0)) + ' hoy' : ' ';
+    $('k-man').textContent = man;
+    $('b-mandar').disabled = !PEND.length || EST.modo === 'apagado';
+    $('c-gru').hidden = VISTA !== 'gru'; $('c-rec').hidden = VISTA !== 'rec'; $('c-his').hidden = VISTA !== 'his';
+    ['gru', 'rec', 'his'].forEach(function (v) { $('t-' + v).setAttribute('aria-pressed', VISTA === v ? 'true' : 'false'); });
+    pintaGrupos(); pintaRecs(); pintaHist();
+  }
+  function gruposFiltrados() { var q = norm($('f-gbuscar').value.trim()); return GR.filter(function (g) { return !q || norm(g.grupo).indexOf(q) >= 0; }); }
+  function pintaGrupos() {
+    var L = gruposFiltrados();
+    $('gru-sub').textContent = (L.length === 1 ? '1 grupo' : L.length + ' grupos') + (ant() ? ' · facturas de ' + ant() + ' días o más' : '');
+    $('grupos').tBodies[0].innerHTML = L.map(function (g) {
+      return '<tr class="fila" tabindex="0" data-g="' + g.grupo_id + '"><td><div class="rs">' + esc(g.grupo || ('Grupo ' + g.grupo_id)) + '</div><div class="rfc">' + g.empresas + (g.empresas === 1 ? ' razón social' : ' razones sociales') + '</div></td>'
+        + '<td class="monto">' + esc(dinero(g.saldo)) + '</td><td class="num">' + g.facturas + '</td><td>' + esc(g.dias_max) + ' días</td>'
+        + '<td>' + (g.ultimo_envio ? esc(fecha(g.ultimo_envio)) : '<span class="no">Nunca</span>') + '</td><td>' + (g.pendientes ? '<span class="chip ojo">' + g.pendientes + '</span>' : '<span class="no">—</span>') + '</td></tr>';
+    }).join('');
+    $('gru-vacia').hidden = L.length > 0;
+  }
+  function pintaRecs() {
+    $('rec-sub').textContent = RECS.length === 1 ? '1 recordatorio' : RECS.length + ' recordatorios';
+    $('recs').tBodies[0].innerHTML = RECS.map(function (r) {
+      return '<tr class="fila" tabindex="0" data-r="' + r.id + '"><td><div class="rs">' + esc(r.grupo || ('Grupo ' + r.grupo_id)) + '</div><div class="rfc">' + esc(r.descripcion) + ' · ' + r.n_contactos + (r.n_contactos === 1 ? ' contacto' : ' contactos') + ' · ' + r.n_empresas + (r.n_empresas === 1 ? ' empresa' : ' empresas') + '</div></td>'
+        + '<td>' + chip(r.estatus) + '</td><td class="monto">' + esc(dinero(r.monto_hoy)) + '</td><td class="monto">' + (r.monto_recordado == null ? '<span class="no">—</span>' : esc(dinero(r.monto_recordado))) + '</td>'
+        + '<td>' + esc(fecha(r.creado)) + (r.creado_por ? ' · ' + esc(r.creado_por) : '') + '</td></tr>';
+    }).join('');
+    $('rec-vacia').hidden = RECS.length > 0;
+  }
+  function pintaHist() {
+    $('his-sub').textContent = HIST.length === 1 ? '1 envío' : HIST.length + ' envíos';
+    var EST_TXT = { enviado: ['ok', 'Enviado'], prueba: ['', 'Prueba'], error: ['mal', 'No salió'] };
+    $('hist').tBodies[0].innerHTML = HIST.map(function (h) {
+      var e = EST_TXT[h.estado] || ['', h.estado];
+      return '<tr class="fila" tabindex="0" data-h="' + h.id + '"><td><div class="rs">' + esc(h.grupo || ('Grupo ' + h.grupo_id)) + '</div><div class="rfc">' + esc(h.descripcion) + (h.origen === 'access' ? ' · desde el Access' : '') + '</div></td>'
+        + '<td><span class="chip ' + e[0] + '">' + esc(e[1]) + '</span></td><td class="monto">' + (h.monto == null ? '<span class="no">—</span>' : esc(dinero(h.monto))) + '</td>'
+        + '<td>' + esc(fechaHora(h.fecha)) + (h.usuario ? ' · ' + esc(h.usuario) : '') + '</td><td class="rfc">' + esc(h.razones || '') + '</td></tr>';
+    }).join('');
+    $('his-vacia').hidden = HIST.length > 0;
+  }
+
+  /* ---------- panel ---------- */
+  function cab(sup, tit, sub) {
+    return '<div class="cab"><div><div class="rfc">' + esc(sup) + '</div><h2 id="f-tit">' + esc(tit) + '</h2>' + (sub ? '<div class="rfc">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div>';
+  }
+  function sec(tit, cuerpo, nota) { return '<section class="sec"><h3><span>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</span></h3>' + cuerpo + '</section>'; }
+  function abre(h, quieto) { var y = $('ficha').scrollTop; $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = quieto ? y : 0; if (!quieto) try { $('cerrar').focus(); } catch (e) {} }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; A = null; }
+  function msgEn(id, clase, t) { var el = $(id); if (!el) return; el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; }
+
+  // Armar o cambiar el recordatorio de un grupo
+  async function abreGrupo(gid, rid) {
+    var g = GR.filter(function (x) { return x.grupo_id === gid; })[0];
+    abre(cab(cia(CIA), (g && g.grupo) || 'Grupo', 'Cargando…') + '<div class="cuerpo"><div class="cargando">Cargando el grupo…</div></div>');
+    var d;
+    try { d = await rpc('rec_grupo', { p_compania: CIA, p_grupo_id: gid, p_antiguedad: ant() }); }
+    catch (e) { abre(cab(cia(CIA), 'Grupo', '') + '<div class="cuerpo"><div class="msg mal">' + esc(falla(e)) + '</div></div>'); return; }
+    var nombre = (g && g.grupo) || (RECS.concat(PEND).filter(function (r) { return r.grupo_id === gid; })[0] || {}).grupo || ('Grupo ' + gid);
+    A = { grupo: gid, nombre: nombre, d: d, id: null, sel: { f: {}, e: {}, c: {} }, desc: 'Saldos al ' + fecha(hoy()), estatus: 1, previa: false };
+    d.facturas.forEach(function (f) { A.sel.f[f.id] = true; });
+    d.empresas.forEach(function (e) { A.sel.e[e.id] = true; });
+    d.contactos.forEach(function (c) { A.sel.c[c.correo] = true; });
+    if (rid) carga1(rid);
+    pintaArma();
+  }
+  function carga1(rid) {
+    var r = (A.d.correos || []).filter(function (x) { return x.id === rid; })[0]; if (!r) return;
+    A.id = r.id; A.desc = r.descripcion; A.estatus = r.estatus;
+    A.sel = { f: {}, e: {}, c: {} };
+    (r.facturas || []).forEach(function (x) { A.sel.f[x] = true; });
+    (r.empresas || []).forEach(function (x) { A.sel.e[x] = true; });
+    (r.contactos || []).forEach(function (x) { A.sel.c[x.correo] = true; if (!A.d.contactos.some(function (c) { return c.correo === x.correo; })) A.d.contactos.push({ nombre: x.nombre, correo: x.correo, origen: 'recordatorio' }); });
+  }
+  function elegidas() { return A.d.facturas.filter(function (f) { return A.sel.f[f.id] && A.sel.e[f.empresa_id]; }); }
+  function pintaArma() {
+    var d = A.d, w = escribe(), F = elegidas(), tot = F.reduce(function (a, f) { return a + Number(f.saldo || 0); }, 0);
+    var h = cab(cia(CIA) + (A.id ? ' · cambiando el recordatorio ' + A.id : ''), A.nombre, F.length + (F.length === 1 ? ' factura' : ' facturas') + ' · ' + dinero(tot)) + '<div class="cuerpo">';
+    var pend = (d.correos || []).filter(function (r) { return r.id !== A.id; });
+    if (pend.length) h += sec('Recordatorios de este grupo que no se han mandado', '<ul class="lista">' + pend.map(function (r) {
+      return '<li class="con"><div><div class="t">' + esc(r.descripcion) + '</div><div class="d">' + esc(ESTATUS[r.estatus]) + ' · ' + esc(fecha(r.creado)) + ' · hoy ' + esc(dinero(r.monto_hoy)) + '</div></div>'
+        + (w ? '<button class="btn chico" type="button" data-acc="usar" data-r="' + r.id + '">Abrir este</button>' : '<span></span>') + '</li>';
+    }).join('') + '</ul>', String(pend.length));
+    h += sec('Facturas con saldo', d.facturas.length ? '<div class="todos"><button class="btn chico" type="button" data-acc="todasF">Todas</button><button class="btn chico" type="button" data-acc="ningunaF">Ninguna</button></div><ul class="checks">' + d.facturas.map(function (f) {
+      var dentro = A.sel.e[f.empresa_id];
+      return '<li class="' + (A.sel.f[f.id] && dentro ? '' : 'fuera') + '"><input type="checkbox" data-sel="f" data-k="' + f.id + '"' + (A.sel.f[f.id] ? ' checked' : '') + (dentro ? '' : ' disabled') + ' aria-label="Incluir la factura ' + esc(f.folio) + '">'
+        + '<div><div class="t">' + esc(f.folio || 'Sin folio') + ' · ' + esc(f.razon) + '</div><div class="d">' + esc(fecha(f.fecha)) + ' · ' + esc(f.dias) + ' días' + (f.concepto ? ' · ' + esc(f.concepto) : '') + '</div></div>'
+        + '<div class="monto">' + esc(dinero(f.saldo)) + '<div class="rfc">de ' + esc(dinero(f.total)) + '</div></div></li>';
+    }).join('') + '</ul>' : '<div class="vacio">Este grupo ya no tiene facturas con saldo con esta antigüedad.</div>', d.facturas.length + '');
+    h += sec('Razones sociales', '<ul class="checks">' + d.empresas.map(function (e) {
+      return '<li><input type="checkbox" data-sel="e" data-k="' + e.id + '"' + (A.sel.e[e.id] ? ' checked' : '') + ' aria-label="Incluir ' + esc(e.razon) + '"><div><div class="t">' + esc(e.razon) + '</div><div class="d">' + esc(e.rfc) + '</div></div><span></span></li>';
+    }).join('') + '</ul>');
+    h += sec('A quién se manda', (d.contactos.length ? '<ul class="checks">' + d.contactos.map(function (c) {
+      var o = c.origen === 'ficha' ? 'De la ficha del cliente' : c.origen === 'agregado' ? 'Agregado al grupo' : 'Del recordatorio';
+      return '<li><input type="checkbox" data-sel="c" data-k="' + esc(c.correo) + '"' + (A.sel.c[c.correo] ? ' checked' : '') + ' aria-label="Mandar a ' + esc(c.correo) + '"><div><div class="t">' + esc(c.nombre || c.correo) + '</div><div class="d">' + esc(c.correo) + ' · ' + esc(o) + '</div></div>'
+        + (c.origen === 'agregado' && w ? '<button class="btn chico peligro" type="button" data-acc="quitaCorreo" data-id="' + esc(c.id) + '">Quitar del grupo</button>' : '<span></span>') + '</li>';
+    }).join('') + '</ul>' : '<div class="vacio">Nadie en la ficha recibe recordatorios en esta compañía. Agrega un correo al grupo o márcalo en la Base de clientes.</div>')
+      + (w ? '<div class="agrega"><input id="n-nombre" maxlength="120" placeholder="Nombre" aria-label="Nombre"><input id="n-correo" type="email" maxlength="200" placeholder="correo@cliente.com" aria-label="Correo"><button class="btn" type="button" data-acc="agregaCorreo">Agregar al grupo</button></div>' : ''));
+    if (w) h += sec(A.id ? 'Cambiar el recordatorio' : 'Guardar el recordatorio', '<div class="in"><div class="campos"><div class="campo ancho"><label for="r-desc">Descripción</label><input id="r-desc" maxlength="200" value="' + esc(A.desc) + '"></div>'
+      + '<div class="campo"><label for="r-est">Estatus</label><select id="r-est"><option value="1"' + (A.estatus === 1 ? ' selected' : '') + '>En revisión</option><option value="2"' + (A.estatus === 2 ? ' selected' : '') + '>Para enviar</option></select></div></div>'
+      + '<div class="msg" id="r-msg" hidden></div><div class="acciones" style="margin-top:10px"><button class="btn acento" type="button" data-acc="guarda">' + (A.id ? 'Guardar cambios' : 'Guardar') + '</button><button class="btn" type="button" data-acc="previa">' + (A.previa ? 'Esconder la vista previa' : 'Ver cómo llega el correo') + '</button></div></div>');
+    else h += '<div class="acciones"><button class="btn" type="button" data-acc="previa">' + (A.previa ? 'Esconder la vista previa' : 'Ver cómo llega el correo') + '</button></div>';
+    if (A.previa) h += '<div id="previa"></div>' + sec('Vista previa del correo', '<div class="in"><p class="rfc" style="margin:0 0 8px">Asunto: Honorarios Pendientes Profase · con el PDF de saldos adjunto</p><div class="previa">' + cuerpoHTML(cia(CIA), F) + '</div></div>');
+    h += '</div>';
+    abre(h, true);
+  }
+
+  // El cuerpo del correo, igual que la función «recordatorios» (supabase/functions/recordatorios/logica.ts, cuerpoHTML)
+  function pesos(n) { var v = Math.round((Number(n) || 0) * 100) / 100; return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fechaLarga(s) { var p = String(s).split('-'); return (+p[2]) + ' de ' + MESES_L[+p[1] - 1] + ' de ' + p[0]; }
+  function fechaCorta(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+  function quienEnvia(n) { return /^decomsa$/i.test(String(n || '').trim()) ? 'Reingeniería Fiscal Decomsa' : String(n || 'PROFASE'); }
+  function cuerpoHTML(compania, facturas) {
+    var g = {}, orden = [];
+    facturas.forEach(function (f) { if (!g[f.razon]) { g[f.razon] = { razon: f.razon, fs: [], saldo: 0 }; orden.push(g[f.razon]); } g[f.razon].fs.push(f); g[f.razon].saldo += Number(f.saldo || 0); });
+    var total = orden.reduce(function (a, x) { return a + x.saldo; }, 0);
+    var td = 'padding:5px 8px;border-bottom:1px solid #DDE3EC;font-size:13px;', th = 'padding:6px 8px;background:#1F3864;color:#fff;font-size:12px;text-align:left;';
+    return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1d2433">'
+      + '<p style="margin:0;font-size:18px;color:#1F3864"><b>Grupo PROFASE</b></p>'
+      + '<p style="margin:0 0 14px;font-size:12px;color:#5A6577">Asesoría Contable, Legal y Fiscal · ' + esc(fechaLarga(hoy())) + '</p>'
+      + '<div style="height:3px;background:#1F3864;max-width:720px;margin-bottom:16px"></div>'
+      + '<p style="font-size:14px">Esperando se encuentre bien:</p>'
+      + '<p style="font-size:14px">' + esc(quienEnvia(compania)) + ' le envía un cordial recordatorio respecto a los honorarios contables que actualmente se encuentran pendientes de pago.</p>'
+      + '<p style="font-size:15px">Total: <b><u>' + esc(pesos(total)) + '</u></b></p>'
+      + orden.map(function (x) {
+        return '<p style="margin:18px 0 6px;font-size:14px;color:#1F3864"><b>' + esc(x.razon) + '</b> &nbsp;·&nbsp; Subtotal: <b>' + esc(pesos(x.saldo)) + '</b></p>'
+          + '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;max-width:720px"><tr><th style="' + th + '">Folio</th><th style="' + th + '">Fecha</th><th style="' + th + '">Concepto</th><th style="' + th + 'text-align:right">Días</th><th style="' + th + 'text-align:right">Total</th><th style="' + th + 'text-align:right">Saldo</th></tr>'
+          + x.fs.map(function (f) { return '<tr><td style="' + td + '">' + esc(f.folio) + '</td><td style="' + td + '">' + esc(fechaCorta(f.fecha)) + '</td><td style="' + td + '">' + esc(f.concepto) + '</td><td style="' + td + 'text-align:right">' + esc(f.dias) + '</td><td style="' + td + 'text-align:right">' + esc(pesos(f.total)) + '</td><td style="' + td + 'text-align:right"><b>' + esc(pesos(f.saldo)) + '</b></td></tr>'; }).join('')
+          + '</table>';
+      }).join('')
+      + '<p style="font-size:14px;margin-top:20px">Le agradeceremos nos indique la fecha estimada de pago. Adjuntamos el detalle en PDF.</p>'
+      + '<p style="font-size:14px">Quedamos atentos a cualquier duda o comentario.</p><p style="font-size:14px">¡Saludos!</p></div>';
+  }
+
+  async function guarda(b) {
+    var F = elegidas(), E = Object.keys(A.sel.e).filter(function (k) { return A.sel.e[k]; }).map(Number);
+    var C = A.d.contactos.filter(function (c) { return A.sel.c[c.correo]; }).map(function (c) { return { nombre: c.nombre || '', correo: c.correo }; });
+    var desc = $('r-desc').value.trim(), est = +$('r-est').value;
+    if (!desc) { msgEn('r-msg', 'mal', 'Escribe una descripción.'); return; }
+    if (!F.length) { msgEn('r-msg', 'mal', 'Escoge al menos una factura.'); return; }
+    if (!C.length) { msgEn('r-msg', 'mal', 'Escoge al menos a quién se manda.'); return; }
+    var Eusadas = E.filter(function (e) { return F.some(function (f) { return f.empresa_id === e; }); });
+    var p = { compania: CIA, grupo_id: A.grupo, descripcion: desc, estatus: est, contactos: C, empresas: Eusadas, facturas: F.map(function (f) { return f.id; }) };
+    if (A.id) p.id = A.id;
+    b.disabled = true; msgEn('r-msg', 'ojo', 'Guardando…');
+    try { await rpc('rec_guarda', { p: p }); await recarga(); cierra(); avisa(est === 2 ? 'Guardado como «Para enviar».' : 'Guardado en revisión.'); }
+    catch (e) { msgEn('r-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+  async function agregaCorreo(b) {
+    var n = $('n-nombre').value.trim(), c = $('n-correo').value.trim().toLowerCase();
+    if (!/^[^\s@;,]+@[^\s@;,]+\.[^\s@;,]+$/.test(c)) { error('Escribe un correo válido.'); setTimeout(function () { $('error').hidden = true; }, 5000); return; }
+    b.disabled = true;
+    try {
+      var r = await rpc('rec_destinatario', { p: { grupo_id: A.grupo, nombre: n, correo: c } });
+      A.d.contactos.push({ nombre: n, correo: c, origen: 'agregado', id: r.id }); A.sel.c[c] = true; pintaArma();
+    } catch (e) { error(falla(e)); setTimeout(function () { $('error').hidden = true; }, 6000); b.disabled = false; }
+  }
+  async function quitaCorreo(id, b) {
+    if (!window.confirm('¿Quitar este correo del grupo?')) return;
+    b.disabled = true;
+    try {
+      await rpc('rec_destinatario', { p: { id: +id, borrar: true } });
+      var c = A.d.contactos.filter(function (x) { return String(x.id) === String(id); })[0];
+      A.d.contactos = A.d.contactos.filter(function (x) { return x !== c; }); if (c) delete A.sel.c[c.correo]; pintaArma();
+    } catch (e) { error(falla(e)); b.disabled = false; }
+  }
+
+  // Un recordatorio de la lista
+  function abreRec(id) {
+    var r = RECS.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    var w = escribe() && r.estatus !== 0;
+    var h = cab(cia(CIA) + ' · ' + (ESTATUS[r.estatus] || ''), r.grupo || 'Recordatorio', r.descripcion) + '<div class="cuerpo">'
+      + sec('Recordatorio', '<dl class="datos" style="display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:6px 14px;padding:12px 14px;margin:0">'
+        + '<dt>Saldo hoy</dt><dd>' + esc(dinero(r.monto_hoy)) + '</dd><dt>Recordado</dt><dd>' + (r.monto_recordado == null ? '—' : esc(dinero(r.monto_recordado))) + '</dd>'
+        + '<dt>Armado</dt><dd>' + esc(fechaHora(r.creado)) + (r.creado_por ? ' · ' + esc(r.creado_por) : '') + '</dd><dt>Contactos</dt><dd>' + r.n_contactos + '</dd><dt>Razones sociales</dt><dd>' + r.n_empresas + '</dd></dl>')
+      + (w ? '<div class="acciones">' + (r.estatus === 1 ? '<button class="btn acento" type="button" data-acc="estatus" data-r="' + r.id + '" data-v="2">Pasar a «Para enviar»</button>' : '<button class="btn" type="button" data-acc="estatus" data-r="' + r.id + '" data-v="1">Regresar a «En revisión»</button>')
+        + '<button class="btn" type="button" data-acc="cambiar" data-r="' + r.id + '" data-g="' + r.grupo_id + '">Ver y cambiar</button>'
+        + '<button class="btn" type="button" data-acc="estatus" data-r="' + r.id + '" data-v="0">Archivar sin mandar</button>'
+        + '<button class="btn peligro" type="button" data-acc="borra" data-r="' + r.id + '">Borrar</button></div><div class="msg" id="r-msg" hidden></div>'
+        : (escribe() && r.estatus === 0 ? '<div class="acciones"><button class="btn" type="button" data-acc="estatus" data-r="' + r.id + '" data-v="1">Sacar del archivo</button></div><div class="msg" id="r-msg" hidden></div>' : ''))
+      + '</div>';
+    abre(h);
+  }
+  async function estatus(id, v, b) {
+    b.disabled = true;
+    try { await rpc('rec_estatus', { p_id: id, p_estatus: v }); await recarga(); cierra(); avisa('Listo: ' + ESTATUS[v] + '.'); }
+    catch (e) { msgEn('r-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+  async function borra(id, b) {
+    if (!window.confirm('¿Borrar este recordatorio? (uno que ya se mandó no se borra: se archiva)')) return;
+    b.disabled = true;
+    try { await rpc('rec_borra', { p_id: id }); await recarga(); cierra(); avisa('Recordatorio borrado.'); }
+    catch (e) { msgEn('r-msg', 'mal', falla(e)); b.disabled = false; }
+  }
+
+  // Un envío del historial, con la foto de sus facturas
+  async function abreEnvio(id) {
+    abre(cab('Envío', 'Cargando…') + '<div class="cuerpo"><div class="cargando">Cargando el envío…</div></div>');
+    try {
+      var d = await rpc('rec_envio', { p_id: id }), v = d.envio, F = d.facturas || [];
+      var h = cab(cia(v.compania) + ' · ' + fechaHora(v.fecha), (HIST.filter(function (x) { return x.id === id; })[0] || {}).grupo || 'Envío', v.usuario ? 'Lo mandó ' + v.usuario : '') + '<div class="cuerpo">'
+        + sec('Cómo salió', '<div class="in"><div>' + esc({ enviado: 'Enviado', prueba: 'Prueba (al correo de prueba)', error: 'No salió' }[v.estado] || v.estado) + (v.detalle ? ' · ' + esc(v.detalle) : '') + '</div>'
+          + ((v.para || []).length ? '<div class="rfc">Para: ' + esc((v.para || []).join(', ')) + (v.copia ? ' · copia oculta a ' + esc(v.copia) : '') + '</div>' : '') + '</div>')
+        + sec('Facturas y saldos al momento del envío', F.length ? '<div class="tabla"><table><thead><tr><th>Folio</th><th>Razón social</th><th>Fecha</th><th>Días</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody>'
+          + F.map(function (f) { return '<tr><td>' + esc(f.folio) + '</td><td>' + esc(f.razon) + '</td><td>' + esc(fecha(f.fecha)) + '</td><td class="num">' + esc(f.dias) + '</td><td class="monto">' + esc(dinero(f.total)) + '</td><td class="monto">' + esc(dinero(f.saldo)) + '</td></tr>'; }).join('')
+          + '</tbody></table></div>' : '<div class="vacio">Sin foto de facturas.</div>', String(F.length)) + '</div>';
+      abre(h, true);
+    } catch (e) { abre(cab('Envío', 'No se pudo abrir') + '<div class="cuerpo"><div class="msg mal">' + esc(falla(e)) + '</div></div>'); }
+  }
+
+  // Mandar los «Para enviar» (máximo 20 por vez) por la función «recordatorios» de Supabase
+  async function mandar(b) {
+    if (!PEND.length) return;
+    var ids = PEND.slice(0, 20).map(function (r) { return r.id; });
+    var tot = PEND.slice(0, 20).reduce(function (a, r) { return a + Number(r.monto_hoy || 0); }, 0);
+    if (!window.confirm('Se van a mandar ' + ids.length + (ids.length === 1 ? ' recordatorio' : ' recordatorios') + ' por ' + dinero(tot) + (EST.modo === 'prueba' ? ' (modo prueba: solo al correo de prueba)' : '') + '. ¿Continuar?')) return;
+    b.disabled = true;
+    abre(cab('Recordatorios', 'Mandando…', ids.length + ' recordatorios') + '<div class="cuerpo"><div class="cargando">Mandando desde ' + esc(EST.remitente || 'el buzón de cumplimiento') + '…</div></div>');
+    var r = await P.sb.functions.invoke('recordatorios', { body: { ids: ids } }), d = r.data;
+    if (r.error) {
+      var m = falla(r.error);
+      try { var j = await r.error.context.json(); if (j && j.error) m = j.error; } catch (e) {}
+      abre(cab('Recordatorios', 'No se mandaron') + '<div class="cuerpo"><div class="msg mal">' + esc(m) + '</div></div>', true);
+      b.disabled = false; return;
+    }
+    var R = (d && d.resultados) || [], bien = R.filter(function (x) { return x.estado === 'enviado' || x.estado === 'prueba'; }).length;
+    var EST_TXT = { enviado: 'Enviado', prueba: 'Prueba', error: 'No salió', no: 'No se mandó' };
+    abre(cab('Recordatorios', bien + ' de ' + R.length + ' salieron', d && d.modo === 'prueba' ? 'Modo prueba: llegaron al correo de prueba' : '') + '<div class="cuerpo">'
+      + sec('Resultado', '<ul class="res">' + R.map(function (x) {
+        return '<li><div class="t">' + esc(x.grupo || ('Recordatorio ' + x.id)) + ' · ' + esc(EST_TXT[x.estado] || x.estado) + '</div><div class="d">' + esc(x.descripcion || '') + (x.monto != null ? ' · ' + esc(dinero(x.monto)) : '') + (x.detalle ? ' · ' + esc(x.detalle) : '') + (x.para ? ' · ' + esc(x.para.join(', ')) : '') + '</div></li>';
+      }).join('') + '</ul>') + '</div>', true);
+    await recarga();
+    b.disabled = false;
+  }
+
+  /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
+  async function excel(b) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = gruposFiltrados(), wb = MK.libro(EX, 'Recordatorios de pago');
+      var ws = wb.addWorksheet('Grupos con saldo');
+      var head = ['Grupo', 'Saldo', 'Facturas', 'Razones sociales', 'Días de la más vieja', 'Último envío', 'Pendientes'];
+      ws.columns = [40, 15, 10, 14, 14, 14, 11].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: 'Recordatorios de pago · ' + cia(CIA), lineas: ['Al ' + fecha(hoy()), (ant() ? 'Facturas de ' + ant() + ' días o más · ' : '') + L.length + ' grupos'] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (g, i) { ws.getRow(f0 + 1 + i).values = [g.grupo, Number(g.saldo || 0), g.facturas, g.empresas, g.dias_max, g.ultimo_envio ? fecha(g.ultimo_envio) : 'Nunca', g.pendientes]; });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.getColumn(2).numFmt = '$#,##0.00';
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Recordatorios de pago PROFASE.xlsx');
+    } catch (e) { error('No se pudo armar el Excel. Vuelve a intentar.'); setTimeout(function () { $('error').hidden = true; }, 6000); }
+    b.disabled = false;
+  }
+
+  /* ---------- eventos ---------- */
+  $('c-cia').addEventListener('change', function () { CIA = +this.value; recarga().catch(function (e) { error(falla(e)); }); });
+  $('c-ant').addEventListener('change', function () { recarga().catch(function (e) { error(falla(e)); }); });
+  $('f-est').addEventListener('change', function () { recarga().catch(function (e) { error(falla(e)); }); });
+  ['f-desde', 'f-hasta'].forEach(function (k) { $(k).addEventListener('change', function () { recarga().catch(function (e) { error(falla(e)); }); }); });
+  $('f-gbuscar').addEventListener('input', pintaGrupos);
+  $('x-gru').onclick = function () { excel(this); };
+  $('b-mandar').onclick = function () { mandar(this); };
+  ['gru', 'rec', 'his'].forEach(function (v) { $('t-' + v).onclick = function () { VISTA = v; pinta(); }; });
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var f = t.closest && t.closest('tr.fila');
+    if (f) { if (f.dataset.g) abreGrupo(+f.dataset.g); else if (f.dataset.r) abreRec(+f.dataset.r); else if (f.dataset.h) abreEnvio(+f.dataset.h); return; }
+    if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
+    var b = t.closest && t.closest('[data-acc]'); if (!b) return;
+    var a = b.getAttribute('data-acc');
+    if (a === 'guarda') guarda(b);
+    else if (a === 'previa') { A.previa = !A.previa; leeForma(); pintaArma(); if (A.previa && $('previa')) try { $('previa').scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} }
+    else if (a === 'todasF') { A.d.facturas.forEach(function (x) { A.sel.f[x.id] = true; }); leeForma(); pintaArma(); }
+    else if (a === 'ningunaF') { A.sel.f = {}; leeForma(); pintaArma(); }
+    else if (a === 'usar') { leeForma(); carga1(+b.dataset.r); pintaArma(); }
+    else if (a === 'agregaCorreo') agregaCorreo(b);
+    else if (a === 'quitaCorreo') quitaCorreo(b.dataset.id, b);
+    else if (a === 'estatus') estatus(+b.dataset.r, +b.dataset.v, b);
+    else if (a === 'borra') borra(+b.dataset.r, b);
+    else if (a === 'cambiar') abreGrupo(+b.dataset.g, +b.dataset.r);
+  });
+  function leeForma() { if ($('r-desc')) A.desc = $('r-desc').value; if ($('r-est')) A.estatus = +$('r-est').value; }
+  document.addEventListener('change', function (ev) {
+    var t = ev.target, s = t.getAttribute && t.getAttribute('data-sel'); if (!s || !A) return;
+    A.sel[s][t.getAttribute('data-k')] = t.checked;
+    leeForma(); pintaArma();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('velo').hidden) cierra();
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) ev.target.click();
+  });
+  carga();
+})();
+</script>
+</body></html>
