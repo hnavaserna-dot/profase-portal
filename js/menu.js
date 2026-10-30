@@ -158,7 +158,8 @@
     + '.pm-pop{position:fixed;top:var(--pm-py,120px);left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 24px));box-sizing:border-box;' + SOMBRAS + ',var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-top:3px solid var(--accent,#F07A1E);border-radius:12px;box-shadow:0 16px 40px rgba(10,18,32,.22);padding:14px 14px 10px;text-align:left;max-height:var(--pm-ph,calc(100vh - 16px));overflow:auto;overscroll-behavior:contain}'
     + 'body.pm-arriba .pm-top.pm-con-pop{z-index:85}'   // abierta, encima de los avisos flotantes
     + '.pm-pop[hidden]{display:none}'
-    + '.pm-pop h2{margin:0 0 2px;font-size:16px;font-weight:700}.pm-pop>p{margin:0 0 10px;color:var(--muted,#5A6577);font-size:13px}'
+    + '.pm-pcab{position:sticky;top:-14px;z-index:1;margin:-14px -14px 10px;padding:12px 14px 10px;background:var(--navy-soft,#E6ECF6);border-bottom:1px solid var(--line,#DCE2EB);border-radius:11px 11px 0 0/9px 9px 0 0}'   // encabezado sombreado (30-oct-2026)
+    + '.pm-pop h2{margin:0 0 2px;font-size:16px;font-weight:700}.pm-pcab p{margin:0;color:var(--muted,#5A6577);font-size:13px}'
     + '.pm-pop ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}'
     + '.pm-pop a{display:block;text-decoration:none;color:var(--ink,#132036);padding:9px 10px;border-radius:8px}'
     + '.pm-pop a:hover{background:var(--navy-soft,#E6ECF6)}'
@@ -170,6 +171,7 @@
     + '@media (min-width:901px){'
     + 'body.pm{padding-left:var(--pm-sw)!important}body.pm header.band{margin-left:calc(-1 * var(--pm-sw))}'
     + 'body.pm.pm-mini{padding-left:var(--pm-rail)!important}body.pm.pm-mini header.band{margin-left:calc(-1 * var(--pm-rail))}'
+    + 'body:not(.pm-mini) .pm-mod[data-open="true"]>.pm-mb:not(.pm-inicio){background:rgba(255,255,255,.09)}'   // el módulo abierto, sombreado como encabezado de sus opciones
     + 'body.pm-mini .pm-side{width:var(--pm-rail)}'
     + 'body.pm-mini .pm-car{display:none}'
     // el riel se desliza si la pantalla es baja (las tarjetas van aparte, fijas en la pantalla, y no se recortan)
@@ -192,7 +194,9 @@
     + 'body.pm-mini .pm-mod.pm-mide .pm-subs{display:flex!important;visibility:hidden!important}'   // solo para medirla
     + 'body.pm-mini .pm-subs::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:14px}'
     + 'body.pm-mini .pm-sl{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;' + SOMBRAS + '}'   // si no caben, las opciones se deslizan; el título se queda arriba
-    + 'body.pm-mini .pm-fly{display:block;flex:none;padding:0 6px 10px;font-size:15px;font-weight:700;color:var(--ink,#132036);letter-spacing:0;text-transform:none}'
+    // el encabezado de la tarjeta (nombre y qué es) va en una franja sombreada, para que se vea que abajo están sus opciones
+    // (pedido de Daniel, 30-oct-2026); en claro, el azul grisáceo de PROFASE; en oscuro, un tono más claro que la tarjeta
+    + 'body.pm-mini .pm-fly{display:block;flex:none;margin:-14px -12px 8px;padding:13px 18px 11px;background:var(--navy-soft,#E6ECF6);border-bottom:1px solid var(--line,#DCE2EB);border-radius:11px 13px 0 0/13px 13px 0 0;font-size:15px;font-weight:700;color:var(--ink,#132036);letter-spacing:0;text-transform:none}'
     + 'body.pm-mini .pm-fly .pm-fd{display:block;font-size:12.5px;font-weight:400;color:var(--muted,#5A6577);margin-top:2px}'
     + 'body.pm-mini .pm-subs a{border-left:0;padding:8px 10px;border-radius:9px;color:var(--ink,#132036);white-space:normal;font-weight:600;font-size:13.5px}'
     + 'body.pm-mini .pm-subs a:hover{background:var(--navy-soft,#E6ECF6);color:var(--ink,#132036)}'
@@ -206,6 +210,7 @@
     + 'body.pm-abierto .pm-scrim{display:block;position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:85}'
     + '.pm-cab{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) 10px 10px 16px;border-bottom:1px solid rgba(255,255,255,.12)}'
     + '.pm-pie{padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}'
+    + '.pm-mod[data-open="true"]>.pm-mb:not(.pm-inicio){background:rgba(255,255,255,.09)}'
     + '.pm-cab img{width:30px;height:30px;object-fit:contain;display:block;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box}'
     + '.pm-cab span{flex:1;font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-weight:700;letter-spacing:.16em;color:#fff;font-size:15px}'
     + '.pm-cab button{border:0;background:none;color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;display:grid;place-items:center}'
@@ -341,9 +346,9 @@
     var pop = '';
     var x = popAbierto === 'home' ? null : ms.filter(function (y) { return y.m.k === popAbierto; })[0];
     if (popAbierto === 'home' && ini) {
-      pop = '<h2>Inicio</h2><p>Regresa al principio del portal.</p><ul><li><a href="#' + esc(ini.k) + '" data-k="' + esc(ini.k) + '"><b>' + esc(nombre(ini)) + '</b><span class="pm-d">' + esc(ini.d || '') + '</span></a></li></ul>';
+      pop = '<div class="pm-pcab"><h2>Inicio</h2><p>Regresa al principio del portal.</p></div><ul><li><a href="#' + esc(ini.k) + '" data-k="' + esc(ini.k) + '"><b>' + esc(nombre(ini)) + '</b><span class="pm-d">' + esc(ini.d || '') + '</span></a></li></ul>';
     } else if (x) {
-      pop = '<h2>' + esc(x.m.t) + '</h2><p>' + esc(x.m.d || '') + '</p><ul>' + x.subs.map(function (s) {
+      pop = '<div class="pm-pcab"><h2>' + esc(x.m.t) + '</h2><p>' + esc(x.m.d || '') + '</p></div><ul>' + x.subs.map(function (s) {
         var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
         return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '><b>' + esc(nombre(s))
           + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + '</b><span class="pm-d">' + esc(s.d || '') + '</span></a></li>';
