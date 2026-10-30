@@ -44,7 +44,11 @@
    Cada tarjeta lee con la sesión de quien entró: la base decide qué ve cada quien (si no puede leer algo, la tarjeta no
    sale). La cobranza de la otra compañía solo existe en el paquete de la dirección, así que solo ahí puede salir; el
    código no la nombra. Solo lee: lo único que escribe es marcar como leído un aviso propio (notif_leer). Las horas,
-   siempre en hora de Monterrey. */
+   siempre en hora de Monterrey.
+   «Equipo conectado» (Daniel, 30-oct-2026, 16:26 y 17:22: «solo yo y HNR»; «si» a la tarjeta en su Inicio): quién del
+   equipo está en línea, ausente o no disponible, al momento. Solo sale si la base dice que sí (chat_veo_conectados(),
+   portal/sql/65_chat_conectados.sql; hoy daniel.nava y hnava). Nombres: chat_directorio; estatus: el chat de la página
+   de afuera (chat_tab.js, window.__chatEstado). No lee conversaciones. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6;
@@ -142,6 +146,13 @@ button{font:inherit;color:inherit}
 .carga .esq.g{height:52px}
 @keyframes brilla{0%{background-position:100% 0}100%{background-position:-100% 0}}
 @media (prefers-reduced-motion:reduce){.carga .esq{animation:none}}
+/* Equipo conectado */
+.avw{position:relative;flex:none;line-height:0}
+.avq{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:var(--navy-soft);color:var(--ink);font-weight:700;font-size:12px;line-height:1}
+.avq img{width:100%;height:100%;object-fit:cover;display:block}
+.pq{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 2px var(--surface)}
+.pq[data-e="ausente"]{background:var(--amber)} .pq[data-e="nd"]{background:var(--red)}
+.fila .b.linea{color:var(--ok)}
 @media (max-width:520px){.wrap{padding:14px 12px 32px}.card{padding:12px 13px 10px}.card h2{font-size:16px}}
 </style></head><body>
 <div class="wrap">
@@ -862,6 +873,65 @@ button{font:inherit;color:inherit}
     } };
   }
 
+  // --- Equipo conectado (Daniel, 30-oct-2026: «solo yo y HNR»): al momento, del chat de la página de afuera ---
+  var VEO_EQ = false, EQ = null, repT = 0;
+  function estChat() { try { var a = window.parent; return a && a !== window && a.__chatEstado ? a.__chatEstado : null; } catch (e) { return null; } }
+  function avEq(x) {
+    var url = x.uid && EQ.fotos[String(x.uid).toLowerCase()];
+    var w = String(x.nombre || '').trim().split(/\s+/).filter(Boolean);
+    var ini = ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+    return '<span class="avq">' + (url ? '<img alt="" src="' + esc(url) + '">' : '<span>' + esc(ini) + '</span>') + '</span>';
+  }
+  function rolEq(r) { return r === 'director' ? 'Dirección' : r === 'gerente' ? 'Gerente' : r === 'contador' ? 'Contador' : ''; }
+  function htmlConectados() {
+    var x = estChat();
+    if (!EQ || !x) return '<p class="falla">El estatus del equipo sale en cuanto carga el chat. Vuelve a cargar en un momento.</p>';
+    var g = { linea: [], ausente: [], nd: [], off: [] };
+    EQ.dir.forEach(function (p) {
+      if (!p || p.usuario === YO || p.registrado === false) return;
+      var st; try { st = x.de(p.usuario) || { e: 'off' }; } catch (e) { st = { e: 'off' }; }
+      (g[st.e] || g.off).push({ p: p, st: st });
+    });
+    var porNombre = function (a, b) { return String(a.p.nombre || '').localeCompare(String(b.p.nombre || ''), 'es'); };
+    g.linea.sort(porNombre); g.ausente.sort(porNombre); g.nd.sort(porNombre);
+    var h = '<div class="chips">' + chip(g.linea.length, 'en línea', 'bien')
+      + (g.ausente.length ? chip(g.ausente.length, g.ausente.length === 1 ? 'ausente' : 'ausentes', 'ojo') : '')
+      + (g.nd.length ? chip(g.nd.length, g.nd.length === 1 ? 'no disponible' : 'no disponibles', 'mal') : '')
+      + chip(g.off.length, g.off.length === 1 ? 'desconectado' : 'desconectados', '') + '</div>';
+    var filas = [].concat(g.linea, g.ausente, g.nd);
+    if (!filas.length) return h + '<p class="nota">Nadie del equipo está conectado ahora. En «Ver todos» está la última vez de cada quien.</p>';
+    var MAX = 8;
+    h += '<ul class="lista">' + filas.slice(0, MAX).map(function (f) {
+      var txt = ''; try { txt = x.texto(f.st); } catch (e) { txt = ''; }
+      var rol = rolEq(f.p.rol);
+      return '<li><button type="button" class="fila" data-equipo="1" title="Ver al equipo en el chat"><span class="avw">' + avEq(f.p) + '<span class="pq" data-e="' + esc(f.st.e) + '"></span></span>'
+        + '<span class="tx"><span class="a">' + esc(f.p.nombre) + '</span><span class="b' + (f.st.e === 'linea' ? ' linea' : '') + '">' + esc(txt + (rol ? ' · ' + rol : '')) + '</span></span></button></li>';
+    }).join('') + '</ul>';
+    var mas = filas.length - MAX;
+    if (mas > 0) h += '<p class="nota">' + (mas === 1 ? 'Y 1 persona más conectada; está' : 'Y ' + fi(mas) + ' personas más conectadas; están') + ' en «Ver todos».</p>';
+    return h;
+  }
+  function repintaEq() {
+    var el = $('c-conectados'); if (!el || el.classList.contains('carga') || !EQ) return;
+    el.querySelector('.cuerpo').innerHTML = htmlConectados();
+  }
+  function tConectados() {
+    return { id: 'conectados', t: 'Equipo conectado', s: 'Ahora mismo · se actualiza solo', liga: 'chat', ligaTxt: 'Ver todos', arma: async function () {
+      var dir = (await rpc('chat_directorio')) || [], fotos = {};
+      try { fotos = (await P.fotosDe(dir.map(function (x) { return x.uid; }).filter(Boolean))) || {}; } catch (e) { fotos = {}; }
+      EQ = { dir: dir, fotos: fotos };
+      for (var i = 0; i < 20 && !estChat(); i++) await new Promise(function (ok) { setTimeout(ok, 250); });   // el chat de afuera
+      return htmlConectados();
+    } };
+  }
+  // «Ver todos» o una persona: el Chat ya en la lista de todo el equipo (chat_tab.js); si no, solo el Chat
+  function abreEquipo() {
+    try { if (window.parent && window.parent !== window && window.parent.__chatAbreEquipo) { window.parent.__chatAbreEquipo(); return; } } catch (e) { /* sin chat */ }
+    ir('chat');
+  }
+  try { window.parent.addEventListener('profase:presencia', function () { clearTimeout(repT); repT = setTimeout(repintaEq, 250); }); } catch (e) { /* sin página de afuera */ }
+  setInterval(function () { if (!document.hidden) repintaEq(); }, 30000);
+
   /* ---------- quién ve qué tarjetas ---------- */
   function arma() {
     if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tCumplimiento(), tRevisar(),
@@ -874,10 +944,13 @@ button{font:inherit;color:inherit}
       tAvance(), tJustificar(), tPantallas(), tAvisos()];
     else TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tAvance(), tJustificar(),
       tFirmas('e.firma y sellos de tus clientes', 'Vencidas o por vencer'), tPantallas(), tAvisos()];
+    // «Equipo conectado»: solo a quien la base se la da (hoy la dirección); junto a la cobranza o antes de los avisos
+    if (VEO_EQ) TARJETAS.splice(PERFIL === 'direccion' ? 1 : Math.max(0, TARJETAS.length - 1), 0, tConectados());
   }
 
   document.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-liga]'); if (!b) return;
+    var b = e.target.closest('[data-liga],[data-equipo]'); if (!b) return;
+    if (b.hasAttribute('data-equipo') || b.closest('#c-conectados')) { abreEquipo(); return; }
     var id = b.getAttribute('data-notif');
     if (id) { try { P.sb.rpc('notif_leer', { p_ids: [+id] }); } catch (er) { /* no detiene la liga */ } }
     ir(b.getAttribute('data-liga'));
@@ -897,6 +970,7 @@ button{font:inherit;color:inherit}
       else PERFIL = 'contador';
       DEP = depDe(YO, NOMWF);
       if (PERFIL === 'gerente' && DEP < 0) PERFIL = 'contador';
+      try { VEO_EQ = (await rpc('chat_veo_conectados')) === true; } catch (e) { VEO_EQ = false; }   // sin 65: no sale
       $('que').textContent = TITULO[PERFIL];
       document.title = TITULO[PERFIL] + ' · Portal PROFASE';
       arma();
