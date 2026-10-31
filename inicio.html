@@ -211,10 +211,13 @@ button{font:inherit;color:inherit}
 
   /* ---------- a dónde lleva cada tarjeta: el menú de la página de afuera (js/menu.js) ---------- */
   function ir(k) {
+    // Renovaciones de e.firma y sellos: Access › Clientes, en su pestaña (acc_cli_tab.js)
+    if (k === 'renovaciones') { try { if (window.parent && window.parent !== window && window.parent.__axcliAbre) { window.parent.__axcliAbre('renovaciones'); return; } } catch (e) { /* sin vista */ } k = 'access-clientes'; }
     try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU && window.parent.PORTAL_MENU.ir(k)) return; } catch (e) { /* sin menú */ }
     try { window.top.location.hash = '#' + k; } catch (e) { /* nada */ }
   }
   function ve(k) {
+    if (k === 'renovaciones') k = 'access-clientes';
     try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU) return !!window.parent.PORTAL_MENU.ve(k); } catch (e) { /* sin menú */ }
     return false;
   }
@@ -818,7 +821,7 @@ button{font:inherit;color:inherit}
 
   // --- e.firma y sellos de los clientes (paquete de Access › Clientes) ---
   function tFirmas(t, s, soloEquipo) {
-    return { id: 'firmas', t: t, s: s, liga: 'access-clientes', arma: async function () {
+    return { id: 'firmas', t: t, s: s, liga: 'renovaciones', arma: async function () {
       var col = ROL === 'director' ? 'director' : 'access', id = ROL === 'director' ? 'acc_cli' : ROL === 'gerente' ? 'cli_equipo' : 'cli_' + YO;
       var doc = await leeDoc(col, id); if (!doc || !doc.b64) return null;
       var D = await gunzip(doc.b64), E = (D.empresas || []).filter(function (e) { return e.est !== 'Inactivo'; });
@@ -837,11 +840,16 @@ button{font:inherit;color:inherit}
       });
       if (!c.fm && !c.fo && !c.sm && !c.so) return aldia('Ninguna e.firma ni sello vence en los próximos 3 meses.');
       l.sort(function (a, b) { return a.f < b.f ? -1 : 1; });
+      // en qué paso va su renovación (portal/sql/71_renovaciones.sql: la base decide qué seguimiento ve cada quien)
+      var PASO = { cotizar: 'por cotizar', cotizado: 'cotizado', facturado: 'falta el pago', tramite: 'en trámite', cargar: 'cargar el nuevo',
+                   vencimiento: 'falta el vencimiento nuevo', baja: 'ya no es cliente' }, ren = {};
+      try { (await rpc('ren_lista', { p_cerrados: false }) || []).forEach(function (x) { ren[x.empresa_id] = PASO[x.etapa] || ''; }); } catch (er) { ren = {}; }
       var h = '<div class="chips">' + (c.fm ? chip(c.fm, c.fm === 1 ? ' e.firma vencida' : ' e.firmas vencidas', 'mal') : '') + (c.fo ? chip(c.fo, c.fo === 1 ? ' e.firma por vencer' : ' e.firmas por vencer', 'ojo') : '')
         + (c.sm ? chip(c.sm, c.sm === 1 ? ' sello vencido' : ' sellos vencidos', 'mal') : '') + (c.so ? chip(c.so, c.so === 1 ? ' sello por vencer' : ' sellos por vencer', 'ojo') : '') + '</div>';
       h += lista(l.slice(0, 5).map(function (x) {
         var sel = x.q === 'Sellos';
-        return { pt: x.mal ? 'mal' : 'ojo', a: esc(x.e.rs), b: esc(x.q) + (x.mal ? (sel ? ' vencidos el ' : ' vencida el ') : (sel ? ' vencen el ' : ' vence el ')) + fCortaA(x.f), n: '', liga: 'access-clientes' };
+        return { pt: x.mal ? 'mal' : 'ojo', a: esc(x.e.rs), b: esc(x.q) + (x.mal ? (sel ? ' vencidos el ' : ' vencida el ') : (sel ? ' vencen el ' : ' vence el ')) + fCortaA(x.f)
+                 + (ren[x.e.id] ? ' · ' + esc(ren[x.e.id]) : ''), n: '', liga: 'renovaciones' };
       }));
       h += '<p class="nota">Por vencer: en los próximos 3 meses. Solo empresas activas e incubadas. Datos al ' + esc(horaCorta(doc.refreshedAt)) + '.</p>';
       return h;
