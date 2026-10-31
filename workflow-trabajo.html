@@ -313,7 +313,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   var EST = { 2: 'Terminada', 3: 'Rechazada', 4: 'En Proceso', 5: 'Por Iniciar', 6: 'Cancelado' }, ORDEN_EST = [5, 4, 2, 3, 6];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  var ROL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
+  var ROL = '', RREAL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
   var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
   var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1 }, ENVD = {}, ENV_IDS = [];
   // configuración del mes (portal/sql/70_wf_config.sql): Reiniciar, Borrar, «Tareas a tiempo», editar el mes y agregar tarea;
@@ -349,7 +349,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   async function carga() {
     try {
       var p = await P.listo; if (!p) return;
-      ROL = p.rol; YO = p.usuario; CONSULTA = !!P.consulta;
+      ROL = p.rol; YO = p.usuario; CONSULTA = !!P.consulta; RREAL = p.rolReal || p.rol;
       var m = await P.sb.from('wf_config').select('valor').eq('clave', 'modo').maybeSingle();
       MODO = m.data && m.data.valor ? m.data.valor : 'practica';
       $('practica').hidden = MODO !== 'practica';
@@ -512,6 +512,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="rfc">' + (CONSULTA ? 'Solo consulta.' : (edita ? 'Terminarla o rechazarla le toca a ' + esc(quienCierra(a)) + ', a un gerente o a la dirección.' : 'Esta actividad la mueven ' + esc(quienCierra(a)) + (a.aut_nombre && a.resp_nombre ? ' y ' + esc(a.resp_nombre) + ' (responsable)' : '') + ', un gerente o la dirección.')) + '</div>'
       + '</div>';
     h += sec('Estatus y comentarios', form);
+    // la pausa la pide el contador y la autoriza el gerente (Daniel, 30-oct-2026, 21:50; portal/sql/78_wf_pausas_quien.sql)
+    var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a);
+    if (pidePz) h += '<section class="sec" id="pz-sec"><h3>Pausa del cliente</h3><div id="pz-in"><div class="vacio">Revisando…</div></div></section>';
     var req = [a.req_archivo ? 'Un documento para terminarla' : '', a.req_secuencia ? 'El paso anterior terminado' : ''].filter(Boolean).join(' · ');
     h += sec('La actividad', '<div class="in"><dl class="dl">'
       + '<dt>Responsable</dt><dd>' + (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + '</dd>'
@@ -542,7 +545,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
-    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes) pintaMes(a);
+    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes) pintaMes(a); if (pidePz) pintaPausa(a);
   }
   function cierra() { ABIERTA = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
   function msg(t, ok) { var m = $('fe-msg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
@@ -573,6 +576,42 @@ tr.fila:hover td{background:var(--navy-soft)}
     try { var r = await P.sb.rpc('wf_pide_aut', { p_id: a.id }); if (r.error) throw r.error; msg('Listo: a ' + a.aut_nombre + ' le llegó el aviso en la campanita.', true); }
     catch (er) { msg(falla(er), false); }
     setTimeout(function () { if ($('fe-pide')) $('fe-pide').disabled = false; }, 3000);
+  }
+
+  /* ---------- Pedir la pausa del cliente (contadores): queda por confirmar y la autoriza el gerente en Panel › Pausas y
+     motivos; solo aplica al WorkFlow (la facturación y la cobranza siguen igual) ---------- */
+  async function pintaPausa(a) {
+    var box = $('pz-in'); if (!box) return;
+    if (a.pausa) { box.innerHTML = '<div class="rfc">El cliente ya está en pausa (' + esc(a.pausa) + '). Lo reactiva tu gerente cuando el cliente responda.</div>'; return; }
+    var j = null;
+    try { var r = await P.sb.rpc('wf_pausa_pedida', { p_act: a.id }); if (!r.error) j = r.data; } catch (e) { j = null; }
+    if (ABIERTA !== a.id || !$('pz-in')) return;
+    var cual = function (x) { return x.todo ? 'del cliente completo' : 'de ' + esc(x.mes); };
+    if (j && j.estado === 'propuesta') {
+      box.innerHTML = '<div class="rfc"><span class="tag pz">Por confirmar</span> Pediste la pausa ' + cual(j) + ' (' + esc(j.motivo) + '). Tu gerente la autoriza o la rechaza en Pausas y motivos.</div>';
+      return;
+    }
+    box.innerHTML = (j && j.estado === 'rechazada' ? '<div class="rfc" style="margin-bottom:8px"><span class="tag">Rechazada</span> Tu gerente rechazó la pausa que pediste ' + cual(j) + (j.nota ? ': «' + esc(j.nota) + '»' : '') + '.</div>' : '')
+      + '<div class="rfc">Si el cliente no contesta o no manda información, pide la pausa: tu gerente la autoriza y, mientras dure, sus actividades no cuentan como vencidas. Solo aplica al WorkFlow; la facturación y la cobranza siguen igual.</div>'
+      + '<div class="botones" style="margin-top:8px"><button class="btn" type="button" id="pz-abre">Pedir pausa</button></div>'
+      + '<div class="form" id="pz-form" hidden>'
+      + '<div><label>Motivo</label><label class="radio"><input type="radio" name="pz-mot" value="no-contesta"><span>El cliente no contesta</span></label>'
+      + '<label class="radio"><input type="radio" name="pz-mot" value="no-info"><span>El cliente no manda información</span></label></div>'
+      + '<label class="radio"><input type="checkbox" id="pz-todo"><span>El cliente completo: todos sus meses, también los que se generen, hasta que se reactive (si no, solo ' + esc(mesTxt(a.periodo)) + ')</span></label>'
+      + '<div><label for="pz-com">Qué pasó</label><textarea id="pz-com" maxlength="500" placeholder="Desde cuándo no contesta o qué falta"></textarea></div>'
+      + '<div class="botones"><button class="btn acento" type="button" id="pz-manda">Pedir la pausa</button><button class="btn" type="button" id="pz-cancela">Cancelar</button></div>'
+      + '<div class="msg" id="pz-msg" hidden></div></div>';
+  }
+  async function pidePausa(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    var m = (document.querySelector('input[name="pz-mot"]:checked') || {}).value || '';
+    if (!m) { vmsg('pz-msg', 'Escoge el motivo.', false); return; }
+    b.disabled = true; vmsg('pz-msg', '');
+    try {
+      var r = await P.sb.rpc('wf_pide_pausa', { p_act: a.id, p_motivo: m, p_todo: !!($('pz-todo') && $('pz-todo').checked), p_coment: $('pz-com').value });
+      if (r.error) throw r.error;
+      pintaPausa(a);
+    } catch (e) { vmsg('pz-msg', falla(e), false); b.disabled = false; }
   }
 
   async function pintaBit(a) {
@@ -1226,6 +1265,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       else emQuitaSi(+em.getAttribute('data-emqs'), em);
       return;
     }
+    if (ev.target.id === 'pz-abre') { $('pz-form').hidden = false; ev.target.hidden = true; return; }
+    if (ev.target.id === 'pz-cancela') { $('pz-form').hidden = true; $('pz-abre').hidden = false; return; }
+    if (ev.target.id === 'pz-manda') { pidePausa(ev.target); return; }
     if (ev.target.id === 'env-abre') { abreEnvios(); return; }
     if (ev.target.id === 'env-revisa') { envRevisa(ev.target); return; }
     if (ev.target.id === 'env-manda') { envMandaTodos(ev.target); return; }
