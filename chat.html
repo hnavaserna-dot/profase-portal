@@ -411,6 +411,8 @@ audio.ad-med{width:280px;max-width:100%}
 .menu .op.rojo{color:var(--red)}
 .menu .op .ic{width:18px;height:18px;color:var(--muted)}
 .menu .op.rojo .ic{color:var(--red)}
+.menu .op-nota{display:flex;gap:8px;align-items:flex-start;width:0;min-width:100%;box-sizing:border-box;padding:9px 14px 11px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.35;color:var(--muted)}
+.menu .op-nota .ic{width:15px;height:15px;flex:none;margin-top:1px}
 .velo-menu{position:fixed;inset:0;z-index:44;background:transparent}
 
 /* imagen en grande */
@@ -627,6 +629,7 @@ audio.ad-med{width:280px;max-width:100%}
     lapiz: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     bote: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
     ojo: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    candado: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
     tache: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     palomita: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>'
   };
@@ -1211,6 +1214,12 @@ audio.ad-med{width:280px;max-width:100%}
   async function llega(row) {
     if (!row || !row.id) return;
     if (ACT && row.conv === ACT.id) {
+      // si solo cambió cuándo lo leyeron por primera vez (visto_en), se anota sin volver a pedir el mensaje
+      var k = ACT.msgs.get(row.id);
+      if (k && row.visto_en && row.actualizado && k.actualizado && Date.parse(row.actualizado) === Date.parse(k.actualizado) && !!row.borrado === !!k.borrado) {
+        if (k.autor === YO.usuario && !k.visto_en) k.visto_en = row.visto_en;
+        return;
+      }
       var m;
       try { m = await rpc('chat_msg', { p_id: row.id }); } catch (e) { m = null; }
       if (m && ACT && ACT.id === row.conv) agrega([m]);
@@ -1304,7 +1313,7 @@ audio.ad-med{width:280px;max-width:100%}
     else if (ev.key === 'ArrowUp' && !texto.value && ACT) {
       // flecha arriba con la caja vacía: corregir el último mensaje propio (como en otras apps de chat)
       var mio = ACT.orden.slice().reverse().map(function (k) { return ACT.msgs.get(k); }).find(function (m) { return m.autor === YO.usuario && m.tipo === 'msg' && !m.borrado; });
-      if (mio && mio.texto && Date.now() - Date.parse(mio.creado) < 864e5) { ev.preventDefault(); corrige(mio); }
+      if (mio && mio.texto && !fijo(mio) && Date.now() - Date.parse(mio.creado) < 864e5) { ev.preventDefault(); corrige(mio); }
     }
   });
   texto.addEventListener('paste', function (ev) {
@@ -1408,7 +1417,8 @@ audio.ad-med{width:280px;max-width:100%}
     cierraMenu();
     if (!m) return;
     var yo = m.autor === YO.usuario, mia = (m.reacciones || []).find(function (r) { return (r.usuarios || []).indexOf(YO.usuario) >= 0; });
-    var puedeCorregir = yo && m.texto !== undefined && Date.now() - Date.parse(m.creado) < 864e5 - 60000;
+    var lim = yo ? limiteDe(m) : null, fija = yo && fijo(m);
+    var puedeCorregir = yo && !fija && m.texto !== undefined && Date.now() - Date.parse(m.creado) < 864e5 - 60000;
     var el = document.createElement('div'); el.className = 'menu'; el.setAttribute('role', 'menu');
     el.innerHTML = '<div class="emos" role="group" aria-label="Reaccionar">' + EMOJIS.map(function (e) { return '<button type="button" data-e="' + e + '" aria-pressed="' + (mia && mia.emoji === e ? 'true' : 'false') + '" aria-label="Reaccionar ' + e + '">' + e + '</button>'; }).join('') + '</div>'
       + '<button type="button" class="op" role="menuitem" data-a="resp">' + IC.resp + 'Contestar</button>'
@@ -1416,7 +1426,9 @@ audio.ad-med{width:280px;max-width:100%}
       + (m.texto ? '<button type="button" class="op" role="menuitem" data-a="copia">' + IC.copia + 'Copiar el texto</button>' : '')
       + (puedeCorregir ? '<button type="button" class="op" role="menuitem" data-a="corrige">' + IC.lapiz + 'Corregir</button>' : '')
       + (yo ? '<button type="button" class="op" role="menuitem" data-a="info">' + IC.ojo + 'Quién lo leyó</button>' : '')
-      + (yo ? '<button type="button" class="op rojo" role="menuitem" data-a="borra">' + IC.bote + 'Eliminar para todos</button>' : '');
+      + (yo && !fija ? '<button type="button" class="op rojo" role="menuitem" data-a="borra">' + IC.bote + 'Eliminar para todos</button>' : '')
+      + (fija ? '<div class="op-nota">' + IC.candado + '<span>Ya lo leyeron hace más de 3 minutos: ya no se puede corregir ni eliminar.</span></div>'
+         : lim ? '<div class="op-nota">' + IC.reloj + '<span>Ya lo leyeron: puedes corregirlo o eliminarlo hasta las ' + esc(fHora.format(new Date(lim)).replace(/\.?$/, '.')) + '</span></div>' : '');
     var velo = document.createElement('div'); velo.className = 'velo-menu';
     document.body.appendChild(velo); document.body.appendChild(el);
     var r = ancla.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
@@ -1444,6 +1456,12 @@ audio.ad-med{width:280px;max-width:100%}
     };
     try { el.querySelector('.op').focus(); } catch (e) { /* sin foco */ }
   }
+  // Corregir y eliminar un mensaje propio: mientras nadie más lo lea y hasta 3 minutos después de que lo leyeron (Daniel,
+  // 30-oct-2026, 20:34: «para que mañana no eliminen algo y digan que no lo hicieron»). Aquí solo se decide qué opciones
+  // enseñar; el candado de verdad está en la base (73_chat_candado_borrar.sql: chat_fijo y el disparador chat_candado_cambio).
+  var CANDADO_MS = 180000;
+  function limiteDe(m) { return m && m.visto_en ? Date.parse(m.visto_en) + CANDADO_MS : null; }
+  function fijo(m) { var l = limiteDe(m); return l !== null && Date.now() >= l - 1500; }
   function corrige(m) { EDIT = m; RESP = null; texto.value = m.texto || ''; ajusta(); pintaBarra(); texto.focus(); try { texto.setSelectionRange(texto.value.length, texto.value.length); } catch (e) { /* ya */ } }
   async function reacciona(id, e) {
     try { var r = await rpc('chat_reacciona', { p_id: id, p_emoji: e }); if (r) agrega([r]); } catch (x) { aviso(err(x), true); }
