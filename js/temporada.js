@@ -280,7 +280,8 @@
     if (cual !== 'arana') return;
     var ref = caja.closest('header,nav') || caja.parentNode;
     var mide = function () {
-      var d = caja.getBoundingClientRect().top - ref.getBoundingClientRect().top;
+      // el hilo sale de abajo de la hora y la batería: desde el 30-oct-2026 el encabezado trae ese espacio arriba (pantallas.css)
+      var d = caja.getBoundingClientRect().top - ref.getBoundingClientRect().top - (parseFloat(getComputedStyle(ref).paddingTop) || 0);
       caja.style.setProperty('--ptc-d', Math.max(0, Math.round(d)) + 'px');
     };
     mide();

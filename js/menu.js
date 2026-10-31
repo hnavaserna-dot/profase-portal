@@ -236,7 +236,13 @@
     + '.pm-cab button:hover{background:rgba(255,255,255,.1)}.pm-cab svg{width:20px;height:20px;display:block}'
     + '.pm-pie .pm-pmini{display:none}'
     + '}'
-    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit h1{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}'   // en el celular el título no se parte a media palabra
+    // en el celular la sección se ve COMPLETA (Daniel, 30-oct-2026, con una captura: salía «Altas …»): nunca se corta con
+    // «…» ni se parte a media palabra; si no cabe en un renglón, pasa entera al segundo (y los íconos bajan, pantallas.css)
+    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit{flex:1 1 auto}.pm-tit h1{font-size:17px;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;word-break:normal;-webkit-hyphens:manual;hyphens:manual}}'
+    // la franja de abajo del encabezado en el celular («Datos al…», Notas, «Privado · …»; acomodaInfo(), abajo)
+    // (.meta.pm-info: le gana a «.meta» de la página, que viene después en el código)
+    + '.meta.pm-info{display:none}'
+    + '@media (max-width:600px){.meta.pm-info{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;column-gap:14px;row-gap:0;font-size:12.5px;color:var(--muted,#5A6577)}.pm-info>*{margin:6px 0}}'
     + '@media (min-width:901px){body.pm.pm-arriba{padding-left:0!important}body.pm.pm-arriba header.band{margin-left:0}}'
     + '@media (max-width:420px){.pm-tira,.pm-lado{gap:2px}.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
     + '@media (max-width:370px){.pm-tb{width:44px;height:44px}.pm-tb.pm-home{margin:0 3px}}'   // 360 px: la tira de íconos cabía 3 px de más
@@ -462,6 +468,33 @@
     document.documentElement.style.setProperty('--pm-top', Math.max(0, r.bottom) + 'px');
     recoloca(); popArriba();   // si el encabezado cambia de alto, las tarjetas abiertas se vuelven a acomodar
   }
+  /* Celular, 600 px o menos (Daniel, 30-oct-2026: «que todo sea responsive y que se vea bien y todo quepa»): el
+     encabezado se queda pegado arriba (pantallas.css; así el iPhone y el iPad no lo difuminan) y lleva solo lo de
+     siempre: ☰, el signo, la sección completa, el chat, la campanita, la foto y el claro/oscuro. Lo demás que traía
+     («Datos al…», Notas, «Privado · …») baja a una franja justo abajo del encabezado, que se va al deslizar la página.
+     Son los mismos botones (con sus funciones); al agrandarse la pantalla regresan al encabezado, en su orden.
+     «Equipo DECOMSA · …» se queda: js/portal.js pone en su lugar la foto y los botones. */
+  var info = null, celInfo = window.matchMedia ? matchMedia('(max-width:600px)') : null;
+  function acomodaInfo() {
+    if (!hdr || !celInfo) return;
+    var meta = hdr.querySelector('.meta');
+    if (!meta) return;
+    if (!info) {
+      info = document.createElement('div');
+      info.className = 'wrap meta pm-info';
+      info.setAttribute('role', 'group'); info.setAttribute('aria-label', 'Datos de la sección');
+    }
+    if (hdr.nextElementSibling !== info) hdr.parentNode.insertBefore(info, hdr.nextSibling);   // siempre pegada al encabezado
+    if (celInfo.matches) {
+      Array.prototype.slice.call(meta.children).forEach(function (el) {
+        if (el === sw || el.classList.contains('pu-par') || el.classList.contains('equipo')) return;
+        info.appendChild(el);
+      });
+    } else if (info.firstChild) {
+      var pu = meta.querySelector(':scope > .pu-par, :scope > .equipo');
+      while (info.firstChild) meta.insertBefore(info.firstChild, pu);
+    }
+  }
 
   function arranca() {
     sw = document.querySelector('header .vsw');
@@ -576,6 +609,15 @@
 
     mini();
     arriba();
+    // la franja de abajo del encabezado en el celular: lo que llegue después al encabezado (la foto la pone js/portal.js)
+    // y lo que otra pestaña ponga junto a él (el aviso del Calendario) no la separan del encabezado
+    acomodaInfo();
+    if (celInfo) {
+      if (celInfo.addEventListener) celInfo.addEventListener('change', acomodaInfo); else if (celInfo.addListener) celInfo.addListener(acomodaInfo);
+      var metaH = hdr.querySelector('.meta');
+      if (metaH) new MutationObserver(acomodaInfo).observe(metaH, { childList: true });
+      new MutationObserver(acomodaInfo).observe(document.body, { childList: true });
+    }
     alto();
     addEventListener('resize', function () { alto(); if (!movil()) abre(false); recoloca(); popArriba(); });
     addEventListener('scroll', alto, { passive: true });
