@@ -26,7 +26,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="a1388f3ae334"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="68309e27d4fe"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -2699,7 +2699,10 @@ initDB=async function(){await initDB0();oirJust()};
    solos (portal/sql/21_propuestas.sql, nube/propuestas.py). El botón solo aparece si la base dice que esta persona
    tiene que ver con las propuestas (cambios_rol(): autoriza, propone o consulta).
    Aviso: el número de cosas que esperan a cada quien sale junto al nombre de la pestaña en el menú y, una vez por
-   sesión, en un aviso chico al entrar. Todo se comunica dentro del portal (regla de Daniel, 29-oct-2026). */
+   sesión, en un aviso chico al entrar. Todo se comunica dentro del portal (regla de Daniel, 29-oct-2026).
+   Quien autoriza de respaldo (Daniel, 30-oct-2026; portal/sql/67_cambios_leidas.sql): la revisión la lleva Cadengo, así
+   que a Daniel el número y el punto naranja solo le cuentan las propuestas que no ha leído, y el aviso chico le ofrece
+   «Marcar como leído». Sigue pudiendo autorizar o regresar igual. */
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const st=document.createElement('style');
@@ -2710,11 +2713,12 @@ initDB=async function(){await initDB0();oirJust()};
     +'@media (max-width:700px){.meta{min-width:0;max-width:100%}.vsw{max-width:calc(100vw - 32px);overflow-x:auto;scrollbar-width:none}.vsw::-webkit-scrollbar{display:none}.vsw button{flex:none}}'
     +'.chg-toast{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;max-width:min(360px,calc(100vw - 32px));background:#1F3864;color:#fff;border-left:5px solid #F07A1E;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px 14px;font-size:14px;display:flex;gap:12px;align-items:center}'
     +'.chg-toast span{flex:1}.chg-toast button{border:0;border-radius:8px;padding:7px 11px;font:inherit;font-weight:600;cursor:pointer}'
-    +'.chg-toast .ver{background:#F07A1E;color:#fff}.chg-toast .x{background:transparent;color:#DCE5F3;padding:7px 8px}';
+    +'.chg-toast .ver{background:#F07A1E;color:#fff}.chg-toast .leer{background:rgba(255,255,255,.14);color:#fff}.chg-toast .x{background:transparent;color:#DCE5F3;padding:7px 8px}'
+    +'.chg-toast.dos{flex-wrap:wrap;row-gap:10px}.chg-toast.dos span{flex-basis:100%}.chg-toast.dos .x{margin-left:auto}';
   document.head.appendChild(st);
   const b=document.createElement('button');b.type='button';b.dataset.view='chg';b.setAttribute('aria-pressed','false');b.textContent='Cambios al portal';b.hidden=true;
   sw.appendChild(b);
-  let rol=null;
+  let rol=null,resp=null;
   async function avisos(){
     try{
       const P=window.PORTAL;if(!P||!rol||rol==='consulta')return;
@@ -2728,11 +2732,16 @@ initDB=async function(){await initDB0();oirJust()};
   function toast(n){
     try{if(sessionStorage.getItem('chg-toast'))return;sessionStorage.setItem('chg-toast','1')}catch(e){}
     const t=document.createElement('div');t.className='chg-toast';t.setAttribute('role','status');
-    const txt=rol==='autoriza'?(n===1?'Hay 1 cambio al portal que espera tu revisión.':'Hay '+n+' cambios al portal que esperan tu revisión.')
+    const enc=resp&&resp.encargados&&resp.encargados.length?resp.encargados.join(' y '):'';
+    const txt=resp&&resp.respaldo?(n===1?'Llegó 1 propuesta de cambio al portal':'Llegaron '+n+' propuestas de cambio al portal')+(enc?' (la revisión la lleva '+enc+').':'.')
+      :rol==='autoriza'?(n===1?'Hay 1 cambio al portal que espera tu revisión.':'Hay '+n+' cambios al portal que esperan tu revisión.')
       :(n===1?'Hay una novedad en tus propuestas de cambio.':'Hay '+n+' novedades en tus propuestas de cambio.');
-    t.innerHTML='<span></span><button type="button" class="ver">Ver</button><button type="button" class="x" aria-label="Cerrar">✕</button>';
+    t.innerHTML='<span></span><button type="button" class="ver">Ver</button>'+(resp&&resp.respaldo?'<button type="button" class="leer">Marcar como leído</button>':'')+'<button type="button" class="x" aria-label="Cerrar">✕</button>';
     t.firstChild.textContent=txt;
+    if(resp&&resp.respaldo)t.classList.add('dos');
     t.querySelector('.ver').onclick=()=>{t.remove();setView('chg')};
+    const le=t.querySelector('.leer');
+    if(le)le.onclick=async()=>{le.disabled=true;try{await window.PORTAL.sb.rpc('cambios_leer_todo')}catch(e){}t.remove();try{window.postMessage({tipo:'cambios-avisos'},location.origin)}catch(e){}};
     t.querySelector('.x').onclick=()=>t.remove();
     document.body.appendChild(t);
     setTimeout(()=>{try{t.remove()}catch(e){}},15000);
@@ -2744,6 +2753,7 @@ initDB=async function(){await initDB0();oirJust()};
       const r=await P.sb.rpc('cambios_rol');
       if(r.error||!r.data)return;
       rol=r.data;b.hidden=false;
+      if(rol==='autoriza'){try{const i=await P.sb.rpc('cambios_respaldo_info');if(!i.error&&i.data)resp=i.data}catch(e){}}
       const n=await avisos();
       if(n>0&&document.body.getAttribute('data-view')!=='chg')toast(n);
       setInterval(()=>{if(!document.hidden)avisos()},60000);
@@ -2773,7 +2783,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','chg');
     const t=document.getElementById('vtitle');if(t)t.textContent='Cambios al portal';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chg'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cambios.html?v=4bf86f600f');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cambios.html?v=e61b4b58b7');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -3134,6 +3144,9 @@ initDB=async function(){await initDB0();oirJust()};
   };
   window.__setView=setView;
   b.onclick=()=>setView('ntf');
+  // «Cambios al portal» avisa cuando alguien abrió o marcó como leídas las propuestas (a quien autoriza de respaldo
+  // también se le leen sus avisos de esa sección; 67_cambios_leidas.sql): la campanita se pone al día al momento
+  addEventListener('message',e=>{if(e.origin===location.origin&&e.data&&e.data.tipo==='cambios-avisos')setTimeout(()=>{refresca()},300)});
 
   (async function(){
     try{
@@ -5327,7 +5340,7 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.setAttribute('data-view','ini');
     const t=document.getElementById('vtitle');if(t)t.textContent='Inicio';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='ini'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','inicio.html?v=59714534a9');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','inicio.html?v=3d21d4e70f');
     else{try{const w=fr.contentWindow;if(w&&w.INICIO)w.INICIO.refresca()}catch(e){}}
     alto();
   };

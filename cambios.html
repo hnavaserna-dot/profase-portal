@@ -190,6 +190,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   <div class="acts">
     <span id="hora" aria-live="polite"></span>
     <button class="btn pri" type="button" id="mandar" hidden>Mandar a autorizar</button>
+    <button class="btn" type="button" id="leer" hidden title="Te quita los avisos y los puntos naranjas de estas propuestas; puedes seguir autorizándolas o regresándolas">Marcar todo como leído</button>
     <button class="btn" type="button" id="recargar">Actualizar</button>
   </div>
 </div></div>
@@ -221,6 +222,9 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   'use strict';
   var P = window.PORTAL, sb = P.sb, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey';
+  // RESP (30-oct-2026, 67_cambios_leidas.sql): quien autoriza de respaldo (Daniel). La revisión la lleva Cadengo; a él
+  // solo le cuentan como nuevas las propuestas por autorizar que no ha leído, y tiene «Marcar todo como leído».
+  var RESP = { respaldo: false, encargados: [] };
   var ROL = null, YO = null, FILTRO = 'pend', FILAS = [], VISTO = {}, NOMBRES = {}, ABIERTA = null, CAMBIO = {}, MSJS = [], FIRMA = '', URLS = {}, cargando = false;
   var PEND = ['por_autorizar', 'choca', 'error', 'autorizada', 'deshaciendo'];
   var ESTADO = { por_autorizar: 'Por autorizar', autorizada: 'Publicándose', publicada: 'Publicada', rechazada: 'Rechazada',
@@ -245,9 +249,11 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   function puedeEscribir() { return !P.consulta && ROL !== 'consulta'; }
   function aviso(t, cls) { var a = $('aviso'); a.className = 'nota' + (cls ? ' ' + cls : ''); a.textContent = t; a.hidden = !t; }
   function avisaArriba() { try { window.parent.postMessage({ tipo: 'cambios-avisos' }, location.origin); } catch (e) { /* abierta sola */ } }
+  function encargados() { return (RESP.encargados || []).join(' y ') || 'Fernando Cadengo'; }
   function nuevo(p) {
     if (ROL === 'consulta') return false;
     var v = VISTO[p.id];
+    if (RESP.respaldo) return p.estado === 'por_autorizar' && !v && p.ultimo_por !== YO;
     return p.ultimo_por !== YO && p.estado !== 'retirada' && (!v || Date.parse(p.actualizada) > Date.parse(v));
   }
 
@@ -272,13 +278,16 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var r = await sb.rpc('cambios_rol');
     ROL = r.error ? null : r.data;
     if (!ROL) { $('sub').textContent = 'Sin acceso'; $('sin-acceso').hidden = false; return; }
-    $('sub').textContent = ROL === 'autoriza' ? 'Lo que propone Gabo desde su Claude. Basta que uno de ustedes dos lo autorice para que se publique solo.'
+    if (ROL === 'autoriza') { try { var ri = await sb.rpc('cambios_respaldo_info'); if (!ri.error && ri.data) RESP = ri.data; } catch (e) {} }
+    $('sub').textContent = RESP.respaldo ? 'Lo que propone Gabo desde su Claude. La revisión la lleva ' + encargados() + '; si hace falta, tú también puedes autorizarlas o regresarlas. «Marcar todo como leído» te quita los avisos.'
+      : ROL === 'autoriza' ? 'Lo que propone Gabo desde su Claude. Basta que uno de ustedes dos lo autorice para que se publique solo.'
       : ROL === 'propone' ? 'Tus propuestas de cambio. Cuando Daniel o Fernando Cadengo la autorizan, se publica sola en el portal.'
       : 'Propuestas de cambio al portal. Puedes verlas; no cambiar nada.';
     if (puedeEscribir()) {
       $('mandar').hidden = false;
       $('mandar').textContent = ROL === 'autoriza' ? 'Buscar nuevas' : 'Mandar a autorizar';
       $('mandar').title = ROL === 'autoriza' ? 'Revisa en este momento si Gabo subió propuestas nuevas' : 'Manda a revisar las propuestas que tu Claude ya subió';
+      $('leer').hidden = !RESP.respaldo;
     }
     try { var n = await sb.rpc('cambios_nombres'); (n.data || []).forEach(function (x) { NOMBRES[x.usuario] = x.nombre; }); } catch (e) {}
     $('v-lista').hidden = false;
@@ -337,7 +346,8 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
           + '</div></button>';
       }).join('');
     }
-    $('pie').textContent = ROL === 'autoriza' ? (porAut ? porAut + (porAut === 1 ? ' propuesta espera' : ' propuestas esperan') + ' tu revisión.' : '') : '';
+    $('pie').textContent = ROL === 'autoriza' ? (porAut ? porAut + (porAut === 1 ? ' propuesta espera' : ' propuestas esperan')
+      + (RESP.respaldo ? ' la revisión de ' + encargados() + '.' : ' tu revisión.') : '') : '';
   }
   function chipEstado(p) {
     return { por_autorizar: 'amarillo', autorizada: 'amarillo', publicada: 'verde', rechazada: 'rojo', choca: 'amarillo', error: 'rojo', deshaciendo: 'amarillo', deshecha: 'gris', retirada: 'gris' }[p.estado] || '';
@@ -421,7 +431,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
             : '<b>Delicada:</b> espera la revisión técnica del Claude de Daniel o de Fernando.', b, sqlTxt);
         }
         if (aut) { b.push('<button class="btn pri" type="button" data-a="autorizar">Autorizar y publicar</button>'); b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>'); }
-        return caja(p.semaforo === 'rojo' ? 'amarillo' : '', ROL === 'autoriza' ? '<b>Espera tu revisión.</b> ' + esc(SEM_TXT[p.semaforo] || '') + ' Si la autorizas, se publica sola en alrededor de un minuto.'
+        return caja(p.semaforo === 'rojo' ? 'amarillo' : '', ROL === 'autoriza' ? (RESP.respaldo ? '<b>Espera la revisión de ' + esc(encargados()) + '.</b> Si hace falta, tú también puedes autorizarla o regresarla. ' : '<b>Espera tu revisión.</b> ') + esc(SEM_TXT[p.semaforo] || '') + ' Si la autorizas, se publica sola en alrededor de un minuto.'
           : '<b>Espera a que Daniel o Fernando la revisen.</b>', b, sqlTxt);
       case 'choca':
         if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
@@ -584,6 +594,16 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   });
   $('lista').addEventListener('click', function (e) { var it = e.target.closest('.item'); if (it) abre(+it.dataset.id); });
   $('recargar').onclick = function () { carga(); };
+  $('leer').onclick = async function () {
+    var b = this; b.disabled = true;
+    var r = await sb.rpc('cambios_leer_todo');
+    b.disabled = false;
+    if (r.error) { aviso(r.error.message, 'mal'); return; }
+    var ahora = new Date().toISOString();
+    FILAS.forEach(function (p) { VISTO[p.id] = ahora; });
+    pintaLista(); avisaArriba();
+    aviso('Listo: ya no te salen los avisos de estas propuestas. Si llega una nueva, te vuelve a salir; puedes seguir autorizándolas o regresándolas cuando haga falta.', 'ok');
+  };
   $('mandar').onclick = async function () {
     var b = this; b.disabled = true;
     var r = await sb.rpc('cambios_mandar');
