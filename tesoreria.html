@@ -1,0 +1,508 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Tesorería</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · menú Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25). Dos pantallas en esta página:
+   ?s=pre  Préstamos: los préstamos al personal ya autorizados por la dirección. Dora Montalvo (la tesorera) marca
+           «Entregado» y a RH le llega el aviso; la dirección los ve. Nada más de RH (ni nómina ni notas).
+   ?s=rep  Reportes: la cobranza por cliente y las facturas del periodo. Cada quien ve solo las compañías que le tocan
+           (lo decide la base: tes_cxc() y tes_facturas(), portal/sql/79_tesoreria.sql); los nombres de las compañías
+           llegan con los datos.
+   Todo por funciones tes_*; la página no lee tablas. Excel y PDF con la marca PROFASE. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+.cias{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.cias button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.cias button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.cias button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+tr.tot td{font-weight:700;background:var(--surface-2)}
+.edad{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.edad.am{background:var(--amber-soft);color:var(--amber)}
+.edad.ro{background:var(--red-soft);color:var(--red)}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px}
+
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Tesorería</div>
+      <h1 id="titulo">Tesorería</h1>
+      <p id="subt"></p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota" id="practica" hidden>Mientras las facturas y los pagos se siguen capturando en el Access, estos números se copian del Access cada 3 horas.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <!-- ===== Préstamos ===== -->
+  <section id="s-pre" hidden>
+    <div class="tabs" role="tablist" aria-label="Préstamos">
+      <button type="button" role="tab" data-pt="por" aria-selected="true">Por entregar <span class="cta" id="n-por">0</span></button>
+      <button type="button" role="tab" data-pt="ent" aria-selected="false">Entregados</button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="h-pre">Por entregar</h2><div class="sub" id="pre-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-pre">Excel</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th class="monto">Monto</th><th>Pagos</th><th>Primer descuento</th><th>Autorizó</th><th></th></tr></thead>
+        <tbody id="pre-l"></tbody></table></div>
+    </div>
+    <p class="pie">Aquí solo están los préstamos nuevos ya autorizados; los que existían antes del portal ya se entregaron. Los descuentos de nómina los lleva RH.</p>
+  </section>
+
+  <!-- ===== Reportes ===== -->
+  <section id="s-rep" hidden>
+    <div class="cias" id="cias" role="group" aria-label="Compañía"></div>
+    <div class="tabs" role="tablist" aria-label="Reportes">
+      <button type="button" role="tab" data-rt="cxc" aria-selected="true">Cobranza</button>
+      <button type="button" role="tab" data-rt="fac" aria-selected="false">Facturas</button>
+    </div>
+    <div id="r-cxc">
+      <div class="kpis" id="kpis" style="margin-top:0"></div>
+      <div class="card" style="margin-top:16px">
+        <header><div><h2>Cobranza por cliente</h2><div class="sub" id="cxc-sub">Lo que deben, con IVA (lo de efectivo, sin IVA). Vencido: facturas de meses anteriores al mes en curso.</div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-cxc">Excel</button></div></header>
+        <div class="filtros"><input type="search" id="q-cxc" placeholder="Buscar cliente o razón social" aria-label="Buscar cliente o razón social"></div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Compañía</th><th class="monto">Vencido</th><th class="monto">Mes en curso</th><th class="monto">Saldo</th><th>La más vieja</th></tr></thead>
+          <tbody id="cxc-l"></tbody></table></div>
+      </div>
+    </div>
+    <div id="r-fac" hidden>
+      <div class="card" style="margin-top:4px">
+        <header><div><h2>Facturas del periodo</h2><div class="sub">Todas las facturas del periodo, pagadas o con saldo.</div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-fac">Excel</button></div></header>
+        <div class="filtros">
+          <label class="mut" for="f-desde">Del</label><input type="date" id="f-desde">
+          <label class="mut" for="f-hasta">al</label><input type="date" id="f-hasta">
+          <input type="search" id="q-fac" placeholder="Buscar folio, cliente o razón social" aria-label="Buscar folio, cliente o razón social">
+        </div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Compañía</th><th class="monto">Total</th><th class="monto">Pagado</th><th class="monto">Saldo</th><th></th></tr></thead>
+          <tbody id="fac-l"></tbody></table></div>
+      </div>
+    </div>
+    <p class="pie" id="rep-pie"></p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div>
+  <p id="pq-t"></p><textarea id="pq-x" hidden></textarea>
+  <div class="acciones"><button class="btn" type="button" id="pq-no">Cancelar</button><button class="btn acento" type="button" id="pq-si">Sí</button></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var PER = { semanal: 'semanal', quincenal: 'quincenal', mensual: 'mensual' };
+  var PER_PL = { semanal: 'semanales', quincenal: 'quincenales', mensual: 'mensuales' };
+  var SEC = (new URLSearchParams(location.search).get('s') || 'rep');
+  if (['pre', 'rep'].indexOf(SEC) < 0) SEC = 'rep';
+  var EST = null, CONSULTA = false, ENTREGA = false;
+  var PRE = [], PT = 'por', CXC = null, CIAS = [], CIA = 0, RT = 'cxc', FAC = [];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function cia(id) { var c = CIAS.filter(function (x) { return x.id === id; })[0]; return c ? c.nombre : ''; }
+  // meses entre el mes de la factura y el mes en curso (0 = este mes)
+  var HOY = hoyISO(), MES_HOY = +HOY.slice(0, 4) * 12 + (+HOY.slice(5, 7) - 1);
+  function edad(f) { if (!f) return 0; return MES_HOY - (+String(f).slice(0, 4) * 12 + (+String(f).slice(5, 7) - 1)); }
+  function edadTxt(m) { return m <= 0 ? 'de este mes' : m === 1 ? 'del mes pasado' : 'de hace ' + m + ' meses'; }
+  function edadCls(m) { return m >= 3 ? 'ro' : m === 2 ? 'am' : ''; }
+
+  function pregunta(texto, siTxt) {
+    return new Promise(function (res) {
+      $('pq-t').textContent = texto; $('pq-si').textContent = siTxt || 'Sí'; $('pregunta').hidden = false;
+      try { $('pq-no').focus(); } catch (e) {}
+      function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
+      $('pq-si').onclick = function () { fin(true); }; $('pq-no').onclick = function () { fin(false); };
+      pregunta.cierra = function () { fin(false); };
+    });
+  }
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('pregunta').hidden && pregunta.cierra) pregunta.cierra(); else if (!$('velo').hidden) cierra();
+  });
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  async function excel(b, nombre, titulo, lineas, head, filas, monedas, anchos) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\\/?*\[\]:]/g, ' '));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      (monedas || []).forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00;-$#,##0.00'; });
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, nombre + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+
+  /* =============================== PRÉSTAMOS =============================== */
+  async function cargaPre() {
+    PRE = await rpc('tes_prestamos');
+    pintaPre();
+  }
+  function pagosTxt(p) { return p.pagos + ' ' + (p.pagos === 1 ? 'pago ' + PER[p.periodicidad] : 'pagos ' + PER_PL[p.periodicidad]); }
+  function pintaPre() {
+    var por = PRE.filter(function (p) { return !p.entregado; }), ent = PRE.filter(function (p) { return !!p.entregado; });
+    $('n-por').textContent = por.length;
+    document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pt') === PT ? 'true' : 'false'); });
+    $('h-pre').textContent = PT === 'por' ? 'Por entregar' : 'Entregados';
+    $('pre-sub').textContent = PT === 'por'
+      ? (ENTREGA ? 'Ya los autorizó la dirección. Cuando entregues el dinero, márcalo «Entregado»: a RH le llega el aviso.' : 'Ya los autorizó la dirección; los entrega Dora Montalvo.')
+      : 'Con quién y cuándo se entregó cada uno.';
+    var L = PT === 'por' ? por : ent;
+    $('pre-l').innerHTML = L.length ? L.map(function (p) {
+      var accion = p.entregado ? '<span class="mut">Entregado por ' + esc(p.entrego || '') + ', ' + esc(fecha(p.entregado)) + '</span>'
+        : ENTREGA && !CONSULTA ? '<button class="btn bien chico" type="button" data-ent="' + p.id + '">Entregado</button>' : chip('Por entregar', 'ojo');
+      return '<tr><td data-l="Colaborador" class="w"><span class="rs">' + esc(p.nombre) + '</span></td>'
+        + '<td data-l="Monto" class="monto"><b>' + esc(dinero(p.monto)) + '</b></td>'
+        + '<td data-l="Pagos">' + esc(pagosTxt(p)) + '</td>'
+        + '<td data-l="Primer descuento">' + esc(fecha(p.primer_pago)) + '</td>'
+        + '<td data-l="Autorizó">' + esc(p.autorizo || '') + (p.autorizado ? '<div class="mut">' + esc(fecha(p.autorizado)) + '</div>' : '') + '</td>'
+        + '<td data-l="" class="w">' + accion + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">' + (PT === 'por' ? 'No hay préstamos por entregar.' : 'Todavía no se ha entregado ninguno aquí.') + '</td></tr>';
+    $('pre-l').querySelectorAll('[data-ent]').forEach(function (b) { b.onclick = function () { entrega(+b.getAttribute('data-ent'), b); }; });
+  }
+  async function entrega(id, b) {
+    var p = PRE.filter(function (x) { return x.id === id; })[0]; if (!p) return;
+    if (!(await pregunta('¿Ya le entregaste a ' + p.nombre + ' su préstamo de ' + dinero(p.monto) + '?', 'Sí, entregado'))) return;
+    b.disabled = true;
+    try { await rpc('tes_prestamo_entregado', { p_id: id }); avisa('Listo: quedó como entregado y a RH le llega el aviso.'); await cargaPre(); }
+    catch (e) { error(falla(e)); b.disabled = false; }
+  }
+  document.querySelectorAll('[data-pt]').forEach(function (b) { b.onclick = function () { PT = b.getAttribute('data-pt'); pintaPre(); }; });
+  $('x-pre').onclick = function () {
+    var L = PRE.filter(function (p) { return PT === 'por' ? !p.entregado : !!p.entregado; });
+    excel(this, 'Prestamos ' + (PT === 'por' ? 'por entregar' : 'entregados') + ' ' + HOY, 'Préstamos ' + (PT === 'por' ? 'por entregar' : 'entregados'),
+      ['Préstamos al personal autorizados por la dirección', 'Exportado el ' + fecha(HOY)],
+      ['Colaborador', 'Monto', 'Pagos', 'Primer descuento', 'Autorizó', 'Autorizado', 'Entregó', 'Entregado'],
+      L.map(function (p) { return [p.nombre, Number(p.monto), pagosTxt(p), fecha(p.primer_pago), p.autorizo || '', fecha(p.autorizado), p.entrego || '', fecha(p.entregado)]; }),
+      [2], [34, 14, 22, 16, 24, 14, 24, 14]);
+  };
+
+  /* =============================== REPORTES =============================== */
+  function enCia(f) { return !CIA || f.compania === CIA; }
+  function pintaCias() {
+    $('cias').innerHTML = (CIAS.length > 1 ? '<button type="button" data-cia="0" aria-pressed="' + (CIA === 0) + '">Todas</button>' : '')
+      + CIAS.map(function (c) { return '<button type="button" data-cia="' + c.id + '" aria-pressed="' + (CIA === c.id || CIAS.length === 1) + '">' + esc(c.nombre) + '</button>'; }).join('');
+    $('cias').querySelectorAll('[data-cia]').forEach(function (b) { b.onclick = function () { CIA = +b.getAttribute('data-cia'); pintaCias(); pintaRep(); }; });
+  }
+  async function cargaRep() {
+    CXC = await rpc('tes_cxc');
+    CIAS = CXC.companias || [];
+    if (CIAS.length === 1) CIA = CIAS[0].id;
+    pintaCias();
+    $('rep-pie').textContent = CXC.hora ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(CXC.hora)).replace(/\./g, '') + '. Cada quien ve solo las compañías que le tocan.' : '';
+    if (!$('f-desde').value) { $('f-desde').value = HOY.slice(0, 8) + '01'; $('f-hasta').value = HOY; }
+    await cargaFac();
+    pintaRep();
+  }
+  async function cargaFac() {
+    FAC = await rpc('tes_facturas', { p: { desde: $('f-desde').value || null, hasta: $('f-hasta').value || null } });
+  }
+  function porCliente() {
+    var M = {};
+    CXC.facturas.filter(enCia).forEach(function (f) {
+      var k = f.compania + '|' + (f.grupo_id || f.razon || f.id), x = M[k];
+      if (!x) x = M[k] = { cliente: f.grupo || f.razon || '(sin cliente)', compania: f.compania, razones: {}, venc: 0, mes: 0, saldo: 0, n: 0, edad: 0, facs: [] };
+      var e = edad(f.fecha);
+      if (e > 0) x.venc += f.saldo; else x.mes += f.saldo;
+      x.saldo += f.saldo; x.n++; x.edad = Math.max(x.edad, e); x.facs.push(f);
+      if (f.razon) x.razones[f.razon] = 1;
+    });
+    return Object.keys(M).map(function (k) { return M[k]; }).sort(function (a, b) { return b.venc - a.venc || b.saldo - a.saldo; });
+  }
+  function pintaRep() {
+    document.querySelectorAll('[data-rt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-rt') === RT ? 'true' : 'false'); });
+    $('r-cxc').hidden = RT !== 'cxc'; $('r-fac').hidden = RT !== 'fac';
+    if (RT === 'cxc') pintaCxc(); else pintaFac();
+  }
+  function pintaCxc() {
+    var F = CXC.facturas.filter(enCia), venc = 0, mes = 0;
+    F.forEach(function (f) { if (edad(f.fecha) > 0) venc += f.saldo; else mes += f.saldo; });
+    var mesTxt = HOY.slice(0, 7), cobrado = (CXC.cobrado || []).filter(function (c) { return c.mes === mesTxt && enCia(c); }).reduce(function (s, c) { return s + Number(c.monto); }, 0);
+    $('kpis').innerHTML = '<div class="kpi"><div class="l">Por cobrar</div><div class="v">' + esc(dinero(venc + mes)) + '</div><div class="s">' + F.length + (F.length === 1 ? ' factura con saldo' : ' facturas con saldo') + '</div></div>'
+      + '<div class="kpi"><div class="l">Vencido</div><div class="v">' + esc(dinero(venc)) + '</div><div class="s">facturas de meses anteriores</div></div>'
+      + '<div class="kpi"><div class="l">Mes en curso</div><div class="v">' + esc(dinero(mes)) + '</div><div class="s">por vencer</div></div>'
+      + '<div class="kpi"><div class="l">Cobrado en ' + esc(MESES_L[+HOY.slice(5, 7) - 1]) + '</div><div class="v">' + esc(dinero(cobrado)) + '</div><div class="s">pagos aplicados</div></div>';
+    var q = norm($('q-cxc').value), L = porCliente().filter(function (x) { return !q || norm(x.cliente + ' ' + Object.keys(x.razones).join(' ')).indexOf(q) >= 0; });
+    $('cxc-l').innerHTML = L.length ? L.map(function (x, i) {
+      return '<tr class="click" data-cli="' + i + '" tabindex="0"><td data-l="Cliente" class="w"><span class="rs">' + esc(x.cliente) + '</span><div class="mut">' + x.n + (x.n === 1 ? ' factura' : ' facturas') + '</div></td>'
+        + '<td data-l="Compañía">' + esc(cia(x.compania)) + '</td>'
+        + '<td data-l="Vencido" class="monto">' + (x.venc > 0 ? '<span class="neg">' + esc(dinero(x.venc)) + '</span>' : '—') + '</td>'
+        + '<td data-l="Mes en curso" class="monto">' + (x.mes > 0 ? esc(dinero(x.mes)) : '—') + '</td>'
+        + '<td data-l="Saldo" class="monto"><b>' + esc(dinero(x.saldo)) + '</b></td>'
+        + '<td data-l="La más vieja"><span class="edad ' + edadCls(x.edad) + '">' + esc(edadTxt(x.edad)) + '</span></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">' + (CXC.facturas.length ? 'Nadie coincide con la búsqueda.' : 'No hay saldos pendientes.') + '</td></tr>';
+    $('cxc-l').querySelectorAll('[data-cli]').forEach(function (tr) {
+      var x = L[+tr.getAttribute('data-cli')];
+      tr.onclick = function () { fichaCli(x); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fichaCli(x); } };
+    });
+  }
+  function fichaCli(x) {
+    abre(x.cliente, cia(x.compania) + ' · saldo ' + dinero(x.saldo),
+      '<div class="sec"><h3>Facturas con saldo</h3><div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Folio</th><th>Razón social</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody>'
+      + x.facs.map(function (f) {
+        var e = edad(f.fecha);
+        return '<tr><td data-l="Fecha">' + esc(fecha(f.fecha)) + ' <span class="edad ' + edadCls(e) + '">' + esc(edadTxt(e)) + '</span></td><td data-l="Folio">' + esc(f.folio || '(sin folio)') + (f.efectivo ? ' ' + chip('Efectivo') : '') + '</td>'
+          + '<td data-l="Razón social" class="w">' + esc(f.razon || '') + '</td><td data-l="Total" class="monto">' + esc(dinero(f.total)) + '</td><td data-l="Saldo" class="monto"><b>' + esc(dinero(f.saldo)) + '</b></td></tr>';
+      }).join('') + '</tbody></table></div></div>');
+  }
+  function facFiltradas() {
+    var q = norm($('q-fac').value);
+    return FAC.filter(enCia).filter(function (f) { return !q || norm([f.folio, f.grupo, f.razon, f.rfc].join(' ')).indexOf(q) >= 0; });
+  }
+  function pintaFac() {
+    var L = facFiltradas(), t = 0, pg = 0, sd = 0;
+    L.forEach(function (f) { t += f.total; pg += f.pagado; sd += f.saldo; });
+    $('fac-l').innerHTML = L.length ? L.map(function (f) {
+      return '<tr><td data-l="Fecha">' + esc(fecha(f.fecha)) + '</td><td data-l="Folio">' + esc(f.folio || '(sin folio)') + (f.efectivo ? ' ' + chip('Efectivo') : '') + '</td>'
+        + '<td data-l="Cliente" class="w"><span class="rs">' + esc(f.grupo || f.razon || '') + '</span>' + (f.razon && f.razon !== f.grupo ? '<div class="mut">' + esc(f.razon) + '</div>' : '') + '</td>'
+        + '<td data-l="Compañía">' + esc(cia(f.compania)) + '</td><td data-l="Total" class="monto">' + esc(dinero(f.total)) + '</td>'
+        + '<td data-l="Pagado" class="monto">' + esc(dinero(f.pagado)) + '</td><td data-l="Saldo" class="monto">' + (f.saldo > 1 ? '<b>' + esc(dinero(f.saldo)) + '</b>' : '—') + '</td>'
+        + '<td data-l="">' + (f.pagada ? chip('Pagada', 'ok') : chip('Con saldo', 'ojo')) + '</td></tr>';
+    }).join('') + '<tr class="tot"><td data-l="" class="w" colspan="4">' + L.length + (L.length === 1 ? ' factura' : ' facturas') + '</td><td data-l="Total" class="monto">' + esc(dinero(t)) + '</td><td data-l="Pagado" class="monto">' + esc(dinero(pg)) + '</td><td data-l="Saldo" class="monto">' + esc(dinero(sd)) + '</td><td data-l=""></td></tr>'
+      : '<tr><td colspan="8" class="vacio">No hay facturas en ese periodo.</td></tr>';
+  }
+  document.querySelectorAll('[data-rt]').forEach(function (b) { b.onclick = function () { RT = b.getAttribute('data-rt'); pintaRep(); }; });
+  $('q-cxc').oninput = function () { pintaCxc(); };
+  $('q-fac').oninput = function () { pintaFac(); };
+  ['f-desde', 'f-hasta'].forEach(function (id) { $(id).onchange = async function () { try { await cargaFac(); pintaFac(); } catch (e) { error(falla(e)); } }; });
+  function nomCia() { return CIA ? cia(CIA) : CIAS.map(function (c) { return c.nombre; }).join(' y '); }
+  $('x-cxc').onclick = function () {
+    var L = porCliente();
+    excel(this, 'Cobranza por cliente ' + HOY, 'Cobranza por cliente', [nomCia() + ' · con IVA (lo de efectivo, sin IVA)', 'Vencido: facturas de meses anteriores al mes en curso', 'Exportado el ' + fecha(HOY)],
+      ['Cliente', 'Compañía', 'Facturas', 'Vencido', 'Mes en curso', 'Saldo', 'La más vieja'],
+      L.map(function (x) { return [x.cliente, cia(x.compania), x.n, x.venc, x.mes, x.saldo, edadTxt(x.edad)]; }), [4, 5, 6], [40, 16, 10, 16, 16, 16, 20]);
+  };
+  $('x-fac').onclick = function () {
+    var L = facFiltradas();
+    excel(this, 'Facturas ' + ($('f-desde').value || '') + ' al ' + ($('f-hasta').value || ''), 'Facturas del periodo', [nomCia() + ' · del ' + fecha($('f-desde').value) + ' al ' + fecha($('f-hasta').value), 'Exportado el ' + fecha(HOY)],
+      ['Fecha', 'Folio', 'Cliente', 'Razón social', 'RFC', 'Compañía', 'Conceptos', 'Total', 'Pagado', 'Saldo', 'Estado'],
+      L.map(function (f) { return [fecha(f.fecha), f.folio || '', f.grupo || '', f.razon || '', f.rfc || '', cia(f.compania), f.conceptos || '', f.total, f.pagado, f.saldo, f.pagada ? 'Pagada' : 'Con saldo']; }),
+      [8, 9, 10], [14, 12, 28, 34, 16, 14, 40, 14, 14, 14, 12]);
+  };
+
+  /* =============================== Arranque =============================== */
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('tes_estado');
+      if (!EST) throw new Error('Entra al portal para continuar');
+      CONSULTA = !!P.consulta || !!EST.consulta; ENTREGA = !!EST.entrega && !CONSULTA;
+      $('consulta').hidden = !CONSULTA;
+      if (SEC === 'pre') {
+        $('titulo').textContent = 'Préstamos';
+        $('subt').textContent = 'Préstamos al personal, sin interés, ya autorizados por la dirección.';
+        if (!EST.prestamos) throw new Error('Esta pantalla es para Tesorería.');
+        await cargaPre();
+        $('s-pre').hidden = false;
+      } else {
+        $('titulo').textContent = 'Reportes';
+        $('subt').textContent = 'La cobranza por cliente y las facturas del periodo.';
+        if (!EST.reportes || !EST.reportes.length) throw new Error('Esta pantalla es para Tesorería.');
+        $('practica').hidden = EST.modo !== 'practica';
+        await cargaRep();
+        $('s-rep').hidden = false;
+      }
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>

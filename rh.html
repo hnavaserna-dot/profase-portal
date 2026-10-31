@@ -31,7 +31,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=431daee9d5"></script>
 <style>
 /* Portal PROFASE · menú RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna). Tres pantallas en esta misma página
    (?s=vac, ?s=pre, ?s=mov): Vacaciones y permisos, Préstamos, y Altas y bajas. Las ven solo Alex Luna, HNR (solo
@@ -190,6 +190,18 @@ tr.click:hover td{background:var(--navy-soft)}
   .carga-l.uno li>span:first-child{grid-column:auto}
   .descs input{font-size:16px}
 }
+/* Expediente (Daniel, 30-oct-2026, 21:06 y 21:20) */
+.ob{display:flex;flex-wrap:wrap;gap:4px}
+.docs-l{margin:0;padding:0;list-style:none}
+.docs-l li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.docs-l li:first-child{border-top:0}
+.docs-l li.viejo{opacity:.7}
+.docs-l .acciones{flex:none}
+.exp-sube{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px 10px;align-items:end}
+.exp-sube .campo input[type=file]{padding:5px}
+.img-velo{position:fixed;inset:0;z-index:60;background:rgba(10,18,32,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px}
+.img-velo img{max-width:100%;max-height:calc(100vh - 90px);border-radius:8px;background:#fff}
+@media (max-width:700px){.exp-sube{grid-template-columns:minmax(0,1fr)}}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -251,6 +263,15 @@ tr.click:hover td{background:var(--navy-soft)}
   </section>
 
   <!-- Altas y bajas -->
+  <section id="s-exp" hidden>
+    <section class="card" style="margin-top:16px" aria-labelledby="h-exp">
+      <header><div><h2 id="h-exp">Expedientes</h2><div class="sub">Los documentos de cada colaborador. Al dar de alta son obligatorios el INE, el comprobante de domicilio y el acta de nacimiento; lo demás se puede subir cuando se tenga. Nada se borra: un documento nuevo del mismo tipo deja el anterior guardado.</div></div>
+        <div class="acciones"><button class="btn" type="button" id="x-exp" data-excel>Excel</button></div></header>
+      <div class="filtros"><input type="search" id="e-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador">
+        <select id="e-f" aria-label="Cuáles"><option value="">Todos</option><option value="falta">Les falta algo obligatorio</option><option value="completo">Con lo obligatorio completo</option></select></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Área</th><th>Obligatorios</th><th>Documentos</th></tr></thead><tbody id="exp-b"></tbody></table></div>
+    </section>
+  </section>
   <section id="s-mov" hidden>
     <section class="card" style="margin-top:16px" aria-labelledby="h-mov">
       <header><div><h2 id="h-mov">Altas y bajas de personal</h2><div class="sub">Con el alta, la persona entra a los colaboradores y al Calendario (si ya trabajó aquí, regresa con su mismo historial). La baja que registra RH es un aviso: solo Daniel o Fernando Cadengo la confirman, y hasta entonces la persona sigue igual. Ya confirmada, sale del Calendario el día después de su último día y su historial se queda.</div></div>
@@ -280,7 +301,7 @@ tr.click:hover td{background:var(--navy-soft)}
   var AREAS = ['Contabilidad', 'Nóminas', 'Fiscal', 'VAX', 'Administración', 'Dirección'];
   var MOTIVOS_BAJA = ['Renuncia', 'Despido', 'Término de contrato', 'Otro'];
   var SEC = (new URLSearchParams(location.search).get('s') || 'vac');
-  if (['vac', 'pre', 'mov'].indexOf(SEC) < 0) SEC = 'vac';
+  if (['vac', 'pre', 'mov', 'exp'].indexOf(SEC) < 0) SEC = 'vac';
   var EST = null, CONSULTA = false, CAPTURA = false, AUTORIZA = false, CORRIGE = false;
   var COL = [], AUS = [], PRE = [], MOV = [], VT = 'aus', PT = 'curso';
 
@@ -815,6 +836,119 @@ tr.click:hover td{background:var(--navy-soft)}
     var r = await Promise.all([rpc('rh_movimientos_lista'), rpc('rh_colaboradores')]);
     MOV = r[0] || []; COL = r[1] || []; pintaMov();
   }
+  /* =============================== EXPEDIENTES =============================== */
+  // Los tipos de documento los da la base (rh_expediente()); estos son los mismos, para el formulario del alta
+  var EXP_TIPOS = [{ k: 'ine', t: 'INE (identificación oficial)', ob: true }, { k: 'domicilio', t: 'Comprobante de domicilio', ob: true },
+    { k: 'acta', t: 'Acta de nacimiento', ob: true }, { k: 'curp', t: 'CURP' }, { k: 'csf', t: 'Constancia de situación fiscal (RFC)' },
+    { k: 'imss', t: 'Número del IMSS' }, { k: 'estudios', t: 'Comprobante de estudios' }, { k: 'cv', t: 'Solicitud de empleo o CV' },
+    { k: 'cuenta', t: 'Estado de cuenta para la nómina' }, { k: 'contrato', t: 'Contrato firmado' }, { k: 'privacidad', t: 'Aviso de privacidad firmado' }, { k: 'otro', t: 'Otro' }];
+  var EXP = [], EXP_DOCS = [];
+  function tipoTxt(k) { var t = EXP_TIPOS.filter(function (x) { return x.k === k; })[0]; return t ? t.t : k; }
+  // un archivo: primero su renglón (la base da su número), luego la cubeta privada «rh» y al final «listo»
+  async function subeExp(colabId, tipo, f) {
+    if (f.size > 15 * 1024 * 1024) throw new Error('«' + f.name + '» pesa más de 15 MB');
+    var id = await rpc('rh_exp_nuevo', { p_colab: colabId, p_tipo: tipo, p_nombre: f.name, p_bytes: f.size });
+    var u = await P.sb.storage.from('rh').upload(String(id), f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    if (u.error) throw u.error;
+    await rpc('rh_exp_listo', { p_id: id });
+    return id;
+  }
+  function esPdfExp(d) { return /\.pdf$/i.test(d.nombre || ''); }
+  async function bytesExp(d, intento) {
+    var b;
+    if (intento === 2) {
+      var s = await P.sb.storage.from('rh').createSignedUrl(String(d.id), 60);
+      if (s.error || !s.data || !s.data.signedUrl) throw new Error('No se pudo traer el archivo');
+      var res = await fetch(s.data.signedUrl, { cache: 'no-store', credentials: 'omit' });
+      if (!res.ok) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await res.arrayBuffer());
+    } else {
+      var r = await P.sb.storage.from('rh').download(String(d.id));
+      if (r.error || !r.data) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await r.data.arrayBuffer());
+    }
+    if (esPdfExp(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: tipoTxt(d.tipo) }); if (m) b = m; }
+    return b;
+  }
+  // los PDF se ven y se bajan con la marca PROFASE (como los documentos del WorkFlow); las fotos, tal cual
+  var VISOR = window.PROFASE_VISOR ? window.PROFASE_VISOR.nuevo({
+    trae: bytesExp, esPdf: esPdfExp, nombre: function (d) { return String(d.nombre || 'documento').replace(/[\\/:*?"<>|]/g, '_'); },
+    doc: function (el) { return EXP_DOCS.filter(function (x) { return x.id === +(el.getAttribute('data-xver') || el.getAttribute('data-xbaja')); })[0]; },
+    alVer: function () { try { P.registrar('descarga', 'RH · documento del expediente (ver)'); } catch (e) {} },
+    alBajar: function () { try { P.registrar('descarga', 'RH · documento del expediente'); } catch (e) {} }
+  }) : null;
+  async function verFoto(d, btn) {
+    btn.disabled = true;
+    try {
+      var b = await bytesExp(d, 1), url = URL.createObjectURL(new Blob([b])), v = document.createElement('div');
+      v.className = 'img-velo'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-modal', 'true'); v.setAttribute('aria-label', tipoTxt(d.tipo));
+      v.innerHTML = '<img alt="' + esc(tipoTxt(d.tipo)) + '"><button class="btn" type="button">Cerrar</button>';
+      v.querySelector('img').src = url;
+      var fin = function () { v.remove(); URL.revokeObjectURL(url); document.removeEventListener('keydown', tec, true); try { btn.focus(); } catch (e) {} };
+      var tec = function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fin(); } };
+      v.onclick = function (e) { if (e.target === v || e.target.tagName === 'BUTTON') fin(); };
+      document.addEventListener('keydown', tec, true);
+      document.body.appendChild(v); v.querySelector('button').focus();
+      try { P.registrar('descarga', 'RH · documento del expediente (ver)'); } catch (e) {}
+    } catch (e) { error(falla(e)); }
+    btn.disabled = false;
+  }
+  async function cargaExp() {
+    var r = await rpc('rh_expediente', { p_colab: null });
+    EXP = (r && r.colabs) || []; pintaExp();
+  }
+  function obligatorios(c) {
+    return EXP_TIPOS.filter(function (t) { return t.ob; }).map(function (t) { var si = (c.tiene || []).indexOf(t.k) >= 0; return chip((si ? '✓ ' : 'Falta ') + t.t.replace(/ \(.*\)$/, ''), si ? 'ok' : 'mal'); }).join('');
+  }
+  function completo(c) { return EXP_TIPOS.filter(function (t) { return t.ob; }).every(function (t) { return (c.tiene || []).indexOf(t.k) >= 0; }); }
+  function pintaExp() {
+    var q = ($('e-q').value || '').toLowerCase(), f = $('e-f').value;
+    var L = EXP.filter(function (c) { return (!q || c.nombre.toLowerCase().indexOf(q) >= 0) && (!f || (f === 'completo') === completo(c)); });
+    $('exp-b').innerHTML = L.length ? L.map(function (c) {
+      return '<tr class="click" data-exp="' + esc(c.id) + '" tabindex="0"><td data-l="Colaborador" class="w"><span class="rs">' + esc(c.nombre) + '</span></td><td data-l="Área">' + esc(c.area || '') + '</td>'
+        + '<td data-l="Obligatorios" class="w"><div class="ob">' + obligatorios(c) + '</div></td><td data-l="Documentos">' + c.n + '</td></tr>';
+    }).join('') : '<tr><td colspan="4" class="vacio">' + (EXP.length ? 'Nadie coincide.' : 'Todavía no hay colaboradores.') + '</td></tr>';
+  }
+  async function fichaExp(id) {
+    var c = EXP.filter(function (x) { return x.id === id; })[0]; if (!c) return;
+    var r = await rpc('rh_expediente', { p_colab: id });
+    EXP_DOCS = (r && r.docs) || [];
+    var vivos = EXP_DOCS.filter(function (d) { return !d.reemplazado; }), viejos = EXP_DOCS.filter(function (d) { return d.reemplazado; });
+    function li(d) {
+      return '<li' + (d.reemplazado ? ' class="viejo"' : '') + '><div style="min-width:0"><span class="rs">' + esc(tipoTxt(d.tipo)) + '</span>' + (d.reemplazado ? ' ' + chip('Anterior') : '')
+        + '<div class="mut">' + esc(d.nombre) + ' · ' + esc(d.subio || '') + ', ' + esc(fecha(String(d.subido).slice(0, 10))) + '</div></div>'
+        + '<div class="acciones"><button class="btn chico" type="button" data-xver="' + d.id + '">Ver</button><button class="btn chico" type="button" data-xbaja="' + d.id + '">Bajar</button></div></li>';
+    }
+    abre(c.nombre, 'Expediente · ' + (c.area || ''),
+      '<div class="sec"><h3>Obligatorios</h3><div class="in"><div class="ob">' + obligatorios(c) + '</div></div></div>'
+      + '<div class="sec"><h3>Documentos</h3>' + (vivos.length ? '<ul class="docs-l">' + vivos.map(li).join('') + '</ul>' : '<div class="vacio">Todavía no tiene documentos.</div>') + '</div>'
+      + (viejos.length ? '<div class="sec"><h3>Anteriores</h3><ul class="docs-l">' + viejos.map(li).join('') + '</ul></div>' : '')
+      + (CAPTURA ? '<div class="sec"><h3>Subir un documento</h3><div class="in"><div class="exp-sube">'
+        + '<div class="campo"><label for="x-tipo">Qué es</label><select id="x-tipo"><option value="">Escoge…</option>' + EXP_TIPOS.map(function (t) { return '<option value="' + t.k + '">' + esc(t.t) + '</option>'; }).join('') + '</select></div>'
+        + '<div class="campo"><label for="x-arch">Archivo (PDF o foto, hasta 15 MB)</label><input type="file" id="x-arch" accept=".pdf,image/*"></div>'
+        + '</div></div><div class="msg" id="v-msg" hidden></div><div class="acciones" style="padding:0 14px 12px"><button class="btn acento" type="button" id="x-ok">Subir</button></div></div>' : ''));
+    $('ficha').querySelectorAll('[data-xver]').forEach(function (b) {
+      b.onclick = function () { var d = EXP_DOCS.filter(function (x) { return x.id === +b.getAttribute('data-xver'); })[0]; if (!d) return; if (esPdfExp(d) && VISOR) VISOR.ver(d, b); else verFoto(d, b); };
+    });
+    $('ficha').querySelectorAll('[data-xbaja]').forEach(function (b) {
+      b.onclick = function () { var d = EXP_DOCS.filter(function (x) { return x.id === +b.getAttribute('data-xbaja'); })[0]; if (d && VISOR) VISOR.baja(d, b); };
+    });
+    if ($('x-ok')) $('x-ok').onclick = async function () {
+      var bt = this, f = ($('x-arch').files || [])[0]; msgEn('');
+      if (!$('x-tipo').value) { msgEn('Escoge qué documento es.'); return; }
+      if (!f) { msgEn('Escoge el archivo.'); return; }
+      bt.disabled = true;
+      try { msgEn('Subiendo…', 'ojo'); await subeExp(id, $('x-tipo').value, f); avisa('Listo: quedó en su expediente.'); await cargaExp(); await fichaExp(id); }
+      catch (e) { msgEn(falla(e)); bt.disabled = false; }
+    };
+  }
+  function excelExp(b) {
+    var ob = EXP_TIPOS.filter(function (t) { return t.ob; });
+    excel(b, 'RH expedientes', 'Expedientes del personal', ['Qué documentos obligatorios tiene cada colaborador'],
+      ['Colaborador', 'Área'].concat(ob.map(function (t) { return t.t; })).concat(['Documentos']),
+      EXP.map(function (c) { return [c.nombre, c.area || ''].concat(ob.map(function (t) { return (c.tiene || []).indexOf(t.k) >= 0 ? 'Sí' : 'Falta'; })).concat([c.n]); }),
+      [], [32, 16, 22, 22, 22, 12]);
+  }
   function formAlta() {
     var dOpts = '<option value="">Día</option>';
     for (var di = 1; di <= 31; di++) dOpts += '<option>' + di + '</option>';
@@ -830,13 +964,33 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<div class="campo"><label for="n-mes">Cumpleaños (mes)</label><select id="n-mes">' + mOpts + '</select></div>'
       + '<div class="campo chk ancho"><input type="checkbox" id="n-portal" checked><label for="n-portal">Va a usar el portal (se avisa para darle su usuario)</label></div>'
       + '<div class="campo ancho"><label for="n-nota">Nota</label><textarea id="n-nota" maxlength="1000"></textarea></div>'
-      + '</div></div></div><div class="msg ojo">Empieza con 0 días de vacaciones; en su primer aniversario se le suman los que le tocan.</div><div class="msg" id="v-msg" hidden></div>'
+      + '</div></div></div>'
+      + '<div class="sec"><h3>Expediente</h3><div class="in"><div class="campos">'
+      + EXP_TIPOS.filter(function (t) { return t.ob; }).map(function (t) {
+          return '<div class="campo ancho"><label for="n-x-' + t.k + '">' + esc(t.t) + ' (obligatorio)</label><input type="file" id="n-x-' + t.k + '" accept=".pdf,image/*"></div>';
+        }).join('')
+      + '<div class="campo ancho"><span class="mut">PDF o foto, hasta 15 MB cada uno. Lo demás (CURP, constancia fiscal, IMSS, estudios, contrato…) lo puedes subir ahora o después en RH › Expedientes.</span></div>'
+      + '<div class="campo"><label for="n-x-otro-t">Otro documento (opcional)</label><select id="n-x-otro-t"><option value="">Ninguno</option>'
+      + EXP_TIPOS.filter(function (t) { return !t.ob; }).map(function (t) { return '<option value="' + t.k + '">' + esc(t.t) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="n-x-otro">Archivo</label><input type="file" id="n-x-otro" accept=".pdf,image/*"></div>'
+      + '</div></div></div>'
+      + '<div class="msg ojo">Empieza con 0 días de vacaciones; en su primer aniversario se le suman los que le tocan.</div><div class="msg" id="v-msg" hidden></div>'
       + '<div class="acciones"><button class="btn acento" type="button" id="n-ok">Registrar alta</button></div>');
     $('n-ok').onclick = async function () {
-      var b = this; b.disabled = true; msgEn('');
+      var b = this; msgEn('');
+      // el expediente obligatorio (Daniel, 30-oct-2026: INE, comprobante de domicilio y acta de nacimiento): se sube primero
+      // y el alta lo liga; si algo falla, no se registra nada
+      var falta = EXP_TIPOS.filter(function (t) { return t.ob && !($('n-x-' + t.k).files || [])[0]; });
+      if (falta.length) { msgEn('Falta subir: ' + falta.map(function (t) { return t.t; }).join(', ') + '.'); return; }
+      if (($('n-x-otro').files || [])[0] && !$('n-x-otro-t').value) { msgEn('Escoge qué es el otro documento.'); return; }
+      b.disabled = true;
       try {
+        var ids = [], subir = EXP_TIPOS.filter(function (t) { return t.ob; }).map(function (t) { return [t.k, $('n-x-' + t.k).files[0]]; });
+        if (($('n-x-otro').files || [])[0]) subir.push([$('n-x-otro-t').value, $('n-x-otro').files[0]]);
+        for (var i = 0; i < subir.length; i++) { msgEn('Subiendo ' + (i + 1) + ' de ' + subir.length + '…', 'ojo'); ids.push(String(await subeExp(null, subir[i][0], subir[i][1]))); }
+        msgEn('');
         var ra = await rpc('rh_alta', { p: { nombre: $('n-nom').value, area: $('n-area').value, ingreso: $('n-ing').value, dia: $('n-dia').value, mes: $('n-mes').value,
-          autoriza: true, usuario_portal: $('n-portal').checked, nota: $('n-nota').value,
+          autoriza: true, usuario_portal: $('n-portal').checked, nota: $('n-nota').value, expediente: ids,
           sueldo: (function () { var m = num($('n-sue').value); return m > 0 ? String(Math.round(m * 100) / 100) : ''; })() } });
         cierra(); avisa(ra && ra.reingreso ? 'Reingreso registrado: regresa con su mismo historial (préstamos, ausencias y sueldos de antes). Sus días de vacaciones empiezan de nuevo desde su nueva fecha de ingreso.' : 'Alta registrada. A Daniel le llega el aviso.'); await cargaMov();
       } catch (e) { msgEn(falla(e)); b.disabled = false; }
@@ -898,10 +1052,10 @@ tr.click:hover td{background:var(--navy-soft)}
       if (!EST || !EST.ve) { error('RH solo lo ven quienes la dirección decidió.'); clearTimeout(error.t); return; }
       CONSULTA = !!P.consulta || !!EST.consulta; CAPTURA = !!EST.captura && !CONSULTA; AUTORIZA = !!EST.autoriza; CORRIGE = !!EST.corrige && !CONSULTA;
       $('consulta').hidden = !CONSULTA;
-      $('titulo').textContent = { vac: 'Vacaciones y permisos', pre: 'Préstamos', mov: 'Altas y bajas' }[SEC];
+      $('titulo').textContent = { vac: 'Vacaciones y permisos', pre: 'Préstamos', mov: 'Altas y bajas', exp: 'Expedientes' }[SEC];
       $('subt').textContent = { vac: 'Quién está fuera, cuándo regresa y cuántos días de vacaciones le quedan a cada quien.',
         pre: 'Préstamos al personal, sin interés: los autoriza la dirección (basta uno) y se van descontando en la nómina.',
-        mov: 'Los ingresos y las salidas del personal.' }[SEC];
+        mov: 'Los ingresos y las salidas del personal.', exp: 'Los documentos de cada colaborador (solo los ve RH).' }[SEC];
       document.title = 'Portal PROFASE · ' + $('titulo').textContent;
       botones();
       $('s-' + SEC).hidden = false;
@@ -915,6 +1069,10 @@ tr.click:hover td{background:var(--navy-soft)}
         $('p-q').addEventListener('input', pintaPre);
         await cargaPre();
         var q = /[?&]prestamo=(\d+)/.exec(location.search); if (q) fichaPre(+q[1]);
+      } else if (SEC === 'exp') {
+        ['e-q', 'e-f'].forEach(function (id) { $(id).addEventListener('input', pintaExp); });
+        $('x-exp').onclick = function () { excelExp(this); };
+        await cargaExp();
       } else await cargaMov();
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
@@ -930,6 +1088,7 @@ tr.click:hover td{background:var(--navy-soft)}
       document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b === t ? 'true' : 'false'); });
       pintaPre(); return;
     }
+    if (t.matches('[data-exp]')) { fichaExp(t.getAttribute('data-exp')); return; }
     if (t.matches('[data-aus-ed]')) { var a = AUS.filter(function (x) { return x.id === +t.getAttribute('data-aus-ed'); })[0]; if (a) formAus(a); return; }
     if (t.matches('[data-aus-bo]')) {
       var id = +t.getAttribute('data-aus-bo'), a2 = AUS.filter(function (x) { return x.id === id; })[0];
