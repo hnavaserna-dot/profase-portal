@@ -13,7 +13,8 @@
        la izquierda, el riel de íconos o el menú de arriba, y el menú ☰ del celular), el adorno de la temporada a un
        lado, sin taparlo: la arañita cuelga de su hilo desde la orilla de arriba y baja y sube; el Santa, el corazón
        que late y la banderita, a su lado. Pedido de Daniel (29-oct-2026, 17:08): «la arañita bajando», en todos los
-       menús (la propuesta #9 la había quitado de junto al signo).
+       menús (la propuesta #9 la había quitado de junto al signo). Pedido de Daniel (31-oct-2026, 16:31): que el Santa
+       y la banderita también se muevan: el Santa se ríe meciéndose (con la borla y la boca) y la banderita ondea.
      · Dos adornos chicos arriba a la derecha, junto a la campanita (propuesta #9); quietos, solo brincan si se pican.
    - Con «reducir movimiento» del dispositivo, todo se queda quieto.
    ?temporada=navidad en la dirección deja ver otra temporada para revisarla (amor, patrias, muertos o navidad). */
@@ -142,17 +143,31 @@
       + 'M10.4 15.2 14 12.6l1-3M10.6 16.6l4.2-1 1.2-2.2M10.4 18.2l4 1.4 1 2.8M9.8 19.4l2.4 3.2.2 2.6" stroke-width="1"/>'
       + '<circle cx="8" cy="14.4" r="2.3" fill="currentColor" stroke="none"/><circle cx="8" cy="18.6" r="3.2" fill="currentColor" stroke="none"/>'
       + '<circle cx="7.1" cy="14" r=".55" fill="#F07A1E" stroke="none"/><circle cx="8.9" cy="14" r=".55" fill="#F07A1E" stroke="none"/></svg>',
-    santa: '<svg viewBox="0 0 20 24"><path d="M3.5 10.5C4.5 4 9 1.2 14.5 2.2l1.2 5.6-12.2 2.7z" fill="#C8102E"/>'
-      + '<circle cx="15.6" cy="2.6" r="1.9" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
+    // el Santa se ríe: se mece, la borla del gorro se balancea y abre la boca («¡jo, jo, jo!»)
+    santa: '<svg viewBox="0 0 20 24"><g class="ptc-jojo"><g class="ptc-gorro"><path d="M3.5 10.5C4.5 4 9 1.2 14.5 2.2l1.2 5.6-12.2 2.7z" fill="#C8102E"/>'
+      + '<circle cx="15.6" cy="2.6" r="1.9" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/></g>'
       + '<rect x="2.6" y="9.4" width="14.6" height="3" rx="1.5" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
       + '<circle cx="10" cy="15.2" r="4.2" fill="#F6C9A8"/><circle cx="8.5" cy="14.4" r=".55" fill="#3A2A20"/><circle cx="11.5" cy="14.4" r=".55" fill="#3A2A20"/>'
+      + '<circle cx="7.3" cy="16" r=".9" fill="#E8836B" opacity=".55"/><circle cx="12.7" cy="16" r=".9" fill="#E8836B" opacity=".55"/>'
       + '<path d="M4.6 15.6c.4 5 3 7.6 5.4 7.6s5-2.6 5.4-7.6c-1.2 1.6-2.6 2.4-5.4 2.4s-4.2-.8-5.4-2.4z" fill="#fff" stroke="#D5DAE1" stroke-width=".5"/>'
-      + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></svg>',
+      + '<ellipse class="ptc-boca" cx="10" cy="18.4" rx="1.3" ry=".75" fill="#9C2A2A"/>'
+      + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></g></svg>',
     corazon: '<svg viewBox="0 0 16 16"><path class="ptc-lat" d="M8 14.2S1.4 10.1 1.4 5.6A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.6 1.6C14.6 10.1 8 14.2 8 14.2z" fill="#D6336C"/></svg>',
-    bandera: '<svg viewBox="0 0 18 18"><path d="M2 1v16" stroke="#8A94A6" stroke-width="1.2" stroke-linecap="round"/>'
-      + '<path d="M2.6 2h4.6v8H2.6z" fill="#006847"/><path d="M7.2 2h4.6v8H7.2z" fill="#fff" stroke="#C9D1DE" stroke-width=".4"/>'
-      + '<path d="M11.8 2h4.6v8h-4.6z" fill="#CE1126"/><circle cx="9.5" cy="6" r="1.1" fill="#8C6A3D"/></svg>'
+    bandera: BANDERA_OLA()
   };
+  // La banderita ondea: la tela va en 12 tiras que suben y bajan una tras otra (más cerca del asta, menos), con su sombra.
+  function BANDERA_OLA() {
+    var h = '<svg viewBox="0 0 18 18"><path d="M2 1.4v15.6" stroke="#8A94A6" stroke-width="1.2" stroke-linecap="round"/><circle cx="2" cy="1.2" r=".95" fill="#C9A75A"/>';
+    for (var i = 0; i < 12; i++) {
+      var x = 2.6 + i * 1.15, c = i < 4 ? '#006847' : i < 8 ? '#fff' : '#CE1126', d = (i * .11 - 2).toFixed(2);
+      h += '<g class="ptc-ola ptc-o' + (1 + Math.floor(i / 3)) + '" style="animation-delay:' + d + 's">'
+        + '<rect x="' + x.toFixed(2) + '" y="2" width="1.4" height="8" fill="' + c + '"/>'
+        + (c === '#fff' ? '<path d="M' + x.toFixed(2) + ' 2.1h1.2M' + x.toFixed(2) + ' 9.9h1.2" stroke="#C9D1DE" stroke-width=".3"/>' : '')
+        + '<rect class="ptc-sombra" x="' + x.toFixed(2) + '" y="2" width="1.15" height="8" fill="#0A1222" style="animation-delay:' + (i * .11 - 2.33).toFixed(2) + 's"/></g>';
+    }
+    // el escudo, entero, se mueve con la tela de en medio
+    return h + '<g class="ptc-ola ptc-o2" style="animation-delay:-1.40s"><circle cx="9.5" cy="6" r="1.1" fill="#8C6A3D"/></g></svg>';
+  }
 
   var CSS = '.pt-escena{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}'
     + '.pt-escena>*{position:absolute}.pt-escena svg{display:block;width:100%;height:auto;overflow:visible}'
@@ -209,6 +224,20 @@
     + '.ptc-cae:before{content:"";position:absolute;left:50%;bottom:calc(100% - 4px);width:1px;margin-left:-.5px;height:400px;background:currentColor;opacity:.55}'
     + '@keyframes ptc-baja{from{transform:translateY(-16px)}to{transform:translateY(0)}}'
     + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-bandera{top:0;width:15px}'
+    // el Santa riéndose: se mece y brinca, la borla se balancea y la boca se abre tres veces; luego descansa
+    + '.ptc-jojo{transform-origin:10px 23px;animation:ptc-jojo 2.4s ease-in-out infinite}'
+    + '@keyframes ptc-jojo{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(-10deg) translateY(-1.4px)}22%{transform:rotate(9deg)}34%{transform:rotate(-7deg) translateY(-1px)}46%{transform:rotate(5deg)}}'
+    + '.ptc-gorro{transform-origin:9px 10px;animation:ptc-gorro 2.4s ease-in-out infinite}'
+    + '@keyframes ptc-gorro{0%,100%{transform:rotate(0)}14%{transform:rotate(-9deg)}30%{transform:rotate(8deg)}48%{transform:rotate(-6deg)}66%{transform:rotate(3deg)}82%{transform:rotate(-1deg)}}'
+    + '.ptc-boca{transform-origin:10px 18.4px;transform:scaleY(.3);animation:ptc-boca 2.4s ease-in-out infinite}'
+    + '@keyframes ptc-boca{0%,52%,100%{transform:scaleY(.3)}8%,24%,40%{transform:scaleY(1.1)}16%,32%,48%{transform:scaleY(.3)}}'
+    // la banderita ondeando: cada tira sube y baja un poco después de la anterior, con su sombra
+    + '.ptc-ola{animation:ptc-o1 1.3s ease-in-out infinite}.ptc-o2{animation-name:ptc-o2}.ptc-o3{animation-name:ptc-o3}.ptc-o4{animation-name:ptc-o4}'
+    + '@keyframes ptc-o1{0%,100%{transform:translateY(-.35px)}50%{transform:translateY(.35px)}}'
+    + '@keyframes ptc-o2{0%,100%{transform:translateY(-.8px)}50%{transform:translateY(.8px)}}'
+    + '@keyframes ptc-o3{0%,100%{transform:translateY(-1.2px)}50%{transform:translateY(1.2px)}}'
+    + '@keyframes ptc-o4{0%,100%{transform:translateY(-1.6px)}50%{transform:translateY(1.6px)}}'
+    + '.ptc-sombra{opacity:0;animation:ptc-sombra 1.3s ease-in-out infinite}@keyframes ptc-sombra{0%,100%{opacity:0}50%{opacity:.28}}'
     + '.ptc-lat{transform-origin:50% 60%;animation:ptc-lat 1.6s ease-in-out infinite}@keyframes ptc-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
     + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *,.ptc-adorno,.ptc-adorno *{animation:none!important}.pt-nieve{display:none}}';
   function ponCss() {
