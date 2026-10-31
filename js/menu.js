@@ -34,8 +34,9 @@
     rep: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     adm: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
     quo: '<circle cx="11.5" cy="11.5" r="7.5"/><path d="m16.5 16.5 4 4"/>',
-    ayuda: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.5"/><path d="M12 16.6h.01"/>',
+    ayuda: '<path d="M12 3.5l1.8 4.9 4.9 1.8-4.9 1.8L12 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/><path d="M5.5 2.8l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/>',   // destellos: la IA del portal
     access: '<ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/>',
+    clis: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2.6"/><path d="M5.6 16.5c.6-1.6 1.9-2.5 3.4-2.5s2.8.9 3.4 2.5M14.5 9.5h4M14.5 13h3"/>',
     mas: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
     msj: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M8 10.5h8M8 14h5"/>',
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
@@ -45,48 +46,55 @@
   };
   // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO
   var MODS = [
+    /* Menú reacomodado el 31-oct-2026 (Héctor Daniel: «re acomoda el menú, pestañas y demás, para que esté todo donde debe
+       de estar; cuida siempre los permisos»). Desde el lunes 2 ya no se usa el Access, así que el módulo «Access» se
+       repartió donde va cada cosa: lo del cliente en «Clientes» (nuevo), las tareas y el historial de actividades en
+       «Workflow» y las facturas del Access en «Tesorería». Las claves (k y v) no cambiaron, así que las ligas, el Inicio,
+       los recorridos y los permisos siguen igual: el menú solo enseña lo que cada quien ya ve (lo deciden la página y la
+       base). Orden: lo de todos los días primero. */
     { k: 'wf', t: 'Workflow', d: 'El avance del trabajo de cada cliente y de cada contador.', subs: [
       { k: 'panel', v: 'wf', t: 'Panel', tc: 'Mi panel', d: 'Obligaciones, vencimientos y pausas.' },
       { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
-      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
-      { k: 'clientes', v: 'cli', t: 'Clientes', d: 'Cada cliente y su avance.' },
-      { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' }] },
+      { k: 'clientes', v: 'cli', t: 'Avance por cliente', d: 'Cada cliente y cómo va su trabajo.' },
+      { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' },
+      { k: 'access-tareas', v: 'axtar', t: 'Tareas y proyectos', d: 'Pendientes por grupo con responsables, fechas y avance.' },   // antes Access › Tareas y proyectos
+      { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' },   // antes Access › WorkFlow
+      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' }] },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
+    // Clientes (31-oct-2026): la ficha de cada cliente y lo del SAT, juntos
+    { k: 'clis', t: 'Clientes', d: 'La ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
+      { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026); antes en Administración
+      { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' }] },   // antes Access › Clientes
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
     { k: 'msj', t: 'Chat', d: 'Mensajes y archivos con el equipo, 1 a 1 y en grupos.', subs: [
       { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' }] },
-    { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
-      { k: 'cartera', v: 'car', t: 'Cartera', d: 'Lo que deben los clientes.' },
-      { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
-      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Los activos y su depreciación.' }] },
-    // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la empresa
-    { k: 'ayuda', t: 'Ayuda', d: 'SuperConta: pregúntale lo que quieras saber de la empresa.', subs: [
-      { k: 'superconta', v: 'sc', t: 'SuperConta', d: 'Pregunta en palabras; contesta con cifras y tablas.' }] },
-    { k: 'adm', t: 'Administración', d: 'El día a día del despacho.', subs: [
-      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
-      { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026)
-      { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
-      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
-      { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
-      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
-      { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
-    // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/76_tesoreria.sql)
+    // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/79_tesoreria.sql)
     { k: 'tes', t: 'Tesorería', d: 'Facturas, pagos, cobranza, comisiones y préstamos.', subs: [
       { k: 'facturacion', v: 'fac', t: 'Facturación', d: 'Alta y control de facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'pagos', v: 'pag', t: 'Pagos', d: 'Pagos de los clientes y su reparto a facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo cobrado y lo pendiente.' },
       { k: 'recordatorios', v: 'rec', t: 'Recordatorios de pago', d: 'Recordatorios de saldos a los clientes.' },   // etapa 5 del Access (29-oct-2026)
-      { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
+      { k: 'tes-reportes', v: 'trep', t: 'Reportes', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'access-comisiones', v: 'axcom', t: 'Comisiones', d: 'Las comisiones del periodo según lo cobrado.' },   // antes en Access
       { k: 'comisiones-direccion', v: 'cdir', t: 'Comisiones de dirección', d: 'Facturas con comisión, gastos, reserva y utilidad del periodo.' },   // solo quien Daniel decidió
-      { k: 'tes-reportes', v: 'trep', t: 'Reportes', d: 'Cobranza por cliente y facturas del periodo.' }] },
-    // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
-    // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
-    // (usr_estado(), portal/sql/82_usuarios.sql; bloque usr_tab.js)
-    { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas y accesos.', subs: [
-      { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña y regresos.' },
-      { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
+      { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
+      { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
+    { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
+      { k: 'cartera', v: 'car', t: 'Cartera', d: 'Lo que deben los clientes.' },
+      { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
+      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Los activos y su depreciación.' }] },
+    // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la
+    // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
+    { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
+      { k: 'superconta', v: 'sc', t: 'Pregúntale a SuperConta', d: 'Pregúntale como a alguien del equipo; contesta con los datos del portal.' }] },
+    { k: 'adm', t: 'Administración', d: 'El día a día del despacho.', subs: [
+      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
+      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
+      { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
+      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
+      { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
+      { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     { k: 'rh', t: 'RH', d: 'Recursos humanos: vacaciones, permisos, préstamos, colaboradores, eventos, altas y bajas.', subs: [
@@ -96,15 +104,15 @@
       { k: 'rh-eventos', v: 'rhe', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho.' },
       { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' },
       { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
+    // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
+    // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
+    // (usr_estado(), portal/sql/82_usuarios.sql; bloque usr_tab.js)
+    { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas y accesos.', subs: [
+      { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña y regresos.' },
+      { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
     { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
-      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] },
-    // Lo que se pasa del Access, por etapas (29-oct-2026, pedido de Daniel; Fernando Cadengo dirá cómo acomodarlo)
-    { k: 'access', t: 'Access', d: 'Lo que se pasa del Access, por etapas.', subs: [
-      { k: 'access-clientes', v: 'axcli', t: 'Clientes', d: 'La base de clientes del Access.' },
-      { k: 'access-wf', v: 'axwf', t: 'WorkFlow', d: 'Cada actividad como en el Access: estatus, bitácora y documentos.' },
-      { k: 'access-facturas', v: 'axfac', t: 'Facturas', d: 'Facturas, pagos y recordatorios de pago (dirección y gerentes).' },
-      { k: 'access-tareas', v: 'axtar', t: 'Tareas y proyectos', d: 'Pendientes por grupo con responsables, fechas y avance.' }] }
+      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] }
   ];
   // Una pestaña nueva que todavía no tenga lugar en el menú sale en «Más», para que nunca se pierda
   var MAS = { k: 'mas', t: 'Más', d: 'Pestañas nuevas que todavía no tienen lugar en el menú.', subs: [] };
@@ -123,7 +131,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
@@ -206,7 +214,7 @@
     + 'body.pm-mini .pm-mod{margin-bottom:6px}'
     + 'body.pm-mini .pm-mb{flex-direction:column;justify-content:center;gap:5px;padding:10px 0 8px;border-radius:14px}'
     + 'body.pm-mini .pm-mb .pm-ic{width:26px;height:26px}'
-    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#A9BBD8}'
+    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#A9BBD8;white-space:normal;overflow:visible;text-overflow:clip;text-align:center;line-height:1.25;padding:0 4px}'
     + 'body.pm-mini .pm-mb .pm-lbl .pm-lg{display:none}body.pm-mini .pm-mb .pm-lbl .pm-ct{display:inline}'
     + 'body.pm-mini .pm-mod.on>.pm-mb{background:rgba(240,122,30,.18);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}body.pm-mini .pm-mod.on>.pm-mb .pm-lbl{color:#fff}'
     + 'body.pm-mini .pm-mod.con-aviso>.pm-mb::after{left:auto;right:14px;top:8px}'
@@ -437,9 +445,17 @@
     if (!top) return;
     var p = top.querySelector('.pm-pop');
     if (!p || p.hidden) return;
-    var H = altoPantalla();
+    var H = altoPantalla(), y = top.getBoundingClientRect().bottom + 6, abajo = H - y - MARGEN;
+    // Si abajo de la tira hay espacio (celular parado, tableta, computadora), la tarjeta sale ahí y, si es más alta, sus
+    // opciones se deslizan dentro: así nunca tapa la tira de íconos (31-oct-2026; con el Workflow de 7 opciones, en un
+    // celular de 640 px de alto subía y tapaba los íconos). Si no hay espacio (celular acostado), sube como antes.
+    if (abajo >= 260) {
+      top.style.setProperty('--pm-ph', Math.max(120, abajo) + 'px');
+      top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, y)) + 'px');
+      return;
+    }
     top.style.setProperty('--pm-ph', Math.max(120, H - 2 * MARGEN) + 'px');
-    var y = top.getBoundingClientRect().bottom + 6, h = p.offsetHeight;
+    var h = p.offsetHeight;
     top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, Math.min(y, H - MARGEN - h))) + 'px');
   }
   function abrePop(k) { popAbierto = k; if (k) avisaMenu('pm-pop'); pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }

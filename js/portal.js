@@ -115,7 +115,22 @@
       cdir_marca: 1, cdir_guarda_factura: 1, cdir_ajustes: 1, cdir_catalogo_guarda: 1, cdir_catalogo_borra: 1,   // comisiones de dirección
       cdir_empleado_guarda: 1, cdir_guarda: 1, cdir_borra: 1, cdir_trae: 1,   // (64_comisiones_direccion.sql)
       cpf_guardar: 1, cpf_estatus: 1, cot_liga_ren: 1 };   // Cotizador PROFASE y la liga a Renovaciones (80_cotizar_renovaciones.sql)
-    sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
+    /* «¿Qué recorridos ya vi?» lo preguntan una docena de partes de la página al mismo tiempo al abrirla; se pregunta una
+       vez y la respuesta sirve 5 segundos (anotar uno lo vuelve a preguntar). Revisión de eficiencia del 31-oct-2026. */
+    var GUARDA = { recorridos_mios: 5000 }, CACHE = {};
+    sb.rpc = function (fn, args) {
+      if (P.consulta && ESCRIBEN[fn]) return rechazo();
+      if (fn === 'recorrido_visto') CACHE = {};
+      if (GUARDA[fn] && args === undefined) {
+        var c = CACHE[fn];
+        if (c && Date.now() - c.t < GUARDA[fn]) return c.p;
+        var p = Promise.resolve(rpc.apply(null, arguments)).then(function (r) { if (!r || r.error) delete CACHE[fn]; return r; },
+          function (e) { delete CACHE[fn]; throw e; });
+        CACHE[fn] = { t: Date.now(), p: p };
+        return p;
+      }
+      return rpc.apply(null, arguments);
+    };
     // funciones del servidor que mandan algo (recordatorios de pago desde cumplimiento@): en solo consulta, no
     // (sb.functions se arma de nuevo cada vez que se pide: se envuelve el que se entrega)
     var MANDAN = { recordatorios: 1, cotizaciones: 1 };
@@ -825,17 +840,53 @@
       }
     } catch (e) { if (w.err) { try { w.err(error(e)); } catch (_) {} } }
   }
+  /* Una sola pregunta por vuelta (31-oct-2026, revisión de eficiencia): docs_firmas() de la base (85_docs_firmas.sql,
+     SECURITY INVOKER: las reglas de siempre deciden qué ve cada quien) da de una vez la firma de cada documento y de
+     cada colección que se vigila, con el mismo formato que armaba aquí cada revisa(); solo lo que cambió se vuelve a
+     revisar y a bajar. Antes era una petición por cada cosa vigilada (la vista de dirección, 9 cada 20 s). Si la
+     función no está o falla, se regresa a preguntar una por una, como antes. */
+  var FIRMAS = true;
   async function vuelta() {
     if (revisando) return;
     revisando = true;
-    try { await Promise.all(Array.from(VIG).map(revisa)); } finally { revisando = false; }
+    try {
+      var ws = Array.from(VIG);
+      if (FIRMAS && ws.length > 1) {
+        var docs = [], cols = [];
+        ws.forEach(function (w) { if (w.doc) docs.push({ col: w.col, id: w.id }); else if (cols.indexOf(w.col) < 0) cols.push(w.col); });
+        var r = null;
+        try { r = await sb.rpc('docs_firmas', { p_docs: docs, p_cols: cols }); } catch (e) { r = null; }   // sin red: esta vuelta, una por una
+        if (r && !r.error && r.data && r.data.docs && r.data.cols) {
+          var D = r.data.docs, C = r.data.cols;
+          await Promise.all(ws.map(function (w) {
+            var f = w.doc ? (D[w.col + '/' + w.id] || '-') : (C[w.col] || '');
+            return f === w.firma ? null : revisa(w);
+          }));
+          return;
+        }
+        if (r && r.error && !(r.status >= 500)) FIRMAS = false;   // la base no tiene la función: una por una desde ahora
+      }
+      await Promise.all(ws.map(revisa));
+    } finally { revisando = false; }
   }
   function pronto() { setTimeout(vuelta, 300); }
+  /* Una pestaña en su marco que no se está viendo no pregunta (31-oct-2026, revisión de eficiencia): cada pestaña se
+     abre en su marco una sola vez y luego solo se esconde al cambiar de sección, y dentro de un marco document.hidden
+     sigue a la pestaña del navegador, no a si el marco se ve. Al volver a enseñarse (el marco cambia de tamaño), se
+     pone al día en ese momento. La página de arriba sigue igual que siempre. */
+  var dormida = false;
+  function aLaVista() {
+    if (document.hidden) return false;
+    try { var fe = window.frameElement; if (fe && !fe.getClientRects().length) return false; } catch (e) { /* otro origen: pregunta */ }
+    return true;
+  }
+  function despierta() { if (dormida && aLaVista()) { dormida = false; vuelta(); } }
   function arranca() {
     if (reloj) return;
-    reloj = setInterval(function () { if (!document.hidden) vuelta(); }, CADA);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) vuelta(); });
-    window.addEventListener('focus', vuelta);
+    reloj = setInterval(function () { if (aLaVista()) { dormida = false; vuelta(); } else dormida = true; }, CADA);
+    document.addEventListener('visibilitychange', function () { if (aLaVista()) vuelta(); });
+    window.addEventListener('focus', function () { if (aLaVista()) vuelta(); });
+    window.addEventListener('resize', despierta);
   }
   function vigila(w) {
     VIG.add(w); arranca(); revisa(w);
@@ -1050,21 +1101,44 @@
   /* Fotos de perfil de otros usuarios, para espejearlas en otras pestañas (Calendario › Colaboradores y la ventana de
      cumpleaños; pedido de Daniel, 29-oct-2026). Recibe ids de usuario y regresa { id: liga firmada } solo de quienes
      tienen foto. Las ligas duran 6 horas. Si algo falla, regresa {} y la pestaña sigue con lo que tenía. */
+  /* Las fotos de perfil: la lista de la cubeta y sus ligas firmadas se piden una vez y sirven 10 minutos (revisión de
+     eficiencia del 31-oct-2026). Antes cada pestaña o ventana que enseñaba fotos volvía a listar la cubeta y a firmar,
+     y como cada liga nueva es distinta el navegador volvía a bajar cada foto. Las ligas duran 6 horas; al cambiar o
+     quitar la foto propia se vuelve a pedir todo (fotosOlvida). Cualquier usuario del portal ve todas las fotos, igual
+     que antes. */
+  var FOTOS = { t: 0, todas: null, p: null };
+  P.fotosOlvida = function () { FOTOS.t = 0; FOTOS.todas = null; };
+  async function todasLasFotos() {
+    if (FOTOS.todas && Date.now() - FOTOS.t < 600000) return FOTOS.todas;
+    if (!FOTOS.p) FOTOS.p = (async function () {
+      var l = await sb.storage.from('fotos').list('', { limit: 1000 });
+      if (l.error || !Array.isArray(l.data)) return null;
+      var rutas = l.data.map(function (f) { return f && f.name; }).filter(function (n) { return n && /^[0-9a-f-]{36}\.jpg$/i.test(n); });
+      var m = {};
+      if (rutas.length) {
+        var s = await sb.storage.from('fotos').createSignedUrls(rutas, 6 * 3600);
+        if (s.error) return null;
+        var base = SB_URL + '/storage/v1/object/sign/fotos/';
+        (s.data || []).forEach(function (x) {
+          if (x && !x.error && typeof x.signedUrl === 'string' && x.signedUrl.indexOf(base) === 0 && x.path) m[String(x.path).replace(/\.jpg$/i, '').toLowerCase()] = x.signedUrl;
+        });
+      }
+      return m;
+    })();
+    try {
+      var m = await FOTOS.p;
+      if (m) { FOTOS.todas = m; FOTOS.t = Date.now(); }
+      return m || {};
+    } finally { FOTOS.p = null; }
+  }
   P.fotosDe = async function (ids) {
     var out = {};
     try {
       var pide = {};
       (ids || []).forEach(function (u) { u = String(u || ''); if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u)) pide[u.toLowerCase()] = 1; });
       if (!Object.keys(pide).length) return out;
-      var l = await sb.storage.from('fotos').list('', { limit: 1000 });
-      if (l.error || !Array.isArray(l.data)) return out;
-      var rutas = l.data.map(function (f) { return f && f.name; }).filter(function (n) { return n && pide[String(n).replace(/\.jpg$/i, '').toLowerCase()] && /\.jpg$/i.test(n); });
-      if (!rutas.length) return out;
-      var s = await sb.storage.from('fotos').createSignedUrls(rutas, 6 * 3600);
-      var base = SB_URL + '/storage/v1/object/sign/fotos/';
-      (s.data || []).forEach(function (x) {
-        if (x && !x.error && typeof x.signedUrl === 'string' && x.signedUrl.indexOf(base) === 0 && x.path) out[String(x.path).replace(/\.jpg$/i, '').toLowerCase()] = x.signedUrl;
-      });
+      var m = await todasLasFotos();
+      Object.keys(pide).forEach(function (k) { if (m[k]) out[k] = m[k]; });
     } catch (e) { return {}; }
     return out;
   };
@@ -1140,6 +1214,7 @@
       b.disabled = true; b.textContent = 'Guardando…';
       out.toBlob(async function (blob) {
         var r = blob ? await sb.storage.from('fotos').upload(P.uid + '.jpg', blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' }) : { error: { message: 'sin imagen' } };
+        P.fotosOlvida();
         b.disabled = false; b.textContent = 'Guardar foto';
         if (r.error) { falla('pf-msg2', r.error); return; }
         await cargaFoto(p);
@@ -1149,6 +1224,7 @@
     $('pu-quita').onclick = async function () {
       var b = $('pu-quita'); b.disabled = true;
       var r = await sb.storage.from('fotos').remove([P.uid + '.jpg']);
+      P.fotosOlvida();
       b.disabled = false;
       if (r.error) { falla('pf-msg', r.error); return; }
       FOTO.url = null; pintaFoto(p); msg('pf-msg', 'Listo: se quitó tu foto; se ven tus iniciales.', 'ok');
