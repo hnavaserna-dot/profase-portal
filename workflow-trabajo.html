@@ -151,6 +151,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 .no{color:var(--muted)}
 .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
 .tag.az{background:var(--navy-soft);color:var(--ink)}
+.tag.pz,.chip.pz{background:var(--amber-soft);color:var(--amber)}
+.pzaviso{background:var(--amber-soft);color:var(--ink);border:1px solid var(--amber);border-radius:10px;padding:10px 14px;margin:14px 0 0;font-size:13.5px}
+.pzaviso b{color:var(--amber)}
 .link{background:none;border:0;padding:0;color:var(--navy);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 :root[data-theme="dark"] .link{color:#9FB6E0}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:#9FB6E0}}
@@ -306,7 +309,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey', PAGINA = 200;
-  var COLS = 'id,origen,periodo,plantilla_id,plantilla,periodicidad,actividad_id,actividad,empresa_id,rs,rfc,grupo,resp_nombre,resp_usuario,aut_nombre,aut_usuario,estatus,terminado,ven_sat,ven_pro,secuencia,req_archivo,req_secuencia,activa,a_tiempo_manual,reservado,n_docs';
+  var COLS = 'id,origen,periodo,plantilla_id,plantilla,periodicidad,actividad_id,actividad,empresa_id,rs,rfc,grupo,resp_nombre,resp_usuario,aut_nombre,aut_usuario,estatus,terminado,ven_sat,ven_pro,secuencia,req_archivo,req_secuencia,activa,a_tiempo_manual,reservado,n_docs,pausa,pausa_desde,ven_pro_orig,dias_pausa';
   var EST = { 2: 'Terminada', 3: 'Rechazada', 4: 'En Proceso', 5: 'Por Iniciar', 6: 'Cancelado' }, ORDEN_EST = [5, 4, 2, 3, 6];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -325,7 +328,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   function chipEst(e) { return '<span class="est e' + esc(e) + '">' + esc(EST[e] || ('Estatus ' + e)) + '</span>'; }
   function cerrada(a) { return a.estatus === 2 || a.estatus === 3 || a.estatus === 6; }
   function vence(a) { return a.ven_pro || a.ven_sat || ''; }
-  function vencida(a) { var v = vence(a); return !cerrada(a) && v && v < HOY; }
+  function vencida(a) { var v = vence(a); return !cerrada(a) && !a.pausa && v && v < HOY; }   // en pausa (por causa del cliente) no cuenta como vencida
+  function enPausa(a) { return !cerrada(a) && !!a.pausa; }
   function cont(a) { return ASIG[a.empresa_id] || ''; }
   function jefe() { return ROL === 'director' || ROL === 'gerente'; }
   function tamano(b) { b = +b || 0; return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : b + ' B'; }
@@ -409,7 +413,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     sel('f-cont', 'Todos los contadores asignados', u(cont));
     sel('f-aut', 'Todos los que autorizan', u(function (a) { return a.aut_nombre; }));
     var e = $('f-est').value;
-    $('f-est').innerHTML = '<option value="">Todos los estatus</option><option value="abiertas">Abiertas (por iniciar y en proceso)</option><option value="vencidas">Vencidas</option>' + ORDEN_EST.map(function (k) { return '<option value="' + k + '">' + esc(EST[k]) + '</option>'; }).join('');
+    $('f-est').innerHTML = '<option value="">Todos los estatus</option><option value="abiertas">Abiertas (por iniciar y en proceso)</option><option value="vencidas">Vencidas</option><option value="pausa">En pausa (por el cliente)</option>' + ORDEN_EST.map(function (k) { return '<option value="' + k + '">' + esc(EST[k]) + '</option>'; }).join('');
     $('f-est').value = e;
   }
   function actividades() {
@@ -433,6 +437,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (!sinEstatus && es) {
         if (es === 'abiertas') { if (a.estatus !== 4 && a.estatus !== 5) return false; }
         else if (es === 'vencidas') { if (!vencida(a)) return false; }
+        else if (es === 'pausa') { if (!enPausa(a)) return false; }
         else if (a.estatus !== +es) return false;
       }
       if (q && norm([a.grupo, a.rs, a.rfc].join(' ')).indexOf(q) < 0) return false;
@@ -443,14 +448,15 @@ tr.fila:hover td{background:var(--navy-soft)}
   function venceHtml(a) {
     var h = '';
     if (a.ven_pro) h += '<div class="vence' + (vencida(a) ? ' mal' : '') + '">Profase ' + esc(fecha(a.ven_pro)) + '</div>';
+    if (a.dias_pausa > 0 && a.ven_pro_orig) h += '<div class="rfc">Recorrido ' + esc(a.dias_pausa) + (a.dias_pausa === 1 ? ' día' : ' días') + ' por pausa</div>';
     if (a.ven_sat) h += '<div class="rfc">SAT ' + esc(fecha(a.ven_sat)) + '</div>';
     return h || '<span class="no">Sin vencimiento</span>';
   }
   function pinta() {
-    var base = filtradas(true), n = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, ven = 0;
-    base.forEach(function (a) { n[a.estatus] = (n[a.estatus] || 0) + 1; if (vencida(a)) ven++; });
+    var base = filtradas(true), n = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, ven = 0, pz = 0;
+    base.forEach(function (a) { n[a.estatus] = (n[a.estatus] || 0) + 1; if (vencida(a)) ven++; if (enPausa(a)) pz++; });
     var pct = function (x) { return base.length ? Math.round(100 * x / base.length) + ' %' : ' '; };
-    $('k-tot').textContent = base.length; $('k-tot-s').textContent = ven ? ven + (ven === 1 ? ' vencida' : ' vencidas') : 'ninguna vencida';
+    $('k-tot').textContent = base.length; $('k-tot-s').textContent = (ven ? ven + (ven === 1 ? ' vencida' : ' vencidas') : 'ninguna vencida') + (pz ? ' · ' + pz + ' en pausa' : '');
     $('k-pi').textContent = n[5]; $('k-pi-s').textContent = pct(n[5]);
     $('k-ep').textContent = n[4]; $('k-ep-s').textContent = pct(n[4]);
     $('k-te').textContent = n[2]; $('k-te-s').textContent = (n[3] ? n[3] + ' rechazadas · ' : '') + pct(n[2]);
@@ -459,7 +465,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (a) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(a.id) + '"><td><div class="rs">' + esc(a.rs) + '</div><div class="rfc">' + esc(a.rfc) + (a.grupo ? ' · ' + esc(a.grupo) : '') + '</div></td>'
         + '<td><div>' + esc(a.actividad) + '</div><div class="rfc">' + esc(a.plantilla) + ' · paso ' + esc(a.secuencia) + (a.periodicidad === 2 ? ' · anual' : '') + '</div></td>'
-        + '<td>' + chipEst(a.estatus) + '</td>'
+        + '<td>' + chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + '</td>'
         + '<td>' + (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + (a.aut_nombre ? '<div class="rfc">Autoriza: ' + esc(a.aut_nombre) + '</div>' : '') + '</td>'
         + '<td>' + venceHtml(a) + '</td>'
         + '<td>' + (a.n_docs ? '<span class="clip">' + esc(a.n_docs) + (a.n_docs === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>') + '</td></tr>';
@@ -493,6 +499,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     var h = '<div class="cab"><div><div class="rfc">' + esc(a.grupo) + ' · ' + esc(a.plantilla) + '</div><h2 id="f-tit">' + esc(a.actividad) + '</h2><div class="rfc">' + esc(a.rs) + ' · ' + esc(a.rfc) + ' · ' + esc(mesTxt(a.periodo)) + '</div></div>'
       + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar la ficha">Cerrar</button></div><div class="cuerpo">';
     if (MODO === 'practica') h += '<div class="practica" style="margin:0">Práctica: lo que cambies aquí se borra en la siguiente actualización.</div>';
+    if (enPausa(a)) h += '<div class="pzaviso"><b>En pausa' + (a.pausa_desde ? ' desde el ' + esc(fecha(diaMty(a.pausa_desde))) : '') + ':</b> ' + esc(a.pausa)
+      + '. El cliente está en pausa (Panel › Pausas y motivos). Mientras siga así no cuenta como vencida y sí se puede trabajar. Al reactivarlo, su vencimiento Profase se recorre los días hábiles que estuvo en pausa.</div>';
     var edita = puedeEditar(a);
     var ops = ORDEN_EST.map(function (e) { var ok = e === a.estatus || puedeEstatus(a, e); return '<option value="' + e + '"' + (e === a.estatus ? ' selected' : '') + (ok ? '' : ' disabled') + '>' + esc(EST[e]) + (ok ? '' : ' (no te toca)') + '</option>'; }).join('');
     var form = '<div class="form">'
@@ -509,7 +517,8 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<dt>Responsable</dt><dd>' + (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + '</dd>'
       + '<dt>Autoriza</dt><dd>' + (esc(a.aut_nombre) || '<span class="no">Nadie (la termina el responsable)</span>') + '</dd>'
       + '<dt>Contador asignado</dt><dd>' + (esc(cont(a)) || '<span class="no">Sin contador asignado</span>') + '</dd>'
-      + '<dt>Vencimiento Profase</dt><dd>' + (a.ven_pro ? '<span class="vence' + (vencida(a) ? ' mal' : '') + '">' + esc(fecha(a.ven_pro)) + '</span>' : '<span class="no">Sin fecha</span>') + '</dd>'
+      + '<dt>Vencimiento Profase</dt><dd>' + (a.ven_pro ? '<span class="vence' + (vencida(a) ? ' mal' : '') + '">' + esc(fecha(a.ven_pro)) + '</span>' : '<span class="no">Sin fecha</span>')
+        + (a.dias_pausa > 0 && a.ven_pro_orig ? ' <span class="tag az">Recorrido ' + esc(a.dias_pausa) + (a.dias_pausa === 1 ? ' día hábil' : ' días hábiles') + ' por pausa (era el ' + esc(fecha(a.ven_pro_orig)) + ')</span>' : '') + '</dd>'
       + '<dt>Vencimiento SAT</dt><dd>' + (a.ven_sat ? esc(fecha(a.ven_sat)) : '<span class="no">Sin fecha</span>') + '</dd>'
       + '<dt>Terminada</dt><dd>' + (a.terminado ? esc(fechaHora(a.terminado)) : '<span class="no">Todavía no</span>') + (a.a_tiempo_manual ? ' <span class="tag az">Marcada «a tiempo» a mano</span>' : '') + '</dd>'
       + '<dt>Paso</dt><dd>' + esc(a.secuencia || '—') + ' de la plantilla ' + esc(a.plantilla) + (a.periodicidad === 2 ? ' (anual)' : '') + '</dd>'
@@ -798,7 +807,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="botones"><button class="btn" type="button" id="g-revisa">Revisar qué se generaría</button></div>'
       + '<div class="msg" id="g-msg" hidden></div></div><div id="g-res"></div>';
     h += sec('Qué generar', form);
-    h += '<p class="rfc gen-nota">Como en el Access: solo clientes activos y plantillas habilitadas para cada uno, y nada se repite (si la actividad del mes ya existe, se deja; una anual, en todo el año). Cada actividad nace «Por Iniciar» con su responsable, quien autoriza y sus vencimientos (SAT por el sexto dígito del RFC; Profase según la actividad).</p>';
+    h += '<p class="rfc gen-nota">Como en el Access: solo clientes activos y plantillas habilitadas para cada uno, y nada se repite (si la actividad del mes ya existe, se deja; una anual, en todo el año). Cada actividad nace «Por Iniciar» con su responsable, quien autoriza y sus vencimientos (SAT por el sexto dígito del RFC; Profase según la actividad). Los clientes en pausa por causa del cliente (Panel › Pausas y motivos) sí se generan, pero sus actividades nacen «En pausa»: no cuentan como vencidas hasta que se reactiven.</p>';
     h += '</div>';
     $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
@@ -819,19 +828,21 @@ tr.fila:hover td{background:var(--navy-soft)}
     var modo = (document.querySelector('input[name="g-modo"]:checked') || {}).value || 'mes_pasado';
     return { p_periodo: $('g-anio').value + '-' + dos(+$('g-mes').value) + '-01', p_plantilla: +$('g-pla').value || null, p_empresa: +$('g-emp').value || null, p_modo: modo, p_prueba: prueba };
   }
-  var G_ARGS = null, G_PARES = [];
+  var G_ARGS = null, G_PARES = [], G_PZ = {};
   function num(n) { return (+n || 0).toLocaleString('es-MX'); }
   // cuántas actividades y clientes van con las casillas como están
   function gCuenta() {
-    var act = 0, ina = 0, cli = {}, por = {};
+    var act = 0, ina = 0, cli = {}, por = {}, pzc = {}, pza = 0;
     G_PARES.forEach(function (x) {
       por[x.p] = por[x.p] || { k: 0, n: 0, a: 0, s: 0 }; por[x.p].n++; if (!x.mp) por[x.p].s++;
       if (!x.sel) return;
       act += x.activas; ina += x.nuevas - x.activas; cli[x.e] = 1; por[x.p].k++; por[x.p].a += x.activas;
+      if (x.pz) { pzc[x.e] = 1; pza += x.activas; }
     });
+    var npz = Object.keys(pzc).length;
     var mes = G_ARGS ? mesTxt(G_ARGS.p_periodo) : '';
     if ($('g-tot')) $('g-tot').textContent = num(act) + ' actividades nuevas';
-    if ($('g-sub')) $('g-sub').textContent = mes + ' · ' + num(Object.keys(cli).length) + ' clientes' + (ina ? ' · ' + num(ina) + ' más que se crean deshabilitadas, como en el Access' : '');
+    if ($('g-sub')) $('g-sub').textContent = mes + ' · ' + num(Object.keys(cli).length) + ' clientes' + (ina ? ' · ' + num(ina) + ' más que se crean deshabilitadas, como en el Access' : '') + (npz ? ' · ' + num(npz) + (npz === 1 ? ' cliente en pausa' : ' clientes en pausa') + ': ' + num(pza) + ' actividades nacen «En pausa»' : '');
     Object.keys(por).forEach(function (p) { var e = document.querySelector('[data-gcta="' + p + '"]'); if (e) e.textContent = por[p].k + ' de ' + por[p].n + ' clientes · ' + num(por[p].a) + ' actividades' + (por[p].s ? ' · ' + por[p].s + ' sin trabajo el ' + (G_PARES.some(function (x) { return x.p === +p && x.anual; }) ? 'año' : 'mes') + ' pasado' : ''); });
     var b = $('g-genera'); if (b) { b.disabled = !act && !ina; b.textContent = 'Sí, generar ' + mes; }
   }
@@ -844,9 +855,14 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var r = await P.sb.rpc('wf_genera', args);
       if (r.error) throw r.error;
+      if (prueba) {
+        // qué clientes están en pausa por causa del cliente en ese mes (nacen «En pausa»; portal/sql/76_wf_pausas.sql)
+        G_PZ = {};
+        try { var rz = await P.sb.rpc('wf_pausas_mes', { p_periodo: args.p_periodo }); (rz.data || []).forEach(function (z) { G_PZ[norm(String(z.rs || '').trim())] = z.motivo || 'En pausa'; }); } catch (ez) { G_PZ = {}; }
+      }
       var d = r.data || {}, mes = mesTxt(args.p_periodo);
       if (prueba) {
-        G_ARGS = args; G_PARES = (d.pares || []).map(function (x) { return { e: +x.e, p: +x.p, rs: x.rs || '', grupo: x.grupo || '', plantilla: x.plantilla || '', activas: +x.activas || 0, nuevas: +x.nuevas || 0, mp: !!x.mp, sel: !!x.sel, anual: !!x.anual }; });
+        G_ARGS = args; G_PARES = (d.pares || []).map(function (x) { return { e: +x.e, p: +x.p, rs: x.rs || '', grupo: x.grupo || '', plantilla: x.plantilla || '', activas: +x.activas || 0, nuevas: +x.nuevas || 0, mp: !!x.mp, sel: !!x.sel, anual: !!x.anual, pz: G_PZ[norm(String(x.rs || '').trim())] || '' }; });
         var grupos = [], ix = {};
         G_PARES.forEach(function (x, i) { if (!(x.p in ix)) { ix[x.p] = grupos.length; grupos.push({ p: x.p, nombre: x.plantilla, l: [] }); } grupos[ix[x.p]].l.push(i); });
         // primero los que no tuvieron trabajo el mes pasado (son los que hay que decidir)
@@ -861,7 +877,7 @@ tr.fila:hover td{background:var(--navy-soft)}
               + g.l.map(function (i) {
                 var x = G_PARES[i];
                 return '<label class="gen-cli"><input type="checkbox" data-gp="' + i + '"' + (x.sel ? ' checked' : '') + '><span class="q"><span class="rs">' + esc(x.rs) + '</span>'
-                  + '<span class="rfc">' + (x.grupo ? esc(x.grupo) + ' · ' : '') + num(x.activas) + ' actividades' + (x.mp ? '' : ' · <span class="chip ojo">sin trabajo el ' + (x.anual ? 'año' : 'mes') + ' pasado</span>') + '</span></span></label>';
+                  + '<span class="rfc">' + (x.grupo ? esc(x.grupo) + ' · ' : '') + num(x.activas) + ' actividades' + (x.mp ? '' : ' · <span class="chip ojo">sin trabajo el ' + (x.anual ? 'año' : 'mes') + ' pasado</span>') + (x.pz ? ' · <span class="chip pz" title="' + esc(x.pz) + '">En pausa: ' + esc(x.pz) + '</span>' : '') + '</span></span></label>';
               }).join('') + '</details>';
           }).join('')
           + (G_PARES.length ? '<div class="form" style="padding:12px 0 0"><div class="botones"><button class="btn acento" type="button" id="g-genera">Sí, generar</button><span class="rfc">Si cambias el periodo, la plantilla o el cliente, vuelve a revisar.</span></div></div>'
@@ -870,8 +886,10 @@ tr.fila:hover td{background:var(--navy-soft)}
         $('g-res').innerHTML = h;
         gCuenta();
       } else {
+        var npa = 0; G_PARES.forEach(function (x) { if (x.sel && x.pz) npa += x.activas; });
         G_ARGS = null; G_PARES = [];
-        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se generaron ' + num(d.activas) + ' actividades de ' + esc(mes) + '. Ya salen en la lista.</div></div>';
+        $('g-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se generaron ' + num(d.activas) + ' actividades de ' + esc(mes) + '. Ya salen en la lista.'
+          + (npa ? ' De esas, ' + num(npa) + ' son de clientes en pausa y nacieron «En pausa».' : '') + '</div></div>';
         $('f-anio').value = args.p_periodo.slice(0, 4); $('f-mes').value = String(+args.p_periodo.slice(5, 7));
         cargaPeriodo().catch(function () {});
       }
@@ -939,7 +957,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     EM.a = a;
     try {
       await personas();
-      var r = await P.sb.from('wf_act').select('id,periodo,periodicidad,actividad,secuencia,resp_nombre,aut_nombre,activa,req_archivo,req_secuencia,estatus,n_docs')
+      var r = await P.sb.from('wf_act').select('id,periodo,periodicidad,actividad,secuencia,resp_nombre,aut_nombre,activa,req_archivo,req_secuencia,estatus,n_docs,pausa')
         .eq('empresa_id', a.empresa_id).eq('plantilla_id', a.plantilla_id).eq('periodo', a.periodo).order('secuencia').range(0, 499);
       if (r.error) throw r.error;
       if (ABIERTA !== a.id || !$('em-in')) return;
@@ -947,7 +965,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('em-n').textContent = (r.data || []).length + ' en ' + mesTxt(a.periodo);
       $('em-in').innerHTML = '<ul class="lista">' + (r.data || []).map(function (x) {
         var req = [x.req_archivo ? 'documento' : '', x.req_secuencia ? 'paso anterior' : ''].filter(Boolean).join(' y ');
-        return '<li id="em-li-' + esc(x.id) + '"><div class="t">' + esc(x.secuencia) + '. ' + esc(x.actividad) + ' ' + chipEst(x.estatus) + (x.activa ? '' : ' <span class="tag">Desactivada</span>') + (x.id === a.id ? ' <span class="tag az">Esta</span>' : '') + '</div>'
+        return '<li id="em-li-' + esc(x.id) + '"><div class="t">' + esc(x.secuencia) + '. ' + esc(x.actividad) + ' ' + chipEst(x.estatus) + (x.activa ? '' : ' <span class="tag">Desactivada</span>') + (enPausa(x) ? ' <span class="tag pz">En pausa</span>' : '') + (x.id === a.id ? ' <span class="tag az">Esta</span>' : '') + '</div>'
           + '<div class="d">' + (esc(x.resp_nombre) || 'Sin responsable') + (x.aut_nombre ? ' · autoriza ' + esc(x.aut_nombre) : '') + (req ? ' · pide ' + esc(req) : '') + '</div>'
           + '<div class="botones" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><button class="btn" type="button" data-emed="' + esc(x.id) + '">Editar</button>'
           + (x.n_docs ? '' : '<button class="btn peligro" type="button" data-emqu="' + esc(x.id) + '">Quitar del mes</button>') + '</div>'
@@ -1102,7 +1120,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   // «Tareas a tiempo»: marcar como a tiempo lo que se terminó tarde contra Profase (con los filtros de la lista)
   var AT = { l: [], sel: {}, ver: 'todas' };
   function diaMty(s) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(s)); } catch (e) { return String(s).slice(0, 10); } }
-  function tarde(a) { if (!a.ven_pro) return false; var c = a.terminado ? diaMty(a.terminado) : HOY; return c > a.ven_pro; }
+  function tarde(a) { if (!a.ven_pro || enPausa(a)) return false; var c = a.terminado ? diaMty(a.terminado) : HOY; return c > a.ven_pro; }
   function abreATiempo() {
     if (!CONF.a_tiempo || CONSULTA) return;
     AT.l = filtradas(false).filter(function (a) { return a.a_tiempo_manual || tarde(a); });

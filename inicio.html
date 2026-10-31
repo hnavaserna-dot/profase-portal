@@ -126,7 +126,7 @@ button{font:inherit;color:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:600;background:var(--surface-2);color:var(--ink)}
 .chip b{font-family:var(--f-display);font-size:15px}
-.chip.mal{background:var(--red-soft);color:var(--red)} .chip.ojo{background:var(--amber-soft);color:var(--amber)} .chip.bien{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)} .chip.ojo{background:var(--amber-soft);color:var(--amber)} .chip.bien{background:var(--ok-soft);color:var(--ok)} .chip.az{background:var(--navy-soft);color:var(--ink)}
 
 /* Tabla chica del equipo */
 .eq{width:100%;border-collapse:collapse;font-size:13px}
@@ -391,7 +391,7 @@ button{font:inherit;color:inherit}
   }
 
   /* ---------- actividades del Panel de trabajo (al momento) ---------- */
-  var COLS_ACT = 'id,periodo,actividad,rs,grupo,resp_usuario,aut_usuario,empresa_id,estatus,ven_sat,ven_pro,plantilla';
+  var COLS_ACT = 'id,periodo,actividad,rs,grupo,resp_usuario,aut_usuario,empresa_id,estatus,ven_sat,ven_pro,plantilla,pausa';
   function cargaActs() {
     return una('acts', async function () {
       function base(c) { return P.sb.from('wf_act').select(COLS_ACT, c ? { count: 'exact' } : undefined).eq('activa', true).in('estatus', [4, 5]).gte('periodo', '2025-01-01'); }
@@ -413,7 +413,8 @@ button{font:inherit;color:inherit}
       return out;
     });
   }
-  function grupoDe(a) { return !a.vence ? 'sin' : a.vence < HOY ? 'ven' : a.vence === HOY ? 'hoy' : a.vence <= EN7 ? 'sem' : 'des'; }
+  // en pausa por causa del cliente (portal/sql/76_wf_pausas.sql): no cuenta como vencida ni urgente
+  function grupoDe(a) { return a.pausa ? 'pz' : !a.vence ? 'sin' : a.vence < HOY ? 'ven' : a.vence === HOY ? 'hoy' : a.vence <= EN7 ? 'sem' : 'des'; }
 
   /* ---------- pintar ---------- */
   function k(t, v, s, cls) { return '<div class="k' + (cls ? ' ' + cls : '') + '"><div class="t">' + esc(t) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
@@ -584,10 +585,10 @@ button{font:inherit;color:inherit}
     return { id: 'pend', t: t, s: s, liga: 'workflow-trabajo', ancha: PERFIL === 'contador' || PERFIL === 'gabo', arma: async function () {
       var A = await cargaActs();
       if (!A.length) return PERFIL === 'contador' ? null : aldia('No tienes actividades abiertas.');
-      var n = { ven: 0, hoy: 0, sem: 0, des: 0, sin: 0 }, porAut = [];
+      var n = { ven: 0, hoy: 0, sem: 0, des: 0, sin: 0, pz: 0 }, porAut = [];
       A.forEach(function (a) { n[grupoDe(a)]++; if (a.autorizo && a.estatus === 4) porAut.push(a); });
       var h = '<div class="chips">' + chip(n.ven, ' vencidas', n.ven ? 'mal' : 'bien') + chip(n.hoy, ' vencen hoy', n.hoy ? 'ojo' : '')
-        + chip(n.sem, ' en 7 días', n.sem ? 'ojo' : '') + chip(n.des + n.sin, ' después', '') + '</div>';
+        + chip(n.sem, ' en 7 días', n.sem ? 'ojo' : '') + chip(n.des + n.sin, ' después', '') + (n.pz ? chip(n.pz, ' en pausa', 'az') : '') + '</div>';
       var hoy = A.filter(function (a) { return grupoDe(a) === 'hoy'; });
       var ven = A.filter(function (a) { return grupoDe(a) === 'ven'; }).sort(function (a, b) { return a.vence < b.vence ? 1 : -1; });
       var sem = A.filter(function (a) { return grupoDe(a) === 'sem'; }).sort(function (a, b) { return a.vence < b.vence ? -1 : 1; });
@@ -605,7 +606,7 @@ button{font:inherit;color:inherit}
           return { pt: grupoDe(a) === 'ven' ? 'mal' : 'az', a: esc(a.actividad), b: esc(a.rs), n: a.vence ? fCorta(a.vence) : '', ncls: grupoDe(a) === 'ven' ? 'mal' : '', liga: 'workflow-trabajo' };
         }));
       }
-      h += '<p class="nota">Del Panel de trabajo, al momento. Vence con la fecha Profase (o la del SAT si no tiene).</p>';
+      h += '<p class="nota">Del Panel de trabajo, al momento. Vence con la fecha Profase (o la del SAT si no tiene).' + (n.pz ? ' Las de clientes en pausa no cuentan como vencidas.' : '') + '</p>';
       return h;
     } };
   }
