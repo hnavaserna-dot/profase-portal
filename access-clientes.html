@@ -196,6 +196,10 @@ tr.fila:hover td{background:var(--navy-soft)}
 .ren .conf .acc{display:flex;gap:6px;flex-wrap:wrap}
 .ren .conf .msg{font-size:12.5px;color:var(--muted)}
 .ren .conf .msg.mal{color:var(--red)}
+.ren .aut{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--accent-soft);border-radius:10px;padding:8px 10px}
+.ren .aut p{margin:0;flex:1 1 220px;font-size:13px}
+.ren .msg-r{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.ren .msg-r.mal{color:var(--red)}
 @media (max-width:640px){.ren>li{grid-template-columns:minmax(0,1fr)}.ren .lado{align-items:flex-start;text-align:left}.ren .conf input{font-size:16px}}
 /* En celular cada cliente es una tarjeta; las tablas de la ficha se deslizan dentro de su recuadro */
 @media (max-width:640px){
@@ -268,13 +272,13 @@ tr.fila:hover td{background:var(--navy-soft)}
         <div><h2 id="h-ren">Renovación de e.firma y sellos</h2><div class="sub" id="ren-sub">Lo que vence en los próximos 3 meses o ya venció: se cotiza, se cobra y se carga el nuevo.</div></div>
         <div class="seg" role="group" aria-label="Qué ver"><button type="button" data-rver="0" aria-pressed="true">En curso</button><button type="button" data-rver="1" aria-pressed="false">Cerrados</button></div>
       </header>
-      <div class="ren-guia" id="ren-guia">Cotízala y márcala «Cotizado». La factura y el pago se ven solos; cuando pague (o si va «Gratis»), te llega el aviso para cargar los archivos nuevos. Si ya no es cliente, márcalo y le avisamos a Cadengo para que lo ponga inactivo.</div>
+      <div class="ren-guia" id="ren-guia">Pícale a «Cotizar»: se abre el cotizador con el cliente y la renovación ya puestos. Al emitir la cotización se marca sola «Cotizado»; si el cliente la rechaza, se cierra sola. La factura y el pago se ven solos; cuando pague (o si la dirección autoriza que vaya «Gratis»), te llega el aviso para cargar los archivos nuevos. Si ya no es cliente, márcalo y le avisamos a Cadengo para que lo ponga inactivo.</div>
       <div class="ren-res" id="ren-res"></div>
       <div class="cargando" id="ren-cargando">Cargando…</div>
       <ul class="ren" id="ren-lista"></ul>
       <div class="vacio" id="ren-vacio" hidden></div>
     </section>
-    <p class="pie">Se revisa sola cada 3 horas (y al momento cuando la ficha y las facturas ya estén en el portal). Se cierra sola cuando la fecha de vencimiento cambia a la nueva o el cliente queda inactivo.</p>
+    <p class="pie">Se revisa sola cada 3 horas (y al momento cuando la ficha y las facturas ya estén en el portal). La cotización la marca sola al emitirla y, si el cliente la rechaza, la pasa a «Cerrados». Se cierra sola cuando la fecha de vencimiento cambia a la nueva o el cliente queda inactivo.</p>
   </div>
   <p class="pie" id="pie">&nbsp;</p>
 </div>
@@ -695,14 +699,18 @@ tr.fila:hover td{background:var(--navy-soft)}
                 baja: ['Ya no es cliente · falta marcarlo inactivo', 'az'] };
   var CIERRE = { cargado: ['Renovado', 'ok'], inactivo: ['Quedó inactivo', ''], no_quiere: ['No lo quiso', ''] };
   var CIA_TXT = { equipo: 'Equipo', ambas: 'Equipo y dirección', direccion: 'Solo dirección', ninguna: 'Sin compañía' };
+  /* «Cotizado» ya no es botón: se marca solo al emitir la cotización desde «Cotizar» (Daniel, 30-oct-2026, noche:
+     «tú mismo marcas los estatus de cotizado»). «Gratis» es una petición que autoriza la dirección (basta uno), salvo que
+     la marque Daniel. portal/sql/80_cotizar_renovaciones.sql */
   var ACC = {
-    cotizado: ['Cotizado', 'Márcalo cuando ya le mandaste la cotización al cliente. La factura y el pago se ven solos.', 'Nota (opcional): a quién o por cuánto', false],
-    gratis: ['Gratis', 'La renovación va sin cobro: al contador le llega el aviso para cargar los archivos nuevos.', 'Por qué va sin cobro (opcional)', false],
+    gratis: ['Gratis', 'Pide que la renovación vaya sin cobro. La autoriza la dirección; cuando conteste te llega el aviso.', 'Por qué va sin cobro (opcional)', false],
     no_quiere: ['No lo quiere', 'El cliente no quiere que se la renovemos (o lo hace él). Se cierra el seguimiento.', 'Por qué (obligatorio)', true],
     baja: ['Ya no es cliente', 'Le avisamos a Cadengo para que lo marque inactivo; se cierra solo cuando quede inactivo.', 'Nota para Cadengo (opcional)', false],
-    deshacer: ['Deshacer', 'Regresa al paso anterior.', '', false]
+    deshacer: ['Deshacer', 'Regresa al paso anterior (o quita la petición de «Gratis»).', '', false]
   };
-  var PUEDO = { cotizado: 'cotizado', gratis: 'gratis', no_quiere: 'noQuiere', baja: 'baja', deshacer: 'deshacer' };
+  var PUEDO = { gratis: 'gratis', no_quiere: 'noQuiere', baja: 'baja', deshacer: 'deshacer' };
+  var COT_TXT = { dec: 'Cotizar', pf: 'Cotizar' }, COT_DOS = { dec: 'Cotizar con DECOMSA', pf: 'Cotizar con PROFASE' };
+  function yoSoy() { try { return (P.perfil && P.perfil.usuario) || ''; } catch (e) { return ''; } }
   function diaDe(ts) { try { return fDia.format(new Date(ts)); } catch (e) { return ''; } }
   function quienCuando(o) { return o ? esc(o.por || '') + ', ' + esc(fecha(diaDe(o.en))) : ''; }
   function venceRen(q, o) {
@@ -730,17 +738,26 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="d">' + esc(x.rfc) + (x.contadores && x.contadores.length ? ' · Contador asignado: ' + esc(x.contadores.join(', ')) : ' · Sin contador asignado') + '</div>'
       + venceRen('e.firma', x.fiel) + venceRen('Sellos', x.sellos) + pasosRen(x);
     var d = [];
-    if (x.cotizado) d.push('Cotizado por ' + quienCuando(x.cotizado));
-    if (x.gratisPor) d.push('Sin cobro (lo marcó ' + quienCuando(x.gratisPor) + ')');
+    if (x.cotizado) d.push('Cotizado por ' + quienCuando(x.cotizado) + (x.cotizado.ref ? ' · ' + esc(x.cotizado.ref) : '') + (x.cotizado.total != null ? ' · ' + dinero(x.cotizado.total) : ''));
+    if (x.gratisPor) d.push('Sin cobro (lo pidió ' + quienCuando(x.gratisPor) + (x.gratisPor.autorizo ? '; lo autorizó ' + esc(x.gratisPor.autorizo) : '') + ')');
+    if (x.gratisPide) d.push('Pidió que vaya sin cobro: ' + quienCuando(x.gratisPide) + (x.gratisPide.nota ? ' («' + esc(x.gratisPide.nota) + '»)' : '') + ' · lo autoriza la dirección');
+    if (x.etapa === 'cotizar' && !x.gratisPide && x.mio && !(x.cotizarCon && x.cotizarCon.length)) d.push('La cotizan tu gerente, Cadengo o Elisa con «Cotizar»');
     if (x.factura) d.push('Factura ' + esc(x.factura.folio || '') + ' del ' + esc(fecha(x.factura.fecha)) + ' · ' + dinero(x.factura.total) + ' · saldo ' + dinero(x.factura.saldo));
     if (x.baja) d.push('Ya no es cliente (lo marcó ' + quienCuando(x.baja) + ')');
     if (x.nota) d.push('«' + esc(x.nota) + '»');
     if (d.length) h += '<div class="d" style="margin-top:6px">' + d.join(' · ') + '</div>';
-    h += '</div><div class="lado"><span class="chip ' + et[1] + '">' + esc(et[0]) + '</span>'
+    h += '</div><div class="lado"><span class="chip ' + et[1] + '">' + esc(et[0]) + '</span>' + (x.gratisPide ? '<span class="chip az">Gratis por autorizar</span>' : '')
       + (x.cia && CIA_TXT[x.cia] ? '<span class="chip">' + esc(CIA_TXT[x.cia]) + '</span>' : '')
       + (x.etapa !== 'cerrado' && x.desde ? '<span class="d">Desde el ' + esc(fecha(diaDe(x.desde))) + '</span>' : (x.cerrado ? '<span class="d">El ' + esc(fecha(diaDe(x.cerrado))) + '</span>' : '')) + '</div>';
     var bs = P.consulta ? [] : Object.keys(ACC).filter(function (a) { return x.puedo && x.puedo[PUEDO[a]]; });
-    if (bs.length) h += '<div class="bot">' + bs.map(function (a) { return '<button type="button" class="btn' + (a === 'cotizado' ? ' acento' : '') + '" data-racc="' + a + '" data-rid="' + (+x.id) + '">' + esc(ACC[a][0]) + '</button>'; }).join('') + '</div>';
+    var cot = P.consulta || !x.puedo || !x.puedo.cotizar ? [] : (x.cotizarCon || []).filter(function (t) { return t === 'dec' || t === 'pf'; });
+    if (cot.length || bs.length) h += '<div class="bot">'
+      + cot.map(function (t) { return '<button type="button" class="btn acento" data-rcot="' + t + '" data-rid="' + (+x.id) + '">' + esc((cot.length > 1 ? COT_DOS : COT_TXT)[t]) + '</button>'; }).join('')
+      + bs.map(function (a) { return '<button type="button" class="btn" data-racc="' + a + '" data-rid="' + (+x.id) + '">' + esc(a === 'gratis' && yoSoy() === 'daniel.nava' ? 'Gratis (sin cobro)' : ACC[a][0]) + '</button>'; }).join('') + '</div>';
+    // la dirección contesta la petición de «Gratis» (basta uno; HNR también, aunque sea de solo consulta)
+    if (x.puedo && x.puedo.autorizaGratis) h += '<div class="aut"><p><b>¿Va sin cobro?</b> ' + esc((x.gratisPide && x.gratisPide.por) || '') + ' lo pidió.</p>'
+      + '<button type="button" class="btn acento" data-raut="1" data-rid="' + (+x.id) + '">Autorizar sin cobro</button>'
+      + '<button type="button" class="btn" data-raut="0" data-rid="' + (+x.id) + '">Se cobra</button></div>';
     return h + '</li>';
   }
   function pintaRen() {
@@ -777,7 +794,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     var a = b.getAttribute('data-racc'), id = +b.getAttribute('data-rid'), li = b.closest('li'); if (!ACC[a] || !li) return;
     var viejo = li.querySelector('.conf'); if (viejo) viejo.remove();
     var f = document.createElement('div'); f.className = 'conf';
-    f.innerHTML = '<p><b>' + esc(ACC[a][0]) + ':</b> ' + esc(ACC[a][1]) + '</p>'
+    var expl = a === 'gratis' && yoSoy() === 'daniel.nava' ? 'La renovación va sin cobro (tú la autorizas): al contador le llega el aviso para cargar los archivos nuevos y a HNR, que ya quedó.' : ACC[a][1];
+    f.innerHTML = '<p><b>' + esc(ACC[a][0]) + ':</b> ' + esc(expl) + '</p>'
       + (ACC[a][2] ? '<input type="text" maxlength="300" aria-label="' + esc(ACC[a][2]) + '" placeholder="' + esc(ACC[a][2]) + '">' : '')
       + '<div class="acc"><button type="button" class="btn acento" data-rok="' + a + '" data-rid="' + id + '">Confirmar</button><button type="button" class="btn" data-rno>Cancelar</button></div><div class="msg" aria-live="polite"></div>';
     li.appendChild(f);
@@ -790,6 +808,38 @@ tr.fila:hover td{background:var(--navy-soft)}
     b.disabled = true; msg.className = 'msg'; msg.textContent = 'Guardando…';
     try {
       var r = await P.sb.rpc('ren_marca', { p_id: id, p_accion: a, p_nota: nota });
+      if (r.error) throw r.error;
+      await cargaRen();
+    } catch (e) {
+      msg.className = 'msg mal'; msg.textContent = 'No se guardó: ' + String((e && e.message) || 'vuelve a intentar'); b.disabled = false;
+    }
+  }
+  /* «Cotizar»: abre el cotizador de la vista (cot_tab.js o cpf_tab.js) con esta renovación ya puesta */
+  function cotiza(b) {
+    var t = b.getAttribute('data-rcot'), id = +b.getAttribute('data-rid'), li = b.closest('li'), fn = null;
+    try { if (window.parent !== window) fn = window.parent[t === 'pf' ? '__cotizaRenPF' : '__cotizaRen']; } catch (e) { fn = null; }
+    if (typeof fn === 'function') { fn(id); return; }
+    var m = li && li.querySelector('.msg-r');
+    if (li && !m) { m = document.createElement('div'); m.className = 'msg-r'; li.appendChild(m); }
+    if (m) { m.className = 'msg-r mal'; m.textContent = 'Abre Clientes (Access) desde el menú del portal para cotizar aquí mismo.'; }
+  }
+  function abreAut(b) {
+    var si = b.getAttribute('data-raut') === '1', id = +b.getAttribute('data-rid'), li = b.closest('li'); if (!li) return;
+    var viejo = li.querySelector('.conf'); if (viejo) viejo.remove();
+    var f = document.createElement('div'); f.className = 'conf';
+    f.innerHTML = '<p><b>' + (si ? 'Autorizar sin cobro' : 'Se cobra') + ':</b> ' + (si
+        ? 'la renovación va sin cobro y al equipo le llega el aviso para cargar los archivos nuevos.'
+        : 'a quien lo pidió le llega el aviso de que se cotice con «Cotizar».') + '</p>'
+      + '<input type="text" maxlength="300" aria-label="Nota (opcional)" placeholder="Nota (opcional)">'
+      + '<div class="acc"><button type="button" class="btn acento" data-rautok="' + (si ? 1 : 0) + '" data-rid="' + id + '">Confirmar</button><button type="button" class="btn" data-rno>Cancelar</button></div><div class="msg" aria-live="polite"></div>';
+    li.appendChild(f);
+    try { f.querySelector('input').focus(); } catch (e) { /* sin foco */ }
+  }
+  async function confirmaAut(b) {
+    var si = b.getAttribute('data-rautok') === '1', id = +b.getAttribute('data-rid'), f = b.closest('.conf'), inp = f.querySelector('input'), msg = f.querySelector('.msg');
+    b.disabled = true; msg.className = 'msg'; msg.textContent = 'Guardando…';
+    try {
+      var r = await P.sb.rpc('ren_gratis_resuelve', { p_id: id, p_autoriza: si, p_nota: inp ? inp.value.trim() : '' });
       if (r.error) throw r.error;
       await cargaRen();
     } catch (e) {
@@ -854,9 +904,11 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('x-cli').onclick = function () { excelClientes(this); };
   $('x-fir').onclick = function () { excelFirmas(this); };
   document.addEventListener('click', function (ev) {
-    var rb = ev.target.closest('[data-racc],[data-rok],[data-rno]');
+    var rb = ev.target.closest('[data-racc],[data-rok],[data-rno],[data-rcot],[data-raut],[data-rautok]');
     if (rb) {
-      if (rb.hasAttribute('data-racc')) abreAcc(rb); else if (rb.hasAttribute('data-rok')) confirmaAcc(rb); else { var cf = rb.closest('.conf'); if (cf) cf.remove(); }
+      if (rb.hasAttribute('data-racc')) abreAcc(rb); else if (rb.hasAttribute('data-rok')) confirmaAcc(rb);
+      else if (rb.hasAttribute('data-rcot')) cotiza(rb); else if (rb.hasAttribute('data-raut')) abreAut(rb);
+      else if (rb.hasAttribute('data-rautok')) confirmaAut(rb); else { var cf = rb.closest('.conf'); if (cf) cf.remove(); }
       return;
     }
     var cb = ev.target.closest('[data-cver],[data-ccopia],[data-carch],[data-ccambia],[data-cguarda],[data-csube],[data-csubeok],[data-cquita],[data-cquitaok]');
@@ -885,6 +937,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   })();
   carga();
   cargaRen();
+  // al regresar del cotizador la lista se pone al día sola (cada minuto, si está a la vista y nadie está escribiendo)
+  setInterval(function () { if (!$('p-ren').hidden && !document.querySelector('#ren-lista .conf')) cargaRen(); }, 60000);
 })();
 </script>
 </body></html>

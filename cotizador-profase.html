@@ -1,0 +1,641 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Cotizador PROFASE</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · Administración › Cotizador PROFASE (Daniel, 30-oct-2026, noche): cotizaciones con la marca PROFASE
+   (solo PROFASE, sin otro logo) para los clientes que atiende la dirección. Submenú con las opciones que hay en la base
+   (hoy Renovación de e.firma y Renovación de sellos; se agregan más con un SQL de Claude) y «Cotizaciones».
+   Al final: «Exportar PDF» (con la marca PROFASE) y «Mandar por correo» (desde el buzón de cumplimiento, con «Responder
+   a» la dirección; lo hace la función «cotizaciones» de Supabase).
+   Todo pasa por las funciones de la base (portal/sql/80_cotizar_renovaciones.sql): ellas deciden quién lo ve (solo la
+   dirección; su papá en solo consulta), asignan el folio y calculan los totales. Esta página no lee ni escribe tablas.
+   Los nombres de las compañías y los correos llegan de la base: el código público no los escribe. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --paper:#FFFFFF; --paper-ink:#132036; --paper-muted:#5A6577; --paper-line:#DCE2EB;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.band .chip{background:rgba(255,255,255,.14);color:var(--navy-ink)}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 13px;font-weight:600;font-size:13.5px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.chico{padding:5px 10px;font-size:12.5px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.sub button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* el submenú: las opciones del cotizador y «Cotizaciones» (se desliza en el celular) */
+.sub{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:14px 0 2px;margin:0}
+.sub::-webkit-scrollbar{display:none}
+.sub button{flex:none;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);border-radius:999px;padding:8px 14px;font-weight:600;font-size:13.5px;cursor:pointer}
+.sub button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+:root[data-theme="dark"] .sub button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .sub button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:14px 0 0;font-size:13.5px;overflow-wrap:anywhere}
+.nota.info{background:var(--navy-soft)}
+.nota.ok{background:var(--ok-soft)}
+.cargando{padding:28px 0;color:var(--muted)}
+.dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:14px;align-items:start}
+@media (max-width:980px){.dos{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.card h2{font-size:17px;margin-bottom:10px}
+.card h3{font-size:14.5px;margin:14px 0 8px}
+.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600;min-width:0}
+.f input,.f textarea,.f select{font-size:14px;font-weight:400;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.f textarea{resize:vertical}
+.fila{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.fila.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:560px){.fila,.fila.tres{grid-template-columns:minmax(0,1fr)}}
+.busca{position:relative;margin-bottom:10px}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;margin-top:4px;max-height:260px;overflow:auto;box-shadow:0 10px 30px rgba(10,18,32,.18)}
+.sug button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line)}
+.sug button:hover,.sug button.on{background:var(--navy-soft)}
+.sug small{display:block;color:var(--muted)}
+.ops{display:flex;flex-direction:column;gap:10px}
+.op{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.op.si{border-color:var(--accent);background:var(--surface)}
+.op label.ck{display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
+.op label.ck input{width:18px;height:18px;accent-color:var(--accent)}
+.op .det{display:grid;grid-template-columns:minmax(0,1fr) 90px 130px;gap:8px;margin-top:8px}
+@media (max-width:560px){.op .det{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.op .det .f:first-child{grid-column:1/-1}}
+.tot{display:grid;grid-template-columns:auto auto;justify-content:end;gap:4px 18px;margin-top:12px;font-size:14px}
+.tot b{font-size:16px}
+.acc{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.msg{font-size:13px;color:var(--muted);margin-top:8px;overflow-wrap:anywhere}
+.msg.mal{color:var(--red)}.msg.ok{color:var(--ok)}
+/* la hoja (vista previa): siempre papel blanco, como sale el PDF */
+.hoja{background:var(--paper);color:var(--paper-ink);border:1px solid var(--line);border-radius:6px;padding:22px;box-shadow:0 6px 24px rgba(10,18,32,.10);min-width:0;overflow:hidden}
+.hoja .cab{display:flex;align-items:center;gap:10px;border-bottom:2px solid #1F3864;padding-bottom:8px}
+.hoja .cab img{width:26px;height:auto}
+.hoja .cab .wm{font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:.14em;color:#1F3864;font-size:15px}
+.hoja .cab .sb{font-family:Arial,Helvetica,sans-serif;font-style:italic;color:#888;font-size:10.5px}
+.hoja .tit{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:14px 0 8px;flex-wrap:wrap}
+.hoja .tit h2{color:#1F3864;font-size:18px}
+.hoja .tit .fo{color:#F07A1E;font-weight:700}
+.hoja .dat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;font-size:12.5px;color:var(--paper-muted)}
+.hoja .dat b{color:var(--paper-ink);font-weight:600}
+.hoja table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+.hoja th{background:#1F3864;color:#fff;text-align:left;padding:6px 7px;font-weight:600}
+.hoja td{border-bottom:1px solid var(--paper-line);padding:6px 7px;vertical-align:top}
+.hoja td small{display:block;color:var(--paper-muted)}
+.hoja .r{text-align:right;white-space:nowrap}
+.hoja .tt{margin-left:auto;width:min(260px,100%);margin-top:10px;font-size:13px}
+.hoja .tt div{display:flex;justify-content:space-between;padding:3px 0}
+.hoja .tt .g{border-top:2px solid #1F3864;font-weight:700;color:#1F3864;margin-top:3px;padding-top:5px}
+.hoja ul{margin:12px 0 0;padding-left:18px;font-size:11.5px;color:var(--paper-muted)}
+.hoja .fir{margin-top:16px;font-size:12px;color:var(--paper-muted)}
+.hoja .fir b{color:var(--paper-ink)}
+@media (max-width:560px){.hoja{padding:14px}.hoja .dat{grid-template-columns:minmax(0,1fr)}}
+/* Cotizaciones */
+.lista{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.lista li{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:start}
+.lista .fo{font-weight:700;color:var(--navy)}
+:root[data-theme="dark"] .lista .fo{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lista .fo{color:var(--accent-ink)}}
+.lista .d{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.lista .lado{display:flex;flex-direction:column;align-items:flex-end;gap:6px;text-align:right}
+.lista .bot{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:640px){.lista li{grid-template-columns:minmax(0,1fr)}.lista .lado{align-items:flex-start;text-align:left}}
+.vacio{padding:24px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line-strong);border-radius:12px;margin-top:14px}
+/* ventana de correo */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:14px}
+.dlg{background:var(--surface);border-radius:14px;max-width:560px;width:100%;max-height:calc(100vh - 28px);overflow:auto;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.dlg h2{font-size:18px;margin-bottom:6px}
+.dlg .f{margin-top:10px}
+.pie{color:var(--muted);font-size:12.5px;margin:18px 0 40px}
+@media (max-width:700px){.f input,.f textarea,.f select{font-size:16px}.band h1{font-size:22px}}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">Administración</div>
+    <h1>Cotizador PROFASE</h1>
+    <p>Cotizaciones con la marca PROFASE. Escoge qué cotizar, el cliente y el precio; al emitirla queda fija con su folio y ya la puedes exportar en PDF o mandar por correo.</p>
+  </div>
+  <div><span class="chip" id="consulta" hidden>Solo consulta</span></div>
+</div></div>
+
+<div class="wrap">
+  <div class="sub" role="tablist" aria-label="Qué cotizar" id="sub"></div>
+  <div class="nota" id="error" hidden></div>
+  <div class="cargando" id="cargando">Cargando el cotizador…</div>
+
+  <section id="p-nueva" hidden>
+    <div class="nota info" id="ren-nota" hidden></div>
+    <div class="dos">
+      <div class="card">
+        <h2 id="ed-tit">Nueva cotización</h2>
+        <div class="busca">
+          <label class="f" for="f-cli">Cliente (busca por nombre o RFC, o escribe uno nuevo)
+            <input id="f-cli" autocomplete="off" maxlength="300" placeholder="Razón social"></label>
+          <div class="sug" id="sug" role="listbox" hidden></div>
+        </div>
+        <div class="fila">
+          <label class="f">RFC<input id="f-rfc" maxlength="13" autocomplete="off" placeholder="Opcional"></label>
+          <label class="f">Atención<input id="f-ate" maxlength="200" placeholder="Nombre de quien la recibe"></label>
+        </div>
+        <label class="f" style="margin-bottom:10px">Correos del cliente (separados por coma)<input id="f-cor" maxlength="600" inputmode="email" placeholder="correo@cliente.com"></label>
+        <h3>Qué se cotiza</h3>
+        <div class="ops" id="ops"></div>
+        <div class="fila tres" style="margin-top:12px">
+          <label class="f">Fecha<input type="date" id="f-fec"></label>
+          <label class="f">Vigencia (días)<input type="number" id="f-vig" min="1" max="365" step="1"></label>
+          <label class="f">Válida hasta<input id="f-has" disabled></label>
+        </div>
+        <label class="f">Notas para el cliente (opcional)<textarea id="f-not" rows="3" maxlength="2000"></textarea></label>
+        <div class="tot num" id="tot"></div>
+        <div class="acc" id="acc"></div>
+        <div class="msg" id="ed-msg" aria-live="polite"></div>
+      </div>
+      <div><div class="hoja" id="hoja" aria-label="Vista previa de la cotización"></div></div>
+    </div>
+  </section>
+
+  <section id="p-lista" hidden>
+    <ul class="lista" id="lista"></ul>
+    <div class="vacio" id="lista-vacia" hidden>Todavía no hay cotizaciones.</div>
+  </section>
+  <p class="pie" id="pie"></p>
+</div>
+
+<div class="velo" id="velo" hidden><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="m-tit">
+  <h2 id="m-tit">Mandar por correo</h2>
+  <div class="msg" id="m-de"></div>
+  <label class="f">Para (separados por coma)<input id="m-para" inputmode="email" maxlength="600"></label>
+  <label class="f">Con copia (opcional)<input id="m-cc" inputmode="email" maxlength="600"></label>
+  <label class="f">Asunto<input id="m-asu" maxlength="200"></label>
+  <label class="f">Mensaje<textarea id="m-men" rows="6" maxlength="4000"></textarea></label>
+  <div class="acc"><button type="button" class="btn acento" id="m-ok">Mandar</button><button type="button" class="btn" id="m-no">Cancelar</button></div>
+  <div class="msg" id="m-msg" aria-live="polite"></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, MK = window.PROFASE_MARCA, $ = function (id) { return document.getElementById(id); };
+  var ZONA = 'America/Monterrey', MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var EST = { borrador: ['Borrador', ''], emitida: ['Emitida', 'az'], aceptada: ['Aceptada', 'ok'], rechazada: ['Rechazada', 'mal'], vencida: ['Vencida', 'ojo'] };
+  var D = null, CLI = [], VISTA = '', ED = null, EDITA = false, REN = null, guardando = false;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); }
+  function dinero(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function cent(n) { return Math.round((Number(n) || 0) * 100); }
+  function hoy() { return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+  function mas(iso, n) { var d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + (Number(n) || 0)); return d.toISOString().slice(0, 10); }
+  function fecha(iso) { if (!iso) return ''; var p = String(iso).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaL(iso) { if (!iso) return ''; var p = String(iso).slice(0, 10).split('-'); return (+p[2]) + ' de ' + MESES_L[+p[1] - 1] + ' de ' + p[0]; }
+  function cuando(ts) { try { return new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ts)).replace(/\./g, ''); } catch (e) { return ''; } }
+  function ref(q) { return (q.prefijo || (D && D.ajustes.prefijo) || '') + ' - ' + (q.folio == null ? '____' : q.folio); }
+  function efectivo(q) { return q.estatus === 'emitida' && mas(q.fecha, q.vigencia) < hoy() ? 'vencida' : q.estatus; }
+  function correos(t) { return String(t || '').split(/[,;\s]+/).map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean); }
+  function err(e, def) { var m = String((e && (e.message || e.error)) || ''); return m && !/fetch|network/i.test(m) ? m : def; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+
+  /* ---------- carga ---------- */
+  async function carga() {
+    var p = await P.listo; if (!p) return;
+    var st = await rpc('cpf_estado');
+    if (!st || !st.ve) { $('cargando').hidden = true; $('error').hidden = false; $('error').textContent = 'Este cotizador solo lo usa la dirección.'; return; }
+    EDITA = !!st.edita && !P.consulta;
+    $('consulta').hidden = EDITA;
+    D = await rpc('cpf_datos');
+    try { CLI = await rpc('cpf_clientes') || []; } catch (e) { CLI = []; }
+    $('cargando').hidden = true;
+    pintaSub();
+    var rq = PEND || +(new URLSearchParams(location.search).get('ren') || 0); PEND = 0;
+    $('pie').textContent = 'Sale del buzón ' + D.ajustes.remitente + '; si el cliente contesta, la respuesta llega a ' + D.ajustes.responder_a + '. Precios más IVA (' + Math.round(D.ajustes.iva * 100) + ' %).';
+    if (rq && EDITA) { await preparaRen(rq); return; }
+    ir(D.opciones.length ? 'op:' + D.opciones[0].clave : 'lista');
+  }
+  async function recarga() { D = await rpc('cpf_datos'); pintaSub(); }
+
+  /* ---------- submenú ---------- */
+  function pintaSub() {
+    var n = (D.cotizaciones || []).length;
+    $('sub').innerHTML = D.opciones.map(function (o) { return '<button type="button" role="tab" data-ir="op:' + esc(o.clave) + '">' + esc(o.nombre) + '</button>'; }).join('')
+      + '<button type="button" role="tab" data-ir="lista">Cotizaciones' + (n ? ' (' + n + ')' : '') + '</button>';
+    marcaSub();
+  }
+  function marcaSub() {
+    [].forEach.call($('sub').querySelectorAll('button'), function (b) {
+      var si = b.getAttribute('data-ir') === VISTA || (VISTA === 'editar' && ED && ED.folio == null && ED.op && b.getAttribute('data-ir') === 'op:' + ED.op);
+      b.setAttribute('aria-selected', si ? 'true' : 'false');
+    });
+  }
+  function ir(v) {
+    if (v.indexOf('op:') === 0) { nueva(v.slice(3)); return; }
+    VISTA = 'lista'; $('p-nueva').hidden = true; $('p-lista').hidden = false; pintaLista(); marcaSub();
+  }
+
+  /* ---------- editor ---------- */
+  function op(clave) { return D.opciones.find(function (o) { return o.clave === clave; }); }
+  function nueva(clave, ren) {
+    if (!EDITA) { ir('lista'); return; }
+    var o = op(clave) || D.opciones[0];
+    REN = ren || null;
+    ED = { folio: null, version: null, estatus: 'borrador', op: o ? o.clave : '', empresa_id: null, cliente: '', rfc: '', atencion: '', correos: [],
+           fecha: hoy(), vigencia: D.ajustes.vigencia, nota: '', ren_id: ren ? ren.id : null, sel: {} };
+    D.opciones.forEach(function (x) { ED.sel[x.clave] = { si: !!o && x.clave === o.clave, cantidad: 1, precio: x.precio == null ? '' : Number(x.precio), descripcion: x.descripcion || '' }; });
+    VISTA = 'editar'; $('p-lista').hidden = true; $('p-nueva').hidden = false; pintaEditor(); marcaSub();
+  }
+  function abre(folio) {
+    var q = (D.cotizaciones || []).find(function (x) { return x.folio === folio; }); if (!q) return;
+    REN = null;
+    ED = { folio: q.folio, version: q.version, estatus: q.estatus, op: '', empresa_id: q.empresa_id, cliente: q.cliente, rfc: q.rfc, atencion: q.atencion,
+           correos: q.correos || [], fecha: String(q.fecha).slice(0, 10), vigencia: q.vigencia, nota: q.nota || '', ren_id: q.ren_id, sel: {}, q: q };
+    D.opciones.forEach(function (x) { ED.sel[x.clave] = { si: false, cantidad: 1, precio: x.precio == null ? '' : Number(x.precio), descripcion: x.descripcion || '' }; });
+    (q.items || []).forEach(function (it) {
+      var k = it.clave && ED.sel[it.clave] ? it.clave : '_' + it.nombre;
+      ED.sel[k] = { si: true, cantidad: it.cantidad, precio: Number(it.precio), descripcion: it.descripcion || '', nombre: it.nombre };
+    });
+    VISTA = 'editar'; $('p-lista').hidden = true; $('p-nueva').hidden = false; pintaEditor(); marcaSub();
+    window.scrollTo(0, 0);
+  }
+  function fija() { return !EDITA || (ED && ED.estatus !== 'borrador'); }
+  function partidas() {
+    var out = [];
+    Object.keys(ED.sel).forEach(function (k) {
+      var s = ED.sel[k]; if (!s.si) return;
+      var o = op(k);
+      out.push({ clave: o ? o.clave : '', nombre: o ? o.nombre : (s.nombre || k.replace(/^_/, '')), descripcion: s.descripcion || '', cantidad: Number(s.cantidad) || 0, precio: Number(s.precio) || 0 });
+    });
+    return out;
+  }
+  function totales(its, iva) {
+    var sub = its.reduce(function (a, i) { return a + (Number(i.cantidad) || 0) * cent(i.precio); }, 0), iv = Math.round(sub * iva);
+    return { sub: sub / 100, iva: iv / 100, total: (sub + iv) / 100 };
+  }
+  function pintaEditor() {
+    var f = fija(), q = ED.q;
+    $('ed-tit').textContent = ED.folio == null ? 'Nueva cotización' : 'Cotización ' + ref(q || ED);
+    $('f-cli').value = ED.cliente; $('f-rfc').value = ED.rfc; $('f-ate').value = ED.atencion; $('f-cor').value = (ED.correos || []).join(', ');
+    $('f-fec').value = ED.fecha; $('f-vig').value = ED.vigencia; $('f-not').value = ED.nota;
+    ['f-cli', 'f-rfc', 'f-ate', 'f-cor', 'f-fec', 'f-vig', 'f-not'].forEach(function (id) { $(id).disabled = f; });
+    var ks = Object.keys(ED.sel);
+    $('ops').innerHTML = ks.map(function (k) {
+      var s = ED.sel[k], o = op(k), nom = o ? o.nombre : (s.nombre || k);
+      if (f && !s.si) return '';
+      return '<div class="op' + (s.si ? ' si' : '') + '" data-op="' + esc(k) + '"><label class="ck"><input type="checkbox" data-k="si"' + (s.si ? ' checked' : '') + (f ? ' disabled' : '') + '> ' + esc(nom) + '</label>'
+        + (s.si ? '<div class="det"><label class="f">Descripción<input data-k="descripcion" maxlength="600" value="' + esc(s.descripcion) + '"' + (f ? ' disabled' : '') + '></label>'
+          + '<label class="f">Cantidad<input type="number" min="1" step="1" data-k="cantidad" value="' + esc(s.cantidad) + '"' + (f ? ' disabled' : '') + '></label>'
+          + '<label class="f">Precio sin IVA<input type="number" min="0" step="0.01" data-k="precio" inputmode="decimal" value="' + esc(s.precio) + '" placeholder="0.00"' + (f ? ' disabled' : '') + '></label></div>' : '')
+        + '</div>';
+    }).join('');
+    pintaRen(); pintaAcciones(); pintaHoja();
+  }
+  function pintaRen() {
+    var n = $('ren-nota');
+    if (REN) { n.hidden = false; n.innerHTML = '<b>Renovación:</b> ' + esc(REN.razon) + '. ' + esc(REN.vence || '') + ' Al emitir la cotización, la renovación se marca sola «Cotizado»; si el cliente la rechaza, márcala «Rechazada» y se cierra sola.'; }
+    else if (ED && ED.q && ED.q.renovacion) { n.hidden = false; n.textContent = 'Ligada a la renovación de e.firma o sellos de este cliente (Clientes (Access) › Renovaciones).'; }
+    else n.hidden = true;
+  }
+  function pintaAcciones() {
+    var h = '', q = ED.q;
+    if (!fija()) {
+      h = '<button type="button" class="btn" data-a="guardar">Guardar borrador</button><button type="button" class="btn acento" data-a="emitir">Emitir</button>';
+    } else if (q) {
+      h = '<button type="button" class="btn" data-a="pdf" data-descarga="pdf">Exportar PDF</button>'
+        + (EDITA ? '<button type="button" class="btn acento" data-a="correo">Mandar por correo</button>'
+          + '<label class="f" style="flex-direction:row;align-items:center;gap:6px">Estatus <select id="f-est">'
+          + ['emitida', 'aceptada', 'rechazada'].map(function (e) { return '<option value="' + e + '"' + (q.estatus === e ? ' selected' : '') + '>' + EST[e][0] + '</option>'; }).join('')
+          + '</select></label>' : '');
+    }
+    if (q && q.estatus === 'borrador') h += '<button type="button" class="btn" data-a="pdf" data-descarga="pdf">Vista en PDF</button>';
+    $('acc').innerHTML = h;
+    var envs = q && q.envios ? q.envios.filter(function (e) { return e.estado !== 'error'; }) : [];
+    $('ed-msg').className = 'msg';
+    $('ed-msg').textContent = envs.length ? 'Mandada por correo el ' + cuando(envs[0].cuando) + ' a ' + (envs[0].para || []).join(', ') + (envs[0].modo === 'prueba' ? ' (prueba)' : '') : '';
+  }
+  function pintaHoja() {
+    var its = partidas(), A = D.ajustes, iva = ED.q ? Number(ED.q.iva) : Number(A.iva), t = totales(its, iva);
+    var q = ED.q, cond = (q ? q.condiciones : A.condiciones) || [], firma = (q ? q.firma : A.firma) || {};
+    $('tot').innerHTML = '<span>Subtotal</span><span>' + dinero(t.sub) + '</span><span>IVA</span><span>' + dinero(t.iva) + '</span><span><b>Total</b></span><span><b>' + dinero(t.total) + '</b></span>';
+    $('f-has').value = fecha(mas(ED.fecha, ED.vigencia));
+    $('hoja').innerHTML = '<div class="cab"><img src="img/logo.png" alt=""><div><div class="wm">PROFASE</div><div class="sb">Asesoría Contable, Legal y Fiscal</div></div></div>'
+      + '<div class="tit"><h2>Cotización</h2><span class="fo">' + esc(ref(q || ED)) + '</span></div>'
+      + '<div class="dat"><div>Cliente: <b>' + esc(ED.cliente || '—') + '</b></div><div>Fecha: <b>' + esc(fechaL(ED.fecha)) + '</b></div>'
+      + '<div>RFC: <b>' + esc(ED.rfc || '—') + '</b></div><div>Válida hasta: <b>' + esc(fechaL(mas(ED.fecha, ED.vigencia))) + '</b></div>'
+      + (ED.atencion ? '<div>Atención: <b>' + esc(ED.atencion) + '</b></div>' : '') + '</div>'
+      + '<table><thead><tr><th>Concepto</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>'
+      + (its.length ? its.map(function (i) { return '<tr><td>' + esc(i.nombre) + (i.descripcion ? '<small>' + esc(i.descripcion) + '</small>' : '') + '</td><td class="r num">' + esc(i.cantidad) + '</td><td class="r num">' + dinero(i.precio) + '</td><td class="r num">' + dinero(i.cantidad * i.precio) + '</td></tr>'; }).join('')
+        : '<tr><td colspan="4" style="color:#5A6577">Escoge qué cotizar</td></tr>')
+      + '</tbody></table>'
+      + '<div class="tt num"><div><span>Subtotal</span><span>' + dinero(t.sub) + '</span></div><div><span>IVA</span><span>' + dinero(t.iva) + '</span></div><div class="g"><span>Total</span><span>' + dinero(t.total) + '</span></div></div>'
+      + (cond.length || ED.nota ? '<ul>' + cond.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + (ED.nota ? ED.nota.split('\n').filter(Boolean).map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') : '') + '</ul>' : '')
+      + '<div class="fir">Atentamente,<br><b>' + esc(firma.nombre || 'PROFASE') + '</b>' + (firma.puesto ? '<br>' + esc(firma.puesto) : '') + '<br>' + esc([firma.telefono, firma.correo].filter(Boolean).join(' · ')) + '</div>';
+  }
+  function leeForm() {
+    if (fija()) return;
+    ED.cliente = $('f-cli').value; ED.rfc = $('f-rfc').value.toUpperCase().replace(/\s/g, ''); ED.atencion = $('f-ate').value;
+    ED.correos = correos($('f-cor').value); ED.fecha = $('f-fec').value || hoy(); ED.vigencia = +$('f-vig').value || D.ajustes.vigencia; ED.nota = $('f-not').value;
+  }
+  async function guarda(emitir) {
+    if (guardando || fija()) return;
+    leeForm();
+    var m = $('ed-msg'), its = partidas();
+    if (!ED.cliente.trim()) { m.className = 'msg mal'; m.textContent = 'Escribe el cliente.'; return; }
+    if (!its.length) { m.className = 'msg mal'; m.textContent = 'Escoge qué cotizar.'; return; }
+    var sin = its.filter(function (i) { return !(i.precio > 0); });
+    if (sin.length) { m.className = 'msg mal'; m.textContent = 'Ponle precio a «' + sin[0].nombre + '».'; return; }
+    guardando = true; m.className = 'msg'; m.textContent = emitir ? 'Emitiendo…' : 'Guardando…';
+    try {
+      var r = await rpc('cpf_guardar', { datos: { folio: ED.folio, version: ED.version, empresa_id: ED.empresa_id, cliente: ED.cliente, rfc: ED.rfc, atencion: ED.atencion,
+        correos: ED.correos, fecha: ED.fecha, vigencia: ED.vigencia, nota: ED.nota, ren_id: ED.ren_id, items: its }, emitir: !!emitir });
+      await recarga();
+      var ren = REN; abre(r.folio); REN = ren && emitir ? null : ren;
+      m = $('ed-msg'); m.className = 'msg ok';
+      m.textContent = emitir ? 'Emitida: ' + ref(ED.q) + '. Ya la puedes exportar en PDF o mandar por correo.' + (ED.ren_id ? ' La renovación quedó «Cotizado».' : '')
+                             : 'Guardada en borrador (' + ref(ED.q) + ').';
+      pintaRen();
+    } catch (e) { m.className = 'msg mal'; m.textContent = 'No se guardó: ' + err(e, 'revisa tu conexión y vuelve a intentar.'); }
+    finally { guardando = false; }
+  }
+  async function cambiaEstatus(e) {
+    var q = ED.q; if (!q || !EDITA || q.estatus === e) return;
+    var m = $('ed-msg');
+    try {
+      await rpc('cpf_estatus', { p_folio: q.folio, p_estatus: e });
+      await recarga(); abre(q.folio);
+      $('ed-msg').className = 'msg ok';
+      $('ed-msg').textContent = EST[e][0] + '.' + (q.ren_id && e === 'rechazada' ? ' La renovación se cerró sola (pasó a «Cerrados»).' : '');
+    } catch (x) { m.className = 'msg mal'; m.textContent = 'No se cambió: ' + err(x, 'vuelve a intentar.'); pintaAcciones(); }
+  }
+
+  /* ---------- clientes (sugerencias) ---------- */
+  function sugiere() {
+    var t = norm($('f-cli').value).trim(), s = $('sug');
+    if (fija() || t.length < 2) { s.hidden = true; return; }
+    var hits = CLI.filter(function (c) { return norm(c.razon).indexOf(t) >= 0 || norm(c.rfc).indexOf(t) >= 0; }).slice(0, 8);
+    if (!hits.length) { s.hidden = true; return; }
+    s.innerHTML = hits.map(function (c) { return '<button type="button" role="option" data-cli="' + (+c.id) + '">' + esc(c.razon) + '<small>' + esc(c.rfc) + (c.contacto ? ' · ' + esc(c.contacto) : '') + '</small></button>'; }).join('');
+    s.hidden = false;
+  }
+  function escogeCli(id) {
+    var c = CLI.find(function (x) { return x.id === id; }); if (!c) return;
+    ED.empresa_id = c.id; ED.cliente = c.razon; ED.rfc = c.rfc || ''; ED.atencion = c.contacto || ED.atencion; ED.correos = c.correos && c.correos.length ? c.correos.slice() : ED.correos;
+    $('sug').hidden = true; pintaEditor();
+  }
+
+  /* ---------- desde Renovaciones ---------- */
+  async function preparaRen(id) {
+    try {
+      var R = await rpc('ren_cotiza_datos', { p_id: id, p_tipo: 'pf' });
+      if (!R.puede) throw new Error('Esta renovación ya no está por cotizar (ya se cotizó o cambió).');
+      var claves = D.opciones.filter(function (o) { return (o.ren === 'fiel' && R.fiel) || (o.ren === 'sellos' && R.sellos); }).map(function (o) { return o.clave; });
+      nueva(claves[0] || (D.opciones[0] && D.opciones[0].clave), R);
+      claves.forEach(function (k) { ED.sel[k].si = true; });
+      ED.empresa_id = R.empresa_id; ED.cliente = R.razon; ED.rfc = R.rfc || ''; ED.atencion = R.contacto || ''; ED.correos = R.correos || [];
+      pintaEditor();
+    } catch (e) {
+      ir(D.opciones.length ? 'op:' + D.opciones[0].clave : 'lista');
+      $('error').hidden = false; $('error').textContent = err(e, 'No se pudo abrir la renovación.');
+    }
+  }
+  var PEND = 0;   // si la vista lo pide antes de que termine de cargar
+  window.__cpfNuevaRen = function (id) { $('error').hidden = true; if (D) { if (EDITA) preparaRen(+id); } else PEND = +id; };
+
+  /* ---------- Cotizaciones ---------- */
+  function pintaLista() {
+    var L = D.cotizaciones || [];
+    $('lista-vacia').hidden = L.length > 0;
+    $('lista').innerHTML = L.map(function (q) {
+      var e = efectivo(q), envs = (q.envios || []).filter(function (x) { return x.estado !== 'error'; });
+      return '<li><div><div class="fo">' + esc(ref(q)) + ' · ' + esc(q.cliente) + '</div>'
+        + '<div class="d">' + esc((q.items || []).map(function (i) { return i.nombre; }).join(', ')) + ' · ' + esc(fecha(q.fecha)) + (q.rfc ? ' · ' + esc(q.rfc) : '') + '</div>'
+        + (envs.length ? '<div class="d">Mandada el ' + esc(cuando(envs[0].cuando)) + ' a ' + esc((envs[0].para || []).join(', ')) + (envs[0].modo === 'prueba' ? ' (prueba)' : '') + '</div>' : '')
+        + (q.renovacion ? '<div class="d">Renovación: ' + esc(q.renovacion.etapa === 'cerrado' ? 'cerrada' : q.renovacion.etapa) + '</div>' : '')
+        + '</div><div class="lado"><span class="chip ' + EST[e][1] + '">' + EST[e][0] + '</span><b class="num">' + dinero(q.total) + '</b></div>'
+        + '<div class="bot"><button type="button" class="btn chico" data-abre="' + q.folio + '">Abrir</button>'
+        + '<button type="button" class="btn chico" data-pdf="' + q.folio + '" data-descarga="pdf">PDF</button>'
+        + (EDITA && (q.estatus === 'emitida' || q.estatus === 'aceptada') ? '<button type="button" class="btn chico acento" data-mail="' + q.folio + '">Mandar por correo</button>' : '') + '</div></li>';
+    }).join('');
+  }
+
+  /* ---------- PDF con la marca PROFASE (js/marca.js) ---------- */
+  async function pdfDe(q) {
+    var jsPDF = await MK.pdfJS();
+    var doc = new jsPDF({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 36;
+    var y = MK.marcaPDF(doc), firma = q.firma || {};
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(31, 56, 100); doc.text('Cotización', M, y + 4);
+    doc.setFontSize(11); doc.setTextColor(240, 122, 30); doc.text(ref(q), W - M, y + 4, { align: 'right' });
+    y += 22;
+    var dat = [['Cliente', q.cliente], ['Fecha', fechaL(q.fecha)], ['RFC', q.rfc || '-'], ['Válida hasta', fechaL(mas(q.fecha, q.vigencia))]];
+    if (q.atencion) dat.push(['Atención', q.atencion], ['', '']);
+    doc.setFontSize(9.5);
+    for (var i = 0; i < dat.length; i += 2) {
+      [dat[i], dat[i + 1]].forEach(function (d, j) {
+        if (!d || !d[0]) return;
+        var x = j ? W / 2 + 10 : M, w = (W - 2 * M) / 2 - 14;
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 101, 119); doc.text(d[0] + ':', x, y);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(19, 32, 54); doc.text(doc.splitTextToSize(String(d[1] || ''), w - 62)[0] || '', x + 62, y);
+      });
+      y += 14;
+    }
+    var its = q.items || [];
+    doc.autoTable(Object.assign(MK.tablaPDF(), {
+      startY: y + 6,
+      head: [['Concepto', 'Cant.', 'Precio unitario', 'Importe']],
+      body: its.map(function (it) { return [it.nombre + (it.descripcion ? '\n' + it.descripcion : ''), String(it.cantidad), dinero(it.precio), dinero(it.cantidad * it.precio)]; }),
+      styles: Object.assign({}, MK.tablaPDF().styles, { fontSize: 9, cellPadding: 5 }),
+      columnStyles: { 1: { halign: 'right', cellWidth: 44 }, 2: { halign: 'right', cellWidth: 92 }, 3: { halign: 'right', cellWidth: 92 } }
+    }));
+    y = doc.lastAutoTable.finalY + 12;
+    if (y > H - 200) { doc.addPage(); y = 70; }
+    var tx = W - M - 200;
+    [['Subtotal', q.subtotal], ['IVA', q.iva_monto], ['Total', q.total]].forEach(function (t, k) {
+      doc.setFont('helvetica', k === 2 ? 'bold' : 'normal'); doc.setFontSize(k === 2 ? 11.5 : 10); doc.setTextColor(k === 2 ? 31 : 19, k === 2 ? 56 : 32, k === 2 ? 100 : 54);
+      if (k === 2) { doc.setDrawColor(31, 56, 100); doc.setLineWidth(1.2); doc.line(tx, y - 9, W - M, y - 9); }
+      doc.text(t[0], tx, y); doc.text(dinero(t[1]), W - M, y, { align: 'right' }); y += 16;
+    });
+    y += 6;
+    var cond = (q.condiciones || []).concat(String(q.nota || '').split('\n').filter(function (s) { return s.trim(); }));
+    if (cond.length) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(31, 56, 100); doc.text('Condiciones', M, y); y += 13;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.8); doc.setTextColor(64, 64, 64);
+      cond.forEach(function (c) {
+        var ls = doc.splitTextToSize('- ' + c, W - 2 * M);
+        if (y + ls.length * 11 > H - 90) { doc.addPage(); y = 70; }
+        doc.text(ls, M, y); y += ls.length * 11 + 2;
+      });
+    }
+    var pago = q.pago || {};
+    if (pago.banco || pago.clabe) {
+      y += 6; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(31, 56, 100); doc.text('Datos para pago', M, y); y += 13;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.8); doc.setTextColor(64, 64, 64);
+      [['Beneficiario', pago.beneficiario], ['Banco', pago.banco], ['Cuenta', pago.cuenta], ['CLABE', pago.clabe]].forEach(function (r) { if (r[1]) { doc.text(r[0] + ': ' + r[1], M, y); y += 11; } });
+    }
+    if (y > H - 110) { doc.addPage(); y = 70; }
+    y = Math.max(y + 24, H - 130);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 101, 119); doc.text('Atentamente,', M, y); y += 14;
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(19, 32, 54); doc.text(String(firma.nombre || 'PROFASE'), M, y); y += 12;
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 101, 119);
+    if (firma.puesto) { doc.text(String(firma.puesto), M, y); y += 12; }
+    var cont = [firma.telefono, firma.correo].filter(Boolean).join('  ·  ');
+    if (cont) doc.text(cont, M, y);
+    var n = doc.getNumberOfPages();
+    for (var pg = 1; pg <= n; pg++) {
+      doc.setPage(pg); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(136, 136, 136);
+      doc.text((MK.sinMarca() ? '' : 'PROFASE · ' + MK.subtitulo + ' · ') + 'Página ' + pg + ' de ' + n, W / 2, H - 18, { align: 'center' });
+    }
+    return doc;
+  }
+  function nombrePDF(q) { return ('Cotizacion ' + ref(q).replace(/\s+/g, '') + ' - ' + q.cliente).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) + '.pdf'; }
+  async function bajar(blob, nombre) {
+    var dl = null;
+    try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) { dl = null; }
+    if (dl) { await dl.save({ filename: nombre, data: blob }); return; }
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre;
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  function cotDe(folio) { return (D.cotizaciones || []).find(function (x) { return x.folio === folio; }); }
+  function borradorComoCot() {   // vista en PDF de un borrador (sin folio fijo): lo que hay en pantalla
+    leeForm();
+    var its = partidas(), t = totales(its, Number(D.ajustes.iva));
+    return Object.assign({}, ED.q || {}, { prefijo: (ED.q && ED.q.prefijo) || D.ajustes.prefijo, folio: ED.folio, cliente: ED.cliente, rfc: ED.rfc, atencion: ED.atencion, fecha: ED.fecha,
+      vigencia: ED.vigencia, items: its, subtotal: t.sub, iva_monto: t.iva, total: t.total, nota: ED.nota, condiciones: D.ajustes.condiciones, pago: D.ajustes.pago, firma: D.ajustes.firma });
+  }
+  async function exporta(q, b) {
+    if (!q) return;
+    if (b) b.disabled = true;
+    try { var doc = await pdfDe(q); await bajar(doc.output('blob'), nombrePDF(q)); }
+    catch (e) { $('ed-msg').className = 'msg mal'; $('ed-msg').textContent = 'No se pudo armar el PDF. Vuelve a intentar.'; }
+    finally { if (b) b.disabled = false; }
+  }
+
+  /* ---------- Mandar por correo (función «cotizaciones» de Supabase) ---------- */
+  var MAIL = null;
+  function abreCorreo(q) {
+    if (!q || !EDITA) return;
+    MAIL = q;
+    $('m-tit').textContent = 'Mandar ' + ref(q) + ' por correo';
+    $('m-de').textContent = 'Sale de ' + D.ajustes.remitente + ' con el PDF adjunto. Si el cliente contesta, le llega a ' + D.ajustes.responder_a + '.'
+      + (D.ajustes.correo_modo === 'prueba' ? ' (En prueba: solo llega al correo de prueba.)' : '');
+    $('m-para').value = (q.correos || []).join(', '); $('m-cc').value = '';
+    $('m-asu').value = 'Cotización ' + ref(q) + ' · ' + q.cliente;
+    $('m-men').value = 'Buen día' + (q.atencion ? ', ' + q.atencion : '') + ':\n\nTe compartimos la cotización ' + ref(q) + ' de ' + (q.items || []).map(function (i) { return i.nombre.toLowerCase(); }).join(' y ')
+      + ' para ' + q.cliente + '.\n\nQuedamos atentos a tus comentarios.';
+    $('m-msg').textContent = ''; $('m-msg').className = 'msg'; $('m-ok').disabled = false;
+    $('velo').hidden = false;
+    try { $('m-para').focus(); } catch (e) { /* sin foco */ }
+  }
+  function cierraCorreo() { $('velo').hidden = true; MAIL = null; }
+  async function mandaCorreo() {
+    var q = MAIL, m = $('m-msg'); if (!q) return;
+    var para = correos($('m-para').value), cc = correos($('m-cc').value);
+    if (!para.length) { m.className = 'msg mal'; m.textContent = 'Escribe al menos un correo.'; return; }
+    $('m-ok').disabled = true; m.className = 'msg'; m.textContent = 'Armando el PDF y mandando…';
+    try {
+      var doc = await pdfDe(q), dataUrl = doc.output('datauristring'), b64 = String(dataUrl).split(',')[1] || '';
+      var r = await P.sb.functions.invoke('cotizaciones', { body: { folio: q.folio, para: para, cc: cc, asunto: $('m-asu').value, mensaje: $('m-men').value, pdf: b64 } });
+      var d = r.data;
+      if (r.error || !d || !d.ok) {
+        var t = d && d.error;
+        if (!t && r.error && r.error.context && r.error.context.json) { try { t = (await r.error.context.json()).error; } catch (x) { t = ''; } }
+        throw new Error(t || 'No se pudo mandar');
+      }
+      m.className = 'msg ok'; m.textContent = (d.modo === 'prueba' ? 'Prueba mandada a ' : 'Mandada a ') + (d.para || []).join(', ') + '.';
+      await recarga(); if (VISTA === 'editar' && ED && ED.folio === q.folio) abre(q.folio); else pintaLista();
+      setTimeout(cierraCorreo, 1400);
+    } catch (e) { m.className = 'msg mal'; m.textContent = 'No se mandó: ' + err(e, 'revisa tu conexión y vuelve a intentar.'); $('m-ok').disabled = false; }
+  }
+
+  /* ---------- eventos ---------- */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-ir],[data-a],[data-abre],[data-pdf],[data-mail],[data-cli]');
+    if (!t) { if (!ev.target.closest('.busca')) $('sug').hidden = true; if (ev.target === $('velo')) cierraCorreo(); return; }
+    if (t.hasAttribute('data-ir')) { $('error').hidden = true; ir(t.getAttribute('data-ir')); return; }
+    if (t.hasAttribute('data-cli')) { escogeCli(+t.getAttribute('data-cli')); return; }
+    if (t.hasAttribute('data-abre')) { abre(+t.getAttribute('data-abre')); return; }
+    if (t.hasAttribute('data-pdf')) { exporta(cotDe(+t.getAttribute('data-pdf')), t); return; }
+    if (t.hasAttribute('data-mail')) { abreCorreo(cotDe(+t.getAttribute('data-mail'))); return; }
+    var a = t.getAttribute('data-a');
+    if (a === 'guardar') guarda(false); else if (a === 'emitir') guarda(true);
+    else if (a === 'pdf') exporta(ED.q && ED.q.estatus !== 'borrador' ? ED.q : borradorComoCot(), t);
+    else if (a === 'correo') abreCorreo(ED.q);
+  });
+  $('ops').addEventListener('input', function (ev) {
+    var b = ev.target.closest('[data-op]'), k = ev.target.getAttribute('data-k'); if (!b || !k || fija()) return;
+    var s = ED.sel[b.getAttribute('data-op')];
+    if (k === 'si') { if (s.si !== ev.target.checked) { s.si = ev.target.checked; leeForm(); pintaEditor(); } return; }
+    s[k] = k === 'descripcion' ? ev.target.value : ev.target.value === '' ? '' : Number(ev.target.value);
+    pintaHoja();
+  });
+  $('ops').addEventListener('change', function (ev) {   // la casilla, por si el navegador no avisa con «input»
+    var b = ev.target.closest('[data-op]'); if (!b || ev.target.getAttribute('data-k') !== 'si' || fija()) return;
+    var s = ED.sel[b.getAttribute('data-op')]; if (s.si === ev.target.checked) return;
+    s.si = ev.target.checked; leeForm(); pintaEditor();
+  });
+  ['f-cli', 'f-rfc', 'f-ate', 'f-cor', 'f-fec', 'f-vig', 'f-not'].forEach(function (id) {
+    $(id).addEventListener('input', function () { if (id === 'f-cli') { ED.empresa_id = null; sugiere(); } leeForm(); pintaHoja(); });
+  });
+  document.addEventListener('change', function (ev) { if (ev.target.id === 'f-est') cambiaEstatus(ev.target.value); });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { if (!$('velo').hidden) cierraCorreo(); $('sug').hidden = true; } });
+  $('m-ok').onclick = mandaCorreo; $('m-no').onclick = cierraCorreo;
+
+  carga().catch(function (e) {
+    $('cargando').hidden = true; $('error').hidden = false;
+    $('error').textContent = 'No se pudo abrir el cotizador: ' + err(e, 'revisa tu conexión y recarga.');
+  });
+})();
+</script>
+</body></html>
