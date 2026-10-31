@@ -225,7 +225,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div>
     <div class="eti">Clientes</div>
     <h1>Clientes</h1>
-    <p id="subt">La Base de Clientes del Access, para consultar. Se actualiza sola cada 3 horas; los cambios se siguen haciendo en el Access.</p>
+    <p id="subt">Cada cliente con sus datos, sus claves del SAT y sus renovaciones.</p>
   </div>
   <div class="acts"><span id="hora" aria-live="polite"></span></div>
 </div></div>
@@ -278,7 +278,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       <ul class="ren" id="ren-lista"></ul>
       <div class="vacio" id="ren-vacio" hidden></div>
     </section>
-    <p class="pie">Se revisa sola cada 3 horas (y al momento cuando la ficha y las facturas ya estén en el portal). La cotización la marca sola al emitirla y, si el cliente la rechaza, la pasa a «Cerrados». Se cierra sola cuando la fecha de vencimiento cambia a la nueva o el cliente queda inactivo.</p>
+    <p class="pie">Se revisa sola cada vez que se guarda la ficha del cliente, una factura o un pago (hasta el lunes 2 de noviembre, cada 3 horas, con la copia del Access). La cotización la marca sola al emitirla y, si el cliente la rechaza, la pasa a «Cerrados». Se cierra sola cuando la fecha de vencimiento cambia a la nueva o el cliente queda inactivo.</p>
   </div>
   <p class="pie" id="pie">&nbsp;</p>
 </div>
@@ -328,7 +328,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (!doc || !doc.b64) {
         $('cargando').hidden = true;
         $('error').hidden = false;
-        $('error').textContent = 'Todavía no hay datos de clientes para tu usuario. Llegan con la próxima actualización (cada 3 horas).';
+        $('error').textContent = 'Todavía no hay datos de clientes para tu usuario. Llegan solos con la próxima actualización.';
         return;
       }
       D = await desb64(doc.b64);
@@ -336,9 +336,13 @@ tr.fila:hover td{background:var(--navy-soft)}
       CTO = {}; (D.contactos || []).forEach(function (c) { CTO[c.id] = c; });
       EMP = D.empresas || []; POR_ID = {}; EMP.forEach(function (e) { POR_ID[e.id] = e; });
       $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
-      $('subt').textContent = ROL === 'contador'
-        ? 'Tus clientes del Access (donde eres responsable, autorizas o eres el contador asignado), para consultar. Se actualiza sola cada 3 horas; los cambios se siguen haciendo en el Access.'
-        : 'La Base de Clientes del Access, para consultar. Se actualiza sola cada 3 horas; los cambios se siguen haciendo en el Access.';
+      // desde el cambio del lunes 2 de noviembre los datos salen de la ficha del portal (Clientes › Base de clientes)
+      var enPortal = (await modoCli()) === 'portal';
+      $('subt').textContent = (ROL === 'contador'
+        ? 'Tus clientes (donde eres responsable, autorizas o eres el contador asignado)'
+        : 'Cada cliente') + (enPortal
+        ? ' con sus datos de la ficha (Clientes › Base de clientes), sus claves del SAT y sus renovaciones. Las claves y los archivos del SAT se capturan aquí; lo demás, en la Base de clientes.'
+        : ' como está en el Access, para consultar. Se actualiza sola cada 3 horas; hasta el lunes 2 de noviembre los cambios se siguen haciendo en el Access.');
       opciones();
       $('cargando').hidden = true; $('kpis').hidden = false;
       kpis(); pintaLista(); pintaFirmas();
@@ -528,8 +532,13 @@ tr.fila:hover td{background:var(--navy-soft)}
   /* Capturar y cambiar (portal/sql/57_credenciales_portal.sql; decisión de Daniel, 29-oct-2026): los mismos que las ven
      (la dirección, los gerentes y el contador del cliente) con cred_guarda(), cred_sube_archivo() y cred_borra_archivo();
      cada cambio queda en Accesos sin el valor. Lo tecleado no se guarda en el navegador: se manda y se borra de la forma.
-     Desde el cambio del martes 3 de noviembre se capturan solo aquí (cli_modo() = 'portal'). Solo consulta: sin botones. */
+     Desde el cambio del lunes 2 de noviembre se capturan solo aquí (cli_modo() = 'portal'). Solo consulta: sin botones. */
   var CRED = null, OCULTA = {}, SEG = 60, MODO_CLI = null;
+  // el modo de la ficha (práctica o portal), una sola vez por página
+  async function modoCli() {
+    if (MODO_CLI == null) { try { var m = await P.sb.rpc('cli_modo'); MODO_CLI = (m && m.data) || 'practica'; } catch (er) { MODO_CLI = 'practica'; } }
+    return MODO_CLI;
+  }
   var CAMPOS = { ciec: [['ciec', 'CIEC']], fiel: [['fiel', 'Contraseña de la e.firma']], sellos: [['sellos', 'Contraseña de los sellos']],
                  quo: [['quo_uc', 'Usuario de Contabilita'], ['quo_pc', 'Contraseña de Contabilita'], ['quo_uf', 'Usuario de Facturita'], ['quo_pf', 'Contraseña de Facturita']] };
   var TIPOS = ['e.firma · Llave privada (.key)', 'e.firma · Certificado (.cer)', 'e.firma · Acuse de renovación', 'Sellos · Llave privada (.key)', 'Sellos · Certificado (.cer)', 'Sellos · Acuse'];
@@ -544,7 +553,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (!CRED || CRED.id !== e.id || !$('cred-in')) return;
     if (r.error) { caja.innerHTML = '<div class="vacio">No se pudo revisar. Cierra la ficha y vuelve a abrirla en un momento.</div>'; return; }
     var R = r.data;
-    if (MODO_CLI == null) { try { var m = await P.sb.rpc('cli_modo'); MODO_CLI = (m && m.data) || 'practica'; } catch (er) { MODO_CLI = 'practica'; } }
+    await modoCli();
     if (!CRED || CRED.id !== e.id || !$('cred-in')) return;
     if (!R) { caja.innerHTML = '<div class="vacio">Las contraseñas y los archivos de este cliente los ven la dirección, los gerentes y su contador (responsable, quien autoriza o contador asignado en el WorkFlow).</div>'; return; }
     var h = QUE.map(function (q) {
@@ -573,7 +582,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       return '<div class="fc"><div class="izq"><div class="t">' + esc(a.tipo) + '</div><div class="d">' + esc(a.nombre) + '</div></div><div class="acc"><button class="btn" type="button" data-carch="' + esc(a.id) + '">Bajar</button>' + quitaBtn(a) + '</div>' + quitaForma(a) + '</div>';
     }).join('');
     h += '<div class="aviso">Lo que ves se esconde solo al minuto. Cada vez que alguien ve, cambia o sube una contraseña o un archivo queda anotado en Accesos (lo revisa la dirección). Los archivos se bajan tal cual vienen del SAT. '
-      + (MODO_CLI === 'portal' ? 'Se capturan y cambian aquí; el Access ya no se usa para esto.' : 'Hasta el cambio del martes 3 de noviembre se siguen capturando en el Access y llegan aquí cada 3 horas; lo que cambies aquí antes de eso se borra con la siguiente copia.') + '</div>';
+      + (MODO_CLI === 'portal' ? 'Se capturan y cambian aquí; el Access ya no se usa para esto.' : 'Hasta el cambio del lunes 2 de noviembre se siguen capturando en el Access y llegan aquí cada 3 horas; lo que cambies aquí antes de eso se borra con la siguiente copia.') + '</div>';
     caja.innerHTML = h;
   }
   function quitaBtn(a) { return puedeCambiar() ? '<button class="btn" type="button" data-cquita="' + esc(a.id) + '">Quitar</button>' : ''; }
