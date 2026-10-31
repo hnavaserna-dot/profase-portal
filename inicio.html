@@ -865,6 +865,43 @@ button{font:inherit;color:inherit}
     } };
   }
 
+  // --- Tesorería del mes (31-oct-2026, pendiente del cambio de las etapas 4 y 5; Daniel: «todo todo lo que puedas»):
+  //     facturación, pagos y recordatorios de la compañía 1 (DECOMSA), solo lo que la base le deja ver a cada quien
+  //     (fac_estado, rec_estado). Nunca la otra compañía: a Eva y a Dora el Inicio no les enseña sus cifras (eso se queda
+  //     en Facturación y Pagos); por eso se pide y se filtra solo la compañía 1, aunque la base mandara más.
+  function tTesoreria() {
+    return { id: 'tes', t: 'Tesorería del mes', s: 'DECOMSA · lo de este mes', liga: ve('facturacion') ? 'facturacion' : ve('pagos') ? 'pagos' : 'recordatorios', arma: async function () {
+      var est = await Promise.all([rpc('fac_estado').catch(function () { return null; }), rpc('rec_estado').catch(function () { return null; })]);
+      var c1 = ((est[0] && est[0].companias) || []).filter(function (c) { return +c.id === 1; })[0] || {};
+      var r1 = ((est[1] && est[1].companias) || []).some(function (c) { return +c.id === 1; });
+      if (!c1.fac_ver && !c1.pag_ver && !r1) return null;
+      var desde = HOY.slice(0, 8) + '01', de1 = function (x) { return +x.compania === 1 && String(x.fecha || '').slice(0, 10) >= desde && String(x.fecha || '').slice(0, 10) <= HOY; };
+      var res = await Promise.all([
+        c1.fac_ver ? rpc('fac_lista', { p_pantalla: 'facturas', p: { compania: 1, desde: desde, hasta: HOY } }).catch(function () { return null; }) : null,
+        c1.pag_ver ? rpc('pag_lista', { p: { compania: 1, desde: desde, hasta: HOY } }).catch(function () { return null; }) : null,
+        r1 ? rpc('rec_lista', { p_compania: 1, p_estatus: null }).catch(function () { return null; }) : null]);
+      var f = [];
+      if (Array.isArray(res[0])) {
+        var fs = res[0].filter(function (x) { return de1(x) && !x.descartado; }), tot = 0, porCobrar = 0;
+        fs.forEach(function (x) { tot += +x.total || 0; porCobrar += Math.max(0, +x.saldo || 0); });
+        f.push({ pt: 'az', a: 'Facturado', b: plural(fs.length, 'factura', 'facturas') + ' con IVA' + (porCobrar > 0 ? ' · por cobrar ' + fm(porCobrar) : ''), n: fm(tot), liga: 'facturacion' });
+      }
+      if (Array.isArray(res[1])) {
+        var ps = res[1].filter(function (x) { return de1(x) && !x.nota_credito; }), cob = 0, sinRep = 0;
+        ps.forEach(function (x) { cob += +x.monto || 0; if (+x.por_aplicar > 0.009) sinRep++; });
+        f.push({ pt: 'bien', a: 'Cobrado', b: plural(ps.length, 'pago recibido', 'pagos recibidos'), n: fm(cob), liga: 'pagos' });
+        if (sinRep) f.push({ pt: 'ojo', a: 'Pagos por repartir', b: 'Falta decir a qué facturas van', n: fi(sinRep), ncls: 'ojo', liga: 'pagos' });
+      }
+      if (Array.isArray(res[2])) {
+        var rv = res[2].filter(function (x) { return +x.estatus === 1; }).length, pe = res[2].filter(function (x) { return +x.estatus === 2; }).length;
+        f.push({ pt: rv || pe ? 'ojo' : 'bien', a: 'Recordatorios de pago', b: rv || pe ? fi(rv) + ' en revisión · ' + fi(pe) + ' para enviar' : 'Ninguno pendiente', n: rv + pe ? fi(rv + pe) : '', liga: 'recordatorios' });
+      }
+      if (!f.length) return null;
+      var pr = est[0] && est[0].modo === 'practica';
+      return lista(f) + (pr ? '<p class="nota">En práctica: son los datos del Access hasta que las facturas pasen al CRM.</p>' : '');
+    } };
+  }
+
   // --- Tus pantallas (atajos a lo que cada quien usa, solo si su menú las tiene) ---
   function tPantallas() {
     var OPC = [['facturacion', 'Facturación', 'Alta y control de facturas'], ['pagos', 'Pagos', 'Pagos de los clientes y su reparto'],
@@ -990,14 +1027,14 @@ button{font:inherit;color:inherit}
   function arma() {
     if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tCumplimiento(), tRevisar(),
       tFirmas('e.firma y sellos', 'De todos los clientes'), tAvisos()];
-    else if (PERFIL === 'cadengo') TARJETAS = [tPorAutorizar(), tCobranza('Cobranza DECOMSA', 'Lo que nos deben'), tPortal(), tEquipo(DEP),
+    else if (PERFIL === 'cadengo') TARJETAS = [tPorAutorizar(), tCobranza('Cobranza DECOMSA', 'Lo que nos deben'), tTesoreria(), tPortal(), tEquipo(DEP),
       tPendientes('Mis actividades', 'Donde eres responsable o autorizas'), tAvisos()];
     else if (PERFIL === 'gerente') TARJETAS = [tEquipo(DEP), tConfirmar(DEP), tPendientes('Mis actividades', 'Donde eres responsable o autorizas'),
       tAdeudoEquipo(DEP), tFirmas('e.firma y sellos de tu equipo', 'Clientes de tu departamento', DEP), tAvisos()];
     else if (PERFIL === 'gabo') TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tPropuestas(),
       tAvance(), tJustificar(), tPantallas(), tAvisos()];
     else TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tAvance(), tJustificar(),
-      tFirmas('e.firma y sellos de tus clientes', 'Vencidas o por vencer'), tPantallas(), tAvisos()];
+      tFirmas('e.firma y sellos de tus clientes', 'Vencidas o por vencer'), tTesoreria(), tPantallas(), tAvisos()];
     // RH: quién está fuera (gerentes y dirección) y lo que espera en RH (quien lo ve); la base decide si salen
     if (PERFIL === 'direccion' || PERFIL === 'cadengo' || PERFIL === 'gerente') TARJETAS.splice(Math.max(0, TARJETAS.length - 1), 0, tAusencias(), tRH());
     // «Equipo conectado»: solo a quien la base se la da (hoy la dirección); junto a la cobranza o antes de los avisos
