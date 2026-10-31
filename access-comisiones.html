@@ -245,6 +245,8 @@ tr.fila:hover td{background:var(--navy-soft)}
         <div><h2 id="h-pag">Pagos a personas</h2><div class="sub" id="pag-sub">&nbsp;</div></div>
         <div class="filtros">
           <select id="f-pper" aria-label="Persona"><option value="">Todas las personas</option></select>
+          <select id="f-pym" aria-label="Periodo (mes que se paga)"><option value="">Todos los periodos</option></select>
+          <select id="f-pfr" aria-label="Fecha de registro (mes en que se pagó)"><option value="">Cualquier fecha de registro</option></select>
           <button class="btn" type="button" id="x-pag" data-excel>Excel</button>
         </div>
       </header>
@@ -313,7 +315,14 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('f-anio').innerHTML = '<option value="">Todos los años</option>' + op(A); if (A.length) $('f-anio').value = A[0];
     $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + MESES_L.map(function (m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
     ['f-per', 'f-pper'].forEach(function (k) { $(k).innerHTML = '<option value="">Todas las personas</option>' + op(N); });
+    // Pagos a personas: «Periodo Consultado» y «Fecha de Registro» del Access (Clientes_Bdd_1, 30-oct-2026); «Todos» quita el filtro
+    var per = {}, reg = {};
+    (D.pagos || []).forEach(function (p) { if (p.ym) per[p.ym] = 1; var r = ymFecha(p.fecha); if (r) reg[r] = 1; });
+    var orden = function (o) { return Object.keys(o).map(Number).sort(function (a, b) { return b - a; }); };
+    $('f-pym').innerHTML = '<option value="">Todos los periodos</option>' + op(orden(per), function (x) { return 'Periodo: ' + mesTxt(x); });
+    $('f-pfr').innerHTML = '<option value="">Cualquier fecha de registro</option>' + op(orden(reg), function (x) { return 'Registro: ' + mesTxt(x); });
   }
+  function ymFecha(s) { var p = String(s || '').slice(0, 7).split('-'); return p.length === 2 && +p[0] && +p[1] ? (+p[0]) * 100 + (+p[1]) : 0; }
 
   function mesesFiltrados() {
     var a = +$('f-anio').value || 0, m = +$('f-mes').value || 0, n = $('f-per').value, pe = $('f-pend').value;
@@ -339,7 +348,22 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('mes-vacia').hidden = L.length > 0;
   }
 
-  function pagosFiltrados() { var n = $('f-pper').value; return (D.pagos || []).filter(function (p) { return !n || p.n === n; }); }
+  function pagosFiltrados() {
+    var n = $('f-pper').value, pe = +$('f-pym').value || 0, re = +$('f-pfr').value || 0;
+    return (D.pagos || []).filter(function (p) {
+      if (n && p.n !== n) return false;
+      if (pe && +p.ym !== pe) return false;
+      if (re && ymFecha(p.fecha) !== re) return false;
+      return true;
+    });
+  }
+  function filtrosPagos() {
+    var t = [];
+    if ($('f-pper').value) t.push($('f-pper').value);
+    if ($('f-pym').value) t.push('periodo ' + mesTxt($('f-pym').value));
+    if ($('f-pfr').value) t.push('registrados en ' + mesTxt($('f-pfr').value));
+    return t.length ? 'Filtros: ' + t.join(' · ') : 'Sin filtros';
+  }
   function pintaPagos() {
     var L = pagosFiltrados(), t = 0; L.forEach(function (p) { t += p.monto; });
     $('pag-sub').textContent = (L.length === 1 ? '1 pago' : L.length + ' pagos') + ' · ' + dinero(t);
@@ -365,7 +389,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     await conBoton(b, async function () {
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Comisiones · Access');
       if (tipo === 'mes') { var L = mesesFiltrados(); hoja(MK, wb, 'Por persona y mes', 'Comisiones por persona y mes (Access)', [datosAl(), L.length + ' renglones con los filtros de la pantalla'], ['Persona', 'Mes', 'Comisión', 'Comisión 5 %', 'Total', 'Pagado', 'Diferencia'], L.map(function (x) { return [x.n, mesTxt(x.ym), x.com, x.com5, x.tot, x.pag, x.dif]; }), [32, 18, 14, 14, 14, 14, 14], [3, 4, 5, 6, 7]); }
-      if (tipo === 'pag') { var N = pagosFiltrados(); hoja(MK, wb, 'Pagos a personas', 'Pagos a personas (Access)', [datosAl(), N.length + ' pagos'], ['Persona', 'Fecha del pago', 'Mes que se paga', 'Monto'], N.map(function (p) { return [p.n, fecha(p.fecha), mesTxt(p.ym), p.monto]; }), [32, 16, 18, 14], [4]); }
+      if (tipo === 'pag') { var N = pagosFiltrados(); hoja(MK, wb, 'Pagos a personas', 'Pagos a personas (Access)', [datosAl(), N.length + ' pagos · ' + filtrosPagos()], ['Persona', 'Fecha del pago', 'Mes que se paga', 'Monto'], N.map(function (p) { return [p.n, fecha(p.fecha), mesTxt(p.ym), p.monto]; }), [32, 16, 18, 14], [4]); }
       await MK.guardar(wb, 'Comisiones PROFASE.xlsx');
     });
   }
@@ -374,7 +398,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('t-mes').onclick = function () { muestra('mes'); };
   $('t-pag').onclick = function () { muestra('pag'); };
   ['f-anio', 'f-mes', 'f-per', 'f-pend'].forEach(function (k) { $(k).addEventListener('change', pintaMeses); });
-  $('f-pper').addEventListener('change', pintaPagos);
+  ['f-pper', 'f-pym', 'f-pfr'].forEach(function (k) { $(k).addEventListener('change', pintaPagos); });
   $('x-mes').onclick = function () { excel(this, 'mes'); };
   $('x-pag').onclick = function () { excel(this, 'pag'); };
   carga();
