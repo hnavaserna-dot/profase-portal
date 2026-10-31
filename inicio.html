@@ -944,6 +944,39 @@ button{font:inherit;color:inherit}
   try { window.parent.addEventListener('profase:presencia', function () { clearTimeout(repT); repT = setTimeout(repintaEq, 250); }); } catch (e) { /* sin página de afuera */ }
   setInterval(function () { if (!document.hidden) repintaEq(); }, 30000);
 
+  /* ---------- RH (30-oct-2026): quién está fuera (gerentes y dirección) y lo que espera en RH ---------- */
+  // La base decide: rh_ausencias_cal() solo contesta a los gerentes y a la dirección (sin notas ni faltas) y rh_estado()
+  // dice si la persona ve RH. Nunca sueldos ni montos de préstamos en el Inicio.
+  var AUS_T = { vacaciones: 'de vacaciones', permiso: 'con permiso', incapacidad: 'de incapacidad' };
+  function fCorta(iso) { var d = new Date(iso + 'T12:00:00Z'); return DIAS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESL[d.getUTCMonth()]; }
+  function tAusencias() {
+    return { id: 'aus', t: 'Quién está fuera', s: 'Vacaciones, permisos e incapacidades · hoy y los próximos 15 días', liga: 'calendario', arma: async function () {
+      var L = await rpc('rh_ausencias_cal', { p_desde: HOY, p_hasta: masDias(HOY, 15) });
+      if (!Array.isArray(L)) return null;
+      var hoy = L.filter(function (a) { return a.desde <= HOY && a.hasta >= HOY; }), prox = L.filter(function (a) { return a.desde > HOY; });
+      if (!hoy.length && !prox.length) return aldia('Nadie está fuera hoy ni sale en los próximos 15 días.');
+      return lista(hoy.map(function (a) {
+        return { pt: 'ojo', a: esc(a.nombre), b: 'Hoy ' + esc(AUS_T[a.tipo] || 'fuera') + ' · regresa el ' + esc(fCorta(a.regresa)) + (a.cubre ? ' · buscar a ' + esc(a.cubre) : ''), liga: 'calendario' };
+      }).concat(prox.slice(0, 6).map(function (a) {
+        return { pt: 'az', a: esc(a.nombre), b: 'Sale ' + esc(AUS_T[a.tipo] || '') + ' el ' + esc(fCorta(a.desde)) + ' · regresa el ' + esc(fCorta(a.regresa)), liga: 'calendario' };
+      })));
+    } };
+  }
+  function tRH() {
+    return { id: 'rh', t: 'RH', s: 'Lo que espera en recursos humanos', arma: async function () {
+      var e = await rpc('rh_estado');
+      if (!e || !e.ve) return null;
+      var f = [], c = e.carga || {};
+      if (e.autoriza) {
+        f.push({ pt: +e.por_autorizar ? 'ojo' : 'bien', a: 'Préstamos por autorizar', b: +e.por_autorizar ? 'Basta que uno de la dirección autorice' : 'Nada esperando', n: +e.por_autorizar ? fi(e.por_autorizar) : '✓', liga: 'rh-prestamos' });
+      }
+      if (c.pendientes > 0 || !c.prestamos) {
+        f.push({ pt: 'na', a: 'Carga inicial de RH', b: c.pendientes > 0 ? 'Faltan días y sueldo de ' + fi(c.pendientes) + (c.pendientes === 1 ? ' persona' : ' personas') : 'Faltan los préstamos que ya existen', n: c.pendientes > 0 ? fi(c.pendientes) : '1', liga: 'rh-vacaciones' });
+      }
+      return f.length ? lista(f) : null;
+    } };
+  }
+
   /* ---------- quién ve qué tarjetas ---------- */
   function arma() {
     if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tCumplimiento(), tRevisar(),
@@ -956,6 +989,8 @@ button{font:inherit;color:inherit}
       tAvance(), tJustificar(), tPantallas(), tAvisos()];
     else TARJETAS = [tPendientes('Mis pendientes', 'Donde eres responsable, autorizas o eres el contador asignado'), tAvance(), tJustificar(),
       tFirmas('e.firma y sellos de tus clientes', 'Vencidas o por vencer'), tPantallas(), tAvisos()];
+    // RH: quién está fuera (gerentes y dirección) y lo que espera en RH (quien lo ve); la base decide si salen
+    if (PERFIL === 'direccion' || PERFIL === 'cadengo' || PERFIL === 'gerente') TARJETAS.splice(Math.max(0, TARJETAS.length - 1), 0, tAusencias(), tRH());
     // «Equipo conectado»: solo a quien la base se la da (hoy la dirección); junto a la cobranza o antes de los avisos
     if (VEO_EQ) TARJETAS.splice(PERFIL === 'direccion' ? 1 : Math.max(0, TARJETAS.length - 1), 0, tConectados());
   }

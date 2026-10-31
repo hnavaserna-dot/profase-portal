@@ -38,6 +38,7 @@
     access: '<ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/>',
     mas: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
     msj: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M8 10.5h8M8 14h5"/>',
+    rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
   // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO
@@ -70,6 +71,14 @@
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
       { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' },   // bitácora de accesos: solo la ve el director
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
+    // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
+    // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
+    { k: 'rh', t: 'RH', d: 'Recursos humanos: vacaciones, permisos, préstamos, colaboradores, eventos, altas y bajas.', subs: [
+      { k: 'rh-vacaciones', v: 'rhv', t: 'Vacaciones y permisos', d: 'Quién está fuera y cuántos días le quedan a cada quien.' },
+      { k: 'rh-prestamos', v: 'rhp', t: 'Préstamos', d: 'Préstamos al personal, su autorización y sus descuentos.' },
+      { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },
+      { k: 'rh-eventos', v: 'rhe', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho.' },
+      { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' }] },
     { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] },
@@ -98,7 +107,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', rh: 'RH', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'

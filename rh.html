@@ -1,0 +1,973 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · RH</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · menú RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna). Tres pantallas en esta misma página
+   (?s=vac, ?s=pre, ?s=mov): Vacaciones y permisos, Préstamos, y Altas y bajas. Las ven solo Alex Luna, HNR (solo
+   consulta; autoriza préstamos) y Daniel; quién ve y quién captura lo decide la base (portal/sql/72_rh.sql) y todo pasa
+   por sus funciones rh_*: los días hábiles, los días que le quedan a cada quien y los descuentos los calcula la base.
+   HNR y Daniel no salen como empleados (ni en sueldo, vacaciones, permisos ni préstamos). Los préstamos no llevan interés.
+   Carga inicial (Daniel, 30-oct-2026): los días que le quedan hoy y el sueldo de cada quien (una sola vez; los días los
+   corrige Daniel) y los préstamos que ya existen, que tienen que cuadrar (prestado − descontado = saldo). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.carga{border-left:4px solid var(--accent);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.carga-l{margin:0;padding:0;list-style:none}
+.carga-l li{padding:9px 14px;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) 90px 130px;gap:6px 12px;align-items:center}
+.carga-l.uno li{grid-template-columns:minmax(0,1fr) 110px}
+.carga-l li.cab{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding-top:7px;padding-bottom:7px}
+.carga-l li.cab span+span{text-align:right}
+.descs{display:grid;gap:6px}
+.descs .r{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center}
+.descs input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13.5px;width:100%;min-width:0}
+.cuadre{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;font-variant-numeric:tabular-nums}
+.cuadre span:nth-child(even){text-align:right;font-weight:600}
+.carga-l li:first-child{border-top:0}
+.carga-l input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13.5px;width:100%;min-width:0;text-align:right}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.carga-l input,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+  .carga-l li{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .carga-l li>span:first-child{grid-column:1/-1}
+  .carga-l li.cab{display:none}
+  .carga-l.uno li{grid-template-columns:minmax(0,1fr) 96px}
+  .carga-l.uno li>span:first-child{grid-column:auto}
+  .descs input{font-size:16px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">RH</div>
+      <h1 id="titulo">Recursos humanos</h1>
+      <p id="subt"></p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo; lo único que puedes hacer aquí es autorizar o rechazar préstamos.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <!-- Vacaciones y permisos -->
+  <section id="s-vac" hidden>
+    <div class="nota carga" id="carga-n" hidden><span id="carga-t"></span><span class="acciones"><button class="btn acento" type="button" id="carga-b">Capturar días y sueldo</button><button class="btn" type="button" id="carga-p" hidden>Cargar préstamo de antes</button><button class="btn" type="button" id="carga-l" hidden>Ya cargué los préstamos</button><button class="btn" type="button" id="carga-0" hidden>No hay préstamos vigentes</button></span></div>
+    <div class="kpis" id="vac-kpis"></div>
+    <div class="tabs" role="tablist" aria-label="Vacaciones y permisos">
+      <button type="button" role="tab" data-vt="aus" aria-selected="true">Ausencias</button>
+      <button type="button" role="tab" data-vt="dias" aria-selected="false">Días y sueldo</button>
+    </div>
+    <section class="card" id="vt-aus" aria-labelledby="h-aus">
+      <header><div><h2 id="h-aus">Ausencias</h2><div class="sub">Vacaciones, permisos, incapacidades y faltas. En el Calendario, los gerentes y la dirección ven quién está fuera (sin las notas ni las faltas).</div></div>
+        <div class="acciones"><button class="btn" type="button" id="x-aus" data-excel>Excel</button></div></header>
+      <div class="filtros">
+        <select id="f-cuando" aria-label="Cuándo"><option value="prox">Hoy y próximas</option><option value="pas">Pasadas</option><option value="todo">Todas</option></select>
+        <select id="f-tipo" aria-label="Tipo"><option value="">Todos los tipos</option></select>
+        <input type="search" id="f-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off">
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Del</th><th>Al</th><th class="monto">Días</th><th>Regresa</th><th>Buscar a</th><th>Nota</th><th></th></tr></thead><tbody id="aus-b"></tbody></table></div>
+    </section>
+    <section class="card" id="vt-dias" hidden aria-labelledby="h-dias">
+      <header><div><h2 id="h-dias">Días de vacaciones y sueldo</h2><div class="sub">Desde la carga inicial, en cada aniversario se le suman solos los días que le tocan por su antigüedad, y las vacaciones capturadas se restan. El sueldo lo ven solo RH y la dirección.</div></div>
+        <div class="acciones"><button class="btn" type="button" id="x-dias" data-excel>Excel</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Área</th><th>Ingreso</th><th>Antigüedad</th><th class="monto">Le quedan</th><th class="monto">Programadas</th><th>Próximo aniversario</th><th>Desde</th><th class="monto">Sueldo mensual</th><th></th></tr></thead><tbody id="dias-b"></tbody></table></div>
+    </section>
+  </section>
+
+  <!-- Préstamos -->
+  <section id="s-pre" hidden>
+    <div class="kpis" id="pre-kpis"></div>
+    <div class="tabs" role="tablist" aria-label="Préstamos">
+      <button type="button" role="tab" data-pt="curso" aria-selected="true">En curso<span class="cta" id="pt-n1">0</span></button>
+      <button type="button" role="tab" data-pt="todo" aria-selected="false">Historial</button>
+      <button type="button" role="tab" data-pt="colab" aria-selected="false">Por colaborador</button>
+    </div>
+    <section class="card" aria-labelledby="h-pre">
+      <header><div><h2 id="h-pre">En curso</h2><div class="sub" id="pre-sub">Por autorizar y autorizados que todavía se están descontando.</div></div>
+        <div class="acciones"><button class="btn" type="button" id="x-pre" data-excel>Excel</button></div></header>
+      <div class="filtros" id="pre-f"><input type="search" id="p-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off"></div>
+      <div class="tabla"><table class="resp"><thead id="pre-h"></thead><tbody id="pre-b"></tbody></table></div>
+    </section>
+  </section>
+
+  <!-- Altas y bajas -->
+  <section id="s-mov" hidden>
+    <section class="card" style="margin-top:16px" aria-labelledby="h-mov">
+      <header><div><h2 id="h-mov">Altas y bajas de personal</h2><div class="sub">Con el alta, la persona entra a los colaboradores y al Calendario (si ya trabajó aquí, regresa con su mismo historial). La baja que registra RH es un aviso: solo Daniel o Fernando Cadengo la confirman, y hasta entonces la persona sigue igual. Ya confirmada, sale del Calendario el día después de su último día y su historial se queda.</div></div>
+        <div class="acciones"><button class="btn" type="button" id="x-mov" data-excel>Excel</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Movimiento</th><th>Colaborador</th><th>Área</th><th>Fecha</th><th>Motivo</th><th>Usuario del portal</th><th>Registró</th><th></th></tr></thead><tbody id="mov-b"></tbody></table></div>
+    </section>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="alertdialog" aria-modal="true" aria-labelledby="pq-t"><div><p id="pq-t"></p>
+  <textarea id="pq-x" hidden aria-label="Comentario"></textarea>
+  <div class="acciones"><button class="btn" type="button" id="pq-no">No</button><button class="btn acento" type="button" id="pq-si">Sí</button></div></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var TIPOS = { vacaciones: 'Vacaciones', permiso_goce: 'Permiso con goce', permiso_sin: 'Permiso sin goce', incapacidad: 'Incapacidad', falta: 'Falta' };
+  var TIPO_CHIP = { vacaciones: 'az', permiso_goce: 'na', permiso_sin: 'na', incapacidad: 'ojo', falta: 'mal' };
+  var PER = { semanal: 'semanal', quincenal: 'quincenal', mensual: 'mensual' };
+  var PER_PL = { semanal: 'semanales', quincenal: 'quincenales', mensual: 'mensuales' };
+  var EST_TXT = { solicitado: 'Por autorizar', autorizado: 'Autorizado', rechazado: 'Rechazado', cancelado: 'Cancelado', liquidado: 'Pagado' };
+  var EST_CHIP = { solicitado: 'ojo', autorizado: 'az', rechazado: 'mal', cancelado: '', liquidado: 'ok' };
+  var AREAS = ['Contabilidad', 'Nóminas', 'Fiscal', 'VAX', 'Administración', 'Dirección'];
+  var MOTIVOS_BAJA = ['Renuncia', 'Despido', 'Término de contrato', 'Otro'];
+  var SEC = (new URLSearchParams(location.search).get('s') || 'vac');
+  if (['vac', 'pre', 'mov'].indexOf(SEC) < 0) SEC = 'vac';
+  var EST = null, CONSULTA = false, CAPTURA = false, AUTORIZA = false, CORRIGE = false;
+  var COL = [], AUS = [], PRE = [], MOV = [], VT = 'aus', PT = 'curso';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaL(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][d.getDay()] + ' ' + (+p[2]) + ' de ' + MESES_L[+p[1] - 1]; }
+  function fechaD(s) { if (!s) return null; var p = String(s).slice(0, 10).split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+  function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function dias(n) { if (n == null) return ''; n = Number(n); return n.toLocaleString('es-MX', { maximumFractionDigits: 1 }) + (Math.abs(n) === 1 ? ' día' : ' días'); }
+  function num(v) { var s = String(v == null ? '' : v).replace(/[$,\s]/g, ''); if (s === '') return null; var n = Number(s); return isFinite(n) ? n : NaN; }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function antig(ing) {
+    if (!ing) return '';
+    var a = fechaD(ing), h = fechaD(hoyISO()), m = (h.getUTCFullYear() - a.getUTCFullYear()) * 12 + (h.getUTCMonth() - a.getUTCMonth()) - (h.getUTCDate() < a.getUTCDate() ? 1 : 0);
+    if (m < 0) return 'Por entrar';
+    var y = Math.floor(m / 12), mm = m % 12;
+    return (y ? y + (y === 1 ? ' año' : ' años') : '') + (y && mm ? ' y ' : '') + (mm || !y ? mm + (mm === 1 ? ' mes' : ' meses') : '');
+  }
+  function colab(id) { return COL.filter(function (c) { return c.id === id; })[0] || null; }
+  function opColabs(sel, vacio) {
+    return '<option value="">' + esc(vacio || 'Escoge…') + '</option>' + COL.map(function (c) {
+      return '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nombre) + (c.area ? ' · ' + esc(c.area) : '') + '</option>';
+    }).join('');
+  }
+
+  /* Confirmación propia (con comentario si hace falta) */
+  function pregunta(texto, comentario, siTxt) {
+    return new Promise(function (res) {
+      $('pq-t').textContent = texto; $('pq-x').hidden = !comentario; $('pq-x').value = ''; $('pq-x').placeholder = comentario || '';
+      $('pq-si').textContent = siTxt || 'Sí'; $('pregunta').hidden = false;
+      try { (comentario ? $('pq-x') : $('pq-no')).focus(); } catch (e) {}
+      function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
+      $('pq-si').onclick = function () { fin(comentario ? { ok: true, texto: $('pq-x').value.trim() } : true); };
+      $('pq-no').onclick = function () { fin(comentario ? { ok: false } : false); };
+      pregunta.cierra = function () { fin(comentario ? { ok: false } : false); };
+    });
+  }
+
+  /* Ventana a la derecha */
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('ficha').querySelector('input,select,textarea,button.acento').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  function msgEn(t, cls) { var m = $('v-msg'); if (!m) { error(t); return; } m.className = 'msg ' + (cls || 'mal'); m.textContent = t; m.hidden = !t; }
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  async function excel(b, nombre, titulo, lineas, head, filas, monedas, anchos) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\\/?*\[\]:]/g, ' '));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      (monedas || []).forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00;-$#,##0.00'; });
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, nombre + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+
+  /* =============================== VACACIONES Y PERMISOS =============================== */
+  function ausFiltradas() {
+    var hoy = hoyISO(), cu = $('f-cuando').value, ti = $('f-tipo').value, q = $('f-q').value.trim().toLowerCase();
+    return AUS.filter(function (a) {
+      if (cu === 'prox' && a.hasta < hoy) return false;
+      if (cu === 'pas' && a.hasta >= hoy) return false;
+      if (ti && a.tipo !== ti) return false;
+      if (q && String(a.nombre).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return cu === 'prox' ? (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0) : (a.desde < b.desde ? 1 : a.desde > b.desde ? -1 : 0); });
+  }
+  function pintaAus() {
+    var L = ausFiltradas(), hoy = hoyISO();
+    $('aus-b').innerHTML = L.length ? L.map(function (a) {
+      var ahora = a.desde <= hoy && a.hasta >= hoy;
+      return '<tr><td data-l="Colaborador" class="rs">' + esc(a.nombre) + (ahora ? ' ' + chip('Hoy fuera', 'na') : '') + '</td>'
+        + '<td data-l="Tipo">' + chip(TIPOS[a.tipo] || a.tipo, TIPO_CHIP[a.tipo]) + '</td>'
+        + '<td data-l="Del">' + esc(fecha(a.desde)) + '</td><td data-l="Al">' + esc(fecha(a.hasta)) + '</td>'
+        + '<td data-l="Días" class="monto">' + esc(Number(a.dias).toLocaleString('es-MX', { maximumFractionDigits: 1 })) + '</td>'
+        + '<td data-l="Regresa">' + (a.tipo === 'falta' ? '' : esc(fecha(a.regresa))) + '</td>'
+        + '<td data-l="Buscar a" class="mut">' + esc(a.cubre || '') + '</td><td data-l="Nota" class="mut w">' + esc(a.nota || '') + '</td>'
+        + '<td data-l="" class="w">' + (CAPTURA ? '<span class="acciones"><button class="btn chico" type="button" data-aus-ed="' + a.id + '">Editar</button><button class="btn chico peligro" type="button" data-aus-bo="' + a.id + '">Quitar</button></span>' : '') + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="9">' + ($('f-cuando').value === 'prox' ? 'Nadie está fuera hoy ni tiene ausencias programadas.' : 'No hay ausencias con ese filtro.') + '</td></tr>';
+  }
+  function pintaDias() {
+    $('dias-b').innerHTML = COL.length ? COL.map(function (c) {
+      var v = c.vac || {}, pend = v.pendiente;
+      return '<tr><td data-l="Colaborador" class="rs">' + esc(c.nombre) + (c.baja ? ' ' + chip((c.baja_confirmada ? 'Baja el ' : 'Baja por confirmar: ') + fecha(c.baja), c.baja_confirmada ? 'mal' : 'ojo') : '') + '</td>'
+        + '<td data-l="Área">' + esc(c.area) + '</td><td data-l="Ingreso">' + (c.ingreso ? esc(fecha(c.ingreso)) : '<span class="mut">Sin fecha de ingreso</span>') + '</td>'
+        + '<td data-l="Antigüedad">' + esc(antig(c.ingreso)) + '</td>'
+        + '<td data-l="Le quedan" class="monto">' + (pend ? chip('Falta la carga inicial', 'ojo') : '<b class="' + (Number(v.disponibles) < 0 ? 'neg' : '') + '">' + esc(dias(v.disponibles)) + '</b>') + '</td>'
+        + '<td data-l="Programadas" class="monto">' + (pend || !Number(v.programados) ? '' : esc(dias(v.programados))) + '</td>'
+        + '<td data-l="Próximo aniversario">' + (v.prox_aniv ? esc(fecha(v.prox_aniv)) + ' <span class="mut">(+' + esc(dias(v.prox_dias)) + ')</span>' : '') + '</td>'
+        + '<td data-l="Desde" class="mut">' + (pend ? '' : esc((v.origen === 'alta' ? 'Ingreso ' : v.origen === 'correccion' ? 'Corrección ' : 'Carga ') + fecha(v.corte))) + '</td>'
+        + '<td data-l="Sueldo mensual" class="monto">' + (c.sueldo != null ? esc(dinero(c.sueldo)) : chip('Falta', 'ojo')) + '</td>'
+        + '<td data-l="" class="w"><span class="acciones">' + (CORRIGE && !pend ? '<button class="btn chico" type="button" data-corrige="' + esc(c.id) + '">Corregir días</button>' : '')
+        + (CAPTURA && c.sueldo != null ? '<button class="btn chico" type="button" data-sueldo="' + esc(c.id) + '">Sueldo</button>' : '') + '</span></td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="10">No hay colaboradores. Se agregan en RH › Colaboradores o con un alta.</td></tr>';
+  }
+  function pintaVacKpis() {
+    var hoy = hoyISO(), fuera = AUS.filter(function (a) { return a.desde <= hoy && a.hasta >= hoy; });
+    var prox = AUS.filter(function (a) { var d = fechaD(a.desde), h = fechaD(hoy); return a.desde > hoy && (d - h) / 864e5 <= 15; });
+    var pend = COL.filter(function (c) { return (c.vac && c.vac.pendiente) || c.sueldo == null; }).length;
+    $('vac-kpis').innerHTML = '<div class="kpi"><div class="l">Fuera hoy</div><div class="v">' + fuera.length + '</div><div class="s">' + esc(fuera.map(function (a) { return a.nombre.split(' ')[0]; }).slice(0, 4).join(', ') || 'Todos están') + '</div></div>'
+      + '<div class="kpi"><div class="l">Próximos 15 días</div><div class="v">' + prox.length + '</div><div class="s">Salen pronto</div></div>'
+      + '<div class="kpi"><div class="l">Colaboradores</div><div class="v">' + COL.length + '</div><div class="s">' + (pend ? pend + ' sin carga inicial' : 'Todos con sus días') + '</div></div>';
+    var c = EST.carga || {}, faltaPre = !c.prestamos, n = c.pendientes || 0;
+    $('carga-n').hidden = !((n > 0 || faltaPre) && CAPTURA);
+    $('carga-b').hidden = !(n > 0);
+    ['carga-p', 'carga-l', 'carga-0'].forEach(function (id) { $(id).hidden = !(n === 0 && faltaPre); });
+    var nPre = PRE_CARGA;
+    if (nPre > 0) $('carga-0').hidden = true; else $('carga-l').hidden = true;
+    $('carga-t').textContent = n > 0
+      ? 'Carga inicial: falta capturar los días de vacaciones que le quedan hoy y el sueldo de ' + n + (n === 1 ? ' colaborador.' : ' colaboradores.') + ' Se captura una sola vez. Después siguen los préstamos que ya existen.'
+      : faltaPre ? 'Carga inicial, último paso: carga los préstamos que ya existen (cuándo se prestó, cuánto, cómo se ha descontado y el saldo de hoy)' + (nPre ? '; llevas ' + nPre + '. Cuando termines, confírmalo.' : ', o confirma que no hay ninguno vigente.') : '';
+  }
+  var PRE_CARGA = 0;
+  async function cargaVac() {
+    var r = await Promise.all([rpc('rh_colaboradores'), rpc('rh_ausencias_lista', { p_desde: null, p_hasta: null }), rpc('rh_estado'), rpc('rh_prestamos_lista')]);
+    COL = r[0] || []; AUS = r[1] || []; EST = r[2] || EST; PRE = r[3] || [];
+    PRE_CARGA = PRE.filter(function (p) { return p.origen === 'carga'; }).length;
+    pintaVacKpis(); pintaAus(); pintaDias();
+  }
+  function formAus(a) {
+    a = a || {};
+    abre(a.id ? 'Cambiar ausencia' : 'Registrar ausencia', 'Vacaciones, permiso, incapacidad o falta',
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="a-col">Colaborador</label><select id="a-col">' + opColabs(a.colab_id) + '</select></div>'
+      + '<div class="campo"><label for="a-tipo">Tipo</label><select id="a-tipo">' + Object.keys(TIPOS).map(function (k) { return '<option value="' + k + '"' + ((a.tipo || 'vacaciones') === k ? ' selected' : '') + '>' + TIPOS[k] + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="a-dias">Días hábiles</label><input id="a-dias" inputmode="decimal" autocomplete="off" value="' + esc(a.dias != null ? a.dias : '') + '" placeholder="Se cuentan solos"></div>'
+      + '<div class="campo"><label for="a-desde">Desde</label><input type="date" id="a-desde" value="' + esc(a.desde || '') + '"></div>'
+      + '<div class="campo"><label for="a-hasta">Hasta (su último día fuera)</label><input type="date" id="a-hasta" value="' + esc(a.hasta || '') + '"></div>'
+      + '<div class="campo ancho"><label for="a-cubre">Mientras, buscar a</label><input id="a-cubre" maxlength="200" autocomplete="off" value="' + esc(a.cubre || '') + '"></div>'
+      + '<div class="campo ancho"><label for="a-nota">Nota (solo la ven RH y la dirección)</label><textarea id="a-nota" maxlength="1000">' + esc(a.nota || '') + '</textarea></div>'
+      + '</div></div></div><div class="msg ojo" id="a-info" hidden></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="a-ok">Guardar</button></div>');
+    var tocado = a.dias != null;
+    $('a-dias').addEventListener('input', function () { tocado = $('a-dias').value.trim() !== ''; });
+    async function cuenta() {
+      var d = $('a-desde').value, h = $('a-hasta').value, c = colab($('a-col').value), t = $('a-tipo').value, info = [];
+      if (d && h && h >= d) {
+        try { var n = await rpc('rh_cuenta_dias', { p_desde: d, p_hasta: h }); if (!tocado) $('a-dias').value = n; info.push(dias(n) + ' hábiles; regresa al día hábil siguiente.'); } catch (e) {}
+      }
+      if (c && t === 'vacaciones' && c.vac) {
+        if (c.vac.pendiente) info.push('A ' + c.nombre + ' todavía le falta la carga inicial de vacaciones.');
+        else {
+          var ya = a.id && a.tipo === 'vacaciones' ? Number(a.dias || 0) : 0, usa = num($('a-dias').value) || 0;
+          info.push('Le quedan ' + dias(Number(c.vac.disponibles) + ya) + '; con estas, ' + dias(Number(c.vac.disponibles) + ya - usa) + '.');
+        }
+      }
+      $('a-info').textContent = info.join(' '); $('a-info').hidden = !info.length;
+    }
+    ['a-desde', 'a-hasta', 'a-col', 'a-tipo', 'a-dias'].forEach(function (id) { $(id).addEventListener('change', cuenta); });
+    $('a-dias').addEventListener('input', cuenta);
+    cuenta();
+    $('a-ok').onclick = async function () {
+      var b = this; b.disabled = true; msgEn('');
+      try {
+        await rpc('rh_ausencia_guarda', { p: { id: a.id || null, colab_id: $('a-col').value, tipo: $('a-tipo').value, desde: $('a-desde').value, hasta: $('a-hasta').value,
+          dias: tocado ? $('a-dias').value.trim() : '', cubre: $('a-cubre').value, nota: $('a-nota').value } });
+        cierra(); avisa('Guardado. Los gerentes y la dirección lo verán en el Calendario.'); await cargaVac();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function formCarga(solo) {
+    var L = solo ? COL.filter(function (c) { return c.id === solo; }) : COL.filter(function (c) { return (c.vac && c.vac.pendiente) || c.sueldo == null; });
+    if (!L.length) { avisa('Ya están los días y el sueldo de todos.'); return; }
+    var corr = !!solo;
+    abre(corr ? 'Corregir días de vacaciones' : 'Carga inicial', corr ? L[0].nombre : 'Los días de vacaciones que le quedan hoy y el sueldo de cada quien',
+      '<div class="msg ojo">' + (corr ? 'Escribe los días que le quedan hoy. Desde hoy se vuelve a llevar la cuenta con este número.'
+        : 'Escribe los días de vacaciones que le quedan <b>hoy</b> a cada quien, según el control que ya llevas, y su <b>sueldo mensual</b>. Los días se capturan <b>una sola vez</b>: ya guardados, si hay que corregir algo, pídeselo a Daniel. Desde ahí el portal suma solo los días de cada aniversario y resta las vacaciones que captures.') + '</div>'
+      + '<div class="sec"><ul class="carga-l' + (corr ? ' uno' : '') + '">' + (corr ? '' : '<li class="cab" aria-hidden="true"><span>Colaborador</span><span>Días</span><span>Sueldo mensual</span></li>') + L.map(function (c) {
+        return '<li><span><span class="rs">' + esc(c.nombre) + '</span><br><span class="mut">' + esc(c.area || '') + (c.ingreso ? ' · ingresó el ' + esc(fecha(c.ingreso)) + ' (' + esc(antig(c.ingreso)) + ')' : ' · sin fecha de ingreso') + '</span></span>'
+          + (corr || !(c.vac && c.vac.pendiente) ? (corr ? '<input data-carga="' + esc(c.id) + '" inputmode="decimal" autocomplete="off" aria-label="Días que le quedan a ' + esc(c.nombre) + '" placeholder="Días" value="' + (c.vac && !c.vac.pendiente ? esc(c.vac.disponibles) : '') + '">' : '<span class="mut" style="text-align:right">' + esc(dias(c.vac.disponibles)) + '</span>')
+             : '<input data-carga="' + esc(c.id) + '" inputmode="decimal" autocomplete="off" aria-label="Días que le quedan a ' + esc(c.nombre) + '" placeholder="Días">')
+          + (corr ? '' : (c.sueldo == null ? '<input data-sueldo-c="' + esc(c.id) + '" inputmode="decimal" autocomplete="off" aria-label="Sueldo mensual de ' + esc(c.nombre) + '" placeholder="Sueldo">' : '<span class="mut" style="text-align:right">' + esc(dinero(c.sueldo)) + '</span>')) + '</li>';
+      }).join('') + '</ul></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="c-ok">' + (corr ? 'Guardar' : 'Guardar los que capturé') + '</button></div>');
+    $('c-ok').onclick = async function () {
+      var b = this, lista = [], malo = '', M = {};
+      L.forEach(function (c) {
+        var iD = $('ficha').querySelector('[data-carga="' + c.id + '"]'), iS = $('ficha').querySelector('[data-sueldo-c="' + c.id + '"]');
+        var vD = iD ? iD.value.trim() : '', vS = iS ? iS.value.trim() : '';
+        if (!vD && !vS) return;
+        if (iD && !vD) { malo = malo || 'faltan los días de ' + c.nombre; return; }
+        if (iS && !vS) { malo = malo || 'falta el sueldo de ' + c.nombre; return; }
+        var it = { colab_id: c.id };
+        if (iD) { var n = num(vD); if (isNaN(n) || n === null || Math.round(n * 10) !== n * 10) { malo = malo || 'los días de ' + c.nombre + ' (solo números, con un decimal como máximo)'; return; } it.dias = String(n); }
+        else it.dias = String(c.vac.disponibles);
+        if (iS) { var m = num(vS); if (isNaN(m) || m === null || m <= 0) { malo = malo || 'el sueldo de ' + c.nombre; return; } it.sueldo = String(Math.round(m * 100) / 100); }
+        if (!iD && c.vac && !c.vac.pendiente) { it.solo_sueldo = true; }
+        lista.push(it);
+      });
+      if (malo) { msgEn('Revisa: ' + malo + '.'); return; }
+      if (!lista.length) { msgEn('Escribe los días y el sueldo de al menos una persona.'); return; }
+      if (!corr && !(await pregunta('¿Guardar los días y el sueldo de ' + lista.length + (lista.length === 1 ? ' persona' : ' personas') + '? Los días ya no los podrás cambiar.'))) return;
+      b.disabled = true;
+      try {
+        var r = null, conDias = lista.filter(function (x) { return !x.solo_sueldo; }), soloS = lista.filter(function (x) { return x.solo_sueldo; });
+        for (var i = 0; i < soloS.length; i++) await rpc('rh_sueldo_guarda', { p: { colab_id: soloS[i].colab_id, sueldo: soloS[i].sueldo } });
+        if (conDias.length) r = await rpc('rh_saldo_inicial', { p: conDias.map(function (x) { return { colab_id: x.colab_id, dias: x.dias, sueldo: x.sueldo || '' }; }) });
+        else r = { pendientes: COL.filter(function (c) { return (c.vac && c.vac.pendiente) || (c.sueldo == null && !soloS.some(function (x) { return x.colab_id === c.id; })); }).length };
+        cierra(); avisa(corr ? 'Corregido.' : 'Guardado. ' + (r && r.pendientes ? 'Faltan ' + r.pendientes + '.' : 'Ya están los días y el sueldo de todos. Sigue cargar los préstamos que ya existen.'));
+        await cargaVac();
+        avisaPadre();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function avisaPadre() {
+    rpc('rh_estado').then(function (e) {
+      EST = e || EST;
+      var c = (e && e.carga) || {};
+      try { window.parent.postMessage({ rh: 'carga', pendientes: (c.pendientes || 0) + (c.prestamos ? 0 : 1) }, location.origin); } catch (er) {}
+    }).catch(function () {});
+  }
+  function formSueldo(id) {
+    var c = colab(id); if (!c) return;
+    abre('Sueldo de ' + c.nombre, 'Hoy: ' + (c.sueldo != null ? dinero(c.sueldo) + ' desde el ' + fecha(c.sueldo_desde) : 'sin sueldo'),
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="s-mon">Sueldo mensual nuevo</label><input id="s-mon" inputmode="decimal" autocomplete="off"></div>'
+      + '<div class="campo"><label for="s-des">Desde</label><input type="date" id="s-des" value="' + esc(hoyISO()) + '"></div>'
+      + '</div></div></div><div class="sec"><h3>Historial</h3><div class="in" id="s-hist"><span class="mut">Cargando…</span></div></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="s-ok">Guardar</button></div>');
+    rpc('rh_sueldos_de', { p_colab: id }).then(function (h) {
+      $('s-hist').innerHTML = (h || []).length ? '<div class="cuadre">' + h.map(function (x) { return '<span>Desde el ' + esc(fecha(x.desde)) + ' <span class="mut">(' + esc(x.capturado_por) + ')</span></span><span>' + esc(dinero(x.sueldo)) + '</span>'; }).join('') + '</div>' : '<span class="mut">Sin historial.</span>';
+    }).catch(function () { $('s-hist').innerHTML = ''; });
+    $('s-ok').onclick = async function () {
+      var b = this, m = num($('s-mon').value); msgEn('');
+      if (!(m > 0)) { msgEn('Escribe el sueldo.'); return; }
+      b.disabled = true;
+      try { await rpc('rh_sueldo_guarda', { p: { colab_id: id, sueldo: String(Math.round(m * 100) / 100), desde: $('s-des').value } }); cierra(); avisa('Sueldo guardado.'); await recarga(); }
+      catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  async function recarga() { if (SEC === 'vac') await cargaVac(); else if (SEC === 'pre') await cargaPre(); else await cargaMov(); }
+  /* Préstamo de antes del portal: cuándo, cuánto, cada descuento ya hecho y el saldo de hoy, que tiene que cuadrar */
+  function formPreAntes() {
+    abre('Cargar préstamo de antes', 'Un préstamo que ya existía antes del portal',
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="q-col">Colaborador</label><select id="q-col">' + opColabs('') + '</select></div>'
+      + '<div class="campo"><label for="q-fec">Cuándo se prestó</label><input type="date" id="q-fec"></div>'
+      + '<div class="campo"><label for="q-mon">Cuánto se prestó</label><input id="q-mon" inputmode="decimal" autocomplete="off"></div>'
+      + '</div></div></div>'
+      + '<div class="sec"><h3>Descuentos que ya se hicieron</h3><div class="in"><div class="descs" id="q-descs"></div>'
+      + '<div class="acciones" style="margin-top:8px"><button class="btn chico" type="button" id="q-mas">Agregar descuento</button><button class="btn chico" type="button" id="q-varios">Agregar varios iguales</button></div></div></div>'
+      + '<div class="sec"><h3>Saldo de hoy</h3><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="q-sal">Saldo que debe hoy (según tu control)</label><input id="q-sal" inputmode="decimal" autocomplete="off"></div>'
+      + '<div class="campo"><span class="mut" style="margin-top:22px" id="q-cuadra"></span></div>'
+      + '</div></div></div>'
+      + '<div class="sec" id="q-resto"><h3>Cómo se descuenta lo que falta</h3><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="q-pag">Pagos que faltan</label><input id="q-pag" inputmode="numeric" autocomplete="off"></div>'
+      + '<div class="campo"><label for="q-per">Cada cuándo</label><select id="q-per">' + ['quincenal', 'semanal', 'mensual'].map(function (k) { return '<option value="' + k + '">' + PER_PL[k][0].toUpperCase() + PER_PL[k].slice(1) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="q-prox">Nómina del próximo descuento</label><input type="date" id="q-prox"></div>'
+      + '<div class="campo ancho"><label for="q-mot">Nota</label><textarea id="q-mot" maxlength="1000"></textarea></div>'
+      + '</div></div></div><div class="msg ojo" id="q-info" hidden></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="q-ok">Guardar préstamo</button></div>');
+    function fila(f, m) {
+      var d = document.createElement('div'); d.className = 'r';
+      d.innerHTML = '<input type="date" aria-label="Fecha del descuento" value="' + esc(f || '') + '"><input inputmode="decimal" autocomplete="off" aria-label="Monto del descuento" placeholder="Monto" value="' + esc(m || '') + '"><button class="btn chico peligro" type="button" aria-label="Quitar descuento">✕</button>';
+      d.querySelector('button').onclick = function () { d.remove(); cuadra(); };
+      d.querySelectorAll('input').forEach(function (i) { i.addEventListener('input', cuadra); });
+      $('q-descs').appendChild(d);
+    }
+    function descs() {
+      var out = [], malo = false;
+      $('q-descs').querySelectorAll('.r').forEach(function (r) {
+        var i = r.querySelectorAll('input'), f = i[0].value, m = num(i[1].value);
+        if (!f && (m === null)) return;
+        if (!f || !(m > 0)) { malo = true; return; }
+        out.push({ fecha: f, monto: String(Math.round(m * 100) / 100) });
+      });
+      return malo ? null : out;
+    }
+    function cuadra() {
+      var mon = num($('q-mon').value), sal = num($('q-sal').value), L = descs(), t = $('q-cuadra');
+      if (!(mon > 0) || L === null) { t.textContent = L === null ? 'Revisa la fecha y el monto de cada descuento.' : ''; return; }
+      var desc = L.reduce(function (a, x) { return a + Number(x.monto); }, 0), deb = Math.round((mon - desc) * 100) / 100;
+      t.innerHTML = 'Prestado ' + esc(dinero(mon)) + ' − descontado ' + esc(dinero(desc)) + ' = <b>' + esc(dinero(deb)) + '</b>'
+        + (sal === null || isNaN(sal) ? '' : (Math.round(sal * 100) / 100 === deb ? ' · <span style="color:var(--ok)">cuadra</span>' : ' · <span class="neg">no cuadra con el saldo</span>'));
+      $('q-resto').hidden = sal === 0;
+    }
+    $('q-mas').onclick = function () { fila('', ''); };
+    $('q-varios').onclick = function () {
+      if ($('q-v')) return;
+      var d = document.createElement('div'); d.id = 'q-v'; d.className = 'campos'; d.style.marginTop = '10px';
+      d.innerHTML = '<div class="campo"><label for="q-vn">Cuántos</label><input id="q-vn" inputmode="numeric" autocomplete="off"></div>'
+        + '<div class="campo"><label for="q-vm">De cuánto cada uno</label><input id="q-vm" inputmode="decimal" autocomplete="off"></div>'
+        + '<div class="campo"><label for="q-vp">Cada cuándo</label><select id="q-vp"><option value="quincenal">Quincenales</option><option value="semanal">Semanales</option><option value="mensual">Mensuales</option></select></div>'
+        + '<div class="campo"><label for="q-vf">Fecha del primero</label><input type="date" id="q-vf"></div>'
+        + '<div class="campo ancho"><span class="acciones"><button class="btn chico acento" type="button" id="q-vok">Agregarlos</button><button class="btn chico" type="button" id="q-vno">Cancelar</button></span></div>';
+      this.parentNode.after(d);
+      $('q-vno').onclick = function () { d.remove(); };
+      $('q-vok').onclick = async function () {
+        var n = parseInt($('q-vn').value, 10), m = num($('q-vm').value), f = $('q-vf').value;
+        if (!(n >= 1 && n <= 120) || !(m > 0) || !f) { msgEn('Escribe cuántos, de cuánto y la fecha del primero.'); return; }
+        try {
+          var plan = await rpc('rh_prestamo_simula', { p_monto: Math.round(m * n * 100) / 100, p_pagos: n, p_periodicidad: $('q-vp').value, p_primer: f });
+          $('q-descs').querySelectorAll('.r').forEach(function (r) { var i = r.querySelectorAll('input'); if (!i[0].value && !i[1].value) r.remove(); });
+          ((plan && plan.pagos) || []).forEach(function (x) { fila(x.fecha, x.monto); }); d.remove(); msgEn(''); cuadra();
+        } catch (e) { msgEn(falla(e)); }
+      };
+    };
+    ['q-mon', 'q-sal'].forEach(function (id) { $(id).addEventListener('input', cuadra); });
+    fila('', '');
+    $('q-ok').onclick = async function () {
+      var b = this, L = descs(); msgEn('');
+      if (L === null) { msgEn('Revisa la fecha y el monto de cada descuento.'); return; }
+      var mon = num($('q-mon').value), sal = num($('q-sal').value);
+      b.disabled = true;
+      try {
+        var r = await rpc('rh_prestamo_carga', { p: { colab_id: $('q-col').value, prestado: $('q-fec').value, monto: mon > 0 ? String(mon) : '', descuentos: L,
+          saldo: sal === null || isNaN(sal) ? '' : String(Math.round(sal * 100) / 100), pagos: $('q-pag').value.trim(), periodicidad: $('q-per').value, proximo: $('q-prox').value, motivo: $('q-mot').value } });
+        cierra(); avisa(r && r.estado === 'liquidado' ? 'Guardado como pagado.' : 'Guardado: queda autorizado y se sigue descontando.'); await recarga(); avisaPadre();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  async function prestamosListos(ninguno) {
+    if (!(await pregunta(ninguno ? '¿Confirmas que no hay ningún préstamo vigente de antes del portal?' : '¿Ya cargaste todos los préstamos vigentes de antes del portal?'))) return;
+    try {
+      var r = await rpc('rh_prestamos_listos', { p_ninguno: !!ninguno });
+      avisa(ninguno ? 'Listo: no hay préstamos vigentes. Terminaste la carga inicial.' : 'Listo: ' + r.prestamos + (r.prestamos === 1 ? ' préstamo' : ' préstamos') + ' con saldo de ' + dinero(r.saldo) + '. Terminaste la carga inicial.');
+      await recarga(); avisaPadre();
+    } catch (e) { error(falla(e)); }
+  }
+  function excelAus(b) {
+    var L = ausFiltradas();
+    excel(b, 'RH ausencias', 'Ausencias', [$('f-cuando').selectedOptions[0].textContent + ($('f-tipo').value ? ' · ' + TIPOS[$('f-tipo').value] : '')],
+      ['Colaborador', 'Tipo', 'Del', 'Al', 'Días hábiles', 'Regresa', 'Buscar a', 'Nota'],
+      L.map(function (a) { return [a.nombre, TIPOS[a.tipo] || a.tipo, fechaD(a.desde), fechaD(a.hasta), Number(a.dias), a.tipo === 'falta' ? '' : fechaD(a.regresa), a.cubre || '', a.nota || '']; }),
+      [], [30, 18, 13, 13, 12, 13, 22, 40]);
+  }
+  function excelDias(b) {
+    excel(b, 'RH dias de vacaciones', 'Días de vacaciones', ['Al ' + fecha(hoyISO())],
+      ['Colaborador', 'Área', 'Ingreso', 'Antigüedad', 'Le quedan', 'Programadas', 'Próximo aniversario', 'Días que se suman', 'Se lleva desde', 'Sueldo mensual'],
+      COL.map(function (c) { var v = c.vac || {};
+        return [c.nombre, c.area, c.ingreso ? fechaD(c.ingreso) : '', antig(c.ingreso), v.pendiente ? 'Falta la carga inicial' : Number(v.disponibles), v.pendiente ? '' : Number(v.programados || 0),
+                v.prox_aniv ? fechaD(v.prox_aniv) : '', v.prox_dias || '', v.pendiente ? '' : fechaD(v.corte), c.sueldo != null ? Number(c.sueldo) : 'Falta']; }),
+      [10], [30, 16, 13, 16, 12, 13, 18, 16, 15, 15]);
+  }
+
+  /* =============================== PRÉSTAMOS =============================== */
+  function debe(p) { return Math.round((Number(p.monto) - Number(p.pagado || 0)) * 100) / 100; }
+  function cada(p) { return p.plan && p.plan.length ? Number(p.plan[0].monto) : Number(p.monto) / p.pagos; }
+  function preFiltrados() {
+    var q = $('p-q').value.trim().toLowerCase();
+    return PRE.filter(function (p) {
+      if (PT === 'curso' && ['solicitado', 'autorizado'].indexOf(p.estado) < 0) return false;
+      return !q || String(p.nombre).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function pintaPre() {
+    var cur = PRE.filter(function (p) { return p.estado === 'solicitado' || p.estado === 'autorizado'; });
+    $('pt-n1').textContent = cur.length;
+    var porAut = PRE.filter(function (p) { return p.estado === 'solicitado'; }), vivos = PRE.filter(function (p) { return p.estado === 'autorizado'; });
+    $('pre-kpis').innerHTML = '<div class="kpi"><div class="l">Por autorizar</div><div class="v">' + porAut.length + '</div><div class="s">' + (porAut.length ? esc(dinero(porAut.reduce(function (s, p) { return s + Number(p.monto); }, 0))) : 'Nada esperando') + '</div></div>'
+      + '<div class="kpi"><div class="l">Por descontar</div><div class="v">' + esc(dinero(vivos.reduce(function (s, p) { return s + debe(p); }, 0))) + '</div><div class="s">' + vivos.length + (vivos.length === 1 ? ' préstamo autorizado' : ' préstamos autorizados') + '</div></div>';
+    $('h-pre').textContent = { curso: 'En curso', todo: 'Historial', colab: 'Por colaborador' }[PT];
+    $('pre-sub').textContent = { curso: 'Por autorizar y autorizados que todavía se están descontando.', todo: 'Todos los préstamos, con su estado.', colab: 'Cuánto se le ha prestado a cada quien y cuánto debe.' }[PT];
+    if (PT === 'colab') {
+      var g = {};
+      PRE.forEach(function (p) { if (p.estado === 'rechazado' || p.estado === 'cancelado') return; var x = g[p.colab_id] = g[p.colab_id] || { nombre: p.nombre, n: 0, prestado: 0, pagado: 0, debe: 0 };
+        x.n++; x.prestado += Number(p.monto); x.pagado += Number(p.pagado || 0); if (p.estado === 'autorizado') x.debe += debe(p); });
+      var L = Object.keys(g).map(function (k) { return g[k]; }).filter(function (x) { var q = $('p-q').value.trim().toLowerCase(); return !q || x.nombre.toLowerCase().indexOf(q) >= 0; })
+        .sort(function (a, b) { return a.nombre.localeCompare(b.nombre); });
+      $('pre-h').innerHTML = '<tr><th>Colaborador</th><th class="monto">Préstamos</th><th class="monto">Prestado</th><th class="monto">Pagado</th><th class="monto">Debe</th></tr>';
+      $('pre-b').innerHTML = L.length ? L.map(function (x) {
+        return '<tr><td data-l="Colaborador" class="rs w">' + esc(x.nombre) + '</td><td data-l="Préstamos" class="monto">' + x.n + '</td><td data-l="Prestado" class="monto">' + esc(dinero(x.prestado)) + '</td>'
+          + '<td data-l="Pagado" class="monto">' + esc(dinero(x.pagado)) + '</td><td data-l="Debe" class="monto"><b>' + esc(dinero(x.debe)) + '</b></td></tr>';
+      }).join('') : '<tr><td class="vacio" colspan="5">Sin préstamos.</td></tr>';
+      return;
+    }
+    var L2 = preFiltrados();
+    $('pre-h').innerHTML = '<tr><th>Colaborador</th><th class="monto">Monto</th><th>Pagos</th><th class="monto">Por pago</th><th class="monto">Pagado</th><th class="monto">Debe</th><th>Estado</th><th>Pedido</th></tr>';
+    $('pre-b').innerHTML = L2.length ? L2.map(function (p) {
+      return '<tr class="click" tabindex="0" data-pre="' + p.id + '"><td data-l="Colaborador" class="rs w">' + esc(p.nombre) + '</td><td data-l="Monto" class="monto">' + esc(dinero(p.monto)) + '</td>'
+        + '<td data-l="Pagos">' + p.pagos + ' ' + esc(p.pagos === 1 ? PER[p.periodicidad] : PER_PL[p.periodicidad]) + '</td><td data-l="Por pago" class="monto">' + esc(dinero(cada(p))) + '</td>'
+        + '<td data-l="Pagado" class="monto">' + esc(dinero(p.pagado)) + '</td><td data-l="Debe" class="monto">' + (p.estado === 'autorizado' ? '<b>' + esc(dinero(debe(p))) + '</b>' : '') + '</td>'
+        + '<td data-l="Estado">' + chip(EST_TXT[p.estado] || p.estado, EST_CHIP[p.estado]) + '</td><td data-l="Pedido" class="mut">' + esc(fecha(String(p.solicitado).slice(0, 10))) + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="8">' + (PT === 'curso' ? 'No hay préstamos en curso.' : 'Sin préstamos.') + '</td></tr>';
+  }
+  async function cargaPre() {
+    var r = await Promise.all([rpc('rh_prestamos_lista'), rpc('rh_colaboradores')]);
+    PRE = r[0] || []; COL = r[1] || []; pintaPre();
+  }
+  function fichaPre(id) {
+    var p = PRE.filter(function (x) { return x.id === id; })[0]; if (!p) return;
+    var aplica = CAPTURA && (p.estado === 'autorizado' || p.estado === 'liquidado');
+    abre('Préstamo de ' + p.nombre, EST_TXT[p.estado] + ' · ' + dinero(p.monto),
+      '<div class="sec"><div class="in"><div class="dl">'
+      + '<span>Monto</span><span><b>' + esc(dinero(p.monto)) + '</b> (sin interés)</span>'
+      + '<span>Pagos</span><span>' + p.pagos + (p.origen === 'carga' ? ' descuentos en total' : ' ' + esc(p.pagos === 1 ? PER[p.periodicidad] : PER_PL[p.periodicidad]) + ' de ' + esc(dinero(cada(p)))) + '</span>'
+      + (p.origen === 'carga' ? '' : '<span>Primer descuento</span><span>' + esc(fechaL(p.primer_pago)) + '</span>')
+      + (p.sueldo != null ? '<span>Sueldo</span><span>' + esc(dinero(p.sueldo)) + '</span>' : '')
+      + (p.motivo ? '<span>Motivo</span><span>' + esc(p.motivo) + '</span>' : '')
+      + (p.origen === 'carga' ? '<span>Se prestó</span><span>' + esc(fechaL(p.prestado)) + ' (préstamo de antes del portal; lo cargó ' + esc(p.solicito) + ')</span>'
+         : '<span>Lo pidió</span><span>' + esc(p.solicito) + ', ' + esc(fecha(String(p.solicitado).slice(0, 10))) + '</span>')
+      + (p.resolvio ? '<span>' + (p.estado === 'rechazado' ? 'Lo rechazó' : 'Lo autorizó') + '</span><span>' + esc(p.resolvio) + ', ' + esc(fecha(String(p.resuelto).slice(0, 10))) + '</span>' : '')
+      + (p.comentario ? '<span>Comentario</span><span>' + esc(p.comentario) + '</span>' : '')
+      + '<span>Pagado</span><span>' + esc(dinero(p.pagado)) + '</span>'
+      + (p.estado === 'autorizado' ? '<span>Debe</span><span><b>' + esc(dinero(debe(p))) + '</b></span>' : '')
+      + '</div></div></div>'
+      + '<div class="sec"><h3>Descuentos</h3><div class="tabla"><table class="resp"><thead><tr><th>#</th><th>Nómina</th><th class="monto">Monto</th><th>Aplicado</th><th>Nota</th></tr></thead><tbody>'
+      + (p.plan || []).map(function (x) {
+        return '<tr><td data-l="#">' + x.n + '</td><td data-l="Nómina">' + esc(fecha(x.fecha)) + '</td><td data-l="Monto" class="monto">' + esc(dinero(x.monto)) + '</td>'
+          + '<td data-l="Aplicado">' + (aplica ? '<input type="checkbox" data-aplica="' + x.n + '"' + (x.aplicado ? ' checked' : '') + ' aria-label="Descuento ' + x.n + ' aplicado">' : (x.aplicado ? chip('Aplicado', 'ok') : '<span class="mut">Pendiente</span>')) + '</td>'
+          + '<td data-l="Nota" class="mut">' + esc(x.nota || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>'
+      + '<div class="msg" id="v-msg" hidden></div><div class="acciones">'
+      + (AUTORIZA && p.estado === 'solicitado' ? '<button class="btn bien" type="button" id="p-aut">Autorizar</button><button class="btn peligro" type="button" id="p-rec">Rechazar</button>' : '')
+      + (CAPTURA && p.estado === 'solicitado' ? '<button class="btn" type="button" id="p-ed">Cambiar</button><button class="btn peligro" type="button" id="p-can">Cancelar solicitud</button>' : '')
+      + (CAPTURA && p.estado === 'autorizado' ? '<button class="btn" type="button" id="p-liq">Pagó todo de una vez</button>' : '')
+      + '<button class="btn" type="button" id="x-plan" data-excel>Excel</button></div>');
+    async function resuelve(aut) {
+      var r = await pregunta(aut ? '¿Autorizar el préstamo de ' + p.nombre + ' por ' + dinero(p.monto) + '?' : '¿Rechazar el préstamo de ' + p.nombre + '?',
+        aut ? 'Comentario (opcional)' : 'Escribe por qué se rechaza', aut ? 'Autorizar' : 'Rechazar');
+      if (!r || !r.ok) return;
+      try { await rpc('rh_prestamo_resuelve', { p_id: p.id, p_autoriza: aut, p_comentario: r.texto || '' }); cierra(); avisa(aut ? 'Autorizado. A Alex le llega el aviso.' : 'Rechazado.'); await cargaPre(); }
+      catch (e) { msgEn(falla(e)); }
+    }
+    if ($('p-aut')) { $('p-aut').onclick = function () { resuelve(true); }; $('p-rec').onclick = function () { resuelve(false); }; }
+    if ($('p-ed')) $('p-ed').onclick = function () { formPre(p); };
+    if ($('p-can')) $('p-can').onclick = async function () {
+      var r = await pregunta('¿Cancelar la solicitud de ' + p.nombre + '?', 'Motivo (opcional)', 'Cancelar solicitud'); if (!r || !r.ok) return;
+      try { await rpc('rh_prestamo_cancela', { p_id: p.id, p_motivo: r.texto || '' }); cierra(); avisa('Se canceló la solicitud.'); await cargaPre(); } catch (e) { msgEn(falla(e)); }
+    };
+    if ($('p-liq')) $('p-liq').onclick = async function () {
+      var r = await pregunta('¿' + p.nombre + ' pagó los ' + dinero(debe(p)) + ' que faltaban de una vez?', 'Nota (opcional)', 'Sí, pagó todo'); if (!r || !r.ok) return;
+      try { await rpc('rh_prestamo_liquida', { p_id: p.id, p_nota: r.texto || '' }); cierra(); avisa('Préstamo pagado.'); await cargaPre(); } catch (e) { msgEn(falla(e)); }
+    };
+    $('ficha').querySelectorAll('[data-aplica]').forEach(function (c) {
+      c.onchange = async function () {
+        c.disabled = true;
+        try { await rpc('rh_prestamo_aplica', { p_id: p.id, p_n: +c.getAttribute('data-aplica'), p_aplicado: c.checked, p_nota: '' }); await cargaPre(); fichaPre(p.id); }
+        catch (e) { c.checked = !c.checked; c.disabled = false; msgEn(falla(e)); }
+      };
+    });
+    $('x-plan').onclick = function () {
+      excel(this, 'RH prestamo ' + p.nombre, 'Préstamo de ' + p.nombre,
+        [EST_TXT[p.estado] + ' · ' + dinero(p.monto) + ' en ' + p.pagos + ' ' + (p.pagos === 1 ? PER[p.periodicidad] : PER_PL[p.periodicidad]) + ' · sin interés', 'Pagado ' + dinero(p.pagado) + (p.estado === 'autorizado' ? ' · debe ' + dinero(debe(p)) : '')],
+        ['#', 'Nómina', 'Monto', 'Aplicado', 'Nota'],
+        (p.plan || []).map(function (x) { return [x.n, fechaD(x.fecha), Number(x.monto), x.aplicado ? 'Sí' : 'Pendiente', x.nota || '']; }), [3], [6, 14, 14, 12, 40]);
+    };
+  }
+  function formPre(p) {
+    p = p || {};
+    abre(p.id ? 'Cambiar solicitud de préstamo' : 'Pedir préstamo', 'Sin interés · lo autoriza la dirección',
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="p-col">Colaborador</label><select id="p-col">' + opColabs(p.colab_id) + '</select></div>'
+      + '<div class="campo"><label for="p-monto">Monto</label><input id="p-monto" inputmode="decimal" autocomplete="off" value="' + esc(p.monto || '') + '"></div>'
+      + '<div class="campo"><label for="p-pagos">Número de pagos</label><input id="p-pagos" inputmode="numeric" autocomplete="off" value="' + esc(p.pagos || '') + '"></div>'
+      + '<div class="campo"><label for="p-per">Cada cuándo</label><select id="p-per">' + ['quincenal', 'semanal', 'mensual'].map(function (k) { return '<option value="' + k + '"' + ((p.periodicidad || 'quincenal') === k ? ' selected' : '') + '>' + PER_PL[k][0].toUpperCase() + PER_PL[k].slice(1) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="p-primer">Nómina del primer descuento</label><input type="date" id="p-primer" value="' + esc(p.primer_pago || '') + '"></div>'
+      + '<div class="campo"><label for="p-sueldo">Sueldo</label><input id="p-sueldo" inputmode="decimal" autocomplete="off" value="' + esc(p.sueldo != null ? p.sueldo : '') + '"></div>'
+      + '<div class="campo ancho"><label for="p-mot">Motivo</label><textarea id="p-mot" maxlength="1000">' + esc(p.motivo || '') + '</textarea></div>'
+      + '</div></div></div><div class="msg ojo" id="p-info" hidden></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="p-ok">' + (p.id ? 'Guardar' : 'Pedir autorización') + '</button></div>');
+    $('p-col').addEventListener('change', function () { var c = colab(this.value); if (c && c.sueldo != null && !$('p-sueldo').value) $('p-sueldo').value = c.sueldo; });
+    var t = 0;
+    async function simula() {
+      var m = num($('p-monto').value), n = parseInt($('p-pagos').value, 10), f = $('p-primer').value;
+      if (!(m > 0) || !(n >= 1 && n <= 120) || !f) { $('p-info').hidden = true; return; }
+      var mia = ++t;
+      try {
+        var r = await rpc('rh_prestamo_simula', { p_monto: m, p_pagos: n, p_periodicidad: $('p-per').value, p_primer: f }); if (mia !== t) return;
+        var L = (r && r.pagos) || []; if (!L.length) { $('p-info').hidden = true; return; }
+        var ult = L[L.length - 1], dif = Number(ult.monto) !== Number(L[0].monto);
+        $('p-info').textContent = L.length + (L.length === 1 ? ' descuento de ' : ' descuentos de ') + dinero(L[0].monto) + (dif ? ' (el último de ' + dinero(ult.monto) + ')' : '')
+          + ', del ' + fecha(L[0].fecha) + ' al ' + fecha(ult.fecha) + '. Total: ' + dinero(m) + '.';
+        $('p-info').hidden = false;
+      } catch (e) { $('p-info').hidden = true; }
+    }
+    ['p-monto', 'p-pagos', 'p-per', 'p-primer'].forEach(function (id) { $(id).addEventListener('change', simula); $(id).addEventListener('input', simula); });
+    simula();
+    $('p-ok').onclick = async function () {
+      var b = this; b.disabled = true; msgEn('');
+      var m = num($('p-monto').value), s = num($('p-sueldo').value);
+      try {
+        await rpc('rh_prestamo_guarda', { p: { id: p.id || null, colab_id: $('p-col').value, monto: m == null || isNaN(m) ? '' : String(m), pagos: $('p-pagos').value.trim(),
+          periodicidad: $('p-per').value, primer_pago: $('p-primer').value, sueldo: s == null || isNaN(s) ? '' : String(s), motivo: $('p-mot').value } });
+        cierra(); avisa(p.id ? 'Guardado. A la dirección le llega el aviso del cambio.' : 'Listo: a HNR y a Daniel les llega para autorizar (basta uno).'); await cargaPre();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function excelPre(b) {
+    var L = PT === 'colab' ? null : preFiltrados();
+    if (!L) {
+      var g = {};
+      PRE.forEach(function (p) { if (p.estado === 'rechazado' || p.estado === 'cancelado') return; var x = g[p.colab_id] = g[p.colab_id] || [p.nombre, 0, 0, 0, 0];
+        x[1]++; x[2] += Number(p.monto); x[3] += Number(p.pagado || 0); if (p.estado === 'autorizado') x[4] += debe(p); });
+      excel(b, 'RH prestamos por colaborador', 'Préstamos por colaborador', ['Sin interés'], ['Colaborador', 'Préstamos', 'Prestado', 'Pagado', 'Debe'],
+        Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, c) { return a[0].localeCompare(c[0]); }), [3, 4, 5], [32, 12, 15, 15, 15]);
+      return;
+    }
+    excel(b, PT === 'curso' ? 'RH prestamos en curso' : 'RH prestamos', PT === 'curso' ? 'Préstamos en curso' : 'Préstamos', ['Sin interés'],
+      ['Colaborador', 'Monto', 'Pagos', 'Cada cuándo', 'Por pago', 'Pagado', 'Debe', 'Estado', 'Pedido', 'Lo pidió', 'Resolvió', 'Comentario'],
+      L.map(function (p) { return [p.nombre, Number(p.monto), p.pagos, PER[p.periodicidad], cada(p), Number(p.pagado || 0), p.estado === 'autorizado' ? debe(p) : 0, EST_TXT[p.estado] || p.estado,
+        fechaD(String(p.solicitado).slice(0, 10)), p.solicito, p.resolvio || '', p.comentario || '']; }),
+      [2, 5, 6, 7], [30, 14, 8, 12, 14, 14, 14, 14, 13, 20, 20, 36]);
+  }
+
+  /* =============================== ALTAS Y BAJAS =============================== */
+  function pintaMov() {
+    var hoy = hoyISO();
+    $('mov-b').innerHTML = MOV.length ? MOV.map(function (m) {
+      var est = m.tipo === 'alta' ? '' : !m.confirmada ? chip('Por confirmar (Daniel o Cadengo)', 'ojo')
+        : (m.aplicado ? chip('Confirmada · ya salió', '') : chip('Confirmada · sale después del ' + fecha(m.fecha), 'az'));
+      return '<tr><td data-l="Movimiento">' + chip(m.tipo === 'alta' ? 'Alta' : 'Baja', m.tipo === 'alta' ? 'ok' : 'mal') + '</td><td data-l="Colaborador" class="rs">' + esc(m.nombre) + '</td>'
+        + '<td data-l="Área">' + esc(m.area) + '</td><td data-l="Fecha">' + esc((m.tipo === 'alta' ? 'Ingreso: ' : 'Último día: ') + fecha(m.fecha)) + '</td>'
+        + '<td data-l="Motivo" class="mut">' + esc(m.motivo || '') + (m.nota ? (m.motivo ? ' · ' : '') + esc(m.nota) : '') + '</td>'
+        + '<td data-l="Usuario del portal">' + (m.usuario_portal ? (m.tipo === 'alta' ? 'Darle usuario' : 'Quitárselo') : '<span class="mut">No</span>') + '</td>'
+        + '<td data-l="Registró" class="mut">' + esc(m.creado_por) + ', ' + esc(fecha(String(m.creado).slice(0, 10))) + '</td>'
+        + '<td data-l="" class="w"><span class="acciones">' + est
+        + (CORRIGE && m.tipo === 'baja' && !m.confirmada ? '<button class="btn chico acento" type="button" data-confirma="' + m.id + '">Confirmar baja</button>' : '')
+        + (CAPTURA && m.tipo === 'baja' && (!m.confirmada || CORRIGE) ? '<button class="btn chico" type="button" data-deshace="' + m.id + '">Deshacer</button>' : '')
+        + (m.confirmo ? '<span class="mut">Confirmó ' + esc(m.confirmo) + '</span>' : '') + '</span></td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="8">Todavía no hay altas ni bajas registradas aquí.</td></tr>';
+  }
+  async function cargaMov() {
+    var r = await Promise.all([rpc('rh_movimientos_lista'), rpc('rh_colaboradores')]);
+    MOV = r[0] || []; COL = r[1] || []; pintaMov();
+  }
+  function formAlta() {
+    var dOpts = '<option value="">Día</option>';
+    for (var di = 1; di <= 31; di++) dOpts += '<option>' + di + '</option>';
+    var mOpts = '<option value="">Mes</option>' + MESES_L.map(function (m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
+    abre('Registrar alta', 'Entra a los colaboradores y al Calendario',
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="n-nom">Nombre completo</label><input id="n-nom" maxlength="120" autocomplete="off"></div>'
+      + '<div class="campo"><label for="n-area">Área</label><select id="n-area"><option value="">Escoge…</option>' + AREAS.map(function (a) { return '<option>' + a + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="n-ing">Fecha de ingreso</label><input type="date" id="n-ing"></div>'
+      + '<div class="campo"><label for="n-sue">Sueldo mensual</label><input id="n-sue" inputmode="decimal" autocomplete="off"></div>'
+      + '<div class="campo"><span></span></div>'
+      + '<div class="campo"><label for="n-dia">Cumpleaños (día)</label><select id="n-dia">' + dOpts + '</select></div>'
+      + '<div class="campo"><label for="n-mes">Cumpleaños (mes)</label><select id="n-mes">' + mOpts + '</select></div>'
+      + '<div class="campo chk ancho"><input type="checkbox" id="n-pub"><label for="n-pub">Autorizó publicar su cumpleaños en el Calendario</label></div>'
+      + '<div class="campo chk ancho"><input type="checkbox" id="n-portal" checked><label for="n-portal">Va a usar el portal (se avisa para darle su usuario)</label></div>'
+      + '<div class="campo ancho"><label for="n-nota">Nota</label><textarea id="n-nota" maxlength="1000"></textarea></div>'
+      + '</div></div></div><div class="msg ojo">Empieza con 0 días de vacaciones; en su primer aniversario se le suman los que le tocan.</div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="n-ok">Registrar alta</button></div>');
+    $('n-ok').onclick = async function () {
+      var b = this; b.disabled = true; msgEn('');
+      try {
+        var ra = await rpc('rh_alta', { p: { nombre: $('n-nom').value, area: $('n-area').value, ingreso: $('n-ing').value, dia: $('n-dia').value, mes: $('n-mes').value,
+          autoriza: $('n-pub').checked, usuario_portal: $('n-portal').checked, nota: $('n-nota').value,
+          sueldo: (function () { var m = num($('n-sue').value); return m > 0 ? String(Math.round(m * 100) / 100) : ''; })() } });
+        cierra(); avisa(ra && ra.reingreso ? 'Reingreso registrado: regresa con su mismo historial (préstamos, ausencias y sueldos de antes). Sus días de vacaciones empiezan de nuevo desde su nueva fecha de ingreso.' : 'Alta registrada. A Daniel le llega el aviso.'); await cargaMov();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function formBaja() {
+    abre('Avisar baja', 'La confirman Daniel o Fernando Cadengo',
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="b-col">Colaborador</label><select id="b-col">' + opColabs('') + '</select></div>'
+      + '<div class="campo"><label for="b-fec">Su último día</label><input type="date" id="b-fec"></div>'
+      + '<div class="campo"><label for="b-mot">Motivo</label><select id="b-mot"><option value="">Escoge…</option>' + MOTIVOS_BAJA.map(function (m) { return '<option>' + m + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo chk ancho"><input type="checkbox" id="b-portal"><label for="b-portal">Tiene usuario del portal (se avisa para quitárselo)</label></div>'
+      + '<div class="campo ancho"><span class="mut">A Daniel y a Fernando Cadengo les llega el aviso. Solo ellos confirman la baja y deciden qué pasa con sus pendientes; hasta entonces la persona sigue igual en el portal.</span></div>'
+      + '<div class="campo ancho"><label for="b-nota">Nota</label><textarea id="b-nota" maxlength="1000"></textarea></div>'
+      + '</div></div></div><div class="msg ojo" id="b-info" hidden></div><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="b-ok">Avisar baja</button></div>');
+    $('b-col').onchange = function () {
+      var c = colab(this.value), info = [];
+      $('b-portal').checked = !!(c && c.portal);
+      if (c && Number(c.prestamo) > 0) info.push('Le falta pagar ' + dinero(c.prestamo) + ' de un préstamo.');
+      if (c && c.vac && !c.vac.pendiente && Number(c.vac.disponibles) > 0) info.push('Le quedan ' + dias(c.vac.disponibles) + ' de vacaciones.');
+      $('b-info').textContent = info.join(' '); $('b-info').hidden = !info.length;
+    };
+    $('b-ok').onclick = async function () {
+      var b = this, c = colab($('b-col').value); msgEn('');
+      if (c && !(await pregunta('¿Avisar la baja de ' + c.nombre + '?'))) return;
+      b.disabled = true;
+      try {
+        await rpc('rh_baja', { p: { colab_id: $('b-col').value, fecha: $('b-fec').value, motivo: $('b-mot').value, nota: $('b-nota').value, usuario_portal: $('b-portal').checked } });
+        cierra(); avisa('Listo: a Daniel y a Fernando Cadengo les llega el aviso para confirmar la baja.'); await cargaMov();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function excelMov(b) {
+    excel(b, 'RH altas y bajas', 'Altas y bajas de personal', [],
+      ['Movimiento', 'Colaborador', 'Área', 'Fecha', 'Motivo', 'Nota', 'Usuario del portal', 'Registró', 'Registrado'],
+      MOV.map(function (m) { return [m.tipo === 'alta' ? 'Alta' : 'Baja', m.nombre, m.area, fechaD(m.fecha), m.motivo || '', m.nota || '', m.usuario_portal ? (m.tipo === 'alta' ? 'Darle usuario' : 'Quitárselo') : 'No', m.creado_por, fechaD(String(m.creado).slice(0, 10))]; }),
+      [], [10, 30, 16, 13, 18, 34, 16, 20, 13]);
+  }
+
+  /* =============================== arranque =============================== */
+  function botones() {
+    var h = '';
+    if (SEC === 'vac' && CAPTURA) h = '<button class="btn acento" type="button" id="b-aus">Registrar ausencia</button>';
+    if (SEC === 'pre' && CAPTURA) h = '<button class="btn" type="button" id="b-prea">Cargar préstamo de antes</button><button class="btn acento" type="button" id="b-pre">Pedir préstamo</button>';
+    if (SEC === 'mov' && CAPTURA) h = '<button class="btn" type="button" id="b-baja">Avisar baja</button><button class="btn acento" type="button" id="b-alta">Registrar alta</button>';
+    $('acts').innerHTML = h;
+    if ($('b-aus')) $('b-aus').onclick = function () { formAus(); };
+    if ($('b-pre')) $('b-pre').onclick = function () { formPre(); };
+    if ($('b-prea')) $('b-prea').onclick = function () { formPreAntes(); };
+    if ($('b-alta')) { $('b-alta').onclick = formAlta; $('b-baja').onclick = formBaja; }
+  }
+  async function arranca() {
+    try {
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('rh_estado');
+      $('cargando').hidden = true;
+      if (!EST || !EST.ve) { error('RH solo lo ven quienes la dirección decidió.'); clearTimeout(error.t); return; }
+      CONSULTA = !!P.consulta || !!EST.consulta; CAPTURA = !!EST.captura && !CONSULTA; AUTORIZA = !!EST.autoriza; CORRIGE = !!EST.corrige && !CONSULTA;
+      $('consulta').hidden = !CONSULTA;
+      $('titulo').textContent = { vac: 'Vacaciones y permisos', pre: 'Préstamos', mov: 'Altas y bajas' }[SEC];
+      $('subt').textContent = { vac: 'Quién está fuera, cuándo regresa y cuántos días de vacaciones le quedan a cada quien.',
+        pre: 'Préstamos al personal, sin interés: los autoriza la dirección (basta uno) y se van descontando en la nómina.',
+        mov: 'Los ingresos y las salidas del personal.' }[SEC];
+      document.title = 'Portal PROFASE · ' + $('titulo').textContent;
+      botones();
+      $('s-' + SEC).hidden = false;
+      if (SEC === 'vac') {
+        $('f-tipo').innerHTML += Object.keys(TIPOS).map(function (k) { return '<option value="' + k + '">' + TIPOS[k] + '</option>'; }).join('');
+        ['f-cuando', 'f-tipo', 'f-q'].forEach(function (id) { $(id).addEventListener('input', pintaAus); });
+        $('carga-b').onclick = function () { formCarga(); };
+        await cargaVac();
+        if (/carga=1/.test(location.search) && EST.carga && EST.carga.pendientes > 0 && (CAPTURA || CORRIGE)) formCarga();
+      } else if (SEC === 'pre') {
+        $('p-q').addEventListener('input', pintaPre);
+        await cargaPre();
+        var q = /[?&]prestamo=(\d+)/.exec(location.search); if (q) fichaPre(+q[1]);
+      } else await cargaMov();
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('click', async function (ev) {
+    var t = ev.target.closest('button,tr.click'); if (!t) return;
+    if (t.matches('[data-vt]')) {
+      VT = t.getAttribute('data-vt');
+      document.querySelectorAll('[data-vt]').forEach(function (b) { b.setAttribute('aria-selected', b === t ? 'true' : 'false'); });
+      $('vt-aus').hidden = VT !== 'aus'; $('vt-dias').hidden = VT !== 'dias'; return;
+    }
+    if (t.matches('[data-pt]')) {
+      PT = t.getAttribute('data-pt');
+      document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b === t ? 'true' : 'false'); });
+      pintaPre(); return;
+    }
+    if (t.matches('[data-aus-ed]')) { var a = AUS.filter(function (x) { return x.id === +t.getAttribute('data-aus-ed'); })[0]; if (a) formAus(a); return; }
+    if (t.matches('[data-aus-bo]')) {
+      var id = +t.getAttribute('data-aus-bo'), a2 = AUS.filter(function (x) { return x.id === id; })[0];
+      var r = await pregunta('¿Quitar ' + (a2 ? (TIPOS[a2.tipo] || '').toLowerCase() + ' de ' + a2.nombre : 'esta ausencia') + '?', 'Escribe por qué se quita', 'Quitar');
+      if (!r || !r.ok) return;
+      try { await rpc('rh_ausencia_borra', { p_id: id, p_motivo: r.texto }); avisa('Se quitó.'); await cargaVac(); } catch (e) { error(falla(e)); }
+      return;
+    }
+    if (t.matches('[data-corrige]')) { formCarga(t.getAttribute('data-corrige')); return; }
+    if (t.matches('[data-sueldo]')) { formSueldo(t.getAttribute('data-sueldo')); return; }
+    if (t.id === 'carga-p') { formPreAntes(); return; }
+    if (t.id === 'carga-l') { prestamosListos(false); return; }
+    if (t.id === 'carga-0') { prestamosListos(true); return; }
+    if (t.matches('[data-pre]')) { fichaPre(+t.getAttribute('data-pre')); return; }
+    if (t.matches('[data-confirma]')) {
+      if (!(await pregunta('¿Confirmar esta baja? Desde su último día sale del Calendario; su historial se queda.'))) return;
+      try { await rpc('rh_baja_confirma', { p_id: +t.getAttribute('data-confirma') }); avisa('Baja confirmada. A RH le llega el aviso.'); await cargaMov(); } catch (e) { error(falla(e)); }
+      return;
+    }
+    if (t.matches('[data-deshace]')) {
+      if (!(await pregunta('¿Deshacer esta baja? Si ya había salido del Calendario, regresa como estaba.'))) return;
+      try { await rpc('rh_baja_deshace', { p_id: +t.getAttribute('data-deshace') }); avisa('Se deshizo la baja.'); await cargaMov(); } catch (e) { error(falla(e)); }
+      return;
+    }
+    if (t.id === 'x-aus') excelAus(t);
+    else if (t.id === 'x-dias') excelDias(t);
+    else if (t.id === 'x-pre') excelPre(t);
+    else if (t.id === 'x-mov') excelMov(t);
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') {
+      if (!$('pregunta').hidden) { if (pregunta.cierra) pregunta.cierra(); return; }
+      if (!$('velo').hidden) { cierra(); return; }
+    }
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('click')) ev.target.click();
+  });
+  arranca();
+})();
+</script>
+</body></html>
