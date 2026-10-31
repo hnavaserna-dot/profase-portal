@@ -165,13 +165,24 @@ button{cursor:pointer}
 
 /* círculos de las personas y grupos */
 .av{width:46px;height:46px;border-radius:50%;flex:none;object-fit:cover;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;background:var(--c,#1F3864);position:relative;overflow:visible}
-img.av{background:var(--surface-3)}
+img.av{background:var(--surface-3);overflow:hidden}
 .av.ch{width:34px;height:34px;font-size:12px}
 .av.gr{width:84px;height:84px;font-size:26px}
 .av.mi{width:18px;height:18px;font-size:8px;display:inline-grid;vertical-align:-4px;margin-right:4px}
 .av .ic{width:22px;height:22px}
 .av.pf{background:#fff;border:1px solid var(--line)}
 .av.pf img{width:68%;height:auto;display:block}
+/* foto de cada grupo: collage con las fotos de perfil de sus integrantes (Daniel, 31-oct-2026; «Todo PROFASE» lleva el logo) */
+.av.mos{background:var(--surface);overflow:hidden;font-size:13px;box-shadow:0 0 0 1px var(--line)}
+.av.mos>*{position:absolute;display:grid;place-items:center;object-fit:cover;color:#fff;background:var(--c,#1F3864);font-weight:700;line-height:1;overflow:hidden;margin:0}
+.av.mos>.mt{top:0;left:0;width:100%;height:100%}
+.av.mos>.mz,.av.mos>.mr{top:0;height:100%;width:calc(50% - 1px)}
+.av.mos>.mz{left:0}.av.mos>.mr{right:0}
+.av.mos>.mai,.av.mos>.mad,.av.mos>.mbi,.av.mos>.mbd{width:calc(50% - 1px);height:calc(50% - 1px);font-size:.72em}
+.av.mos>.mai{left:0;top:0}.av.mos>.mad{right:0;top:0}.av.mos>.mbi{left:0;bottom:0}.av.mos>.mbd{right:0;bottom:0}
+.av.mos>.mas{background:#1F3864}
+.av.ch.mos{font-size:10px}
+.av.gr.mos{font-size:22px}
 .avw{position:relative;flex:none;display:inline-block;line-height:0}
 .pe{display:inline-block;position:relative;width:12px;height:12px;border-radius:50%;flex:none;background:var(--vivo)}
 .pe[data-e="ausente"]{background:var(--ausente)}
@@ -702,7 +713,43 @@ audio.ad-med{width:280px;max-width:100%}
     if (!c) return '';
     if (c.tipo === 'directo') return '<span class="avw">' + avU(c.otro, cls) + punto(c.otro) + '</span>';
     if (c.tipo === 'todos') return '<span class="av pf ' + (cls || '') + '" aria-hidden="true"><img alt="" src="img/logo.png"></span>';
+    var mos = collage(c, cls); if (mos) return mos;
     return '<span class="av ' + (cls || '') + '" style="--c:' + color(c.id) + '" aria-hidden="true">' + (cls === 'gr' ? esc(iniciales(c.nombre)) : IC.grupo) + '</span>';
+  }
+  // Foto de cada grupo (Daniel, 31-oct-2026: «pongas de foto de perfil un tipo collage de las fotos de perfil del crm de
+  // todos»; en «Todos los grupos excepto el de profase»): las fotos de perfil del portal de sus integrantes, las mismas de
+  // siempre (FOTOS, de PORTAL.fotosDe). Con 2, mitad y mitad; con 3, una grande y dos chicas; con 4, cuatro; con 5 o más,
+  // tres y «+N». Primero la gente del área (quien tiene foto antes) y al final la dirección. Quién está en cada grupo lo da
+  // chat_caras() (97_chat_grupos_direccion.sql), solo de los grupos propios; sin eso sale el ícono de grupo de antes.
+  var CARAS = {}, CARAS_F = null;
+  async function cargaCaras(forzar) {
+    var f = CONVS.filter(function (c) { return c.tipo === 'grupo'; }).map(function (c) { return c.id + ':' + c.n_miembros; }).join('|');
+    if (!forzar && f === CARAS_F) return;
+    try { CARAS = (await rpc('chat_caras')) || {}; CARAS_F = f; } catch (e) { /* sin collage: sale el ícono de grupo */ }
+  }
+  function carasDe(c) {
+    var us = CARAS[c.id];
+    if (!Array.isArray(us) || !us.length) return null;
+    function dir(u) { var d = DIR.get(u); return d && d.rol === 'director' ? 1 : 0; }
+    function sinFoto(u) { var d = DIR.get(u); return d && d.uid && FOTOS[String(d.uid).toLowerCase()] ? 0 : 1; }
+    return us.map(function (u, i) { return { u: u, i: i }; })
+      .sort(function (a, b) { return dir(a.u) - dir(b.u) || sinFoto(a.u) - sinFoto(b.u) || a.i - b.i; })
+      .map(function (x) { return x.u; });
+  }
+  function cara(u, k) {
+    var d = DIR.get(u), url = d && d.uid && FOTOS[String(d.uid).toLowerCase()];
+    if (url) return '<img class="' + k + '" alt="" src="' + esc(url) + '">';
+    return '<span class="' + k + '" style="--c:' + color(u) + '">' + esc(iniciales(nombre(u))) + '</span>';
+  }
+  function collage(c, cls) {
+    var us = carasDe(c), h;
+    if (!us) return null;
+    if (us.length === 1) h = cara(us[0], 'mt');
+    else if (us.length === 2) h = cara(us[0], 'mz') + cara(us[1], 'mr');
+    else if (us.length === 3) h = cara(us[0], 'mz') + cara(us[1], 'mad') + cara(us[2], 'mbd');
+    else h = cara(us[0], 'mai') + cara(us[1], 'mad') + cara(us[2], 'mbi')
+      + (us.length === 4 ? cara(us[3], 'mbd') : '<span class="mbd mas">+' + (us.length - 3) + '</span>');
+    return '<span class="av mos ' + (cls || '') + '" aria-hidden="true">' + h + '</span>';
   }
 
   // texto: ligas, *negritas*, _cursiva_ y ~tachado~ (siempre escapado)
@@ -782,6 +829,7 @@ audio.ad-med{width:280px;max-width:100%}
   function listaPronto() { clearTimeout(listaT); listaT = setTimeout(cargaLista, 450); }
   async function cargaLista() {
     try { CONVS = (await rpc('chat_lista')) || []; } catch (e) { return; }
+    await cargaCaras();
     pintaLista();
     if (ACT) {
       var c = CONVS.find(function (x) { return x.id === ACT.id; });
@@ -924,6 +972,9 @@ audio.ad-med{width:280px;max-width:100%}
     if (!info || !ms) { aviso('Ya no estás en esa conversación.', true); cierraConv(); cargaLista(); return; }
     ACT.info = info;
     (info.miembros || []).forEach(function (m) { ACT.lect[m.usuario] = m.leido_id || 0; });
+    // si cambió quién está en el grupo (sin cambiar cuántos), el collage se pone al día
+    if (info.tipo === 'grupo' && (CARAS[info.id] || []).slice().sort().join(',') !== (info.miembros || []).map(function (m) { return m.usuario; }).sort().join(','))
+      cargaCaras(true).then(function () { pintaLista(); if (ACT && ACT.id === id) { pintaCab(); pintaInfo(); } });
     mete(ms.items); ACT.mas = !!ms.mas; ACT.t = ms.ahora;
     // dónde empiezan los sin leer
     var mio = ACT.lect[YO.usuario] || 0, prim = null;
