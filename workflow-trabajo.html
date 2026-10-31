@@ -287,6 +287,9 @@ tr.fila:hover td{background:var(--navy-soft)}
         <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
         <button class="btn" type="button" id="env-abre" hidden>Enviar al cliente</button>
         <button class="btn acento" type="button" id="gen-abre" hidden>Generar el mes</button>
+        <button class="btn" type="button" id="agr-abre" hidden>Agregar tarea</button>
+        <button class="btn" type="button" id="at-abre" hidden>Tareas a tiempo</button>
+        <button class="btn" type="button" id="mes-abre" hidden>Reiniciar o borrar</button>
       </div>
     </header>
     <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Actividad</th><th>Estatus</th><th>Responsable</th><th>Vencimiento</th><th>Docs</th></tr></thead><tbody></tbody></table></div>
@@ -310,6 +313,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   var ROL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
   var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
   var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1 }, ENVD = {}, ENV_IDS = [];
+  // configuración del mes (portal/sql/70_wf_config.sql): Reiniciar, Borrar, «Tareas a tiempo», editar el mes y agregar tarea;
+  // la base dice quién: la dirección y quien Daniel autorizó (30-oct-2026)
+  var CONF = { edita: false, a_tiempo: false }, PERS = null, CATS = null;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   var HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -345,6 +351,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('practica').hidden = MODO !== 'practica';
       try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
       try { var es = await P.sb.rpc('env_estado'); if (!es.error && es.data) ENV = es.data; } catch (e) { ENV = { visible: false, modo: 'apagado' }; }
+      try { var ce = await P.sb.rpc('wf_conf_estado'); if (!ce.error && ce.data) CONF = ce.data; } catch (e) { CONF = { edita: false, a_tiempo: false }; }
       var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
@@ -354,6 +361,8 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (window.matchMedia('(min-width: 900px)').matches) $('masf').open = true;
       $('gen-abre').hidden = !(jefe() && !CONSULTA);
       $('env-abre').hidden = !(ENV.visible && !CONSULTA);
+      $('agr-abre').hidden = $('mes-abre').hidden = !(CONF.edita && !CONSULTA);
+      $('at-abre').hidden = !(CONF.a_tiempo && !CONSULTA);
       await cargaPeriodo();
       $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
     } catch (e) {
@@ -512,6 +521,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (envia) h += '<section class="sec" id="env-sec"><h3>Envío al cliente <small id="env-n"></small></h3>'
       + '<div class="subir"><button class="btn acento" type="button" id="env-uno">Revisar y enviar al cliente</button><span class="rfc">' + esc(envNota()) + '</span></div>'
       + '<div id="env-uno-res"></div><div id="env-hist"><div class="vacio">Revisando…</div></div></section>';
+    var emes = CONF.edita && !CONSULTA;
+    if (emes) h += '<section class="sec" id="em-sec"><h3>Editar plantilla del mes <small id="em-n"></small></h3><div id="em-in"><div class="vacio">Revisando…</div></div></section>';
     h += '<section class="sec" id="bit-sec"><h3>Bitácora <small id="bit-n"></small></h3><div id="bit-in"><div class="vacio">Revisando…</div></div></section>';
     var otras = A.filter(function (x) { return x.empresa_id === a.empresa_id && x.periodo === a.periodo && x.id !== a.id; });
     if (otras.length) h += sec('Otras actividades del cliente en ' + mesTxt(a.periodo), '<ul class="lista">' + otras.map(function (x) {
@@ -522,7 +533,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
-    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a);
+    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes) pintaMes(a);
   }
   function cierra() { ABIERTA = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
   function msg(t, ok) { var m = $('fe-msg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
@@ -868,6 +879,271 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (b && document.body.contains(b)) { b.disabled = false; if (!prueba) gCuenta(); }
   }
 
+  /* ---------- Lo que faltaba del panel del Access (portal/sql/70_wf_config.sql, 30-oct-2026, pedido de Fernando
+     Cadengo): «Editar plantilla» del mes, «Agregar tarea», Reiniciar, Borrar y «Tareas a tiempo». La base decide quién:
+     la dirección y quien Daniel autorizó. ---------- */
+  async function personas() { if (!PERS) { var r = await P.sb.rpc('wf_conf_personas'); if (r.error) throw r.error; PERS = r.data || []; } return PERS; }
+  async function catalogo() { if (!CATS) { var r = await P.sb.from('wf_catact').select('id,nombre').order('nombre').range(0, 1999); if (r.error) throw r.error; CATS = r.data || []; } return CATS; }
+  async function plantillasYClientes() {
+    if (!GEN.pla) { var rp = await P.sb.from('wf_plantillas').select('id,nombre,periodicidad').order('nombre').range(0, 999); if (rp.error) throw rp.error; GEN.pla = rp.data || []; }
+    if (!GEN.emp) {
+      var re = await todas(function (c) { return P.sb.from('wf_asign').select('empresa_id,rs', c ? { count: 'exact' } : undefined).eq('emp_estatus', 1).order('id'); });
+      var o = {}; re.forEach(function (x) { o[x.empresa_id] = x.rs; });
+      GEN.emp = Object.keys(o).map(function (k) { return [+k, o[k]]; }).sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+    }
+  }
+  function opPers(actual, vacio) {
+    var L = (PERS || []).slice();
+    if (actual && !L.some(function (p) { return norm(p.nombre) === norm(actual); })) L.unshift({ nombre: actual, usuario: null });
+    return (vacio != null ? '<option value="">' + esc(vacio) + '</option>' : '') + L.map(function (p) {
+      return '<option value="' + esc(p.nombre) + '"' + (actual && norm(p.nombre) === norm(actual) ? ' selected' : '') + '>' + esc(p.nombre) + (p.usuario ? '' : ' (sin usuario)') + '</option>';
+    }).join('');
+  }
+  function periodoSel(pref, per) {
+    var y = +String(per).slice(0, 4), m = +String(per).slice(5, 7);
+    var anios = []; for (var k = +HOY.slice(0, 4) + 1; k >= 2025; k--) anios.push(k);
+    return '<div class="dos"><select id="' + pref + '-anio" aria-label="Año">' + anios.map(function (k) { return '<option' + (k === y ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select>'
+      + '<select id="' + pref + '-mes" aria-label="Mes">' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></div>';
+  }
+  function periodoDe(pref) { return $(pref + '-anio').value + '-' + dos(+$(pref + '-mes').value) + '-01'; }
+  function periodoFiltro() {   // el periodo que se ve en la lista (o el mes contable que se trabaja)
+    if ($('f-mes').value) return $('f-anio').value + '-' + dos(+$('f-mes').value) + '-01';
+    var y = +HOY.slice(0, 4), m = +HOY.slice(5, 7) - 1; if (m === 0) { m = 12; y--; }
+    return y + '-' + dos(m) + '-01';
+  }
+  function abreVentana(eti, tit, sub, cuerpo) {
+    ABIERTA = null;
+    $('ficha').innerHTML = '<div class="cab"><div><div class="rfc">' + esc(eti) + '</div><h2 id="f-tit">' + esc(tit) + '</h2><div class="rfc">' + esc(sub) + '</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">'
+      + (MODO === 'practica' ? '<div class="practica" style="margin:0">Práctica: lo que hagas aquí se borra en la siguiente actualización.</div>' : '') + cuerpo + '</div>';
+    $('velo').hidden = false; $('ficha').scrollTop = 0;
+    try { $('cerrar').focus(); } catch (er) {}
+  }
+  function vmsg(id, t, ok) { var g = $(id); if (!g) return; g.hidden = !t; g.className = 'msg ' + (ok ? 'ok' : 'mal'); g.textContent = t || ''; }
+  // una actividad cambiada o quitada: la lista se pone al día sin volver a leer todo el periodo
+  function alDia(n) {
+    if (!n || !n.id) return;
+    if (POR_ID[n.id]) { if (n.activa === false) { A = A.filter(function (x) { return x.id !== n.id; }); delete POR_ID[n.id]; } else Object.keys(n).forEach(function (k) { if (k in POR_ID[n.id]) POR_ID[n.id][k] = n[k]; }); }
+    else if (n.activa !== false && enPeriodo(n)) { A.push(n); POR_ID[n.id] = n; }
+    pinta();
+  }
+  function enPeriodo(n) {
+    var y = $('f-anio').value, m = $('f-mes').value;
+    if (String(n.periodo).slice(0, 4) !== y) return false;
+    return !m || +String(n.periodo).slice(5, 7) === +m || n.periodicidad === 2;
+  }
+
+  // «Editar plantilla» del mes: las actividades de esta plantilla, cliente y mes (también las desactivadas)
+  var EM = { a: null, filas: {} };
+  async function pintaMes(a) {
+    EM.a = a;
+    try {
+      await personas();
+      var r = await P.sb.from('wf_act').select('id,periodo,periodicidad,actividad,secuencia,resp_nombre,aut_nombre,activa,req_archivo,req_secuencia,estatus,n_docs')
+        .eq('empresa_id', a.empresa_id).eq('plantilla_id', a.plantilla_id).eq('periodo', a.periodo).order('secuencia').range(0, 499);
+      if (r.error) throw r.error;
+      if (ABIERTA !== a.id || !$('em-in')) return;
+      EM.filas = {}; (r.data || []).forEach(function (x) { EM.filas[x.id] = x; });
+      $('em-n').textContent = (r.data || []).length + ' en ' + mesTxt(a.periodo);
+      $('em-in').innerHTML = '<ul class="lista">' + (r.data || []).map(function (x) {
+        var req = [x.req_archivo ? 'documento' : '', x.req_secuencia ? 'paso anterior' : ''].filter(Boolean).join(' y ');
+        return '<li id="em-li-' + esc(x.id) + '"><div class="t">' + esc(x.secuencia) + '. ' + esc(x.actividad) + ' ' + chipEst(x.estatus) + (x.activa ? '' : ' <span class="tag">Desactivada</span>') + (x.id === a.id ? ' <span class="tag az">Esta</span>' : '') + '</div>'
+          + '<div class="d">' + (esc(x.resp_nombre) || 'Sin responsable') + (x.aut_nombre ? ' · autoriza ' + esc(x.aut_nombre) : '') + (req ? ' · pide ' + esc(req) : '') + '</div>'
+          + '<div class="botones" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><button class="btn" type="button" data-emed="' + esc(x.id) + '">Editar</button>'
+          + (x.n_docs ? '' : '<button class="btn peligro" type="button" data-emqu="' + esc(x.id) + '">Quitar del mes</button>') + '</div>'
+          + '<div id="em-f-' + esc(x.id) + '"></div></li>';
+      }).join('') + '</ul>'
+        + '<div class="subir"><button class="btn" type="button" id="em-agrega">Agregar tarea a esta plantilla</button><span class="rfc">Como «Editar plantilla» del Access: solo cambia este mes. Lo de todos los meses se cambia en WorkFlow › Configuración.</span></div>';
+    } catch (e) { if ($('em-in')) $('em-in').innerHTML = '<div class="vacio">' + esc(falla(e)) + '</div>'; }
+  }
+  function emEdita(id) {
+    var x = EM.filas[id], c = $('em-f-' + id); if (!x || !c) return;
+    if (c.innerHTML && c.dataset.m === 'e') { c.innerHTML = ''; c.dataset.m = ''; return; }
+    c.dataset.m = 'e';
+    c.innerHTML = '<div class="form" style="padding:10px 0 0">'
+      + '<div><label for="em-r-' + id + '">Responsable</label><select id="em-r-' + id + '">' + opPers(x.resp_nombre) + '</select></div>'
+      + '<div><label for="em-a-' + id + '">Autoriza</label><select id="em-a-' + id + '">' + opPers(x.aut_nombre, 'Nadie (la termina el responsable)') + '</select></div>'
+      + '<div><label for="em-s-' + id + '">Paso</label><input id="em-s-' + id + '" type="number" min="0" max="999" value="' + esc(x.secuencia) + '" style="width:110px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px"></div>'
+      + '<label class="radio"><input type="checkbox" id="em-v-' + id + '"' + (x.activa ? ' checked' : '') + '><span>Activa (si la desactivas deja de salir en el panel, como en el Access)</span></label>'
+      + '<label class="radio"><input type="checkbox" id="em-d-' + id + '"' + (x.req_archivo ? ' checked' : '') + '><span>Pide un documento para terminarla</span></label>'
+      + '<label class="radio"><input type="checkbox" id="em-p-' + id + '"' + (x.req_secuencia ? ' checked' : '') + '><span>Pide el paso anterior terminado</span></label>'
+      + '<div class="botones"><button class="btn acento" type="button" data-emok="' + id + '">Guardar</button><button class="btn" type="button" data-emcl="' + id + '">Cancelar</button></div>'
+      + '<div class="msg" id="em-m-' + id + '" hidden></div></div>';
+  }
+  async function emGuarda(id, b) {
+    var x = EM.filas[id]; if (!x) return;
+    b.disabled = true;
+    var p = { resp_nombre: $('em-r-' + id).value, aut_nombre: $('em-a-' + id).value, secuencia: +$('em-s-' + id).value || 0,
+              activa: $('em-v-' + id).checked, req_archivo: $('em-d-' + id).checked, req_secuencia: $('em-p-' + id).checked };
+    try {
+      var r = await P.sb.rpc('wf_mes_edita', { p_id: id, p: p });
+      if (r.error) throw r.error;
+      alDia(r.data);
+      var a = EM.a;
+      if (a && id === a.id) { if (POR_ID[id]) abre(id); else cierra(); } else if (a) pintaMes(a);
+    } catch (e) { vmsg('em-m-' + id, falla(e), false); b.disabled = false; }
+  }
+  function emQuita(id) {
+    var c = $('em-f-' + id); if (!c) return;
+    c.innerHTML = '<div class="form" style="padding:10px 0 0"><div><label for="em-q-' + id + '">Por qué se quita del mes (queda en el respaldo)</label><textarea id="em-q-' + id + '" maxlength="500" style="min-height:60px"></textarea></div>'
+      + '<div class="botones"><button class="btn peligro" type="button" data-emqs="' + id + '">Sí, quitarla del mes</button><button class="btn" type="button" data-emcl="' + id + '">Cancelar</button></div><div class="msg" id="em-m-' + id + '" hidden></div></div>';
+    c.dataset.m = 'q';
+  }
+  async function emQuitaSi(id, b) {
+    b.disabled = true;
+    try {
+      var r = await P.sb.rpc('wf_mes_quita', { p_id: id, p_motivo: $('em-q-' + id).value });
+      if (r.error) throw r.error;
+      A = A.filter(function (x) { return x.id !== id; }); delete POR_ID[id]; pinta();
+      if (EM.a && EM.a.id === id) cierra(); else if (EM.a) pintaMes(EM.a);
+    } catch (e) { vmsg('em-m-' + id, falla(e), false); b.disabled = false; }
+  }
+
+  // «Agregar tarea»: una actividad suelta en el mes de un cliente y plantilla
+  async function abreAgregar(pre) {
+    if (!CONF.edita || CONSULTA) return;
+    pre = pre || {};
+    abreVentana('WorkFlow', 'Agregar tarea', 'Una actividad más en el mes de un cliente, como «Agregar tarea» del Access',
+      '<section class="sec"><h3>La tarea</h3><div class="form">'
+      + '<div><label>Periodo</label>' + periodoSel('ag', pre.periodo || periodoFiltro()) + '</div>'
+      + '<div><label for="ag-emp">Cliente</label><select id="ag-emp"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="ag-pla">Plantilla</label><select id="ag-pla"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="ag-act">Actividad</label><select id="ag-act"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="ag-resp">Responsable</label><select id="ag-resp"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="ag-aut">Autoriza</label><select id="ag-aut"><option value="">Nadie (la termina el responsable)</option></select></div>'
+      + '<label class="radio"><input type="checkbox" id="ag-doc" checked><span>Pide un documento para terminarla</span></label>'
+      + '<label class="radio"><input type="checkbox" id="ag-sec"><span>Pide el paso anterior terminado</span></label>'
+      + '<div class="botones"><button class="btn acento" type="button" id="ag-ok">Agregar</button></div>'
+      + '<div class="msg" id="ag-msg" hidden></div></div><div id="ag-res"></div></section>'
+      + '<p class="rfc gen-nota">Nace «Por Iniciar», al final de la plantilla de ese mes, con su vencimiento SAT y Profase y su renglón en la bitácora (el Access no los ponía).</p>');
+    try {
+      await Promise.all([plantillasYClientes(), personas(), catalogo()]);
+      if (!$('ag-emp')) return;
+      $('ag-emp').innerHTML = '<option value="">Escoge el cliente</option>' + GEN.emp.map(function (e) { return '<option value="' + esc(e[0]) + '"' + (+pre.empresa_id === e[0] ? ' selected' : '') + '>' + esc(e[1]) + '</option>'; }).join('');
+      if (pre.empresa_id && !GEN.emp.some(function (e) { return e[0] === +pre.empresa_id; })) $('ag-emp').insertAdjacentHTML('beforeend', '<option value="' + esc(pre.empresa_id) + '" selected>' + esc(pre.rs || ('Cliente ' + pre.empresa_id)) + '</option>');
+      $('ag-pla').innerHTML = '<option value="">Escoge la plantilla</option>' + GEN.pla.map(function (p) { return '<option value="' + esc(p.id) + '"' + (+pre.plantilla_id === p.id ? ' selected' : '') + '>' + esc(p.nombre) + (p.periodicidad === 2 ? ' (anual)' : '') + '</option>'; }).join('');
+      $('ag-act').innerHTML = '<option value="">Escoge la actividad</option>' + CATS.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.nombre) + '</option>'; }).join('');
+      $('ag-resp').innerHTML = opPers('', 'Escoge al responsable');
+      $('ag-aut').innerHTML = opPers('', 'Nadie (la termina el responsable)');
+    } catch (e) { vmsg('ag-msg', 'No se pudieron leer las listas. Cierra y vuelve a abrir.', false); }
+  }
+  async function agrega(b) {
+    var p = { periodo: periodoDe('ag'), empresa_id: +$('ag-emp').value || null, plantilla_id: +$('ag-pla').value || null, actividad_id: +$('ag-act').value || null,
+              resp_nombre: $('ag-resp').value, aut_nombre: $('ag-aut').value, req_archivo: $('ag-doc').checked, req_secuencia: $('ag-sec').checked };
+    if (!p.empresa_id || !p.plantilla_id || !p.actividad_id || !p.resp_nombre) { vmsg('ag-msg', 'Escoge cliente, plantilla, actividad y responsable.', false); return; }
+    b.disabled = true; vmsg('ag-msg', '');
+    try {
+      var r = await P.sb.rpc('wf_mes_agrega', { p: p });
+      if (r.error) throw r.error;
+      var n = r.data || {};
+      alDia(n);
+      $('ag-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se agregó «' + esc(n.actividad) + '» a ' + esc(n.rs) + ' en ' + esc(mesTxt(n.periodo)) + '.</div>'
+        + (POR_ID[n.id] ? '<div style="margin-top:8px"><button class="btn link" type="button" data-id="' + esc(n.id) + '">Abrir la ficha</button></div>' : '') + '</div>';
+    } catch (e) { vmsg('ag-msg', falla(e), false); }
+    b.disabled = false;
+  }
+
+  // Reiniciar o borrar el mes (como Borrar y Reiniciar del Access, con respaldo)
+  var MB = null;
+  async function abreMes() {
+    if (!CONF.edita || CONSULTA) return;
+    MB = null;
+    abreVentana('WorkFlow', 'Reiniciar o borrar el mes', 'Como Borrar y Reiniciar del Access, con respaldo de todo lo que se borra',
+      '<section class="sec"><h3>Qué</h3><div class="form">'
+      + '<div><label>Periodo</label>' + periodoSel('mb', periodoFiltro()) + '</div>'
+      + '<div><label for="mb-emp">Cliente</label><select id="mb-emp"><option value="">Todos los clientes</option></select></div>'
+      + '<div><label for="mb-pla">Plantilla</label><select id="mb-pla"><option value="">Todas las plantillas</option></select></div>'
+      + '<label class="radio"><input type="checkbox" id="mb-tra"><span>También las que ya tienen avance (estatus, comentario o bitácora). Si no la marcas, esas se quedan.</span></label>'
+      + '<div><label for="mb-mot">Por qué (queda en el respaldo)</label><textarea id="mb-mot" maxlength="500" style="min-height:60px"></textarea></div>'
+      + '<div class="botones"><button class="btn" type="button" id="mb-revisa">Revisar qué se borraría</button></div>'
+      + '<div class="msg" id="mb-msg" hidden></div></div><div id="mb-res"></div></section>'
+      + '<p class="rfc gen-nota"><b>Borrar</b> quita las actividades del mes. <b>Reiniciar</b> las quita y las vuelve a generar con la plantilla de cada cliente como está hoy (en el Access, Reiniciar se llevaba todas las plantillas del cliente aunque escogieras una; aquí respeta lo que escojas). Lo que tiene documentos nunca se borra. Todo lo borrado queda respaldado.</p>');
+    try {
+      await plantillasYClientes();
+      if (!$('mb-emp')) return;
+      $('mb-emp').insertAdjacentHTML('beforeend', GEN.emp.map(function (e) { return '<option value="' + esc(e[0]) + '">' + esc(e[1]) + '</option>'; }).join(''));
+      $('mb-pla').insertAdjacentHTML('beforeend', GEN.pla.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.nombre) + (p.periodicidad === 2 ? ' (anual)' : '') + '</option>'; }).join(''));
+    } catch (e) { vmsg('mb-msg', 'No se pudieron leer las plantillas. Cierra y vuelve a abrir.', false); }
+  }
+  function mbArgs(prueba, reiniciar) {
+    return { periodo: periodoDe('mb'), empresa_id: +$('mb-emp').value || null, plantilla_id: +$('mb-pla').value || null,
+             incluir_trabajadas: $('mb-tra').checked, motivo: $('mb-mot').value, prueba: prueba, reiniciar: !!reiniciar };
+  }
+  async function mbRevisa(b) {
+    b.disabled = true; vmsg('mb-msg', '');
+    try {
+      var args = mbArgs(true), r = await P.sb.rpc('wf_mes_borra', { p: args });
+      if (r.error) throw r.error;
+      var d = r.data || {}; MB = args;
+      $('mb-res').innerHTML = '<div class="gen-res"><div class="grande">' + num(d.seBorran) + ' se borrarían</div>'
+        + '<div class="rfc">' + esc(mesTxt(args.periodo)) + ' · ' + num(d.actividades) + ' actividades de ' + num(d.clientes) + ' clientes con lo que escogiste</div>'
+        + (d.conAvance ? '<div class="rfc">' + num(d.conAvance) + ' ya tienen avance' + (args.incluir_trabajadas ? ' (se borran también, salvo las que tienen documentos)' : ' y se quedan') + '</div>' : '')
+        + (d.conDocumentos ? '<div class="rfc">' + num(d.conDocumentos) + ' tienen documentos y nunca se borran</div>' : '')
+        + '<div class="form" style="padding:12px 0 0"><div class="botones"><button class="btn peligro" type="button" id="mb-borra"' + (d.seBorran ? '' : ' disabled') + '>Borrar ' + num(d.seBorran) + '</button>'
+        + '<button class="btn acento" type="button" id="mb-reinicia"' + (d.actividades ? '' : ' disabled') + '>Reiniciar (borrar y volver a generar)</button></div>'
+        + '<span class="rfc">Si cambias algo de arriba, vuelve a revisar.</span></div></div>';
+    } catch (e) { vmsg('mb-msg', falla(e), false); }
+    b.disabled = false;
+  }
+  async function mbHaz(b, reiniciar) {
+    if (!MB) return;
+    b.disabled = true; vmsg('mb-msg', '');
+    try {
+      var args = Object.assign({}, MB, { prueba: false, reiniciar: reiniciar, motivo: $('mb-mot').value });
+      var r = await P.sb.rpc('wf_mes_borra', { p: args });
+      if (r.error) throw r.error;
+      var d = r.data || {}; MB = null;
+      $('mb-res').innerHTML = '<div class="gen-res"><div class="grande">Listo</div><div class="rfc">Se borraron ' + num(d.borradas) + ' actividades'
+        + (reiniciar ? ' y se generaron ' + num(d.generadasActivas) + ' de nuevo' : '') + (d.seQuedaron ? '; ' + num(d.seQuedaron) + ' se quedaron' : '') + '. Todo lo borrado quedó respaldado.</div></div>';
+      cargaPeriodo().catch(function () {});
+    } catch (e) { vmsg('mb-msg', falla(e), false); b.disabled = false; }
+  }
+
+  // «Tareas a tiempo»: marcar como a tiempo lo que se terminó tarde contra Profase (con los filtros de la lista)
+  var AT = { l: [], sel: {}, ver: 'todas' };
+  function diaMty(s) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(s)); } catch (e) { return String(s).slice(0, 10); } }
+  function tarde(a) { if (!a.ven_pro) return false; var c = a.terminado ? diaMty(a.terminado) : HOY; return c > a.ven_pro; }
+  function abreATiempo() {
+    if (!CONF.a_tiempo || CONSULTA) return;
+    AT.l = filtradas(false).filter(function (a) { return a.a_tiempo_manual || tarde(a); });
+    AT.sel = {}; AT.l.forEach(function (a) { AT.sel[a.id] = !!a.a_tiempo_manual; }); AT.ver = 'todas';
+    abreVentana('WorkFlow', 'Tareas a tiempo', 'Las actividades de la lista (con tus filtros) que van tarde contra Profase o que ya se marcaron a tiempo',
+      '<section class="sec"><h3>Actividades <small id="at-n"></small></h3><div class="form">'
+      + '<div class="botones"><label class="radio" style="margin:0"><input type="radio" name="at-ver" value="todas" checked><span>Todas</span></label>'
+      + '<label class="radio" style="margin:0"><input type="radio" name="at-ver" value="si"><span>Marcadas</span></label>'
+      + '<label class="radio" style="margin:0"><input type="radio" name="at-ver" value="no"><span>Sin marcar</span></label></div>'
+      + '<div class="botones"><button class="btn" type="button" id="at-todas">Marcar las que se ven</button><button class="btn" type="button" id="at-ninguna">Quitar las que se ven</button></div></div>'
+      + '<div id="at-in"></div><div class="form"><div class="botones"><button class="btn acento" type="button" id="at-guarda">Guardar</button><span class="rfc" id="at-cuenta"></span></div><div class="msg" id="at-msg" hidden></div></div></section>'
+      + '<p class="rfc gen-nota">Como en el Access: una marcada cuenta «a tiempo» en la efectividad Profase aunque se haya terminado tarde. Queda anotado quién la marcó.</p>');
+    atPinta();
+  }
+  function atPinta() {
+    var L = AT.l.filter(function (a) { return AT.ver === 'todas' || (AT.ver === 'si') === !!AT.sel[a.id]; });
+    var cambia = AT.l.filter(function (a) { return !!AT.sel[a.id] !== !!a.a_tiempo_manual; }).length;
+    if ($('at-n')) $('at-n').textContent = AT.l.length + (AT.l.length === 1 ? ' actividad' : ' actividades');
+    if ($('at-cuenta')) $('at-cuenta').textContent = cambia ? cambia + ' por guardar' : 'Sin cambios';
+    if (!$('at-in')) return;
+    $('at-in').innerHTML = L.length ? L.slice(0, 600).map(function (a) {
+      return '<label class="gen-cli"><input type="checkbox" data-at="' + esc(a.id) + '"' + (AT.sel[a.id] ? ' checked' : '') + '><span class="q"><span class="rs">' + esc(a.rs) + ' · ' + esc(a.actividad) + '</span>'
+        + '<span class="rfc">' + esc(mesTxt(a.periodo)) + ' · ' + (esc(a.resp_nombre) || 'sin responsable') + ' · vencía ' + esc(fecha(a.ven_pro)) + ' · ' + (a.terminado ? 'terminada ' + esc(fecha(diaMty(a.terminado))) : 'sin terminar') + '</span></span></label>';
+    }).join('') + (L.length > 600 ? '<div class="vacio">Se ven las primeras 600: usa los filtros de la lista para ver menos.</div>' : '') : '<div class="vacio">Nada que marcar con los filtros de la lista.</div>';
+  }
+  async function atGuarda(b) {
+    var si = [], no = [];
+    AT.l.forEach(function (a) { if (!!AT.sel[a.id] !== !!a.a_tiempo_manual) (AT.sel[a.id] ? si : no).push(a.id); });
+    if (!si.length && !no.length) { vmsg('at-msg', 'No hay cambios.', false); return; }
+    b.disabled = true; vmsg('at-msg', '');
+    try {
+      if (si.length) { var r1 = await P.sb.rpc('wf_a_tiempo', { p_ids: si, p_valor: true }); if (r1.error) throw r1.error; }
+      if (no.length) { var r2 = await P.sb.rpc('wf_a_tiempo', { p_ids: no, p_valor: false }); if (r2.error) throw r2.error; }
+      si.forEach(function (id) { if (POR_ID[id]) POR_ID[id].a_tiempo_manual = true; });
+      no.forEach(function (id) { if (POR_ID[id]) POR_ID[id].a_tiempo_manual = false; });
+      vmsg('at-msg', 'Listo: ' + si.length + ' marcadas y ' + no.length + ' desmarcadas.', true);
+      atPinta();
+    } catch (e) { vmsg('at-msg', falla(e), false); }
+    b.disabled = false;
+  }
+
   /* ---------- Excel (con la marca PROFASE: js/marca.js), con las columnas del Excel del Access ---------- */
   async function excel(b) {
     b.disabled = true;
@@ -897,6 +1173,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('x-lista').onclick = function () { excel(this); };
   document.addEventListener('change', function (ev) {
     if (ev.target.hasAttribute && ev.target.hasAttribute('data-gp')) { var x = G_PARES[+ev.target.getAttribute('data-gp')]; if (x) { x.sel = ev.target.checked; gCuenta(); } return; }
+    if (ev.target.hasAttribute && ev.target.hasAttribute('data-at')) { AT.sel[+ev.target.getAttribute('data-at')] = ev.target.checked; atPinta(); return; }
+    if (ev.target.name === 'at-ver') { AT.ver = ev.target.value; atPinta(); return; }
+    if (ev.target.closest && ev.target.closest('#ficha') && /^mb-/.test(ev.target.id || '') && ev.target.id !== 'mb-mot') { MB = null; if ($('mb-res')) $('mb-res').innerHTML = ''; return; }
     if (ev.target.closest && ev.target.closest('#ficha') && /^g-/.test(ev.target.id || ev.target.name || '')) { G_ARGS = null; G_PARES = []; if ($('g-res')) $('g-res').innerHTML = ''; }
   });
   document.addEventListener('click', function (ev) {
@@ -906,6 +1185,29 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'fe-pide') { pideAut(); return; }
     if (ev.target.id === 'fe-sube') { sube(); return; }
     if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
+    if (ev.target.id === 'agr-abre') { abreAgregar(); return; }
+    if (ev.target.id === 'at-abre') { abreATiempo(); return; }
+    if (ev.target.id === 'mes-abre') { abreMes(); return; }
+    if (ev.target.id === 'em-agrega' && EM.a) { abreAgregar({ empresa_id: EM.a.empresa_id, rs: EM.a.rs, plantilla_id: EM.a.plantilla_id, periodo: EM.a.periodo }); return; }
+    if (ev.target.id === 'ag-ok') { agrega(ev.target); return; }
+    if (ev.target.id === 'mb-revisa') { mbRevisa(ev.target); return; }
+    if (ev.target.id === 'mb-borra') { mbHaz(ev.target, false); return; }
+    if (ev.target.id === 'mb-reinicia') { mbHaz(ev.target, true); return; }
+    if (ev.target.id === 'at-guarda') { atGuarda(ev.target); return; }
+    if (ev.target.id === 'at-todas' || ev.target.id === 'at-ninguna') {
+      var v = ev.target.id === 'at-todas';
+      AT.l.forEach(function (a) { if (AT.ver === 'todas' || (AT.ver === 'si') === !!AT.sel[a.id]) AT.sel[a.id] = v; });
+      atPinta(); return;
+    }
+    var em = ev.target.closest('[data-emed],[data-emok],[data-emqu],[data-emqs],[data-emcl]');
+    if (em) {
+      if (em.hasAttribute('data-emcl')) { var cc = $('em-f-' + em.getAttribute('data-emcl')); if (cc) { cc.innerHTML = ''; cc.dataset.m = ''; } }
+      else if (em.hasAttribute('data-emed')) emEdita(+em.getAttribute('data-emed'));
+      else if (em.hasAttribute('data-emok')) emGuarda(+em.getAttribute('data-emok'), em);
+      else if (em.hasAttribute('data-emqu')) emQuita(+em.getAttribute('data-emqu'));
+      else emQuitaSi(+em.getAttribute('data-emqs'), em);
+      return;
+    }
     if (ev.target.id === 'env-abre') { abreEnvios(); return; }
     if (ev.target.id === 'env-revisa') { envRevisa(ev.target); return; }
     if (ev.target.id === 'env-manda') { envMandaTodos(ev.target); return; }

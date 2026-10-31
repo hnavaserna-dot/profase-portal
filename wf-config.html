@@ -1,0 +1,1082 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · WorkFlow · Configuración</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9086261c43"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · WorkFlow › Configuración (30-oct-2026, pedido de Fernando Cadengo: «me faltan esas pantallas»; «son
+   indispensables para generar el workflow del mes»): las pantallas del Access para configurar el WorkFlow (Catálogo de
+   actividades, Configuración de plantillas con «Duplicar», las plantillas de cada cliente y la Configuración General
+   de Plantillas). Lee solo las tablas de la configuración y escribe solo con las funciones de portal/sql/70_wf_config.sql,
+   que revisan quién puede: la ven la dirección y los gerentes; la cambian la dirección y quien Daniel autorizó (hoy
+   Fernando Cadengo); la comisión de cada plantilla solo la ven la dirección y Cadengo. Mientras el Access manda (modo
+   «práctica»), lo que se cambie aquí se borra en la siguiente actualización. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:720px}
+.band .acts{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--band-dim)}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:focus-visible,select:focus-visible,input:focus-visible,.fila:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:4px;margin:16px 0 0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.mal .v{color:var(--red)}
+.kpi.ojo .v{color:var(--accent-ink)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
+.filtros input{width:230px}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 12px;white-space:nowrap}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr.fila{cursor:pointer}
+tr.fila:hover td{background:var(--navy-soft)}
+.rs{font-weight:600}
+.rfc{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.vence{white-space:nowrap}
+.vence.mal{color:var(--red);font-weight:600}
+.vence.ojo{color:var(--accent-ink);font-weight:600}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
+.pie{color:var(--muted);font-size:12px;margin:0 0 24px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+/* Ficha del cliente: panel a la derecha; en celular, pantalla completa */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(780px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .cab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
+.ficha .cab .rfc{color:var(--band-dim)}
+.ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sec>h3 small{font-family:var(--f-body);font-weight:500;font-size:12px;color:var(--muted)}
+.sec .in{padding:10px 14px}
+.sec table{font-size:13px}
+.sec td,.sec th{padding:6px 10px}
+.dl{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr);gap:6px 14px;margin:0}
+.dl dt{color:var(--muted);font-size:12.5px}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.lista{margin:0;padding:0;list-style:none}
+.lista li{padding:8px 14px;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600}
+.lista .d,.dl .d{color:var(--muted);font-size:12.5px}
+.pla{border-top:1px solid var(--line)}
+.pla:first-child{border-top:0}
+.pla summary{cursor:pointer;padding:9px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;list-style:none}
+.pla summary::-webkit-details-marker{display:none}
+.pla summary .n{font-weight:600}
+.pla summary::after{content:"›";color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.pla[open] summary::after{transform:rotate(-90deg)}
+.si{color:var(--ok);font-weight:600}
+.no{color:var(--muted)}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin:2px 4px 0 0;background:var(--surface-2);color:var(--muted)}
+.tag.az{background:var(--navy-soft);color:var(--ink)}
+.link{background:none;border:0;padding:0;color:var(--navy);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .link{color:#9FB6E0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:#9FB6E0}}
+.dos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+
+@media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
+/* Estatus del Access */
+.est{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.est.e2{background:var(--ok-soft);color:var(--ok)}
+.est.e3{background:var(--red-soft);color:var(--red)}
+.est.e4{background:var(--accent-soft);color:var(--accent-ink)}
+.est.e5{background:var(--surface-2);color:var(--muted)}
+.est.e6{background:var(--surface-2);color:var(--muted);text-decoration:line-through}
+.clip{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.bit{margin:0;padding:0;list-style:none}
+.bit li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line)}
+.bit li:first-child{border-top:0}
+.bit .q{font-weight:600}
+.bit .c{color:var(--muted);font-size:12.5px}
+.doc{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.doc:first-child{border-top:0}
+.doc .izq{min-width:0;flex:1 1 240px}
+.doc .t{font-weight:600;overflow-wrap:anywhere}
+.doc .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.doc .acc{display:flex;gap:6px;flex-wrap:wrap}
+.doc .btn{padding:6px 11px}
+.coment{padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.aviso{padding:9px 14px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface-2)}
+.practica{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin:16px 0 0;font-size:13.5px}
+.practica b{font-weight:700}
+.filtros .ancho{width:260px}
+.form{padding:12px 14px;display:grid;gap:10px}
+.form label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:4px}
+.form select,.form textarea{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
+.form textarea{min-height:92px;resize:vertical}
+.form .botones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.msg{font-size:13px;padding:8px 10px;border-radius:8px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.ok{background:var(--ok-soft);color:var(--ok)}
+.subir{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
+.subir input[type=file]{max-width:100%;font-size:13px}
+.env-l li .d.mal{color:var(--red)}
+.env-l .para{overflow-wrap:anywhere}
+.env-chk{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.env-chk input{width:18px;height:18px}
+.btn.peligro{color:var(--red);border-color:var(--red-soft)}
+.form .dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
+.form label.radio{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:inherit;margin:6px 0 0}
+.form label.radio input{margin-top:3px;flex:none}
+.gen-res{padding:10px 14px;border-top:1px solid var(--line)}
+.gen-res .grande{font-family:var(--f-display);font-size:24px;font-weight:750}
+.gen-res .n{text-align:right;font-variant-numeric:tabular-nums}
+.gen-res .tabla{margin:8px -14px 0}
+.gen-nota{padding:0 2px;margin:0}
+.gen-ayuda{font-size:13px;color:var(--muted);margin:10px 0 6px}
+.gen-pla{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface)}
+.gen-pla>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;justify-content:space-between;padding:10px 12px}
+.gen-pla>summary::-webkit-details-marker{display:none}
+.gen-pla>summary .t{font-weight:650;overflow-wrap:anywhere}
+.gen-pla>summary .t::before{content:"› ";color:var(--muted)}
+.gen-pla[open]>summary .t::before{content:"⌄ "}
+.gen-acc{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 6px}
+.gen-acc .btn{padding:5px 10px;font-size:12.5px}
+.gen-cli{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
+.gen-cli input{margin-top:3px;flex:none;width:18px;height:18px}
+.gen-cli .q{display:flex;flex-direction:column;min-width:0}
+.gen-cli .rs{font-weight:600;font-size:13.5px;overflow-wrap:anywhere}
+.masf{flex-basis:100%}
+.masf>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--navy);padding:4px 0;list-style:none}
+.masf>summary::-webkit-details-marker{display:none}
+.masf>summary::after{content:" ›";display:inline-block;transform:rotate(90deg)}
+.masf[open]>summary::after{transform:rotate(-90deg)}
+.masf>.filtros{margin-top:6px}
+:root[data-theme="dark"] .masf>summary{color:#9FB6E0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .masf>summary{color:#9FB6E0}}
+/* En celular cada actividad es una tarjeta */
+@media (max-width:640px){
+  .filtros input,.filtros select,.filtros .ancho{width:100%}
+  .filtros{width:100%}
+  #lista thead{display:none}
+  #lista tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+  #lista td{border:0;padding:0;min-width:0}
+  #lista td:nth-child(1){grid-column:1}
+  #lista td:nth-child(2){grid-column:1/-1;order:3}
+  #lista td:nth-child(3){grid-column:2;grid-row:1;text-align:right}
+  #lista td:nth-child(4),#lista td:nth-child(5),#lista td:nth-child(6){grid-column:1/-1;font-size:12.5px;order:4}
+  #lista td:nth-child(4)::before{content:"Responsable: ";color:var(--muted)}
+  #lista td:nth-child(6)::before{content:"Documentos: ";color:var(--muted)}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .dl dt{margin-top:4px}
+  .ficha .cab h2{font-size:18px}
+  .band h1{font-size:22px}
+  .form select,.form textarea{font-size:16px}
+}
+/* --- WorkFlow › Configuración --- */
+.clis li{display:flex;gap:10px;align-items:center;justify-content:space-between;cursor:pointer}
+.clis li:hover{background:var(--navy-soft)}
+.clis li .q{min-width:0;flex:1 1 auto}
+.clis li .rs{overflow-wrap:anywhere}
+.clis li:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.btn.chico{padding:4px 9px;font-size:12.5px}
+td.acc{white-space:nowrap;width:1%}
+.accs{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.accs .btn{margin:0}
+td.tit{min-width:130px}
+.gen-acc{align-items:center}
+tr.apagada td{color:var(--muted)}
+.ayuda{font-size:12.5px;color:var(--muted);margin:0}
+.fila2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fila2 select,.fila2 input[type=text]{flex:1 1 220px;min-width:0;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
+.form input[type=text],.form input[type=number],.form input[type=date]{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
+.form .rejilla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.form .chks{display:flex;flex-wrap:wrap;gap:8px 18px}
+.chk{display:inline-flex;gap:7px;align-items:center;font-size:13.5px;color:inherit;margin:0;cursor:pointer}
+.form label.chk{display:inline-flex;margin:0;font-size:13.5px;color:inherit}
+.chk input{width:18px;height:18px;margin:0;flex:none}
+.pie-sec{padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
+.subf{border:2px solid var(--accent);border-radius:12px;background:var(--surface);overflow:hidden}
+.subf>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--accent-soft);color:var(--accent-ink)}
+.grid select{width:150px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:5px 7px;font-size:13px}
+.grid input.paso{width:64px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:5px 7px;font-size:13px}
+.grid input[type=checkbox]{width:18px;height:18px}
+.grid td{vertical-align:middle}
+.g-agrega{padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
+.pegar{padding:0 14px 8px;flex-basis:auto}
+.pegar .form{padding:8px 0 0}
+.pegar textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
+.g-lista{max-height:520px;overflow-y:auto;border-top:1px solid var(--line)}
+.g-lista .gen-cli:first-child{border-top:0}
+.modos{display:grid;gap:8px}
+.modo{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px}
+.modo .radio{margin:0!important}
+.modo select{max-width:100%}
+.res-g{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface-2);display:grid;gap:8px}
+.res-g .grande{font-family:var(--f-display);font-size:19px;font-weight:750}
+.de-lista li{display:flex;justify-content:space-between;gap:10px}
+.ti-lista li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;align-items:center}
+/* tablas: en celular cada renglón es una tarjeta con sus etiquetas */
+@media (max-width:640px){
+  .tc,.tc tbody{display:block;width:100%}
+  .tc thead{display:none}
+  .tc tr{display:flex;flex-direction:column;padding:8px 12px;border-top:1px solid var(--line)}
+  .tc td.tit{order:-1;justify-content:flex-start;text-align:left;font-size:14.5px;padding-bottom:4px;min-width:0}
+  .tc td.tit::before{content:none}
+  .accs{flex-direction:row;flex-wrap:wrap;justify-content:flex-end}
+  .tc tbody tr:first-child{border-top:0}
+  .tc td{display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;padding:3px 0;text-align:right;min-width:0;overflow-wrap:anywhere}
+  .tc td::before{content:attr(data-l);color:var(--muted);font-size:12px;text-align:left;flex:none;max-width:45%}
+  .tc td[data-l=""]::before,.tc td:not([data-l])::before{content:none}
+  .tc td.acc{justify-content:flex-end;flex-wrap:wrap;white-space:normal;width:auto}
+  .grid select{width:auto;max-width:62%;min-width:0}
+  .form .rejilla{grid-template-columns:minmax(0,1fr)}
+  .form input[type=text],.form input[type=number],.form input[type=date],.pegar textarea,.grid select,.grid input.paso,.fila2 select{font-size:16px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div>
+    <div class="eti">WorkFlow</div>
+    <h1>Configuración</h1>
+    <p id="subt">Como en el Access: el catálogo de actividades, las plantillas, las plantillas de cada cliente y la Configuración General para dejar igual a muchos clientes de golpe.</p>
+  </div>
+  <div class="acts"><span id="hora" aria-live="polite"></span></div>
+</div></div>
+
+<div class="wrap">
+  <div class="practica" id="practica" hidden><b>Modo práctica.</b> Hasta el cambio del lunes 2 de noviembre la configuración se sigue haciendo en el Access y llega aquí cada 3 horas; lo que cambies aquí se borra en la siguiente actualización.</div>
+  <div class="nota" id="soloVe" hidden>Puedes consultar la configuración; la cambian la dirección y quien ella autorizó.</div>
+  <div class="nota" id="error" hidden></div>
+  <div class="cargando" id="cargando">Cargando la configuración…</div>
+
+  <div class="tabs" id="tabs" role="tablist" aria-label="Configuración del WorkFlow" hidden>
+    <button type="button" role="tab" id="t-cli" data-tab="cli" aria-selected="true" aria-controls="p-cli">Plantillas por cliente</button>
+    <button type="button" role="tab" id="t-pg" data-tab="pg" aria-selected="false" aria-controls="p-pg">Configuración general</button>
+    <button type="button" role="tab" id="t-pla" data-tab="pla" aria-selected="false" aria-controls="p-pla">Plantillas</button>
+    <button type="button" role="tab" id="t-cat" data-tab="cat" aria-selected="false" aria-controls="p-cat">Catálogo de actividades</button>
+  </div>
+
+  <!-- 1. Plantillas por cliente -->
+  <div id="p-cli" role="tabpanel" aria-labelledby="t-cli" hidden>
+    <section class="card" style="margin-top:16px">
+      <header>
+        <div><h2>Clientes</h2><div class="sub" id="cli-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="c-buscar" class="ancho" type="search" placeholder="Razón social, RFC o grupo" aria-label="Buscar por razón social, RFC o grupo">
+          <select id="c-est" aria-label="Estatus del cliente"><option value="1">Activos</option><option value="0">Inactivos</option><option value="2">Incubados</option><option value="">Todos</option></select>
+          <button class="btn" type="button" id="x-asign" data-excel>Excel</button>
+        </div>
+      </header>
+      <ul class="lista clis" id="c-lista"></ul>
+      <div class="vacio" id="c-vacia" hidden>Ningún cliente con estos filtros.</div>
+      <div class="mas" id="c-mas" hidden><button class="btn" type="button" id="c-vermas">Ver más</button></div>
+    </section>
+    <p class="pie">Pica un cliente para ver sus plantillas y, en cada una, quién es responsable, quién autoriza y qué pide cada actividad. El Excel trae las plantillas de todos los clientes.</p>
+  </div>
+
+  <!-- 2. Configuración general (Panel General del Access) -->
+  <div id="p-pg" role="tabpanel" aria-labelledby="t-pg" hidden>
+    <section class="card" style="margin-top:16px">
+      <header>
+        <div><h2>1. La plantilla</h2><div class="sub">Escoge la plantilla y deja cada actividad como debe quedar en los clientes.</div></div>
+        <div class="filtros"><select id="g-pla" aria-label="Plantilla"></select></div>
+      </header>
+      <div id="g-grid"><div class="vacio">Escoge una plantilla.</div></div>
+    </section>
+    <section class="card">
+      <header>
+        <div><h2>2. Los clientes</h2><div class="sub" id="g-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="g-buscar" type="search" placeholder="Razón social, RFC o grupo" aria-label="Buscar clientes">
+          <select id="g-cont" aria-label="Contador asignado"><option value="">Todos los contadores asignados</option></select>
+          <select id="g-tiene" aria-label="Con o sin la plantilla"><option value="">Con y sin la plantilla</option><option value="si">La tienen</option><option value="no">No la tienen</option></select>
+          <select id="g-est" aria-label="Estatus del cliente"><option value="1">Activos</option><option value="0">Inactivos</option><option value="2">Incubados</option><option value="">Todos</option></select>
+        </div>
+      </header>
+      <details class="masf pegar" id="g-pegar"><summary>Pegar RFC's</summary>
+        <div class="form">
+          <textarea id="g-rfcs" placeholder="Pega aquí los RFC: uno por renglón, o separados por comas o espacios" aria-label="RFC a marcar"></textarea>
+          <div class="botones"><button class="btn" type="button" id="g-pega">Marcar estos RFC</button><span class="rfc" id="g-pega-res"></span></div>
+        </div>
+      </details>
+      <div class="gen-acc"><button class="btn" type="button" id="g-todos">Marcar todos</button><button class="btn" type="button" id="g-ninguno">Quitar todos</button><span class="rfc" id="g-cuenta"></span></div>
+      <div class="g-lista" id="g-lista"></div>
+    </section>
+    <section class="card" id="g-aplica" hidden>
+      <header><div><h2>3. Aplicar a los clientes marcados</h2><div class="sub">Primero revisa cuánto cambia; nada se guarda hasta que confirmes.</div></div></header>
+      <div class="form">
+        <div class="modos">
+          <div class="modo"><label class="radio"><input type="radio" name="g-modo" value="todo" checked><span><b>Homologar la plantilla completa:</b> cada cliente marcado queda igual a esta configuración (las actividades que no estén aquí se le quitan; si no tiene la plantilla, se le agrega).</span></label></div>
+          <div class="modo"><label class="radio"><input type="radio" name="g-modo" value="actividad"><span><b>Actualizar una actividad:</b> solo esa actividad, en los clientes marcados que ya tienen la plantilla.</span></label>
+            <select id="g-act" aria-label="Actividad que se actualiza"></select></div>
+          <div class="modo"><label class="radio"><input type="radio" name="g-modo" value="columna"><span><b>Actualizar una columna:</b> solo esa columna, en las actividades marcadas en «Elegir», en los clientes marcados que ya tienen la plantilla.</span></label>
+            <select id="g-col" aria-label="Columna que se actualiza"><option value="resp">Responsable (o contador asignado)</option><option value="aut">Autoriza</option><option value="aactive">Activa</option><option value="req_archivo">Requiere documento</option><option value="req_secuencia">Requiere paso anterior</option></select></div>
+        </div>
+        <div class="botones"><button class="btn acento" type="button" id="g-revisa">Revisar</button></div>
+        <div class="msg" id="g-msg" hidden></div>
+        <div id="g-res"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 3. Plantillas -->
+  <div id="p-pla" role="tabpanel" aria-labelledby="t-pla" hidden>
+    <section class="card" style="margin-top:16px">
+      <header>
+        <div><h2>Plantillas</h2><div class="sub" id="pl-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="pl-buscar" type="search" placeholder="Buscar plantilla" aria-label="Buscar plantilla">
+          <select id="pl-per" aria-label="Periodicidad"><option value="">Mensuales y anuales</option><option value="1">Mensuales</option><option value="2">Anuales</option></select>
+          <button class="btn acento" type="button" id="pl-nueva" hidden>Nueva plantilla</button>
+        </div>
+      </header>
+      <div class="tabla"><table class="tc" id="pl-tabla"><thead></thead><tbody></tbody></table></div>
+      <div class="vacio" id="pl-vacia" hidden>Ninguna plantilla con estos filtros.</div>
+    </section>
+    <p class="pie">La plantilla modelo es la que se copia al agregarla a un cliente. Cambiarla no cambia lo que ya tiene cada cliente: para eso usa la Configuración general.</p>
+  </div>
+
+  <!-- 4. Catálogo de actividades -->
+  <div id="p-cat" role="tabpanel" aria-labelledby="t-cat" hidden>
+    <section class="card" style="margin-top:16px">
+      <header>
+        <div><h2>Actividades</h2><div class="sub" id="ca-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input id="ca-buscar" type="search" placeholder="Buscar actividad" aria-label="Buscar actividad">
+          <select id="ca-tipo" aria-label="Tipo de actividad"></select>
+          <button class="btn acento" type="button" id="ca-nueva" hidden>Nueva actividad</button>
+        </div>
+      </header>
+      <div id="ca-form"></div>
+      <div class="tabla"><table class="tc" id="ca-tabla"><thead><tr><th>Núm.</th><th>Actividad</th><th>Tipo</th><th>En plantillas</th></tr></thead><tbody></tbody></table></div>
+      <div class="vacio" id="ca-vacia" hidden>Ninguna actividad con estos filtros.</div>
+    </section>
+    <div class="dos">
+      <section class="card">
+        <header><div><h2>Tipos de actividad</h2></div><button class="btn" type="button" id="ti-nuevo" hidden>Nuevo tipo</button></header>
+        <div id="ti-form"></div>
+        <ul class="lista ti-lista" id="ti-lista"></ul>
+      </section>
+      <section class="card">
+        <header><div><h2>Departamentos</h2><div class="sub">Se usan en las actividades de cada plantilla.</div></div></header>
+        <ul class="lista de-lista" id="de-lista"></ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+
+<script>
+(function(){
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var PAGINA = 150;
+  var ACOLS = 'id,plantilla_id,actividad_id,empresa_id,emp_estatus,rs,rfc,grupo,resp_nombre,resp_usuario,aut_nombre,aut_usuario,pactive,aactive,req_archivo,req_secuencia,secuencia';
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var ESTATUS = { 1: 'Activo', 0: 'Inactivo', 2: 'Incubado' };
+  var EST = {}, CONSULTA = false, EDITA = false, COM = false, MODO = 'practica';
+  var PLA = [], PLA_ID = {}, CAT = [], CAT_ID = {}, TIPOS = [], TIPO_ID = {}, DEPTOS = [], DEPTO_ID = {}, PACT = [], COMS = {};
+  var ASIGN = [], EMP = [], EMP_ID = {}, CONT = {}, PERS = [];
+  var mostrarC = PAGINA, TAB = 'cli', ABIERTO = null, SUB = null;
+  var G = { pla: null, rows: [], sel: {}, prueba: null };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return m.replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  function num(n) { return (+n || 0).toLocaleString('es-MX'); }
+  function bool(b) { return b ? '<span class="si">Sí</span>' : '<span class="no">No</span>'; }
+  function nada() { return '<span class="no">—</span>'; }
+  function nomPla(id) { return (PLA_ID[id] || {}).nombre || ('Plantilla ' + id); }
+  function perPla(id) { return (PLA_ID[id] || {}).periodicidad || 1; }
+  function nomAct(id) { return (CAT_ID[id] || {}).nombre || ('Actividad ' + id); }
+  function nomTipo(id) { return (TIPO_ID[id] || {}).nombre || ''; }
+  function nomDepto(id) { return (DEPTO_ID[id] || {}).nombre || ''; }
+
+  // todas las filas: la primera página dice cuántas hay y las demás se piden juntas
+  async function todas(armar) {
+    var r = await armar(true).range(0, 999);
+    if (r.error) throw r.error;
+    var out = r.data || [], total = r.count == null ? out.length : r.count, pide = [];
+    for (var de = 1000; de < total; de += 1000) pide.push(armar(false).range(de, de + 999));
+    (await Promise.all(pide)).forEach(function (x) { if (x.error) throw x.error; out = out.concat(x.data || []); });
+    return out;
+  }
+  function cnt(c) { return c ? { count: 'exact' } : undefined; }
+  async function suave(pr) { try { return await pr; } catch (e) { return []; } }
+
+  /* ---------- carga ---------- */
+  async function carga() {
+    try {
+      var p = await P.listo; if (!p) return;
+      CONSULTA = !!P.consulta;
+      var r = await P.sb.rpc('wf_conf_estado');
+      if (r.error) throw r.error;
+      EST = r.data || {};
+      if (!EST.ve) { $('cargando').hidden = true; $('error').hidden = false; $('error').textContent = 'Esta sección la ven la dirección y los gerentes.'; return; }
+      EDITA = !!EST.edita && !CONSULTA; COM = !!EST.comision; MODO = EST.modo || 'practica';
+      $('practica').hidden = MODO !== 'practica';
+      $('soloVe').hidden = EDITA;
+      ['pl-nueva', 'ca-nueva', 'ti-nuevo'].forEach(function (k) { $(k).hidden = !EDITA; });
+      $('g-aplica').hidden = !EDITA;
+      await leeTodo();
+      $('cargando').hidden = true; $('tabs').hidden = false;
+      llenaFiltros();
+      muestra('cli');
+    } catch (e) {
+      $('cargando').hidden = true; $('error').hidden = false;
+      $('error').textContent = 'No se pudo leer la configuración. Vuelve a intentar en un momento.';
+    }
+  }
+  async function leeConfig() {
+    var q = await Promise.all([
+      todas(function (c) { return P.sb.from('wf_plantillas').select('id,nombre,periodicidad,creacion', cnt(c)).order('id'); }),
+      todas(function (c) { return P.sb.from('wf_catact').select('id,nombre,tipo_id', cnt(c)).order('id'); }),
+      suave(todas(function (c) { return P.sb.from('wf_tipoact').select('id,nombre', cnt(c)).order('id'); })),
+      suave(todas(function (c) { return P.sb.from('wf_deptos').select('id,nombre', cnt(c)).order('id'); })),
+      todas(function (c) { return P.sb.from('wf_pact').select('id,plantilla_id,actividad_id,depto_id,secuencia,req_archivo,req_secuencia,resp_nombre,resp_usuario', cnt(c)).order('id'); }),
+      COM ? suave(todas(function (c) { return P.sb.from('wf_plantilla_com').select('plantilla_id,tipo_com,prop,monto,prioridad', cnt(c)).order('plantilla_id'); })) : Promise.resolve([])]);
+    PLA = q[0].sort(function (a, b) { return String(a.nombre).localeCompare(String(b.nombre)); }); PLA_ID = {}; PLA.forEach(function (x) { PLA_ID[x.id] = x; });
+    CAT = q[1].sort(function (a, b) { return String(a.nombre).localeCompare(String(b.nombre)); }); CAT_ID = {}; CAT.forEach(function (x) { CAT_ID[x.id] = x; });
+    TIPOS = q[2]; TIPO_ID = {}; TIPOS.forEach(function (x) { TIPO_ID[x.id] = x; });
+    DEPTOS = q[3]; DEPTO_ID = {}; DEPTOS.forEach(function (x) { DEPTO_ID[x.id] = x; });
+    PACT = q[4]; COMS = {}; q[5].forEach(function (x) { COMS[x.plantilla_id] = x; });
+  }
+  async function leeTodo() {
+    var q = await Promise.all([
+      leeConfig(),
+      todas(function (c) { return P.sb.from('wf_asign').select(ACOLS, cnt(c)).order('id'); }),
+      suave(todas(function (c) { return P.sb.from('cli_empresas').select('id,grupo_id,razon,rfc,estatus', cnt(c)).order('id'); })),
+      suave(todas(function (c) { return P.sb.from('cli_grupos').select('id,alias', cnt(c)).order('id'); })),
+      suave(todas(function (c) { return P.sb.from('wf_asignado').select('empresa_id,nombre', c ? { count: 'exact' } : undefined).order('empresa_id').order('nombre'); })),
+      suave(P.sb.rpc('wf_conf_personas'))]);
+    ASIGN = q[1];
+    var grp = {}; (q[3] || []).forEach(function (g) { grp[g.id] = g.alias || ''; });
+    EMP = []; EMP_ID = {};
+    (q[2] || []).forEach(function (e) {
+      var x = { id: e.id, razon: e.razon || '', rfc: (e.rfc || '').toUpperCase(), grupo: grp[e.grupo_id] || '', estatus: e.estatus };
+      EMP.push(x); EMP_ID[x.id] = x;
+    });
+    ASIGN.forEach(function (a) {   // si algún cliente con plantillas no está en la base de clientes, igual sale
+      if (!EMP_ID[a.empresa_id]) { var x = { id: a.empresa_id, razon: a.rs || ('Cliente ' + a.empresa_id), rfc: a.rfc || '', grupo: a.grupo || '', estatus: a.emp_estatus }; EMP.push(x); EMP_ID[x.id] = x; }
+    });
+    EMP.sort(function (a, b) { return a.razon.localeCompare(b.razon); });
+    CONT = {}; (q[4] || []).forEach(function (c) { (CONT[c.empresa_id] = CONT[c.empresa_id] || []).push(c.nombre); });
+    var pr = q[5] || {}; PERS = (pr.data || []).map(function (x) { return x.nombre; }).filter(Boolean);
+  }
+  function llenaFiltros() {
+    var cs = {}; Object.keys(CONT).forEach(function (k) { CONT[k].forEach(function (n) { cs[n] = 1; }); });
+    $('g-cont').innerHTML = '<option value="">Todos los contadores asignados</option><option value="-">Sin contador asignado</option>' + Object.keys(cs).sort().map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    $('ca-tipo').innerHTML = '<option value="">Todos los tipos</option>' + TIPOS.map(function (t) { return '<option value="' + t.id + '">' + esc(t.nombre) + '</option>'; }).join('');
+    $('g-pla').innerHTML = '<option value="">Escoge la plantilla</option>' + PLA.map(function (p) { return '<option value="' + p.id + '">' + esc(p.nombre) + (p.periodicidad === 2 ? ' (anual)' : '') + '</option>'; }).join('');
+    if (G.pla) $('g-pla').value = String(G.pla);
+  }
+
+  function muestra(t) {
+    TAB = t;
+    ['cli', 'pg', 'pla', 'cat'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; });
+    if (t === 'cli') pintaClientes();
+    if (t === 'pg') { pintaGrid(); pintaGClientes(); }
+    if (t === 'pla') pintaPlantillas();
+    if (t === 'cat') pintaCatalogo();
+  }
+
+  /* ---------- ayudantes de formularios ---------- */
+  function opPers(val, vacio) {
+    var L = PERS.slice(); if (val && L.indexOf(val) < 0) L.unshift(val);
+    return '<option value="">' + esc(vacio) + '</option>' + L.map(function (n) { return '<option value="' + esc(n) + '"' + (n === val ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
+  }
+  function opLista(L, val, vacio, txt) {
+    return (vacio != null ? '<option value="">' + esc(vacio) + '</option>' : '') + L.map(function (x) { return '<option value="' + esc(x.id) + '"' + (String(x.id) === String(val) ? ' selected' : '') + '>' + esc(txt ? txt(x) : x.nombre) + '</option>'; }).join('');
+  }
+  function chk(id, lab, v, dis) { return '<label class="chk"><input type="checkbox" id="' + id + '"' + (v ? ' checked' : '') + (dis ? ' disabled' : '') + '><span>' + esc(lab) + '</span></label>'; }
+  function campo(lab, html, id) { return '<div><label' + (id ? ' for="' + id + '"' : '') + '>' + esc(lab) + '</label>' + html + '</div>'; }
+  function sec(tit, cuerpo, id) { return '<section class="sec"' + (id ? ' id="' + id + '"' : '') + '><h3>' + tit + '</h3>' + cuerpo + '</section>'; }
+  function cab(tit, sub, eti) {
+    return '<div class="cab"><div><div class="rfc">' + esc(eti) + '</div><h2 id="f-tit">' + esc(tit) + '</h2><div class="rfc">' + esc(sub) + '</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div>';
+  }
+  function pon(h) {
+    var f = $('ficha'), y = $('velo').hidden ? 0 : f.scrollTop;
+    f.innerHTML = h; $('velo').hidden = false; f.scrollTop = y;
+    try { if (!y) $('cerrar').focus(); } catch (e) {}
+  }
+  function cierra() { ABIERTO = null; SUB = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  function fmsg(t, ok) { var m = $('fmsg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; if (t) try { m.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+  // un formulario o confirmación arriba de la ficha (solo uno a la vez)
+  function abreSub(tit, cuerpo, accion, texto, peligro) {
+    SUB = accion;
+    var s = $('sub'); if (!s) return;
+    s.innerHTML = '<section class="subf"><h3>' + esc(tit) + '</h3><div class="form">' + cuerpo
+      + '<div class="msg" id="sub-msg" hidden></div><div class="botones"><button class="btn ' + (peligro ? 'peligro' : 'acento') + '" type="button" id="sub-ok">' + esc(texto || 'Guardar') + '</button><button class="btn" type="button" id="sub-no">Cancelar</button></div></div></section>';
+    try { s.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
+  }
+  function cierraSub() { SUB = null; if ($('sub')) $('sub').innerHTML = ''; }
+  function smsg(t) { var m = $('sub-msg'); if (!m) return; m.hidden = !t; m.className = 'msg mal'; m.textContent = t || ''; }
+  async function corre(pr, btn) {
+    if (btn) btn.disabled = true;
+    try { var r = await pr; if (r.error) throw r.error; return r.data; }
+    finally { if (btn && document.body.contains(btn)) btn.disabled = false; }
+  }
+  function val(id) { var e = $(id); return e ? e.value : ''; }
+  function marcado(id) { var e = $(id); return !!(e && e.checked); }
+
+  /* ---------- 1. Plantillas por cliente ---------- */
+  function porEmpresa() { var o = {}; ASIGN.forEach(function (a) { (o[a.empresa_id] = o[a.empresa_id] || {})[a.plantilla_id] = 1; }); return o; }
+  function pintaClientes() {
+    var q = norm($('c-buscar').value), es = $('c-est').value, por = porEmpresa();
+    var L = EMP.filter(function (e) {
+      if (es !== '' && String(e.estatus) !== es) return false;
+      return !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0;
+    });
+    var conP = L.filter(function (e) { return por[e.id]; }).length;
+    $('cli-sub').textContent = num(L.length) + (L.length === 1 ? ' cliente' : ' clientes') + ' · ' + num(conP) + ' con plantillas';
+    $('c-lista').innerHTML = L.slice(0, mostrarC).map(function (e) {
+      var n = Object.keys(por[e.id] || {}).length;
+      return '<li class="fila" tabindex="0" data-emp="' + esc(e.id) + '"><div class="q"><div class="rs">' + esc(e.razon) + '</div><div class="rfc">' + esc(e.rfc) + (e.grupo ? ' · ' + esc(e.grupo) : '') + (String(e.estatus) !== '1' ? ' · ' + esc(ESTATUS[e.estatus] || '') : '') + '</div></div>'
+        + '<span class="chip' + (n ? ' az' : '') + '">' + (n === 1 ? '1 plantilla' : num(n) + ' plantillas') + '</span></li>';
+    }).join('');
+    $('c-vacia').hidden = L.length > 0;
+    $('c-mas').hidden = L.length <= mostrarC;
+  }
+  function abreCliente(eid, ok) {
+    ABIERTO = { tipo: 'cli', id: eid }; SUB = null;
+    var e = EMP_ID[eid] || { id: eid, razon: 'Cliente ' + eid, rfc: '', grupo: '' };
+    var por = {};
+    ASIGN.forEach(function (a) { if (a.empresa_id === eid) (por[a.plantilla_id] = por[a.plantilla_id] || []).push(a); });
+    var pids = Object.keys(por).map(Number).sort(function (a, b) { return nomPla(a).localeCompare(nomPla(b)); });
+    var h = cab(e.razon, [e.rfc, e.grupo, ESTATUS[e.estatus]].filter(Boolean).join(' · '), 'Plantillas del cliente') + '<div class="cuerpo"><div class="msg" id="fmsg" hidden></div><div id="sub"></div>';
+    if (EDITA) {
+      var libres = PLA.filter(function (p) { return !por[p.id]; });
+      h += sec('Agregar plantilla', '<div class="form"><div class="fila2"><select id="ap-pla" aria-label="Plantilla para agregar">' + opLista(libres, '', 'Escoge la plantilla', function (p) { return p.nombre + (p.periodicidad === 2 ? ' (anual)' : ''); }) + '</select>'
+        + '<button class="btn acento" type="button" data-acc="ap-agrega">Agregar</button></div><p class="ayuda">Se copian las actividades de la plantilla modelo con su responsable por omisión; luego ajusta cada una aquí.</p></div>');
+    }
+    if (!pids.length) h += '<section class="sec"><div class="vacio">Este cliente no tiene plantillas.</div></section>';
+    pids.forEach(function (pid) {
+      var rows = por[pid].sort(function (a, b) { return (a.secuencia - b.secuencia) || (a.id - b.id); });
+      var hab = rows.some(function (a) { return a.pactive; });
+      var tit = '<span>' + esc(nomPla(pid)) + (perPla(pid) === 2 ? ' <span class="tag">Anual</span>' : '') + '</span><span class="chip ' + (hab ? 'ok' : 'mal') + '">' + (hab ? 'Habilitada' : 'Deshabilitada') + '</span>';
+      var t = '<div class="tabla"><table class="tc"><thead><tr><th>Paso</th><th>Actividad</th><th>Responsable</th><th>Autoriza</th><th>Activa</th><th title="Requiere documento">Doc.</th><th title="Requiere paso anterior">Paso ant.</th>' + (EDITA ? '<th></th>' : '') + '</tr></thead><tbody>'
+        + rows.map(function (a) {
+          return '<tr' + (a.aactive ? '' : ' class="apagada"') + '><td data-l="Paso" class="num">' + esc(a.secuencia) + '</td><td data-l="Actividad" class="tit"><b>' + esc(nomAct(a.actividad_id)) + '</b></td>'
+            + '<td data-l="Responsable">' + (esc(a.resp_nombre) || nada()) + '</td><td data-l="Autoriza">' + (esc(a.aut_nombre) || nada()) + '</td>'
+            + '<td data-l="Activa">' + bool(a.aactive) + '</td><td data-l="Documento">' + bool(a.req_archivo) + '</td><td data-l="Paso anterior">' + bool(a.req_secuencia) + '</td>'
+            + (EDITA ? '<td class="acc" data-l=""><div class="accs"><button class="btn chico" type="button" data-acc="as-edita" data-id="' + esc(a.id) + '">Editar</button><button class="btn chico peligro" type="button" data-acc="as-quita" data-id="' + esc(a.id) + '">Quitar</button></div></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>';
+      if (EDITA) t += '<div class="botones pie-sec"><button class="btn" type="button" data-acc="ap-act" data-pla="' + pid + '">Agregar actividad</button>'
+        + '<button class="btn" type="button" data-acc="ap-hab" data-pla="' + pid + '" data-v="' + (hab ? 'deshabilitar' : 'habilitar') + '">' + (hab ? 'Deshabilitar' : 'Habilitar') + '</button>'
+        + '<button class="btn peligro" type="button" data-acc="ap-quita" data-pla="' + pid + '">Quitar plantilla</button></div>';
+      h += sec(tit, t, 'sp-' + pid);
+    });
+    h += '<p class="ayuda">Una plantilla deshabilitada no se genera al «Generar el mes». Lo que ya está generado en un mes no cambia: eso se ajusta en el Panel de trabajo.</p></div>';
+    pon(h);
+    if (ok) fmsg(ok, true);
+  }
+  async function recargaCliente(eid, ok) {
+    var r = await todas(function (c) { return P.sb.from('wf_asign').select(ACOLS, c ? { count: 'exact' } : undefined).eq('empresa_id', eid).order('id'); });
+    ASIGN = ASIGN.filter(function (a) { return a.empresa_id !== eid; }).concat(r);
+    pintaClientes();
+    if (ABIERTO && ABIERTO.tipo === 'cli' && ABIERTO.id === eid) abreCliente(eid, ok);
+  }
+  function filaAsign(id) { return ASIGN.filter(function (a) { return String(a.id) === String(id); })[0]; }
+  function formAsign(a, nuevo, pid) {
+    var usadas = {}; if (nuevo) ASIGN.forEach(function (x) { if (x.empresa_id === ABIERTO.id && x.plantilla_id === pid) usadas[x.actividad_id] = 1; });
+    var h = '';
+    if (nuevo) h += campo('Actividad', '<select id="fa-act">' + opLista(CAT.filter(function (c) { return !usadas[c.id]; }), '', 'Escoge la actividad') + '</select>', 'fa-act');
+    h += '<div class="rejilla">' + campo('Responsable', '<select id="fa-resp">' + opPers(a.resp_nombre, nuevo ? 'Escoge al responsable' : 'Sin responsable') + '</select>', 'fa-resp')
+      + campo('Autoriza', '<select id="fa-aut">' + opPers(a.aut_nombre, 'Nadie') + '</select>', 'fa-aut') + '</div>';
+    if (!nuevo) h += campo('Paso (orden)', '<input type="number" id="fa-sec" min="0" max="999" value="' + esc(a.secuencia) + '">', 'fa-sec');
+    h += '<div class="chks">' + (nuevo ? '' : chk('fa-act-on', 'Activa', a.aactive)) + chk('fa-arch', 'Requiere documento', a.req_archivo) + chk('fa-paso', 'Requiere paso anterior', a.req_secuencia) + '</div>';
+    return h;
+  }
+
+  /* ---------- 2. Configuración general ---------- */
+  function siembra(pid) {
+    G.pla = pid || null; G.prueba = null;
+    G.rows = !pid ? [] : PACT.filter(function (x) { return x.plantilla_id === pid; }).sort(function (a, b) { return (a.secuencia - b.secuencia) || (a.id - b.id); })
+      .map(function (x) { return { actividad_id: x.actividad_id, secuencia: x.secuencia, ca: true, resp_nombre: x.resp_nombre || '', def: x.resp_nombre || '', aut_nombre: '', aactive: true, req_archivo: !!x.req_archivo, req_secuencia: !!x.req_secuencia, elegir: false }; });
+  }
+  function pintaGrid() {
+    var box = $('g-grid');
+    if (!G.pla) { box.innerHTML = '<div class="vacio">Escoge una plantilla. Se cargan sus actividades como en la plantilla modelo; ajústalas como deben quedar en los clientes.</div>'; pintaAplica(); return; }
+    var dis = EDITA ? '' : ' disabled';
+    var h = '<div class="tabla"><table class="tc grid"><thead><tr><th>Elegir</th><th>Paso</th><th>Actividad</th><th title="El responsable es el contador asignado de cada cliente">Cont. asig.</th><th>Responsable</th><th>Autoriza</th><th>Activa</th><th title="Requiere documento">Doc.</th><th title="Requiere paso anterior">Paso ant.</th>' + (EDITA ? '<th></th>' : '') + '</tr></thead><tbody>'
+      + G.rows.map(function (r, i) {
+        var c = function (k, lab) { return '<td data-l="' + lab + '"><input type="checkbox" data-gi="' + i + '" data-gk="' + k + '" aria-label="' + lab + '"' + (r[k] ? ' checked' : '') + dis + '></td>'; };
+        return '<tr>' + c('elegir', 'Elegir') + '<td data-l="Paso"><input class="paso" type="number" min="0" max="999" data-gi="' + i + '" data-gk="secuencia" value="' + esc(r.secuencia) + '" aria-label="Paso"' + dis + '></td>'
+          + '<td data-l="Actividad" class="tit"><b>' + esc(nomAct(r.actividad_id)) + '</b></td>' + c('ca', 'Contador asignado')
+          + '<td data-l="Responsable"><select data-gi="' + i + '" data-gk="resp_nombre" aria-label="Responsable"' + (r.ca || !EDITA ? ' disabled' : '') + '>' + (r.ca ? '<option>Contador asignado</option>' : opPers(r.resp_nombre, 'Escoge al responsable')) + '</select></td>'
+          + '<td data-l="Autoriza"><select data-gi="' + i + '" data-gk="aut_nombre" aria-label="Autoriza"' + dis + '>' + opPers(r.aut_nombre, 'Nadie') + '</select></td>'
+          + c('aactive', 'Activa') + c('req_archivo', 'Documento') + c('req_secuencia', 'Paso anterior')
+          + (EDITA ? '<td class="acc" data-l=""><button class="btn chico peligro" type="button" data-acc="g-quita-fila" data-gi="' + i + '">Quitar</button></td>' : '') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+    if (!G.rows.length) h = '<div class="vacio">Esta plantilla no tiene actividades. Agrégaselas aquí o en «Plantillas».</div>';
+    if (EDITA) {
+      var ya = {}; G.rows.forEach(function (r) { ya[r.actividad_id] = 1; });
+      h += '<div class="g-agrega"><div class="fila2"><select id="g-nueva" aria-label="Actividad para agregar">' + opLista(CAT.filter(function (c) { return !ya[c.id]; }), '', 'Agregar otra actividad del catálogo') + '</select><button class="btn" type="button" data-acc="g-agrega-fila">Agregar actividad</button></div></div>';
+    }
+    box.innerHTML = h;
+    pintaAplica();
+  }
+  function tieneSet() { var o = {}; if (G.pla) ASIGN.forEach(function (a) { if (a.plantilla_id === G.pla) o[a.empresa_id] = 1; }); return o; }
+  function gFiltrados() {
+    var q = norm($('g-buscar').value), ct = $('g-cont').value, ti = $('g-tiene').value, es = $('g-est').value, T = tieneSet();
+    return EMP.filter(function (e) {
+      if (es !== '' && String(e.estatus) !== es) return false;
+      if (ti === 'si' && !T[e.id]) return false;
+      if (ti === 'no' && T[e.id]) return false;
+      if (ct === '-' && (CONT[e.id] || []).length) return false;
+      if (ct && ct !== '-' && (CONT[e.id] || []).indexOf(ct) < 0) return false;
+      return !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0;
+    });
+  }
+  function gCuenta() {
+    var n = Object.keys(G.sel).filter(function (k) { return G.sel[k]; }).length;
+    $('g-cuenta').textContent = n === 1 ? '1 cliente marcado' : num(n) + ' clientes marcados';
+    return n;
+  }
+  function pintaGClientes() {
+    var L = gFiltrados(), T = tieneSet();
+    $('g-sub').textContent = num(L.length) + (L.length === 1 ? ' cliente con estos filtros' : ' clientes con estos filtros') + (G.pla ? '' : ' · escoge la plantilla para ver quién la tiene');
+    $('g-lista').innerHTML = L.length ? L.map(function (e) {
+      var c = (CONT[e.id] || []).join(', ');
+      return '<label class="gen-cli"><input type="checkbox" data-ge="' + esc(e.id) + '"' + (G.sel[e.id] ? ' checked' : '') + '><span class="q"><span class="rs">' + esc(e.razon) + '</span>'
+        + '<span class="rfc">' + esc(e.rfc) + (e.grupo ? ' · ' + esc(e.grupo) : '') + ' · ' + (c ? 'Contador: ' + esc(c) : '<span class="chip ojo">sin contador asignado</span>')
+        + (G.pla ? (T[e.id] ? ' · <span class="chip az">la tiene</span>' : ' · <span class="chip">no la tiene</span>') : '') + '</span></span></label>';
+    }).join('') : '<div class="vacio">Ningún cliente con estos filtros.</div>';
+    gCuenta();
+  }
+  function pintaAplica() {
+    if (!EDITA) return;
+    var v = $('g-act').value;
+    $('g-act').innerHTML = G.rows.length ? G.rows.map(function (r) { return '<option value="' + esc(r.actividad_id) + '">' + esc(nomAct(r.actividad_id)) + '</option>'; }).join('') : '<option value="">Primero escoge la plantilla</option>';
+    if (v && G.rows.some(function (r) { return String(r.actividad_id) === v; })) $('g-act').value = v;
+  }
+  function gModo() { var r = document.querySelector('input[name="g-modo"]:checked'); return r ? r.value : 'todo'; }
+  function gLimpia() { G.prueba = null; $('g-res').innerHTML = ''; gmsg(''); }
+  function gmsg(t, ok) { var m = $('g-msg'); m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
+  function gPayload(prueba) {
+    var modo = gModo();
+    return { plantilla_id: G.pla, modo: modo, prueba: prueba,
+      actividad_id: modo === 'actividad' ? (+$('g-act').value || null) : null,
+      columna: modo === 'columna' ? $('g-col').value : null,
+      empresas: Object.keys(G.sel).filter(function (k) { return G.sel[k]; }).map(Number),
+      actividades: G.rows.map(function (r) {
+        return { actividad_id: r.actividad_id, secuencia: +r.secuencia || 0, ca: !!r.ca, resp_nombre: r.ca ? '' : (r.resp_nombre || ''), aut_nombre: r.aut_nombre || '',
+                 aactive: !!r.aactive, req_archivo: !!r.req_archivo, req_secuencia: !!r.req_secuencia, elegir: !!r.elegir };
+      }) };
+  }
+  async function gRevisa(btn) {
+    gLimpia();
+    if (!G.pla) { gmsg('Escoge la plantilla.'); return; }
+    var p = gPayload(true);
+    if (!p.empresas.length) { gmsg('Marca al menos un cliente.'); return; }
+    try {
+      var d = await corre(P.sb.rpc('wf_panel_general', { p: p }), btn) || {};
+      G.prueba = p;
+      var todo = p.modo === 'todo';
+      var cuenta = 'Se agregan ' + num(d.nuevas) + ', cambian ' + num(d.cambian) + ', se quitan ' + num(d.quitan) + ' en ' + num(d.empresas) + (d.empresas === 1 ? ' cliente' : ' clientes');
+      var det = todo ? num(d.sinPlantilla) + ' no tenían la plantilla y se les agrega' : num(d.sinPlantilla) + ' no tienen la plantilla y no se tocan';
+      if (d.sinContador) det += '; ' + num(d.sinContador) + ' sin contador asignado (esas actividades quedan sin responsable)';
+      var nada = !(+d.nuevas || +d.cambian || +d.quitan);
+      $('g-res').innerHTML = '<div class="res-g"><div class="grande">' + esc(cuenta) + '</div><div class="rfc">(' + esc(det) + ')</div>'
+        + (nada ? '<div class="rfc">No hay nada que cambiar: los clientes marcados ya están así.</div>'
+          : '<div class="botones"><button class="btn acento" type="button" id="g-si">Sí, aplicar a ' + num(d.empresas) + (d.empresas === 1 ? ' cliente' : ' clientes') + '</button><span class="rfc">Si cambias algo arriba, vuelve a revisar.</span></div>') + '</div>';
+      try { $('g-res').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (er) {}
+    } catch (e) { gmsg(falla(e)); }
+  }
+  async function gAplica(btn) {
+    if (!G.prueba) return;
+    var p = Object.assign({}, G.prueba, { prueba: false });
+    try {
+      var d = await corre(P.sb.rpc('wf_panel_general', { p: p }), btn) || {};
+      G.prueba = null; $('g-res').innerHTML = '';
+      ASIGN = await todas(function (c) { return P.sb.from('wf_asign').select(ACOLS, cnt(c)).order('id'); });
+      pintaGClientes();
+      gmsg('Listo: se agregaron ' + num(d.nuevas) + ', cambiaron ' + num(d.cambian) + ' y se quitaron ' + num(d.quitan) + ' actividades en ' + num(d.empresas) + ' clientes.', true);
+    } catch (e) { gmsg(falla(e)); }
+  }
+  function gPega() {
+    var toks = String($('g-rfcs').value || '').toUpperCase().split(/[\s,;]+/).filter(Boolean), por = {}, no = [], n = 0;
+    EMP.forEach(function (e) { if (e.rfc) (por[e.rfc] = por[e.rfc] || []).push(e.id); });
+    toks.forEach(function (r) { if (por[r]) por[r].forEach(function (id) { if (!G.sel[id]) n++; G.sel[id] = true; }); else no.push(r); });
+    $('g-pega-res').textContent = toks.length ? ('Se marcaron ' + num(n) + (no.length ? ' · no encontré: ' + no.slice(0, 12).join(', ') + (no.length > 12 ? '…' : '') : '')) : 'Pega al menos un RFC.';
+    gLimpia(); pintaGClientes();
+  }
+
+  /* ---------- 3. Plantillas ---------- */
+  function cuentas() {
+    var act = {}, cli = {};
+    PACT.forEach(function (x) { act[x.plantilla_id] = (act[x.plantilla_id] || 0) + 1; });
+    ASIGN.forEach(function (a) { (cli[a.plantilla_id] = cli[a.plantilla_id] || {})[a.empresa_id] = 1; });
+    return { act: act, cli: cli };
+  }
+  function pct(x) { return (Math.round((+x || 0) * 10000) / 100).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %'; }
+  function dinero(n) { return '$' + (+n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function pintaPlantillas() {
+    var q = norm($('pl-buscar').value), pe = $('pl-per').value, K = cuentas();
+    var L = PLA.filter(function (p) { return (!pe || String(p.periodicidad) === pe) && (!q || norm(p.nombre).indexOf(q) >= 0); });
+    $('pl-sub').textContent = num(L.length) + (L.length === 1 ? ' plantilla' : ' plantillas');
+    $('pl-tabla').tHead.innerHTML = '<tr><th>Plantilla</th><th>Periodicidad</th><th>Creación</th><th>Actividades</th><th>Clientes</th>' + (COM ? '<th>Comisión</th><th>Proporción</th><th>Monto</th><th>Prioridad</th>' : '') + '</tr>';
+    $('pl-tabla').tBodies[0].innerHTML = L.map(function (p) {
+      var c = COMS[p.id] || {};
+      return '<tr class="fila" tabindex="0" data-pl="' + esc(p.id) + '"><td data-l="Plantilla" class="tit"><span class="rs">' + esc(p.nombre) + '</span></td><td data-l="Periodicidad">' + (p.periodicidad === 2 ? 'Anual' : 'Mensual') + '</td>'
+        + '<td data-l="Creación" class="vence">' + (esc(fecha(p.creacion)) || nada()) + '</td><td data-l="Actividades" class="num">' + num(K.act[p.id]) + '</td><td data-l="Clientes" class="num">' + num(Object.keys(K.cli[p.id] || {}).length) + '</td>'
+        + (COM ? '<td data-l="Comisión">' + (c.tipo_com ? (c.tipo_com === 2 ? 'Fija' : 'Proporcional') : nada()) + '</td><td data-l="Proporción" class="num">' + (c.tipo_com ? pct(c.prop) : nada()) + '</td><td data-l="Monto" class="num">' + (c.tipo_com ? dinero(c.monto) : nada()) + '</td><td data-l="Prioridad">' + (c.prioridad ? (c.prioridad === 2 ? 'Secundaria' : 'Primaria') : nada()) + '</td>' : '') + '</tr>';
+    }).join('');
+    $('pl-vacia').hidden = L.length > 0;
+  }
+  function abrePla(pid, ok) {
+    ABIERTO = { tipo: 'pla', id: pid || null }; SUB = null;
+    var p = pid ? PLA_ID[pid] : { nombre: '', periodicidad: 1, creacion: '' }, c = (pid && COMS[pid]) || { tipo_com: 1, prop: 0, monto: 0, prioridad: 1 }, K = cuentas();
+    if (!p) return;
+    var dis = EDITA ? '' : ' disabled';
+    var h = cab(pid ? p.nombre : 'Nueva plantilla', pid ? (p.periodicidad === 2 ? 'Anual' : 'Mensual') + ' · la tienen ' + num(Object.keys(K.cli[pid] || {}).length) + ' clientes' : 'Escribe el nombre y guárdala; luego agrégale actividades', 'Plantilla')
+      + '<div class="cuerpo"><div class="msg" id="fmsg" hidden></div><div id="sub"></div>';
+    var f = '<div class="form">' + campo('Nombre', '<input type="text" id="pl-nom" maxlength="200" value="' + esc(p.nombre) + '"' + dis + '>', 'pl-nom')
+      + '<div class="rejilla">' + campo('Periodicidad', '<select id="pl-per2"' + dis + '><option value="1"' + (p.periodicidad !== 2 ? ' selected' : '') + '>Mensual</option><option value="2"' + (p.periodicidad === 2 ? ' selected' : '') + '>Anual</option></select>', 'pl-per2')
+      + campo('Creación', '<input type="date" id="pl-cre" value="' + esc(String(p.creacion || '').slice(0, 10)) + '"' + dis + '>', 'pl-cre') + '</div>';
+    if (COM) f += '<div class="rejilla">' + campo('Tipo de comisión', '<select id="pl-tc"' + dis + '><option value="1"' + (c.tipo_com !== 2 ? ' selected' : '') + '>Proporcional</option><option value="2"' + (c.tipo_com === 2 ? ' selected' : '') + '>Fija</option></select>', 'pl-tc')
+      + campo('Prioridad', '<select id="pl-prio"' + dis + '><option value="1"' + (c.prioridad !== 2 ? ' selected' : '') + '>Primaria</option><option value="2"' + (c.prioridad === 2 ? ' selected' : '') + '>Secundaria</option></select>', 'pl-prio')
+      + campo('Proporción (%)', '<input type="number" id="pl-prop" min="0" max="100" step="0.01" value="' + esc(Math.round((+c.prop || 0) * 10000) / 100) + '"' + dis + '>', 'pl-prop')
+      + campo('Monto fijo ($)', '<input type="number" id="pl-monto" min="0" step="0.01" value="' + esc(+c.monto || 0) + '"' + dis + '>', 'pl-monto') + '</div><p class="ayuda">La comisión solo la ven la dirección y Cadengo.</p>';
+    if (EDITA) f += '<div class="botones"><button class="btn acento" type="button" data-acc="pl-guarda">' + (pid ? 'Guardar' : 'Crear plantilla') + '</button></div>';
+    f += '</div>';
+    h += sec('Datos de la plantilla', f);
+    if (pid) {
+      var A = PACT.filter(function (x) { return x.plantilla_id === pid; }).sort(function (a, b) { return (a.secuencia - b.secuencia) || (a.id - b.id); });
+      var t = A.length ? '<div class="tabla"><table class="tc"><thead><tr><th>Paso</th><th>Actividad</th><th>Departamento</th><th>Responsable por omisión</th><th title="Requiere documento">Doc.</th><th title="Requiere paso anterior">Paso ant.</th>' + (EDITA ? '<th></th>' : '') + '</tr></thead><tbody>'
+        + A.map(function (x) {
+          return '<tr><td data-l="Paso" class="num">' + esc(x.secuencia) + '</td><td data-l="Actividad" class="tit"><b>' + esc(nomAct(x.actividad_id)) + '</b></td><td data-l="Departamento">' + (esc(nomDepto(x.depto_id)) || nada()) + '</td>'
+            + '<td data-l="Responsable">' + (esc(x.resp_nombre) || nada()) + '</td><td data-l="Documento">' + bool(x.req_archivo) + '</td><td data-l="Paso anterior">' + bool(x.req_secuencia) + '</td>'
+            + (EDITA ? '<td class="acc" data-l=""><div class="accs"><button class="btn chico" type="button" data-acc="pa-edita" data-id="' + esc(x.id) + '">Editar</button><button class="btn chico peligro" type="button" data-acc="pa-quita" data-id="' + esc(x.id) + '">Quitar</button></div></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="vacio">Todavía no tiene actividades.</div>';
+      if (EDITA) t += '<div class="botones pie-sec"><button class="btn" type="button" data-acc="pa-nueva">Agregar actividad</button></div>';
+      h += sec('Actividades <small>' + num(A.length) + '</small>', t);
+      h += '<p class="ayuda">Cambiar la plantilla modelo no cambia lo que ya tiene cada cliente: para dejarlos igual, usa la Configuración general.</p>';
+      if (EDITA) h += sec('Más', '<div class="form"><div class="fila2"><input type="text" id="pl-dup" maxlength="200" aria-label="Nombre de la copia" value="' + esc(p.nombre + ' (COPIA)') + '"><button class="btn" type="button" data-acc="pl-duplica">Duplicar</button></div>'
+        + '<p class="ayuda">Duplicar copia sus actividades (y su comisión) a una plantilla nueva.</p><div class="botones"><button class="btn peligro" type="button" data-acc="pl-borra">Borrar plantilla</button></div></div>');
+    }
+    h += '</div>';
+    pon(h);
+    if (ok) fmsg(ok, true);
+  }
+  function formPact(x) {
+    return campo('Actividad', '<select id="pa-act">' + opLista(CAT, x.actividad_id, 'Escoge la actividad') + '</select>', 'pa-act')
+      + '<div class="rejilla">' + campo('Departamento', '<select id="pa-dep">' + opLista(DEPTOS, x.depto_id, 'Sin departamento') + '</select>', 'pa-dep')
+      + campo('Paso (orden)', '<input type="number" id="pa-sec" min="0" max="999" value="' + esc(x.secuencia == null ? '' : x.secuencia) + '" placeholder="Al final">', 'pa-sec') + '</div>'
+      + campo('Responsable por omisión', '<select id="pa-resp">' + opPers(x.resp_nombre, 'Sin responsable') + '</select>', 'pa-resp')
+      + '<div class="chks">' + chk('pa-arch', 'Requiere documento', x.req_archivo) + chk('pa-paso', 'Requiere paso anterior', x.req_secuencia) + '</div>';
+  }
+  async function recargaConfig() { await leeConfig(); llenaFiltros(); }
+
+  /* ---------- 4. Catálogo ---------- */
+  function pintaCatalogo() {
+    var q = norm($('ca-buscar').value), ti = $('ca-tipo').value, uso = {};
+    PACT.forEach(function (x) { (uso[x.actividad_id] = uso[x.actividad_id] || {})[x.plantilla_id] = 1; });
+    var L = CAT.filter(function (c) { return (!ti || String(c.tipo_id) === ti) && (!q || norm(c.nombre).indexOf(q) >= 0); });
+    $('ca-sub').textContent = num(L.length) + (L.length === 1 ? ' actividad' : ' actividades');
+    $('ca-tabla').tHead.innerHTML = '<tr><th>Núm.</th><th>Actividad</th><th>Tipo</th><th>En plantillas</th>' + (EDITA ? '<th></th>' : '') + '</tr>';
+    $('ca-tabla').tBodies[0].innerHTML = L.map(function (c) {
+      var n = Object.keys(uso[c.id] || {}).length;
+      return '<tr><td data-l="Núm." class="num">' + esc(c.id) + '</td><td data-l="Actividad" class="tit"><b>' + esc(c.nombre) + '</b></td><td data-l="Tipo">' + (esc(nomTipo(c.tipo_id)) || nada()) + '</td><td data-l="En plantillas" class="num">' + num(n) + '</td>'
+        + (EDITA ? '<td class="acc" data-l=""><div class="accs"><button class="btn chico" type="button" data-acc="ca-edita" data-id="' + esc(c.id) + '">Editar</button><button class="btn chico peligro" type="button" data-acc="ca-borra" data-id="' + esc(c.id) + '">Borrar</button></div></td>' : '') + '</tr>';
+    }).join('');
+    $('ca-vacia').hidden = L.length > 0;
+    var ut = {}; CAT.forEach(function (c) { ut[c.tipo_id] = (ut[c.tipo_id] || 0) + 1; });
+    $('ti-lista').innerHTML = TIPOS.length ? TIPOS.map(function (t) {
+      return '<li><span><span class="t">' + esc(t.nombre) + '</span> <span class="rfc">· ' + num(ut[t.id]) + ' actividades</span></span>'
+        + (EDITA ? '<span><button class="btn chico" type="button" data-acc="ti-edita" data-id="' + esc(t.id) + '">Editar</button> <button class="btn chico peligro" type="button" data-acc="ti-borra" data-id="' + esc(t.id) + '">Borrar</button></span>' : '') + '</li>';
+    }).join('') : '<li class="rfc">Sin tipos.</li>';
+    $('de-lista').innerHTML = DEPTOS.length ? DEPTOS.map(function (d) { return '<li><span class="t">' + esc(d.nombre) + '</span><span class="rfc">Núm. ' + esc(d.id) + '</span></li>'; }).join('') : '<li class="rfc">Sin departamentos.</li>';
+  }
+  // formularios del catálogo (en la misma tarjeta, arriba de la tabla)
+  var CF = null;
+  function caForm(box, tit, cuerpo, accion, texto, peligro) {
+    CF = accion;
+    ['ca-form', 'ti-form'].forEach(function (k) { if (k !== box) $(k).innerHTML = ''; });
+    $(box).innerHTML = '<div class="form" style="border-bottom:1px solid var(--line);background:var(--surface-2)"><b>' + esc(tit) + '</b>' + cuerpo
+      + '<div class="msg" id="cf-msg" hidden></div><div class="botones"><button class="btn ' + (peligro ? 'peligro' : 'acento') + '" type="button" id="cf-ok">' + esc(texto || 'Guardar') + '</button><button class="btn" type="button" id="cf-no">Cancelar</button></div></div>';
+    try { $(box).scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  }
+  function cfCierra() { CF = null; $('ca-form').innerHTML = ''; $('ti-form').innerHTML = ''; }
+  function cfmsg(t) { var m = $('cf-msg'); if (!m) return; m.hidden = !t; m.className = 'msg mal'; m.textContent = t || ''; }
+
+  /* ---------- Excel: todas las plantillas de todos los clientes (con la marca PROFASE: js/marca.js) ---------- */
+  async function excel(b) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS();
+      var L = ASIGN.slice().sort(function (a, b2) {
+        var ea = EMP_ID[a.empresa_id] || {}, eb = EMP_ID[b2.empresa_id] || {};
+        return String(ea.razon || a.rs).localeCompare(String(eb.razon || b2.rs)) || nomPla(a.plantilla_id).localeCompare(nomPla(b2.plantilla_id)) || (a.secuencia - b2.secuencia);
+      });
+      var wb = MK.libro(EX, 'WorkFlow · Plantillas por cliente');
+      var ws = wb.addWorksheet('Plantillas por cliente');
+      var head = ['Cliente', 'RFC', 'Grupo', 'Plantilla', 'Habilitada', 'Paso', 'Actividad', 'Responsable', 'Autoriza', 'Activa', 'Requiere documento', 'Requiere paso anterior'];
+      ws.columns = [40, 15, 26, 30, 11, 7, 34, 26, 26, 8, 12, 12].map(function (w) { return { width: w }; });
+      var f = MK.encabezado(wb, ws, head.length, { titulo: 'WorkFlow · Plantillas por cliente', lineas: [num(L.length) + ' actividades de ' + num(Object.keys(porEmpresa()).length) + ' clientes'] });
+      ws.getRow(f).values = head; MK.cabecera(ws, f, 1, head.length);
+      var si = function (x) { return x ? 'Sí' : 'No'; };
+      L.forEach(function (a, i) {
+        var e = EMP_ID[a.empresa_id] || {};
+        ws.getRow(f + 1 + i).values = [e.razon || a.rs, e.rfc || a.rfc, e.grupo || a.grupo, nomPla(a.plantilla_id), si(a.pactive), a.secuencia, nomAct(a.actividad_id), a.resp_nombre, a.aut_nombre, si(a.aactive), si(a.req_archivo), si(a.req_secuencia)];
+      });
+      if (L.length) MK.cuerpo(ws, f + 1, f + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f }];
+      MK.impresion(ws, { repetir: f });
+      await MK.guardar(wb, 'Plantillas por cliente PROFASE.xlsx');
+    } catch (e) { $('error').hidden = false; $('error').textContent = 'No se pudo armar el Excel. Vuelve a intentar.'; setTimeout(function () { $('error').hidden = true; }, 6000); }
+    b.disabled = false;
+  }
+
+  /* ---------- acciones ---------- */
+  async function accion(b) {
+    var a = b.getAttribute('data-acc'), id = b.getAttribute('data-id'), pid = +b.getAttribute('data-pla') || null;
+    var eid = ABIERTO && ABIERTO.tipo === 'cli' ? ABIERTO.id : null;
+    // plantillas del cliente
+    if (a === 'ap-agrega') {
+      var np = +val('ap-pla'); if (!np) { fmsg('Escoge la plantilla.'); return; }
+      try { var r = await corre(P.sb.rpc('wf_asign_plantilla', { p_empresa: eid, p_plantilla: np, p_accion: 'agregar' }), b); await recargaCliente(eid, 'Se agregó «' + nomPla(np) + '» con ' + num((r || {}).renglones) + ' actividades.'); } catch (e) { fmsg(falla(e)); }
+      return;
+    }
+    if (a === 'ap-hab') {
+      var acc = b.getAttribute('data-v');
+      try { await corre(P.sb.rpc('wf_asign_plantilla', { p_empresa: eid, p_plantilla: pid, p_accion: acc }), b); await recargaCliente(eid, (acc === 'habilitar' ? 'Se habilitó «' : 'Se deshabilitó «') + nomPla(pid) + '».'); } catch (e) { fmsg(falla(e)); }
+      return;
+    }
+    if (a === 'ap-quita') {
+      var n = ASIGN.filter(function (x) { return x.empresa_id === eid && x.plantilla_id === pid; }).length;
+      abreSub('Quitar «' + nomPla(pid) + '»', '<p class="ayuda">Se le quitan a este cliente las ' + num(n) + ' actividades de la plantilla. Lo que ya está generado en un mes no se toca.</p>',
+        { fn: async function (bt) { await corre(P.sb.rpc('wf_asign_plantilla', { p_empresa: eid, p_plantilla: pid, p_accion: 'quitar' }), bt); await recargaCliente(eid, 'Se quitó «' + nomPla(pid) + '».'); } }, 'Sí, quitar plantilla', true);
+      return;
+    }
+    if (a === 'ap-act') {
+      abreSub('Agregar actividad a «' + nomPla(pid) + '»', formAsign({ resp_nombre: '', aut_nombre: '', req_archivo: true, req_secuencia: false }, true, pid),
+        { fn: async function (bt) {
+          var act = +val('fa-act'); if (!act) throw { message: 'Escoge la actividad' };
+          await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'asign', p: { empresa_id: eid, plantilla_id: pid, actividad_id: act, resp_nombre: val('fa-resp'), aut_nombre: val('fa-aut'), req_archivo: marcado('fa-arch'), req_secuencia: marcado('fa-paso') } }), bt);
+          await recargaCliente(eid, 'Se agregó «' + nomAct(act) + '».');
+        } }, 'Agregar');
+      return;
+    }
+    if (a === 'as-edita') {
+      var x = filaAsign(id); if (!x) return;
+      abreSub('Editar «' + nomAct(x.actividad_id) + '» · ' + nomPla(x.plantilla_id), formAsign(x, false),
+        { fn: async function (bt) {
+          await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'asign', p: { id: x.id, resp_nombre: val('fa-resp'), aut_nombre: val('fa-aut'), aactive: marcado('fa-act-on'), req_archivo: marcado('fa-arch'), req_secuencia: marcado('fa-paso'), secuencia: +val('fa-sec') || 0 } }), bt);
+          await recargaCliente(eid, 'Se guardó «' + nomAct(x.actividad_id) + '».');
+        } });
+      return;
+    }
+    if (a === 'as-quita') {
+      var y = filaAsign(id); if (!y) return;
+      abreSub('Quitar «' + nomAct(y.actividad_id) + '» de «' + nomPla(y.plantilla_id) + '»', campo('Por qué (opcional)', '<textarea id="fa-mot" maxlength="500"></textarea>', 'fa-mot'),
+        { fn: async function (bt) { await corre(P.sb.rpc('wf_conf_borra', { p_que: 'asign', p_id: y.id, p_motivo: val('fa-mot') }), bt); await recargaCliente(eid, 'Se quitó «' + nomAct(y.actividad_id) + '».'); } }, 'Sí, quitar', true);
+      return;
+    }
+    // plantillas modelo
+    var plid = ABIERTO && ABIERTO.tipo === 'pla' ? ABIERTO.id : null;
+    if (a === 'pl-guarda') {
+      var datos = { nombre: val('pl-nom'), periodicidad: +val('pl-per2') || 1, creacion: val('pl-cre') || null };
+      if (plid) datos.id = plid;
+      if (COM) datos.com = { tipo_com: +val('pl-tc') || 1, prop: Math.round((+val('pl-prop') || 0) * 100) / 10000, monto: +val('pl-monto') || 0, prioridad: +val('pl-prio') || 1 };
+      try {
+        var g = await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'plantilla', p: datos }), b) || {};
+        await recargaConfig(); pintaPlantillas();
+        abrePla(g.id || plid, plid ? 'Se guardó la plantilla' + ((g.renglonesDelMes || 0) ? ' (y se le cambió el nombre en ' + num(g.renglonesDelMes) + ' actividades ya generadas)' : '') + '.' : 'Se creó la plantilla. Ahora agrégale sus actividades.');
+      } catch (e) { fmsg(falla(e)); }
+      return;
+    }
+    if (a === 'pa-nueva' || a === 'pa-edita') {
+      var z = a === 'pa-edita' ? PACT.filter(function (q) { return String(q.id) === String(id); })[0] : { actividad_id: '', depto_id: '', secuencia: null, resp_nombre: '', req_archivo: true, req_secuencia: false };
+      if (!z) return;
+      abreSub(a === 'pa-edita' ? 'Editar «' + nomAct(z.actividad_id) + '»' : 'Agregar actividad a la plantilla', formPact(z),
+        { fn: async function (bt) {
+          var d = { plantilla_id: plid, actividad_id: +val('pa-act') || null, depto_id: +val('pa-dep') || null, secuencia: val('pa-sec') === '' ? null : +val('pa-sec'), resp_nombre: val('pa-resp'), req_archivo: marcado('pa-arch'), req_secuencia: marcado('pa-paso') };
+          if (z.id) d.id = z.id;
+          await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'pactividad', p: d }), bt);
+          await recargaConfig(); pintaPlantillas(); abrePla(plid, 'Se guardó la actividad.');
+        } }, a === 'pa-edita' ? 'Guardar' : 'Agregar');
+      return;
+    }
+    if (a === 'pa-quita') {
+      var w = PACT.filter(function (q) { return String(q.id) === String(id); })[0]; if (!w) return;
+      abreSub('Quitar «' + nomAct(w.actividad_id) + '» de la plantilla', '<p class="ayuda">Solo se quita de la plantilla modelo; los clientes que ya la tienen no cambian.</p>' + campo('Por qué (opcional)', '<textarea id="pa-mot" maxlength="500"></textarea>', 'pa-mot'),
+        { fn: async function (bt) { await corre(P.sb.rpc('wf_conf_borra', { p_que: 'pactividad', p_id: w.id, p_motivo: val('pa-mot') }), bt); await recargaConfig(); pintaPlantillas(); abrePla(plid, 'Se quitó la actividad.'); } }, 'Sí, quitar', true);
+      return;
+    }
+    if (a === 'pl-duplica') {
+      try { var dd = await corre(P.sb.rpc('wf_plantilla_duplica', { p_id: plid, p_nombre: val('pl-dup') }), b) || {}; await recargaConfig(); pintaPlantillas(); abrePla(dd.id, 'Se creó la copia con ' + num(dd.actividades) + ' actividades.'); } catch (e) { fmsg(falla(e)); }
+      return;
+    }
+    if (a === 'pl-borra') {
+      abreSub('Borrar «' + nomPla(plid) + '»', '<p class="ayuda">Solo se puede borrar si ningún cliente la tiene y no tiene trabajo generado.</p>' + campo('Por qué', '<textarea id="pl-mot" maxlength="500"></textarea>', 'pl-mot'),
+        { fn: async function (bt) { await corre(P.sb.rpc('wf_conf_borra', { p_que: 'plantilla', p_id: plid, p_motivo: val('pl-mot') }), bt); await recargaConfig(); cierra(); pintaPlantillas(); } }, 'Sí, borrar plantilla', true);
+      return;
+    }
+    // Configuración general
+    if (a === 'g-quita-fila') { G.rows.splice(+b.getAttribute('data-gi'), 1); gLimpia(); pintaGrid(); return; }
+    if (a === 'g-agrega-fila') {
+      var na = +val('g-nueva'); if (!na) return;
+      var mx = G.rows.reduce(function (m, r) { return Math.max(m, +r.secuencia || 0); }, 0);
+      G.rows.push({ actividad_id: na, secuencia: mx + 1, ca: true, resp_nombre: '', def: '', aut_nombre: '', aactive: true, req_archivo: true, req_secuencia: false, elegir: false });
+      gLimpia(); pintaGrid(); return;
+    }
+    // catálogo
+    if (a === 'ca-edita' || a === 'ca-nueva') {
+      var ca = a === 'ca-edita' ? CAT_ID[id] : { nombre: '', tipo_id: (TIPOS[0] || {}).id };
+      if (!ca) return;
+      caForm('ca-form', ca.id ? 'Editar actividad' : 'Nueva actividad', '<div class="rejilla">' + campo('Nombre', '<input type="text" id="cf-nom" maxlength="200" value="' + esc(ca.nombre) + '">', 'cf-nom')
+        + campo('Tipo', '<select id="cf-tipo">' + opLista(TIPOS, ca.tipo_id) + '</select>', 'cf-tipo') + '</div>' + (ca.id ? '<p class="ayuda">Si cambias el nombre, también cambia en las actividades ya generadas.</p>' : ''),
+        async function (bt) { var d = { nombre: val('cf-nom'), tipo_id: +val('cf-tipo') || null }; if (ca.id) d.id = ca.id; await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'actividad', p: d }), bt); await recargaConfig(); cfCierra(); pintaCatalogo(); }, ca.id ? 'Guardar' : 'Agregar');
+      return;
+    }
+    if (a === 'ca-borra') {
+      var cb = CAT_ID[id]; if (!cb) return;
+      caForm('ca-form', 'Borrar «' + cb.nombre + '»', '<p class="ayuda">Solo se borra si no está en ninguna plantilla ni en el trabajo de algún mes.</p>',
+        async function (bt) { await corre(P.sb.rpc('wf_conf_borra', { p_que: 'actividad', p_id: cb.id, p_motivo: '' }), bt); await recargaConfig(); cfCierra(); pintaCatalogo(); }, 'Sí, borrar', true);
+      return;
+    }
+    if (a === 'ti-edita' || a === 'ti-nuevo') {
+      var tt = a === 'ti-edita' ? TIPO_ID[id] : { nombre: '' }; if (!tt) return;
+      caForm('ti-form', tt.id ? 'Editar tipo' : 'Nuevo tipo', campo('Nombre', '<input type="text" id="cf-nom" maxlength="200" value="' + esc(tt.nombre) + '">', 'cf-nom'),
+        async function (bt) { var d = { nombre: val('cf-nom') }; if (tt.id) d.id = tt.id; await corre(P.sb.rpc('wf_conf_guarda', { p_que: 'tipo', p: d }), bt); await recargaConfig(); cfCierra(); pintaCatalogo(); }, tt.id ? 'Guardar' : 'Agregar');
+      return;
+    }
+    if (a === 'ti-borra') {
+      var tb = TIPO_ID[id]; if (!tb) return;
+      caForm('ti-form', 'Borrar «' + tb.nombre + '»', '<p class="ayuda">Solo se borra si ninguna actividad tiene ese tipo.</p>',
+        async function (bt) { await corre(P.sb.rpc('wf_conf_borra', { p_que: 'tipo', p_id: tb.id, p_motivo: '' }), bt); await recargaConfig(); cfCierra(); pintaCatalogo(); }, 'Sí, borrar', true);
+    }
+  }
+
+  /* ---------- eventos ---------- */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var tab = t.closest('[data-tab]'); if (tab) { muestra(tab.getAttribute('data-tab')); return; }
+    if (t.id === 'sub-ok') { if (SUB) { smsg(''); SUB.fn(t).catch(function (e) { smsg(falla(e)); }); } return; }
+    if (t.id === 'sub-no') { cierraSub(); return; }
+    if (t.id === 'cf-ok') { if (CF) { cfmsg(''); CF(t).catch(function (e) { cfmsg(falla(e)); }); } return; }
+    if (t.id === 'cf-no') { cfCierra(); return; }
+    var b = t.closest('[data-acc]'); if (b) { accion(b); return; }
+    if (t.id === 'pl-nueva') { abrePla(null); return; }
+    if (t.id === 'ca-nueva') { accion({ getAttribute: function (k) { return k === 'data-acc' ? 'ca-nueva' : null; } }); return; }
+    if (t.id === 'ti-nuevo') { accion({ getAttribute: function (k) { return k === 'data-acc' ? 'ti-nuevo' : null; } }); return; }
+    if (t.id === 'x-asign') { excel(t); return; }
+    if (t.id === 'c-vermas') { mostrarC += PAGINA; pintaClientes(); return; }
+    if (t.id === 'g-revisa') { gRevisa(t); return; }
+    if (t.id === 'g-si') { gAplica(t); return; }
+    if (t.id === 'g-pega') { gPega(); return; }
+    if (t.id === 'g-todos' || t.id === 'g-ninguno') { gFiltrados().forEach(function (e) { G.sel[e.id] = t.id === 'g-todos'; }); gLimpia(); pintaGClientes(); return; }
+    var li = t.closest('[data-emp]'); if (li) { abreCliente(+li.getAttribute('data-emp')); return; }
+    var pl = t.closest('[data-pl]'); if (pl) { abrePla(+pl.getAttribute('data-pl')); return; }
+    if (t.id === 'cerrar' || t === $('velo')) cierra();
+  });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t.hasAttribute && t.hasAttribute('data-ge')) { G.sel[+t.getAttribute('data-ge')] = t.checked; gLimpia(); gCuenta(); return; }
+    if (t.hasAttribute && t.hasAttribute('data-gk')) {
+      var r = G.rows[+t.getAttribute('data-gi')], k = t.getAttribute('data-gk'); if (!r) return;
+      r[k] = t.type === 'checkbox' ? t.checked : (k === 'secuencia' ? (+t.value || 0) : t.value);
+      if (k === 'ca') { if (!t.checked && !r.resp_nombre) r.resp_nombre = r.def || ''; pintaGrid(); }
+      gLimpia(); return;
+    }
+    if (t.name === 'g-modo' || t.id === 'g-act' || t.id === 'g-col') { gLimpia(); return; }
+    if (t.id === 'g-pla') { siembra(+t.value || null); gLimpia(); pintaGrid(); pintaGClientes(); return; }
+    if (['g-cont', 'g-tiene', 'g-est'].indexOf(t.id) >= 0) { pintaGClientes(); return; }
+    if (t.id === 'c-est') { mostrarC = PAGINA; pintaClientes(); return; }
+    if (t.id === 'pl-per') { pintaPlantillas(); return; }
+    if (t.id === 'ca-tipo') { pintaCatalogo(); }
+  });
+  document.addEventListener('input', function (ev) {
+    var t = ev.target;
+    if (t.id === 'c-buscar') { mostrarC = PAGINA; pintaClientes(); }
+    if (t.id === 'g-buscar') pintaGClientes();
+    if (t.id === 'pl-buscar') pintaPlantillas();
+    if (t.id === 'ca-buscar') pintaCatalogo();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('velo').hidden) { if (SUB) cierraSub(); else cierra(); return; }
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) {
+      var e = ev.target.getAttribute('data-emp'), p = ev.target.getAttribute('data-pl');
+      if (e) abreCliente(+e); else if (p) abrePla(+p);
+    }
+  });
+  carga();
+})();
+</script>
+</body></html>
