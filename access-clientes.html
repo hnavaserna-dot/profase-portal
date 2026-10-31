@@ -318,6 +318,31 @@ tr.fila:hover td{background:var(--navy-soft)}
     return q.data ? q.data.data : null;
   }
 
+  // los datos del paquete y la hora; al instante (doc.vivo) no lleva «Datos al…», salvo que se haya detenido
+  var HORA_PAQ = null;
+  function ponDatos(doc, datos) {
+    D = datos; HORA_PAQ = doc.refreshedAt || null;
+    GRU = {}; (D.grupos || []).forEach(function (g) { GRU[g.id] = g; });
+    CTO = {}; (D.contactos || []).forEach(function (c) { CTO[c.id] = c; });
+    EMP = D.empresas || []; POR_ID = {}; EMP.forEach(function (e) { POR_ID[e.id] = e; });
+    $('hora').textContent = doc.vivo && !doc.detenido ? '' : doc.refreshedAt ? (doc.detenido ? 'Se detuvo la actualización al instante · ' : '') + 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
+  }
+  // al instante (portal/sql/99_clientes_vivo.sql): cuando la base cambia el paquete, la lista se pone al día sola, sin
+  // cerrar la ficha que esté abierta (la vigilancia de js/portal.js solo pregunta con la pestaña a la vista)
+  var VIGILA = null;
+  function vigilaPaquete(col, id, primero) {
+    if (VIGILA || !primero || !primero.json || !(window.claude && window.claude.use)) return;
+    window.claude.use('db').then(function (db) {
+      if (!db || VIGILA) return;
+      VIGILA = db.doc(col + '/' + id).onSnapshot(function (snap) {
+        var x = snap && snap.exists ? snap.data() : null;
+        if (!x || !x.json || (x.refreshedAt || null) === HORA_PAQ) return;
+        ponDatos(x, x.json);
+        opciones(); kpis(); pintaLista(); pintaFirmas();
+      }, function () {});
+    }).catch(function () {});
+  }
+
   async function carga() {
     try {
       var p = await P.listo; if (!p) return;
@@ -325,17 +350,14 @@ tr.fila:hover td{background:var(--navy-soft)}
       var col = ROL === 'director' ? 'director' : 'access';
       var id = ROL === 'director' ? 'acc_cli' : ROL === 'gerente' ? 'cli_equipo' : 'cli_' + p.usuario;
       var doc = await leeDoc(col, id);
-      if (!doc || !doc.b64) {
+      // desde el cambio de la ficha lo arma la base al instante (portal/sql/99_clientes_vivo.sql): viene en «json»
+      if (!doc || !(doc.json || doc.b64)) {
         $('cargando').hidden = true;
         $('error').hidden = false;
         $('error').textContent = 'Todavía no hay datos de clientes para tu usuario. Llegan solos con la próxima actualización.';
         return;
       }
-      D = await desb64(doc.b64);
-      GRU = {}; (D.grupos || []).forEach(function (g) { GRU[g.id] = g; });
-      CTO = {}; (D.contactos || []).forEach(function (c) { CTO[c.id] = c; });
-      EMP = D.empresas || []; POR_ID = {}; EMP.forEach(function (e) { POR_ID[e.id] = e; });
-      $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
+      ponDatos(doc, doc.json || await desb64(doc.b64));
       // desde el cambio del lunes 2 de noviembre los datos salen de la ficha del portal (Clientes › Base de clientes)
       var enPortal = (await modoCli()) === 'portal';
       $('subt').textContent = (ROL === 'contador'
@@ -348,6 +370,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       kpis(); pintaLista(); pintaFirmas();
       muestra(location.hash === '#firmas' ? 'fir' : location.hash === '#renovaciones' || REN_ABRE ? 'ren' : 'cli');
       if (REN) pintaRen();
+      vigilaPaquete(col, id, doc);
     } catch (e) {
       $('cargando').hidden = true;
       $('error').hidden = false;
