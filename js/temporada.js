@@ -234,19 +234,10 @@
     // y sube moviendo su «bottom», al mismo compás; nada depende de «overflow:hidden».
     + '.ptc-arana{top:calc(-1 * var(--ptc-d,10px));width:13px;height:calc(var(--ptc-d,10px) + 28px);overflow:visible;color:#2B3445}'
     + ':root[data-theme="dark"] .ptc-arana,.ptc-oscuro .ptc-arana{color:#E5EAF2}'
-<<<<<<< Updated upstream
     + '.ptc-hilo{position:absolute;display:block;left:6px;top:0;width:1px;height:calc(100% - 14px);background:currentColor;opacity:.55;animation:ptc-hilo 2.8s ease-in-out infinite alternate}'
     + '@keyframes ptc-hilo{from{height:calc(100% - 30px)}to{height:calc(100% - 14px)}}'
     + '.ptc-cae{position:absolute;display:block;left:0;width:13px;height:15px;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
     + '@keyframes ptc-baja{from{bottom:19px}to{bottom:3px}}'
-=======
-    // medidas fijas (31-oct-2026): en el iPhone (Safari) el dibujo con alto «auto» dentro de una caja sin ancho propio salía
-    // de 150 px de alto y la araña quedaba fuera del recuadro, sin verse; el Santa, el corazón y la banderita ya tenían ancho
-    + '.ptc-cae{position:absolute;display:block;left:0;width:13px;height:15px;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
-    + '.ptc-arana .ptc-cae svg{width:13px;height:15px}'
-    + '.ptc-cae:before{content:"";position:absolute;left:50%;bottom:calc(100% - 4px);width:1px;margin-left:-.5px;height:400px;background:currentColor;opacity:.55}'
-    + '@keyframes ptc-baja{from{transform:translateY(-16px)}to{transform:translateY(0)}}'
->>>>>>> Stashed changes
     + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-bandera{top:0;width:15px}'
     // el Santa riéndose: se mece y brinca, la borla se balancea y la boca se abre tres veces; luego descansa
     + '.ptc-jojo{transform-origin:10px 23px;animation:ptc-jojo 2.4s ease-in-out infinite}'
