@@ -1,7 +1,11 @@
 /* Cotizador DECOMSA del portal PROFASE.
    Lee y escribe en las tablas cot_* de la base del portal. Quién entra y quién edita lo decide la base
    (tabla cot_permisos; el director siempre): esta página solo muestra u oculta botones.
-   Las horas y fechas se manejan siempre en hora de Monterrey. */
+   Las horas y fechas se manejan siempre en hora de Monterrey.
+   Renovaciones (Daniel, 30-oct-2026, noche; portal/sql/80_cotizar_renovaciones.sql): «Cotizar» en Clientes (Access) ›
+   Renovaciones abre aquí una cotización nueva con el cliente y la renovación ya puestos (?ren=<id> o __cotNuevaRen). Al
+   guardarla se liga a la renovación (cot_liga_ren) y, al emitirla, la base marca sola la renovación «Cotizado»; si se
+   marca «Rechazada», la renovación se cierra sola. */
 (function () {
   'use strict';
 
@@ -275,7 +279,7 @@
       telefono: q.telefono || '', cliente_id: q.cliente_id || null, agregar_cliente: false, fecha: q.fecha, vigencia: q.vigencia,
       asesor: q.asesor && q.asesor.nombre ? copia(q.asesor) : null, items: copia(q.items || []), descuento: copia(q.descuento || { tipo: 'porc', valor: 0 }),
       iva: Number(q.iva), nota: q.nota || '', condiciones: copia(q.condiciones || []), pago: copia(q.pago || {}), pie: q.pie || '',
-      duplicado_de: q.duplicado_de || null, creado: q.creado, creado_por: q.creado_por
+      duplicado_de: q.duplicado_de || null, creado: q.creado, creado_por: q.creado_por, ren: q.ren_id || null
     };
   }
 
@@ -702,12 +706,18 @@
       });
       var r = await sb.rpc('cot_guardar', { datos: datos, emitir: !!emitir, cambios: cambios });
       if (r.error) throw r.error;
-      var folio = r.data.folio;
+      var folio = r.data.folio, ligada = false;
+      if (draft.ren) {   // la renovación de donde se abrió (Clientes (Access) › Renovaciones)
+        var lr = await sb.rpc('cot_liga_ren', { p_folio: folio, p_ren: draft.ren });
+        if (lr.error) toast(mensajeError(lr.error, 'La cotización se guardó, pero no se ligó a la renovación.'), 7000);
+        else ligada = !!emitir;
+      }
       await carga(['cots', 'clientes', 'ajustes']);
       var q = S.cots.find(function (x) { return x.folio === folio; });
       abrir(folio, true);
       toast('Cotización ' + folioTxt(q || draft) + ' ' + (r.data.accion === 'emitir' ? 'emitida' : r.data.accion === 'corregir' ? 'corregida' : 'guardada'));
       if (emitir && q) await descargarPDF(deFila(q));
+      if (ligada) { REN_HECHA = true; pintaRenBanner(); }
     } catch (e) {
       console.error(e);
       var m = mensajeError(e, 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.');
@@ -736,6 +746,7 @@
     } catch (e) { console.error(e); toast('No se pudo armar el PDF.'); }
   }
   function nueva() {
+    REN = null; REN_HECHA = false; pintaRenBanner();
     draft = nuevoDraft(); original = null; editing = null; touched = {}; adminUnlock = false;
     $('#ed-msgs').hidden = true; fillForm();
     if (location.hash !== '#nueva') location.hash = 'nueva'; else route();
@@ -1142,6 +1153,69 @@
     finally { respaldando = false; if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = txt; } }
   }
 
+  // ================= Renovaciones de e.firma y sellos =================
+  var REN = null, REN_HECHA = false;
+  // el servicio del catálogo que es de la renovación (e.firma o sellos; nunca los del IMSS)
+  function servRen(tipo) {
+    var re = tipo === 'fiel' ? /FIRMA|FIEL/ : /SELLO|CSD/;
+    var act = S.servicios.filter(function (s) { var n = norm(s.nombre); return s.activo !== false && re.test(n) && !/IMSS|IDSE|INFONAVIT/.test(n) && !(tipo === 'fiel' && /SELLO|CSD/.test(n)); });
+    return act.find(function (s) { return /RENOV/.test(norm(s.nombre)); }) || act[0] || null;
+  }
+  function itemRen(tipo) {
+    var s = servRen(tipo);
+    if (s) return { sid: s.id, servicio: s.nombre, descripcion: s.descripcion || '', tipo: s.tipo === 'mensual' ? 'mensual' : 'unico', cantidad: 1, precio: Number(s.precio) || 0 };
+    return { sid: '', servicio: tipo === 'fiel' ? 'Renovación de e.firma' : 'Renovación de sellos digitales', descripcion: '', tipo: 'unico', cantidad: 1, precio: 0 };
+  }
+  function pintaRenBanner() {
+    var b = $('#banner'); if (!b) return;
+    var viejo = $('#ren-banner'); if (viejo) viejo.remove();
+    if (!REN) return;
+    var d = document.createElement('div'); d.id = 'ren-banner'; d.className = 'banner info';
+    var que = REN.fiel && REN.sellos ? 'la e.firma y los sellos' : REN.fiel ? 'la e.firma' : 'los sellos';
+    d.innerHTML = REN_HECHA
+      ? '<b>Listo:</b> la renovación de ' + esc(que) + ' de ' + esc(REN.razon) + ' quedó «Cotizado». Si el cliente la rechaza, márcala «Rechazada» y la renovación se cierra sola. '
+        + '<button type="button" class="btn sm" data-ren-volver>Regresar a Renovaciones</button>'
+      : '<b>Renovación:</b> ' + esc(que) + ' de ' + esc(REN.razon) + '. ' + esc(REN.vence || '') + ' Revisa el precio y emítela: la renovación se marca sola «Cotizado».';
+    b.appendChild(d);
+    var v = d.querySelector('[data-ren-volver]');
+    if (v) v.onclick = function () { try { if (window.parent !== window && window.parent.__axcliAbre) { window.parent.__axcliAbre('renovaciones'); return; } } catch (e) { /* sin vista */ } };
+  }
+  async function preparaRen(id) {
+    id = Number(id) || 0; if (!id || YO.consulta) return;
+    var r;
+    try { r = await sb.rpc('ren_cotiza_datos', { p_id: id, p_tipo: 'dec' }); if (r.error) throw r.error; }
+    catch (e) { toast(mensajeError(e, 'No se pudo abrir la renovación.'), 6000); return; }
+    var R = r.data || {};
+    if (!R.puede) { toast('Esta renovación ya no está por cotizar (ya se cotizó o cambió).', 6000); return; }
+    REN = R; REN_HECHA = false;
+    draft = nuevoDraft(); original = null; editing = null; touched = {}; adminUnlock = false;
+    draft.ren = R.id;
+    var rfc = String(R.rfc || '').toUpperCase(), c = S.clientes.find(function (x) { return x.rfc === rfc; });
+    draft.cliente = c ? c.razon : (R.razon || ''); draft.rfc = rfc; draft.cliente_id = c ? c.id : null; draft.agregar_cliente = !c;
+    draft.contacto = (c && c.contacto) || R.contacto || '';
+    draft.telefono = (c && (c.correo || c.telefono)) || (R.correos && R.correos[0]) || '';
+    var its = []; if (R.fiel) its.push(itemRen('fiel')); if (R.sellos) its.push(itemRen('sellos'));
+    draft.items = its.length ? its : [blankItem()];
+    $('#ed-msgs').hidden = true; fillForm(); pintaRenBanner();
+    if (location.hash !== '#nueva') location.hash = 'nueva'; else route();
+    window.scrollTo(0, 0);
+  }
+  // la vista de afuera (cot_tab.js) la llama si el cotizador ya estaba abierto
+  window.__cotNuevaRen = function (id) {
+    var sucio = editing == null && draft && !draft.ren && (String(draft.cliente || '').trim() || draft.items.some(function (i) { return String(i.servicio || '').trim(); }));
+    if (!sucio) { preparaRen(id); return; }
+    // hay una cotización a medias: no se pierde sin preguntar (sin ventanas del navegador)
+    if (location.hash !== '#nueva') location.hash = 'nueva';
+    var b = $('#banner'); if (!b) return;
+    var viejo = $('#ren-banner'); if (viejo) viejo.remove();
+    var d = document.createElement('div'); d.id = 'ren-banner'; d.className = 'banner';
+    d.innerHTML = 'Tienes una cotización sin guardar. <button type="button" class="btn sm" data-ren-si>Dejarla y cotizar la renovación</button> <button type="button" class="btn sm ghost" data-ren-no>Seguir con esta</button>';
+    b.appendChild(d);
+    d.querySelector('[data-ren-si]').onclick = function () { preparaRen(id); };
+    d.querySelector('[data-ren-no]').onclick = function () { d.remove(); };
+    window.scrollTo(0, 0);
+  };
+
   // ================= Navegación =================
   function vista() { var v = (location.hash || '#nueva').slice(1); return ['nueva', 'cotizaciones', 'catalogos', 'bitacora', 'ajustes'].indexOf(v) >= 0 ? v : 'nueva'; }
   // Solo consulta: sin «Nueva cotización»; abre en Cotizaciones (abrir una la muestra fija, con su PDF)
@@ -1215,6 +1289,8 @@
     setInterval(revisaCambios, CADA);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisaCambios(); });
     window.addEventListener('focus', revisaCambios);
+    var rq = new URLSearchParams(location.search).get('ren');
+    if (rq) preparaRen(rq);
   }
   start();
 })();

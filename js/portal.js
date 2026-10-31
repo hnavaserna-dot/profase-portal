@@ -113,11 +113,12 @@
       cli_guarda: 1, cli_borra: 1,   // etapa 4 (55_clientes_ficha.sql)
       rec_guarda: 1, rec_estatus: 1, rec_borra: 1, rec_destinatario: 1,   // etapa 5 (56_recordatorios.sql)
       cdir_marca: 1, cdir_guarda_factura: 1, cdir_ajustes: 1, cdir_catalogo_guarda: 1, cdir_catalogo_borra: 1,   // comisiones de dirección
-      cdir_empleado_guarda: 1, cdir_guarda: 1, cdir_borra: 1, cdir_trae: 1 };   // (64_comisiones_direccion.sql)
+      cdir_empleado_guarda: 1, cdir_guarda: 1, cdir_borra: 1, cdir_trae: 1,   // (64_comisiones_direccion.sql)
+      cpf_guardar: 1, cpf_estatus: 1, cot_liga_ren: 1 };   // Cotizador PROFASE y la liga a Renovaciones (80_cotizar_renovaciones.sql)
     sb.rpc = function (fn) { return P.consulta && ESCRIBEN[fn] ? rechazo() : rpc.apply(null, arguments); };
     // funciones del servidor que mandan algo (recordatorios de pago desde cumplimiento@): en solo consulta, no
     // (sb.functions se arma de nuevo cada vez que se pide: se envuelve el que se entrega)
-    var MANDAN = { recordatorios: 1 };
+    var MANDAN = { recordatorios: 1, cotizaciones: 1 };
     try {
       var proto = Object.getPrototypeOf(sb), des = proto && Object.getOwnPropertyDescriptor(proto, 'functions');
       if (des && des.get) Object.defineProperty(sb, 'functions', { configurable: true, get: function () {
