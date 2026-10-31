@@ -38,7 +38,11 @@
    «Administrar Facturas» del Access y con sus errores corregidos. Todo pasa por las funciones de la base
    (portal/sql/52_facturacion.sql), que deciden qué compañía ve y factura cada quien (decisión de Daniel): la dirección
    todo; DECOMSA la ven los gerentes y la facturan Cadengo y Elisa Mata; la otra compañía solo quien Daniel dijo.
-   Los nombres de las compañías llegan de la base. */
+   Los nombres de las compañías llegan de la base.
+   Revisión contra el Access (Daniel, 30-oct-2026, 21:30): en «Generar del mes», palomitas por servicio del grupo (la
+   lista de servicios del Access) y por razón social en «Facturar a» (su «Facturar a una razón social»), con «Marcar
+   todos», «Quitar todos» y «Como se propuso»; en «Nueva factura», todas las razones sociales, como en el Access
+   (77_fac_empresas_todas.sql); en la lista, el filtro de día y la marca «Efectivo» (también en el Excel). */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -167,11 +171,19 @@ tr.fila:hover td{background:var(--navy-soft)}
 .linea .quita{align-self:center}
 .linea.man{grid-template-columns:minmax(0,1.4fr) minmax(0,1.6fr) minmax(0,1.2fr) 120px auto}
 .pagan{margin:0;padding:0;list-style:none}
-.pagan li{display:grid;grid-template-columns:minmax(0,1fr) auto 150px;gap:6px 12px;align-items:center;padding:8px 14px;border-top:1px solid var(--line)}
+.pagan li{display:grid;grid-template-columns:auto minmax(0,1fr) auto 150px;gap:6px 12px;align-items:center;padding:8px 14px;border-top:1px solid var(--line)}
 .pagan li:first-child{border-top:0}
-.pagan input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;width:100%}
+.pagan li.fuera{opacity:.6}
+.pagan input.folio{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;width:100%}
+.pagan .nf{font-size:12px;color:var(--muted)}
+/* Servicios del grupo (como la lista de servicios de «Administrar Facturas» del Access) */
+.srvs{display:flex;flex-wrap:wrap;gap:6px 8px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center}
+.srvs .chk{border:1px solid var(--line-strong);border-radius:999px;padding:4px 10px;font-size:12.5px;background:var(--surface);max-width:100%;overflow-wrap:anywhere;cursor:pointer}
+.srvs .chk.no{opacity:.6}
+.srvs .btns{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.ayuda{color:var(--muted);font-size:12.5px;padding:8px 14px 0}
 @media (max-width:640px){
-  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.linea input,.linea select,.pagan input{font-size:16px}
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.linea input,.linea select{font-size:16px}
   .filtros input,.filtros select{width:100%}
   .filtros{width:100%}
   .campos{grid-template-columns:minmax(0,1fr)}
@@ -180,8 +192,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   .linea>.inc{grid-column:1;grid-row:1}
   .linea.man>*{grid-column:1/-1}
   .linea .precio{text-align:left}
-  .pagan li{grid-template-columns:minmax(0,1fr) auto}
-  .pagan li input{grid-column:1/-1}
+  .pagan input.folio{font-size:16px}
+  .pagan li{grid-template-columns:auto minmax(0,1fr) auto}
+  .pagan li input.folio,.pagan li .nf{grid-column:2/-1}
   #lista thead{display:none}
   #lista tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
   #lista td{border:0;padding:0;min-width:0}
@@ -229,6 +242,7 @@ tr.fila:hover td{background:var(--navy-soft)}
           <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
           <select id="f-anio" aria-label="Año de la factura"></select>
           <select id="f-mes" aria-label="Mes de la factura"></select>
+          <select id="f-dia" aria-label="Día de la factura" hidden></select>
           <select id="f-est" aria-label="Estado"><option value="">Pagadas y con saldo</option><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="sinfolio">Sin folio</option></select>
           <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
         </div>
@@ -312,14 +326,25 @@ tr.fila:hover td{background:var(--navy-soft)}
     var m0 = $('f-mes').value;
     $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + MESES_L.map(function (m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
     $('f-mes').value = m0;
+    diaOpciones();
+  }
+  // Día de la factura (como el filtro año / mes / día de la lista del Access): sale al escoger un mes
+  function diaOpciones() {
+    var d0 = $('f-dia').value, n = [];
+    for (var i = 1; i <= 31; i++) n.push('<option value="' + i + '">' + i + '</option>');
+    $('f-dia').innerHTML = '<option value="">Todos los días</option>' + n.join('');
+    $('f-dia').hidden = !$('f-mes').value;
+    $('f-dia').value = $('f-mes').value ? d0 : '';
   }
 
   function filtradas() {
     var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = $('f-est').value;
+    var dd = m && !$('f-dia').hidden ? (+$('f-dia').value || 0) : 0;
     return F.filter(function (f) {
       if (c && String(f.compania) !== c) return false;
       if (a && (f.fecha || '').slice(0, 4) !== a) return false;
       if (m && +(f.fecha || '').slice(5, 7) !== m) return false;
+      if (dd && +(f.fecha || '').slice(8, 10) !== dd) return false;
       if (e === 'saldo' && f.pagada) return false;
       if (e === 'pagada' && !f.pagada) return false;
       if (e === 'sinfolio' && f.folio) return false;
@@ -340,7 +365,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (f) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '</td>'
         + '<td><div class="rs">' + esc(f.razon) + '</div><div class="rfc">' + esc(f.grupo) + (f.conceptos ? ' · ' + esc(f.conceptos) : '') + '</div></td>'
-        + '<td>' + chipEst(f) + '</td><td class="vence">' + esc(fecha(f.fecha)) + '</td>'
+        + '<td>' + chipEst(f) + (f.efectivo ? '<div><span class="tag">Efectivo</span></div>' : '') + '</td><td class="vence">' + esc(fecha(f.fecha)) + '</td>'
         + '<td class="monto">' + esc(dinero(f.total)) + '</td><td class="monto">' + (f.pagada ? '<span class="no">—</span>' : esc(dinero(f.saldo))) + '</td></tr>';
     }).join('');
     $('lista-vacia').hidden = L.length > 0;
@@ -431,7 +456,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var E = await empresas(G.cia), q = norm($('g-buscar') ? $('g-buscar').value.trim() : ''), vistos = {}, L = [];
       E.forEach(function (e) {
-        if (!e.grupo_id) return;
+        if (!e.grupo_id || e.reg === false) return;   // «Generar del mes»: solo grupos con registro en esa compañía
         var g = vistos[e.grupo_id]; if (!g) { g = vistos[e.grupo_id] = { id: e.grupo_id, nombre: e.grupo || ('Grupo ' + e.grupo_id), txt: '' }; L.push(g); }
         g.txt += ' ' + e.razon + ' ' + e.rfc;
       });
@@ -446,25 +471,46 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var L = await rpc('fac_propuesta', { p_compania: G.cia, p_grupo_id: g, p_fecha: f }) || [];
       G.grupo = g; G.fecha = f; G.modo = $('g-modo').value; G.folios = {};
-      G.lineas = L.map(function (x) { return Object.assign({}, x, { precio: Number(x.precio || 0), incluir: !!x.incluir }); });
+      G.lineas = L.map(function (x) { return Object.assign({}, x, { precio: Number(x.precio || 0), incluir: !!x.incluir, inc0: !!x.incluir }); });
       pintaPropuesta();
     } catch (e) { $('g-prop').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
     b.disabled = false;
   }
-  function pagan() {
+  // Las facturas que salen de la propuesta. Con «todas», también las razones sociales (o razón y servicio) que se
+  // quitaron, para poder volver a ponerlas; sin «todas», solo lo que se va a generar (con precio).
+  function pagan(todas) {
     var por = {}, orden = [];
-    G.lineas.forEach(function (l) {
-      if (!l.incluir) return;
+    G.lineas.forEach(function (l, i) {
+      if (!todas && !l.incluir) return;
       var k = G.modo === 'concepto' ? l.paga_id + '|' + l.servicio_id : String(l.paga_id);
-      var p = por[k]; if (!p) { p = por[k] = { k: k, paga_id: l.paga_id, paga: l.paga, servicio: G.modo === 'concepto' ? l.servicio : '', n: 0, lista: 0, sub: 0 }; orden.push(p); }
-      p.n++; p.lista += Number(l.precio_lista || 0); p.sub += Number(l.precio || 0);
+      var p = por[k]; if (!p) { p = por[k] = { k: k, paga_id: l.paga_id, paga: l.paga, servicio: G.modo === 'concepto' ? l.servicio : '', n: 0, lista: 0, sub: 0, idx: [], on: false }; orden.push(p); }
+      p.idx.push(i);
+      if (l.incluir) { p.on = true; p.n++; p.lista += Number(l.precio_lista || 0); p.sub += Number(l.precio || 0); }
     });
-    return orden.filter(function (p) { return p.sub > 0; });
+    return todas ? orden : orden.filter(function (p) { return p.sub > 0; });
+  }
+  // Poner o quitar varios conceptos juntos (una razón social, un servicio o todos). Al ponerlos regresan los que la
+  // propuesta traía palomeados; si ninguno lo estaba (fuera de vigencia, cortesía), los que tienen precio.
+  function marca(idx, on) {
+    var hay = idx.some(function (i) { return G.lineas[i].inc0; });
+    idx.forEach(function (i) { var l = G.lineas[i]; l.incluir = !!on && (hay ? l.inc0 : Number(l.precio) > 0); });
+    pintaPropuesta();
+  }
+  function servicios() {
+    var por = {}, orden = [];
+    G.lineas.forEach(function (l, i) {
+      var s = por[l.servicio_id]; if (!s) { s = por[l.servicio_id] = { id: l.servicio_id, nombre: l.servicio, idx: [], on: 0 }; orden.push(s); }
+      s.idx.push(i); if (l.incluir) s.on++;
+    });
+    return orden;
   }
   function pintaPropuesta() {
     if (!G.lineas.length) { $('g-prop').innerHTML = '<div class="msg ojo">Este grupo no tiene servicios contratados en esa compañía.</div>'; return; }
-    var rep = G.lineas.filter(function (l) { return l.ya_facturado && l.incluir; }).length;
-    var h = sec('Conceptos', '<div class="lineas" id="g-lineas">' + G.lineas.map(function (l, i) {
+    var rep = G.lineas.filter(function (l) { return l.ya_facturado && l.incluir; }).length, S = servicios();
+    var srv = '<div class="srvs" id="g-srvs" aria-label="Servicios del grupo">' + S.map(function (x) {
+      return '<label class="chk' + (x.on ? '' : ' no') + '"><input type="checkbox" data-g="srv" data-s="' + esc(x.id) + '"' + (x.on ? ' checked' : '') + '> ' + esc(x.nombre) + ' (' + x.idx.length + ')</label>';
+    }).join('') + '<div class="btns"><button class="btn chico" type="button" id="g-todos">Marcar todos</button><button class="btn chico" type="button" id="g-ninguno">Quitar todos</button><button class="btn chico" type="button" id="g-propuesta">Como se propuso</button></div></div>';
+    var h = sec('Conceptos', srv + '<div class="lineas" id="g-lineas">' + G.lineas.map(function (l, i) {
       var tags = (l.ya_facturado ? '<span class="tag ojo">Ya facturado ese mes</span>' : '') + (!l.vigente ? '<span class="tag">Fuera de vigencia</span>' : '') + (l.cortesia ? '<span class="tag">Cortesía</span>' : '') + (l.especial ? '<span class="tag az">Especial</span>' : '')
         + (l.paga_id !== l.empresa_id ? '<span class="tag az">Lo paga ' + esc(l.paga) + '</span>' : '');
       return '<div class="linea' + (l.incluir ? '' : ' fuera') + '" data-i="' + i + '"><label class="chk inc"><input type="checkbox" data-g="inc" data-i="' + i + '"' + (l.incluir ? ' checked' : '') + ' aria-label="Incluir"></label>'
@@ -472,7 +518,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         + '<input data-g="con" data-i="' + i + '" value="' + esc(l.concepto) + '" aria-label="Concepto en la factura" maxlength="500">'
         + '<input class="precio num" data-g="pre" data-i="' + i + '" value="' + esc(r2(l.precio).toFixed(2)) + '" inputmode="decimal" aria-label="Precio sin IVA">'
         + '<span></span></div>';
-    }).join('') + '</div>', G.lineas.length + ' servicios')
+    }).join('') + '</div>', G.lineas.length + (G.lineas.length === 1 ? ' servicio' : ' servicios'))
       + '<div id="g-pagan"></div>'
       + (rep ? '<div class="msg ojo">' + rep + (rep === 1 ? ' concepto ya está facturado' : ' conceptos ya están facturados') + ' ese mes. Revisa antes de generar.</div>' : '')
       + '<div class="msg" id="g-msg" hidden></div>'
@@ -480,13 +526,22 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('g-prop').innerHTML = h;
     pintaPagan();
   }
+  function pintaSrvs() {
+    servicios().forEach(function (x) {
+      var c = document.querySelector('#g-srvs input[data-s="' + String(x.id).replace(/"/g, '') + '"]');
+      if (c) { c.checked = x.on > 0; c.closest('.chk').classList.toggle('no', !x.on); }
+    });
+  }
   function pintaPagan() {
-    var L = pagan(), tot = 0;
+    var T = pagan(true), L = T.filter(function (p) { return p.on && p.sub > 0; }), tot = 0;
     L.forEach(function (p) { tot += p.sub; });
-    $('g-pagan').innerHTML = sec(G.modo === 'concepto' ? 'Facturas que se van a generar (una por razón social y servicio)' : 'Facturar a', (L.length ? '<ul class="pagan">' + L.map(function (p) {
-      return '<li><div><div class="rs">' + esc(p.paga) + '</div><div class="rfc">' + (p.servicio ? esc(p.servicio) + ' · ' : '') + p.n + (p.n === 1 ? ' concepto' : ' conceptos') + (Math.abs(p.lista - p.sub) > .005 ? ' · lista ' + esc(dinero(p.lista)) : '') + '</div></div>'
-        + '<div class="monto">' + esc(dinero(p.sub)) + '</div>'
-        + (G.modo === 'concepto' ? '<span class="rfc">El folio se pone después</span>' : '<input data-g="folio" data-k="' + esc(p.k) + '" value="' + esc(G.folios[p.k] || '') + '" placeholder="Folio (opcional)" aria-label="Folio" maxlength="20">') + '</li>';
+    var ayuda = T.length > 1 ? '<div class="ayuda">Quita la palomita a una razón social para no facturarle esta vez' + (G.modo === 'concepto' ? ' ese servicio' : '') + '; los demás se generan igual.</div>' : '';
+    $('g-pagan').innerHTML = sec(G.modo === 'concepto' ? 'Facturas que se van a generar (una por razón social y servicio)' : 'Facturar a', ayuda + (T.length ? '<ul class="pagan">' + T.map(function (p) {
+      var va = p.on && p.sub > 0;
+      return '<li' + (va ? '' : ' class="fuera"') + '><label class="chk"><input type="checkbox" data-g="paga" data-k="' + esc(p.k) + '"' + (p.on ? ' checked' : '') + ' aria-label="Facturar a ' + esc(p.paga) + '"></label>'
+        + '<div><div class="rs">' + esc(p.paga) + '</div><div class="rfc">' + (p.servicio ? esc(p.servicio) + ' · ' : '') + (p.on ? p.n + (p.n === 1 ? ' concepto' : ' conceptos') + (Math.abs(p.lista - p.sub) > .005 ? ' · lista ' + esc(dinero(p.lista)) : '') : 'No se factura esta vez') + '</div></div>'
+        + '<div class="monto">' + (va ? esc(dinero(p.sub)) : '<span class="no">—</span>') + '</div>'
+        + (!va ? '<span class="nf">&nbsp;</span>' : G.modo === 'concepto' ? '<span class="nf">El folio se pone después</span>' : '<input class="folio" data-g="folio" data-k="' + esc(p.k) + '" value="' + esc(G.folios[p.k] || '') + '" placeholder="Folio (opcional)" aria-label="Folio" maxlength="20">') + '</li>';
     }).join('') + '</ul>' : '<div class="vacio">Nada incluido con precio.</div>')
       + '<div class="tot"><span>Subtotal</span><span class="r">' + esc(dinero(tot)) + '</span><span>IVA</span><span class="r">' + esc(dinero(tot * .16)) + '</span><span class="f">Total</span><span class="r f">' + esc(dinero(tot * 1.16)) + '</span></div>', L.length === 1 ? '1 factura' : L.length + ' facturas');
   }
@@ -541,7 +596,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var E = await empresas(M.cia), q = norm($('m-buscar').value.trim()), sel = M.empresa;
       var L = E.filter(function (e) { return e.id === sel || !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0; });
-      $('m-emp').innerHTML = '<option value="">Escoge la razón social</option>' + L.map(function (e) { return '<option value="' + e.id + '"' + (e.id === sel ? ' selected' : '') + '>' + esc(e.razon) + ' · ' + esc(e.rfc) + '</option>'; }).join('');
+      // Como en el Access, a quien factura le salen todas las razones sociales: primero las que ya son clientes de esa
+      // compañía (con registro o facturas) y luego las demás (77_fac_empresas_todas.sql)
+      var opt = function (e) { return '<option value="' + e.id + '"' + (e.id === sel ? ' selected' : '') + '>' + esc(e.razon) + ' · ' + esc(e.rfc) + (e.estatus === 0 ? ' · inactiva' : '') + '</option>'; };
+      var reg = L.filter(function (e) { return e.reg !== false; }), otras = L.filter(function (e) { return e.reg === false; });
+      $('m-emp').innerHTML = '<option value="">Escoge la razón social</option>' + (otras.length
+        ? (reg.length ? '<optgroup label="Clientes de esta compañía">' + reg.map(opt).join('') + '</optgroup>' : '') + '<optgroup label="Otras razones sociales">' + otras.map(opt).join('') + '</optgroup>'
+        : reg.map(opt).join(''));
       await catalogo(M.cia);
     } catch (e) { msgEn('m-msg', 'mal', falla(e)); }
   }
@@ -589,13 +650,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = filtradas(), wb = MK.libro(EX, 'Facturación');
       var ws = wb.addWorksheet('Facturas');
-      var head = ['Folio', 'Fecha', 'Compañía', 'Grupo', 'Razón social', 'RFC', 'Conceptos', 'Subtotal', 'IVA', 'Total', 'Pagado', 'Saldo', 'Estado'];
-      ws.columns = [12, 13, 14, 22, 40, 15, 36, 13, 12, 13, 13, 13, 11].map(function (w) { return { width: w }; });
+      var head = ['Folio', 'Fecha', 'Compañía', 'Grupo', 'Razón social', 'RFC', 'Conceptos', 'Efectivo', 'Subtotal', 'IVA', 'Total', 'Pagado', 'Saldo', 'Estado'];
+      ws.columns = [12, 13, 14, 22, 40, 15, 36, 10, 13, 12, 13, 13, 13, 11].map(function (w) { return { width: w }; });
       var f0 = MK.encabezado(wb, ws, head.length, { titulo: 'Facturación', lineas: ['Al ' + fecha(hoy()), L.length + ' facturas con los filtros de la pantalla'] });
       ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
-      L.forEach(function (f, i) { ws.getRow(f0 + 1 + i).values = [f.folio || '', fecha(f.fecha), cia(f.compania), f.grupo, f.razon, f.rfc, f.conceptos || '', f.sub, f.iva, f.total, f.pagado, f.pagada ? 0 : f.saldo, f.pagada ? 'Pagada' : (f.pagado > 0 ? 'Abonada' : 'Sin pago')]; });
+      L.forEach(function (f, i) { ws.getRow(f0 + 1 + i).values = [f.folio || '', fecha(f.fecha), cia(f.compania), f.grupo, f.razon, f.rfc, f.conceptos || '', f.efectivo ? 'Sí' : 'No', f.sub, f.iva, f.total, f.pagado, f.pagada ? 0 : f.saldo, f.pagada ? 'Pagada' : (f.pagado > 0 ? 'Abonada' : 'Sin pago')]; });
       if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
-      [8, 9, 10, 11, 12].forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00'; });
+      [9, 10, 11, 12, 13].forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00'; });
       ws.views = [{ state: 'frozen', ySplit: f0 }];
       MK.impresion(ws, { repetir: f0 });
       await MK.guardar(wb, 'Facturacion PROFASE.xlsx');
@@ -604,7 +665,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   /* ---------- eventos ---------- */
-  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-dia', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { if (k === 'f-mes') diaOpciones(); mostrar = PAGINA; pinta(); }); });
   $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
   $('x-fac').onclick = function () { excel(this); };
   $('b-generar').onclick = abreGenerar;
@@ -621,6 +682,9 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (t.id === 'z-borra-ok') { borra(+t.getAttribute('data-f'), t); return; }
     if (t.id === 'g-ver') { verPropuesta(t); return; }
     if (t.id === 'g-genera') { genera(t, false); return; }
+    if (G && t.id === 'g-todos') { G.lineas.forEach(function (l) { l.incluir = Number(l.precio) > 0; }); pintaPropuesta(); return; }
+    if (G && t.id === 'g-ninguno') { G.lineas.forEach(function (l) { l.incluir = false; }); pintaPropuesta(); return; }
+    if (G && t.id === 'g-propuesta') { G.lineas.forEach(function (l) { l.incluir = l.inc0; }); pintaPropuesta(); return; }
     if (t.id === 'm-agrega') { agregaConcepto(); pintaConceptos(); return; }
     if (t.id === 'm-guarda') { guardaManual(t); return; }
     if (t.getAttribute && t.getAttribute('data-m') === 'quita') { M.conceptos.splice(+t.getAttribute('data-i'), 1); pintaConceptos(); return; }
@@ -637,7 +701,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   });
   document.addEventListener('change', function (ev) {
     var t = ev.target, i = +t.getAttribute('data-i');
-    if (G && t.getAttribute('data-g') === 'inc') { G.lineas[i].incluir = t.checked; t.closest('.linea').classList.toggle('fuera', !t.checked); pintaPagan(); return; }
+    if (G && t.getAttribute('data-g') === 'inc') { G.lineas[i].incluir = t.checked; t.closest('.linea').classList.toggle('fuera', !t.checked); pintaSrvs(); pintaPagan(); return; }
+    if (G && t.getAttribute('data-g') === 'srv') { var sv = servicios().filter(function (x) { return String(x.id) === t.getAttribute('data-s'); })[0]; if (sv) marca(sv.idx, t.checked); return; }
+    if (G && t.getAttribute('data-g') === 'paga') { var pg = pagan(true).filter(function (x) { return x.k === t.getAttribute('data-k'); })[0]; if (pg) marca(pg.idx, t.checked); return; }
     if (G && t.id === 'g-cia') { G.cia = +t.value; $('g-prop').innerHTML = ''; cargaGrupos(); return; }
     if (G && t.id === 'g-modo') { G.modo = t.value; if (G.lineas.length && $('g-pagan')) pintaPagan(); return; }
     if (M && t.id === 'm-cia') { M.cia = +t.value; M.empresa = null; M.conceptos = []; agregaConcepto(); cargaManual().then(pintaConceptos); return; }
