@@ -240,6 +240,11 @@ button{font:inherit;color:inherit}
     var filas = await todas(function (c) { return P.sb.from('docs').select('id,data', c ? { count: 'exact' } : undefined).eq('col', col).order('id'); });
     return filas.map(function (f) { return { id: f.id, d: f.data || {} }; });
   }
+  // «Datos al…» de una tarjeta: no sale si es al instante; si se detuvo, sale con el aviso (Daniel, 31-oct-2026, 6:28)
+  function datosAl(d) {
+    if (!d || (d.vivo && !d.detenido)) return '';
+    return 'Datos al ' + esc(horaCorta(d.refreshedAt)) + (d.detenido ? ' (se detuvo la actualización al instante)' : '') + '. ';
+  }
   async function gunzip(b64) {
     if (typeof DecompressionStream === 'undefined') throw new Error('navegador');
     var bin = atob(b64), u = new Uint8Array(bin.length);
@@ -251,6 +256,8 @@ button{font:inherit;color:inherit}
   // contador, datos/wfc_<usuario>, viene en un solo documento sin número)
   async function paquete(col, base, solo) {
     var p0 = await leeDoc(col, solo ? base : base + '_0');
+    // al instante (portal/sql/96_tablero_vivo.sql): la base lo escribe tal cual, sin comprimir
+    if (p0 && p0.json && typeof p0.json === 'object') { var j = p0.json; if (p0.detenido) j.detenido = p0.detenido; return j; }
     if (!p0 || !p0.b64) return null;
     var n = Math.max(1, +p0.partes || 1), partes = [p0.b64];
     for (var i = 1; i < n; i++) {
@@ -465,7 +472,8 @@ button{font:inherit;color:inherit}
     if (!$('grid').children.length) $('grid').innerHTML = '<section class="card"><p class="falla">Por ahora no hay nada que mostrarte aquí. Usa el menú para entrar a tus pantallas.</p></section>';
     try {
       var m = await leeDoc('datos', 'meta');
-      $('datos').textContent = m && m.refreshedAt ? 'Datos al ' + horaCorta(m.refreshedAt) : '';
+      // «Datos al…» solo si no es al instante (Daniel, 31-oct-2026, 6:28) o si el cálculo al instante se detuvo
+      $('datos').textContent = m && m.refreshedAt && (!m.vivo || m.vivoError) ? 'Datos al ' + horaCorta(m.vivoError || m.refreshedAt) : '';
     } catch (e) { $('datos').textContent = ''; }
   }
 
@@ -510,7 +518,7 @@ button{font:inherit;color:inherit}
                    n: fm(x.ven), ncls: x.max >= 3 ? 'mal' : 'ojo', liga: 'cobranza' };
         }));
       } else h += aldia('Nadie debe facturas de meses anteriores.');
-      h += '<p class="nota">Datos al ' + esc(horaCorta(C.D.refreshedAt)) + '. Amarillo: 2 meses; rojo: 3 o más.</p>';
+      h += '<p class="nota">' + datosAl(C.D) + 'Amarillo: 2 meses; rojo: 3 o más.</p>';
       return h;
     } };
   }
@@ -542,7 +550,7 @@ button{font:inherit;color:inherit}
       h += '</div><div><p class="tl">Lo que vence en los próximos 7 días</p>' + (ts.length ? lista(ts.map(function (t) {
         return { pt: 'ojo', a: esc(W.DIM.tar[t]), b: '', n: fi(porT[t]), ncls: 'ojo', liga: 'panel' };
       })) : aldia('Nada vence en los próximos 7 días.')) + '</div></div>';
-      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Sin lo que está en pausa por el cliente' + (o.pausa ? ' (' + fi(o.pausa) + ' tareas)' : '') + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Sin lo que está en pausa por el cliente' + (o.pausa ? ' (' + fi(o.pausa) + ' tareas)' : '') + '. ' + datosAl(W.D) + '</p>';
       return h;
     } };
   }
@@ -575,7 +583,7 @@ button{font:inherit;color:inherit}
             return '<tr><td>' + esc(bonito(W.DIM.resp[p.r])) + '</td><td>' + fi(p.pen) + '</td><td class="' + (p.ven ? 'mal' : '') + '">' + fi(p.ven) + '</td><td>' + fi(p.sem) + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       } else h += aldia('Tu equipo no tiene pendientes.');
-      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. ' + datosAl(W.D) + '</p>';
       return h;
     } };
   }
@@ -628,7 +636,7 @@ button{font:inherit;color:inherit}
         + k('Vencidas contra el SAT', fi(o.ven), o.venRez ? fi(o.venRez) + ' de años anteriores' : 'contando todos los meses', o.ven ? 'mal' : 'bien')
         + k('Vencen en 7 días', fi(o.semana), 'en plazo todavía', o.semana ? 'ojo' : '')
         + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo') + '</div>';
-      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Datos al ' + esc(horaCorta(W.D.refreshedAt)) + '.</p>';
+      h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. ' + datosAl(W.D) + '</p>';
       return h;
     } };
   }
