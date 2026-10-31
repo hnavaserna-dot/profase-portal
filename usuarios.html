@@ -1,0 +1,518 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Usuarios</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=07c4fddab8"></script>
+<style>
+/* Portal PROFASE · menú Usuarios › Usuarios del portal (30-oct-2026, decisiones de Daniel, 18:44 a 20:50). Altas,
+   bajas (suaves: nada se borra; se corta el acceso al momento), códigos de un solo uso para crear o cambiar la contraseña
+   y reingresos (entran como usuario nuevo). Lo hacen Daniel y Fernando Cadengo, nunca con la dirección; HNR solo ve.
+   Todo por funciones usr_* (portal/sql/82_usuarios.sql); la página no lee tablas. El código se ve una sola vez. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+.cias{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.cias button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.cias button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.cias button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.codigo{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:.08em;background:var(--navy-soft);border:1px dashed var(--navy);border-radius:10px;padding:12px 14px;text-align:center;overflow-wrap:anywhere}
+.paso{margin:0 0 8px;overflow-wrap:anywhere}
+.per{border-left:3px solid var(--line-strong);padding:4px 0 4px 10px;margin:0 0 8px}
+.per.vivo{border-left-color:var(--ok)}
+.per.fin{border-left-color:var(--red)}
+.lista-b{margin:0;padding:0;list-style:none}
+.lista-b li{padding:6px 0;border-top:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.lista-b li:first-child{border-top:0}
+.rh-b{display:grid;gap:8px;padding:12px 14px}
+.rh-b .fila{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.rh-b .fila>div{min-width:0}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Usuarios</div>
+      <h1>Usuarios del portal</h1>
+      <p>Quién entra al portal: altas, bajas, contraseñas olvidadas y regresos. Nada se borra: cada baja deja su antes y su después.</p>
+    </div>
+  </div>
+  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-alta" hidden>Dar de alta</button></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <section id="todo" hidden>
+    <div class="card" id="rh-card" hidden style="margin-top:16px">
+      <header><div><h2>Bajas que avisó RH</h2><div class="sub">RH solo avisa; la baja de verdad la confirman Daniel o Fernando Cadengo. Hasta confirmarla, la persona sigue igual.</div></div></header>
+      <div class="rh-b" id="rh-l"></div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Usuarios">
+      <button type="button" role="tab" data-t="activo" aria-selected="true">Activos <span class="cta" id="n-activo">0</span></button>
+      <button type="button" role="tab" data-t="pendiente" aria-selected="false">Por entrar <span class="cta" id="n-pendiente">0</span></button>
+      <button type="button" role="tab" data-t="baja" aria-selected="false">Dados de baja <span class="cta" id="n-baja">0</span></button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="h-lista">Activos</h2><div class="sub" id="sub-lista"></div></div></header>
+      <div class="filtros"><input type="search" id="q" placeholder="Buscar nombre o usuario" aria-label="Buscar nombre o usuario"></div>
+      <div class="tabla"><table class="resp"><thead><tr id="th"></tr></thead><tbody id="lista"></tbody></table></div>
+    </div>
+    <p class="pie" id="pie">Las contraseñas nunca se ven ni se escriben aquí: a cada quien se le da un código de un solo uso y con él crea su contraseña en la entrada del portal («¿Primera vez u olvidaste tu contraseña?»). Las altas, bajas y contraseñas de la dirección no se cambian desde aquí.</p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div>
+  <p id="pq-t"></p>
+  <div class="acciones"><button class="btn" type="button" id="pq-no">Cancelar</button><button class="btn acento" type="button" id="pq-si">Sí</button></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
+  var EST = null, ADMIN = false, LISTA = [], RHB = [], TAB = 'activo';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function mty(s, conHora) {
+    if (!s) return '';
+    try {
+      var o = { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric' };
+      if (conHora) { o.hour = 'numeric'; o.minute = '2-digit'; }
+      return new Intl.DateTimeFormat('es-MX', o).format(new Date(s)).replace(/\./g, '');
+    } catch (e) { return String(s).slice(0, 10); }
+  }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function hace(s) {
+    if (!s) return 'Nunca';
+    var m = Math.round((Date.now() - new Date(s).getTime()) / 60000);
+    if (m < 2) return 'Hace un momento'; if (m < 60) return 'Hace ' + m + ' min';
+    var h = Math.round(m / 60); if (h < 24) return 'Hace ' + h + (h === 1 ? ' hora' : ' horas');
+    var d = Math.round(h / 24); return d === 1 ? 'Ayer' : 'Hace ' + d + ' días';
+  }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  // nombre.apellido a partir del nombre (sin acentos ni espacios), como los demás usuarios del portal
+  function sugiere(nombre) {
+    var w = norm(nombre).replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+    if (w.length < 2) return '';
+    var ap = w.length >= 4 ? w[2] : w[1];
+    return w[0] + '.' + ap;
+  }
+
+  function pregunta(texto, siTxt) {
+    return new Promise(function (res) {
+      $('pq-t').textContent = texto; $('pq-si').textContent = siTxt || 'Sí'; $('pregunta').hidden = false;
+      try { $('pq-no').focus(); } catch (e) {}
+      function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
+      $('pq-si').onclick = function () { fin(true); }; $('pq-no').onclick = function () { fin(false); };
+      pregunta.cierra = function () { fin(false); };
+    });
+  }
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('pregunta').hidden && pregunta.cierra) pregunta.cierra(); else if (!$('velo').hidden) cierra();
+  });
+
+  /* ---------- La lista ---------- */
+  async function carga() {
+    LISTA = await rpc('usr_lista') || [];
+    try { RHB = await rpc('usr_rh_bajas') || []; } catch (e) { RHB = []; }
+    pinta();
+  }
+  function cuantos(t) { return LISTA.filter(function (x) { return x.estado === t; }).length; }
+  function pinta() {
+    ['activo', 'pendiente', 'baja'].forEach(function (t) { $('n-' + t).textContent = cuantos(t); });
+    document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === TAB ? 'true' : 'false'); });
+    $('h-lista').textContent = { activo: 'Activos', pendiente: 'Por entrar', baja: 'Dados de baja' }[TAB];
+    $('sub-lista').textContent = { activo: 'Quienes hoy entran al portal.', pendiente: 'Ya tienen su código, pero todavía no crean su contraseña.', baja: 'Ya no entran al portal; su historial se queda. Si alguien regresa, entra como usuario nuevo.' }[TAB];
+    var q = norm($('q').value);
+    var L = LISTA.filter(function (x) { return x.estado === TAB && (!q || norm(x.nombre + ' ' + x.usuario + ' ' + (x.nombre_wf || '')).indexOf(q) >= 0); });
+    var th = TAB === 'activo' ? ['Nombre', 'Rol', 'Desde', 'Última entrada', 'Equipos', '']
+      : TAB === 'pendiente' ? ['Nombre', 'Rol', 'Código dado', '', '', ''] : ['Nombre', 'Rol', 'Estuvo', 'Baja', 'Quién la dio', ''];
+    $('th').innerHTML = th.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('');
+    if (!L.length) { $('lista').innerHTML = '<tr><td class="vacio" colspan="6">' + (q ? 'Nadie con esa búsqueda.' : 'Nadie por ahora.') + '</td></tr>'; return; }
+    $('lista').innerHTML = L.map(function (x, i) {
+      var nom = '<td class="w" data-l="Nombre"><div class="rs">' + esc(x.nombre) + '</div><div class="mut">' + esc(x.usuario) + '</div></td>';
+      var rol = '<td data-l="Rol">' + esc(ROL[x.rol] || x.rol) + (x.direccion ? ' ' + chip('Dirección', 'az') : '') + '</td>';
+      var ver = '<td data-l=""><button class="btn chico" type="button" data-i="' + i + '">Ver</button></td>';
+      if (TAB === 'activo') return '<tr class="click" data-i="' + i + '">' + nom + rol + '<td data-l="Desde">' + esc(mty(x.desde)) + '</td>'
+        + '<td data-l="Última entrada">' + (x.ultima === undefined || (x.direccion && !EST.todo) ? '—' : esc(hace(x.ultima))) + (x.codigo ? ' ' + chip('Código sin usar', 'ojo') : '') + '</td>'
+        + '<td data-l="Equipos">' + (x.sesiones == null ? '—' : esc(x.sesiones)) + '</td>' + ver + '</tr>';
+      if (TAB === 'pendiente') return '<tr class="click" data-i="' + i + '">' + nom + rol + '<td data-l="Código dado">' + esc(mty(x.desde)) + '</td><td></td><td></td>' + ver + '</tr>';
+      return '<tr class="click" data-i="' + i + '">' + nom + rol + '<td data-l="Estuvo">' + esc(mty(x.desde)) + ' al ' + esc(mty(x.baja_en)) + '</td>'
+        + '<td data-l="Baja">' + (x.reingreso ? chip('Regresa: código dado', 'ok') : chip('Dado de baja', 'mal')) + '</td>'
+        + '<td data-l="Quién la dio">' + esc(x.baja_por || '') + '</td>' + ver + '</tr>';
+    }).join('');
+    $('lista').querySelectorAll('[data-i]').forEach(function (el) {
+      el.onclick = function (e) { e.stopPropagation(); ficha(L[+el.dataset.i]); };
+    });
+    pintaRH();
+  }
+  document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.onclick = function () { TAB = b.dataset.t; pinta(); }; });
+  $('q').addEventListener('input', pinta);
+
+  /* ---------- Las bajas que avisó RH ---------- */
+  function pintaRH() {
+    $('rh-card').hidden = !RHB.length;
+    $('rh-l').innerHTML = RHB.map(function (b, i) {
+      return '<div class="fila"><div><div class="rs">' + esc(b.nombre) + '</div><div class="mut">Último día: ' + esc(fecha(b.fecha)) + ' · avisó ' + esc(b.aviso)
+        + ' · ' + (b.usuario ? 'tiene usuario del portal (' + esc(b.usuario) + ')' : 'no tiene usuario del portal') + '</div></div>'
+        + (ADMIN ? '<button class="btn ' + (b.usuario ? 'peligro' : '') + '" type="button" data-rh="' + i + '">' + (b.usuario ? 'Confirmar y quitar su usuario' : 'Confirmar la baja') + '</button>' : '') + '</div>';
+    }).join('');
+    $('rh-l').querySelectorAll('[data-rh]').forEach(function (b) {
+      b.onclick = async function () {
+        var x = RHB[+b.dataset.rh];
+        if (x.usuario) {
+          var u = LISTA.filter(function (z) { return z.usuario === x.usuario && z.estado === 'activo'; })[0];
+          if (u) return ficha(u, x);
+        }
+        if (!(await pregunta('¿Confirmas la baja de ' + x.nombre + '? Su último día ' + (x.fecha < hoy() ? 'fue' : 'es') + ' el ' + fecha(x.fecha) + '.', 'Sí, confirmar'))) return;
+        b.disabled = true;
+        try { await rpc('usr_rh_confirma', { p_id: x.id }); avisa('Listo: se confirmó la baja de ' + x.nombre + '.'); await carga(); }
+        catch (e) { error(falla(e)); b.disabled = false; }
+      };
+    });
+  }
+  function hoy() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+
+  /* ---------- La ficha de una persona ---------- */
+  async function ficha(x, rhb) {
+    abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), '<div class="cargando">Cargando…</div>');
+    var h = null;
+    try { h = await rpc('usr_historia', { p_usuario: x.usuario }); } catch (e) { h = { periodos: [], bitacora: [], pendientes: {} }; }
+    var puede = ADMIN && !x.direccion;
+    var c = '';
+    c += '<div class="sec"><h3>Datos</h3><div class="in dl">'
+      + '<span>Usuario</span><span>' + esc(x.usuario) + '</span>'
+      + '<span>Rol</span><span>' + esc(ROL[x.rol] || x.rol) + '</span>'
+      + '<span>Nombre en el WorkFlow</span><span>' + esc(x.nombre_wf || '—') + '</span>'
+      + '<span>Estado</span><span>' + ({ activo: 'Entra al portal', pendiente: 'Todavía no crea su contraseña', baja: x.reingreso ? 'Dado de baja; ya tiene su código para regresar' : 'Dado de baja: ya no entra' }[x.estado]) + '</span>'
+      + (x.estado === 'activo' && (EST.todo || !x.direccion) ? '<span>Última entrada</span><span>' + esc(x.ultima ? mty(x.ultima, true) : 'Nunca') + '</span>' : '')
+      + '</div></div>';
+    if (puede) {
+      c += '<div class="sec"><h3>Qué hacer</h3><div class="in acciones" id="f-acc">';
+      if (x.estado === 'activo') c += '<button class="btn" type="button" id="a-cod">Código para cambiar su contraseña</button><button class="btn peligro" type="button" id="a-baja">Dar de baja</button>';
+      if (x.estado === 'pendiente') c += '<button class="btn" type="button" id="a-cod">Código nuevo</button><button class="btn peligro" type="button" id="a-baja">Quitarle el acceso</button>';
+      if (x.estado === 'baja') c += x.reingreso ? '<button class="btn" type="button" id="a-cod">Código nuevo</button>' : '<button class="btn acento" type="button" id="a-rein">Reingreso</button>';
+      c += '</div><div id="f-form"></div></div>';
+    }
+    var pe = (h && h.pendientes) || {};
+    if (x.estado === 'activo' && (pe.clientes || pe.wf_clientes || pe.wf_abiertas || pe.grupos)) {
+      c += '<div class="sec"><h3>Lo que tiene a su cargo</h3><div class="in"><ul class="lista-b">'
+        + (pe.clientes ? '<li>Contador asignado de <b>' + esc(pe.clientes) + '</b> ' + (pe.clientes === 1 ? 'cliente' : 'clientes') + ' en la Base de clientes.</li>' : '')
+        + (pe.wf_clientes ? '<li>Responsable o quien autoriza en las plantillas del WorkFlow de <b>' + esc(pe.wf_clientes) + '</b> ' + (pe.wf_clientes === 1 ? 'cliente' : 'clientes') + '.</li>' : '')
+        + (pe.wf_abiertas ? '<li><b>' + esc(pe.wf_abiertas) + '</b> ' + (pe.wf_abiertas === 1 ? 'actividad abierta' : 'actividades abiertas') + ' en el WorkFlow.</li>' : '')
+        + (pe.grupos ? '<li>Está en <b>' + esc(pe.grupos) + '</b> ' + (pe.grupos === 1 ? 'grupo' : 'grupos') + ' del chat' + (pe.grupos_admin ? ' (en ' + esc(pe.grupos_admin) + ' es el único administrador: al darlo de baja, pasa a quien lleva más tiempo)' : '') + '.</li>' : '')
+        + '</ul><p class="mut" style="margin:8px 0 0">Antes o después de la baja, pásalos a otra persona en Administración › Base de clientes y en WorkFlow › Configuración.</p></div></div>';
+    }
+    var per = (h && h.periodos) || [];
+    if (per.length) {
+      c += '<div class="sec"><h3>Antes y después</h3><div class="in">' + per.map(function (z) {
+        return '<div class="per ' + (z.hasta ? 'fin' : 'vivo') + '"><div class="rs">' + esc(ROL[z.rol] || z.rol || '') + ': del ' + esc(mty(z.desde)) + (z.hasta ? ' al ' + esc(mty(z.hasta)) : ' a hoy') + '</div>'
+          + '<div class="mut">' + (z.alta_por ? 'Alta: ' + esc(z.alta_por) : '') + (z.hasta ? ' · Baja: ' + esc(z.baja_por || '') + (z.motivo ? ' (' + esc(z.motivo) + ')' : '') : '')
+          + (z.permisos && z.permisos.length ? ' · Al salir tenía ' + z.permisos.length + (z.permisos.length === 1 ? ' permiso especial' : ' permisos especiales') + ' (ya no los tiene)' : '') + '</div></div>';
+      }).join('') + '</div></div>';
+    }
+    var bit = (h && h.bitacora) || [];
+    if (bit.length) {
+      c += '<div class="sec"><h3>Movimientos</h3><div class="in"><ul class="lista-b">' + bit.map(function (b) {
+        return '<li><b>' + esc(b.que) + '</b> · ' + esc(mty(b.en, true)) + ' · ' + esc(b.quien) + (b.detalle ? '<div class="mut">' + esc(b.detalle) + '</div>' : '') + '</li>';
+      }).join('') + '</ul></div></div>';
+    }
+    abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), c);
+    if (!puede) return;
+    if ($('a-cod')) $('a-cod').onclick = function () { codigo(x); };
+    if ($('a-baja')) $('a-baja').onclick = function () { formBaja(x, pe, rhb); };
+    if ($('a-rein')) $('a-rein').onclick = function () { formRein(x); };
+    if (rhb && $('a-baja')) formBaja(x, pe, rhb);
+  }
+
+  /* ---------- El código (se ve una sola vez) ---------- */
+  function muestraCodigo(r, que) {
+    var txt = 'Entra a https://crmprofase.com.mx, pica «¿Primera vez u olvidaste tu contraseña?», escribe tu usuario ' + r.usuario + ' y este código: ' + r.codigo + '. Ahí creas tu contraseña (mínimo 10 caracteres). El código sirve una sola vez.';
+    abre(que, r.nombre || r.usuario,
+      '<div class="sec"><h3>Su código</h3><div class="in"><p class="paso">Usuario: <b>' + esc(r.usuario) + '</b></p><div class="codigo" id="c-cod">' + esc(r.codigo) + '</div>'
+      + '<p class="paso" style="margin-top:10px">Dáselo en persona o por un mensaje privado. Con él crea su contraseña en la entrada del portal, en «¿Primera vez u olvidaste tu contraseña?». Sirve una sola vez.</p>'
+      + '<p class="mut">Este código solo se ve ahora: en la base solo queda su huella. Si se pierde, dale otro con «Código nuevo».</p>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="c-copia">Copiar el mensaje para enviarle</button></div></div></div>');
+    $('c-copia').onclick = async function () {
+      try { await navigator.clipboard.writeText(txt); avisa('Mensaje copiado.'); this.textContent = 'Copiado'; }
+      catch (e) { error('No se pudo copiar; escribe el código a mano.'); }
+    };
+  }
+  async function codigo(x) {
+    var esP = x.estado === 'activo';
+    if (!(await pregunta(esP ? '¿Le das a ' + x.nombre + ' un código para cambiar su contraseña? Su contraseña de ahora sigue sirviendo hasta que use el código.' : '¿Le das a ' + x.nombre + ' un código nuevo? El de antes ya no servirá.', 'Sí, dar código'))) return;
+    try { var r = await rpc('usr_codigo', { p_usuario: x.usuario }); muestraCodigo(r, esP ? 'Código para cambiar su contraseña' : 'Código nuevo'); await carga(); }
+    catch (e) { error(falla(e)); }
+  }
+
+  /* ---------- Alta ---------- */
+  function formAlta() {
+    abre('Dar de alta a alguien en el portal', 'Contadores y gerentes',
+      '<div class="sec"><h3>Sus datos</h3><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="n-nom">Nombre completo</label><input id="n-nom" autocomplete="off" placeholder="Nombre y apellidos"></div>'
+      + '<div class="campo"><label for="n-usr">Usuario (nombre.apellido)</label><input id="n-usr" autocapitalize="none" spellcheck="false" autocomplete="off"></div>'
+      + '<div class="campo"><label for="n-rol">Rol</label><select id="n-rol"><option value="contador">Contador</option><option value="gerente">Gerente</option></select></div>'
+      + '<div class="campo ancho"><label for="n-wf">Cómo sale en el WorkFlow (si ya está)</label><input id="n-wf" autocomplete="off" placeholder="Opcional"></div>'
+      + '</div><p class="mut" style="margin:10px 0 0">Entra sin permisos especiales; los permisos de cada módulo los da quien los decide. Si estuvo antes en el portal, búscalo en «Dados de baja» y usa «Reingreso».</p>'
+      + '<div class="msg mal" id="n-err" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px;justify-content:flex-end"><button class="btn acento" type="button" id="n-ok">Dar de alta y ver su código</button></div></div></div>');
+    var tocado = false;
+    $('n-usr').addEventListener('input', function () { tocado = true; });
+    $('n-nom').addEventListener('input', function () { if (!tocado) $('n-usr').value = sugiere(this.value); });
+    $('n-ok').onclick = async function () {
+      var b = this; b.disabled = true; $('n-err').hidden = true;
+      try {
+        var r = await rpc('usr_alta', { p: { nombre: $('n-nom').value, usuario: $('n-usr').value, rol: $('n-rol').value, nombre_wf: $('n-wf').value } });
+        await carga(); muestraCodigo(r, 'Alta lista');
+      } catch (e) { $('n-err').textContent = falla(e); $('n-err').hidden = false; b.disabled = false; }
+    };
+    try { $('n-nom').focus(); } catch (e) {}
+  }
+
+  /* ---------- Baja (corta el acceso al momento) ---------- */
+  function formBaja(x, pe, rhb) {
+    var nunca = x.estado === 'pendiente';
+    $('f-form').innerHTML = '<div class="in" style="border-top:1px solid var(--line)">'
+      + (nunca ? '<p class="paso">Todavía no entra al portal: se le quita el acceso y su código deja de servir.</p>'
+               : '<p class="paso"><b>Al confirmar, ya no puede entrar al portal: se cierran sus sesiones en todos sus equipos al momento.</b> Nada se borra: queda su historial con su antes y su después. Se le quitan sus permisos especiales, sale de sus grupos del chat (sus mensajes se quedan) y ya no aparece para escribirle.</p>')
+      + (rhb ? '<p class="paso">También queda confirmada la baja que avisó RH (último día: ' + esc(fecha(rhb.fecha)) + ').</p>' : '')
+      + '<div class="campo ancho"><label for="b-mot">Motivo</label><input id="b-mot" autocomplete="off" placeholder="Por ejemplo: renunció, terminó su contrato…"' + (rhb ? ' value="Baja que avisó RH"' : '') + '></div>'
+      + '<div class="msg mal" id="b-err" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px;justify-content:flex-end"><button class="btn" type="button" id="b-no">Cancelar</button><button class="btn peligro" type="button" id="b-ok">' + (nunca ? 'Quitarle el acceso' : 'Dar de baja ahora') + '</button></div></div>';
+    $('b-no').onclick = function () { $('f-form').innerHTML = ''; };
+    try { $('b-mot').focus(); } catch (e) {}
+    $('b-ok').onclick = async function () {
+      var b = this, mot = $('b-mot').value.trim();
+      if (!mot) { $('b-err').textContent = 'Escribe el motivo.'; $('b-err').hidden = false; return; }
+      if (!(await pregunta('¿Das de baja a ' + x.nombre + '? ' + (nunca ? 'Su código deja de servir.' : 'Ya no podrá entrar al portal.'), 'Sí, dar de baja'))) return;
+      b.disabled = true; $('b-err').hidden = true;
+      try {
+        var arg = { usuario: x.usuario, motivo: mot }; if (rhb) arg.rh_mov = rhb.id;
+        var r = await rpc('usr_baja', { p: arg });
+        cierra(); await carga();
+        avisa(x.nombre + ' ya no puede entrar al portal' + (r && r.sesiones ? ' (se cerraron ' + r.sesiones + (r.sesiones === 1 ? ' sesión' : ' sesiones') + ')' : '') + '.'
+          + (r && r.pendientes && (r.pendientes.clientes || r.pendientes.wf_clientes) ? ' Recuerda pasar sus clientes y procesos del WorkFlow a otra persona.' : ''));
+      } catch (e) { $('b-err').textContent = falla(e); $('b-err').hidden = false; b.disabled = false; }
+    };
+  }
+
+  /* ---------- Reingreso (entra como usuario nuevo) ---------- */
+  function formRein(x) {
+    $('f-form').innerHTML = '<div class="in" style="border-top:1px solid var(--line)">'
+      + '<p class="paso">Regresa como usuario nuevo: con el rol que escojas aquí, sin los permisos de antes y con su chat vacío. Su historial queda ligado a él. Sigue de baja hasta que use su código.</p>'
+      + '<div class="campos"><div class="campo ancho"><label for="r-nom">Nombre completo</label><input id="r-nom" autocomplete="off" value="' + esc(x.nombre) + '"></div>'
+      + '<div class="campo"><label for="r-rol">Rol</label><select id="r-rol"><option value="contador"' + (x.rol === 'contador' ? ' selected' : '') + '>Contador</option><option value="gerente"' + (x.rol === 'gerente' ? ' selected' : '') + '>Gerente</option></select></div>'
+      + '<div class="campo"><label for="r-wf">Cómo sale en el WorkFlow</label><input id="r-wf" autocomplete="off" value="' + esc(x.nombre_wf || '') + '"></div></div>'
+      + '<div class="msg mal" id="r-err" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px;justify-content:flex-end"><button class="btn" type="button" id="r-no">Cancelar</button><button class="btn acento" type="button" id="r-ok">Darle el reingreso y ver su código</button></div></div>';
+    $('r-no').onclick = function () { $('f-form').innerHTML = ''; };
+    $('r-ok').onclick = async function () {
+      var b = this; b.disabled = true; $('r-err').hidden = true;
+      try {
+        var r = await rpc('usr_reingreso', { p: { usuario: x.usuario, nombre: $('r-nom').value, rol: $('r-rol').value, nombre_wf: $('r-wf').value } });
+        await carga(); muestraCodigo(r, 'Reingreso listo');
+      } catch (e) { $('r-err').textContent = falla(e); $('r-err').hidden = false; b.disabled = false; }
+    };
+  }
+  $('b-alta').onclick = formAlta;
+
+  /* =============================== Arranque =============================== */
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('usr_estado');
+      if (!EST || !EST.puede) throw new Error('Esta pantalla es para Daniel y Fernando Cadengo.');
+      ADMIN = EST.puede === 'admin' && !P.consulta;
+      $('consulta').hidden = ADMIN;
+      $('b-alta').hidden = !ADMIN;
+      await carga();
+      $('todo').hidden = false; $('cargando').hidden = true;
+      var u = new URLSearchParams(location.search).get('u');
+      if (u) { var x = LISTA.filter(function (z) { return z.usuario === u; })[0]; if (x) ficha(x); }
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>

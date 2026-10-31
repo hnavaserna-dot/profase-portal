@@ -117,12 +117,12 @@ footer b{color:var(--accent);font-weight:600}
       <label>Contraseña<input id="in-p" type="password" autocomplete="current-password" required></label>
       <div class="msg" id="in-msg" role="status"></div>
       <button class="go" type="submit" id="in-go">Entrar</button>
-      <button class="liga" type="button" id="tab-alta">¿Primera vez? Crea tu contraseña</button>
+      <button class="liga" type="button" id="tab-alta">¿Primera vez u olvidaste tu contraseña? Crea tu contraseña</button>
     </form>
 
     <form id="f-alta" hidden novalidate aria-labelledby="t-alta">
       <h1 id="t-alta">Crea tu contraseña</h1>
-      <p class="hint">Solo la primera vez: con el código que te dio Daniel creas tu contraseña. El código sirve una sola vez; después entras siempre con tu usuario y tu contraseña.</p>
+      <p class="hint">Con el código que te dieron Daniel o Fernando Cadengo creas tu contraseña (la primera vez, o si se te olvidó). El código sirve una sola vez; después entras siempre con tu usuario y tu contraseña.</p>
       <label>Usuario<input id="al-u" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="nombre.apellido" required></label>
       <label>Código<input id="al-c" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="XXXX-XXXX-XXXX" required></label>
       <label>Contraseña nueva<input id="al-p1" type="password" autocomplete="new-password" minlength="10" required></label>
@@ -174,7 +174,7 @@ footer b{color:var(--accent);font-weight:600}
       b.disabled=false;b.textContent='Entrar';
       var m=r.error&&r.error.message||'';
       if(/invalid login|credentials/i.test(m)){try{sb.rpc('registrar_fallo',{usuario:u}).then(function(){},function(){})}catch(_){}}
-      aviso('in-msg',/invalid login|credentials/i.test(m)?'Usuario o contraseña incorrectos. Si todavía no tienes contraseña, créala en «¿Primera vez?».':/fetch|network/i.test(m)?'Sin conexión. Revisa tu internet y vuelve a intentar.':'No se pudo entrar. Vuelve a intentar en un momento.','bad');
+      aviso('in-msg',/invalid login|credentials/i.test(m)?'Usuario o contraseña incorrectos. Si todavía no tienes contraseña o se te olvidó, pide un código a Daniel o a Fernando Cadengo y créala en «¿Primera vez u olvidaste tu contraseña?».':/banned/i.test(m)?'Tu usuario ya no tiene acceso al portal. Si es un error, avísale a Daniel.':/fetch|network/i.test(m)?'Sin conexión. Revisa tu internet y vuelve a intentar.':'No se pudo entrar. Vuelve a intentar en un momento.','bad');
       return;
     }
     if(!(await entrar(r.data.session.user.id,true))){b.disabled=false;b.textContent='Entrar';aviso('in-msg','Tu usuario no tiene un perfil asignado. Avísale a Daniel.','warn')}
@@ -186,10 +186,34 @@ footer b{color:var(--accent);font-weight:600}
     var c=$('al-c').value.toUpperCase().replace(/[^A-Z0-9]/g,'');
     if(c.length===12)c=c.slice(0,4)+'-'+c.slice(4,8)+'-'+c.slice(8);
     var p1=$('al-p1').value,p2=$('al-p2').value;
-    if(!u||!c){aviso('al-msg','Escribe tu usuario y el código que te dio Daniel.','warn');return}
+    if(!u||!c){aviso('al-msg','Escribe tu usuario y el código que te dieron Daniel o Fernando Cadengo.','warn');return}
     if(p1.length<10){aviso('al-msg','La contraseña debe tener al menos 10 caracteres.','warn');return}
     if(p1!==p2){aviso('al-msg','Las dos contraseñas no coinciden.','warn');return}
     var b=$('al-go');b.disabled=true;b.textContent='Creando…';aviso('al-msg','');
+    // El código lo revisa primero la base (portal/sql/81_usuarios.sql, usr_canjea): si la persona ya tenía usuario
+    // («olvidé mi contraseña» o un reingreso) ahí mismo queda su contraseña nueva y entra; si es nueva, sigue el registro
+    // de siempre. Si la base todavía no tiene la función, sigue como antes.
+    var cj=null;
+    try{cj=await sb.rpc('usr_canjea',{p_usuario:u,p_codigo:c,p_clave:p1})}catch(_){cj=null}
+    if(cj&&!cj.error&&(cj.data==='invalido'||cj.data==='intentos')){
+      b.disabled=false;b.textContent='Crear mi acceso';
+      aviso('al-msg',cj.data==='intentos'?'Demasiados intentos con ese usuario. Espera una hora o pide un código nuevo a Daniel o a Fernando Cadengo.'
+        :'El usuario o el código no son válidos, o el código ya se usó. Revísalos con Daniel o con Fernando Cadengo.','bad');
+      return;
+    }
+    if(cj&&cj.error&&!/PGRST202|could not find|does not exist|404/i.test((cj.error.code||'')+' '+(cj.error.message||''))){
+      b.disabled=false;b.textContent='Crear mi acceso';
+      aviso('al-msg',/10 caracteres/.test(cj.error.message||'')?'La contraseña debe tener al menos 10 caracteres.'
+        :/direcci/.test(cj.error.message||'')?'Las contraseñas de la dirección no se cambian desde aquí.'
+        :/fetch|network/i.test(cj.error.message||'')?'Sin conexión. Revisa tu internet y vuelve a intentar.':'No se pudo. Vuelve a intentar en un momento.','bad');
+      return;
+    }
+    if(cj&&!cj.error&&cj.data==='listo'){
+      var ri=await sb.auth.signInWithPassword({email:P.correoDe(u),password:p1});
+      if(ri.error||!ri.data.session){b.disabled=false;b.textContent='Crear mi acceso';aviso('al-msg','Tu contraseña nueva quedó. Entra con ella en «Ya tengo contraseña».','warn');return}
+      if(!(await entrar(ri.data.session.user.id,true,'contraseña nueva con código'))){b.disabled=false;b.textContent='Crear mi acceso';aviso('al-msg','Se creó tu contraseña pero no encontré tu perfil. Avísale a Daniel.','warn')}
+      return;
+    }
     var r=await sb.auth.signUp({email:P.correoDe(u),password:p1,options:{data:{usuario:u,codigo:c}}});
     if(r.error||!r.data.session){
       b.disabled=false;b.textContent='Crear mi acceso';
@@ -197,7 +221,7 @@ footer b{color:var(--accent);font-weight:600}
       aviso('al-msg',/already|registered|exists/i.test(m)?'Ese usuario ya tiene acceso. Entra con tu contraseña en «Ya tengo contraseña».'
         :/password/i.test(m)?'Esa contraseña no se acepta. Usa una más larga o distinta.'
         :/fetch|network/i.test(m)?'Sin conexión. Revisa tu internet y vuelve a intentar.'
-        :'El usuario o el código no son válidos, o el código ya se usó. Revísalos con Daniel.','bad');
+        :'El usuario o el código no son válidos, o el código ya se usó. Revísalos con Daniel o con Fernando Cadengo.','bad');
       return;
     }
     if(!(await entrar(r.data.session.user.id,true,'primera vez'))){b.disabled=false;b.textContent='Crear mi acceso';aviso('al-msg','Se creó tu acceso pero no encontré tu perfil. Avísale a Daniel.','warn')}

@@ -1,4 +1,4 @@
-<!doctype html><html lang="es" data-rol="director" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
    «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
    construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
    cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
@@ -33,8 +33,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
 <script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=07c4fddab8"></script>
 <style>
-/* Portal PROFASE · Accesos: la bitácora de quién entra al portal (portal/sql/13_accesos.sql). Solo la abre el
-   director y va dentro de su pestaña «Accesos». Las horas siempre en hora de Monterrey. */
+/* Portal PROFASE · Usuarios › Accesos: la bitácora de quién entra al portal (portal/sql/13_accesos.sql). La ve la
+   dirección completa y Fernando Cadengo sin las entradas ni los movimientos de la dirección (Daniel, 30-oct-2026: «Cadengo
+   también, sin lo nuestro»; lo cuida la base, portal/sql/82_usuarios.sql). Las horas siempre en hora de Monterrey. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -164,7 +165,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 <div class="band"><div class="wrap">
   <div>
     <h1>Accesos al portal</h1>
-    <p>Quién entró, cuándo y desde qué equipo; intentos fallidos, salidas y descargas. Solo tú ves esta pestaña.</p>
+    <p id="subt">Quién entró, cuándo y desde qué equipo; intentos fallidos, salidas y descargas.</p>
   </div>
   <div class="acts"><span id="hora" aria-live="polite"></span><button class="btn" type="button" id="recargar">Actualizar</button></div>
 </div></div>
@@ -211,7 +212,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   var ZONA = 'America/Monterrey', DIA = 864e5, PAGINA = 200;
   var TIPO = { entrada: 'Entrada', salida: 'Salida', inactividad: 'Cierre por inactividad', fallo: 'Intento fallido', descarga: 'Descarga', clave: 'Cambio de contraseña', credencial: 'Contraseña o archivo SAT de cliente', cerrada: 'Sacado de sus equipos' };
   var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
-  var filas = [], perfiles = [], pendientes = [], sesiones = null, mostrar = PAGINA, cargando = false;
+  var filas = [], perfiles = [], pendientes = [], sesiones = null, mostrar = PAGINA, cargando = false, EST = null;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var fHora = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -241,6 +242,13 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
     if (cargando) return;
     cargando = true; $('recargar').disabled = true;
     try {
+      if (!EST) {   // quién la ve lo decide la base (82_usuarios.sql): la dirección y Fernando Cadengo
+        var es = await sb.rpc('usr_estado');
+        EST = es.error ? { accesos: !!P.perfil && P.perfil.rol === 'director', todo: !!P.perfil && P.perfil.rol === 'director', sacar: false } : (es.data || {});
+        $('subt').textContent = 'Quién entró, cuándo y desde qué equipo; intentos fallidos, salidas y descargas. '
+          + (EST.todo ? 'La ven la dirección y Fernando Cadengo (él, sin lo de la dirección).' : 'Sin las entradas ni los movimientos de la dirección.');
+      }
+      if (!EST.accesos) { $('error').hidden = false; $('error').textContent = 'Esta pantalla es para la dirección y Fernando Cadengo.'; return; }
       var desde = new Date(Date.now() - 90 * DIA).toISOString();
       var todos = [], i = 0;
       for (;;) {   // de mil en mil, hasta 20 mil renglones (90 días)
@@ -253,6 +261,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       filas = todos;
       var p = await sb.from('perfiles').select('usuario,nombre,rol').order('nombre');
       perfiles = p.error ? [] : (p.data || []);
+      if (!EST.todo) perfiles = perfiles.filter(function (x) { return x.rol !== 'director'; });
       var q = await sb.rpc('accesos_pendientes');
       pendientes = q.error ? [] : (q.data || []);
       var se = await sb.rpc('sesiones_abiertas');   // null si la base todavía no tiene 28_sesiones.sql
@@ -348,11 +357,11 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   }
 
   /* ---- Sesiones abiertas y «Sacar de todos sus equipos» (portal/sql/28_sesiones.sql) ----
-     Solo daniel.nava saca a alguien; hnava (solo consulta) ve las sesiones pero no el botón (la base igual lo detiene).
-     Para Daniel mismo: «Cerrar mis otras sesiones», que conserva la de este equipo. */
+     Sacan a alguien daniel.nava y Fernando Cadengo (él, a quien no es de la dirección); hnava (solo consulta) ve las
+     sesiones pero no el botón (la base igual lo detiene). Para uno mismo: «Cerrar mis otras sesiones». */
   function sesionesDe(usuario) { return (sesiones || []).filter(function (s) { return s.usuario === usuario; }); }
   function equipos(n) { return n === 1 ? '1 equipo' : n + ' equipos'; }
-  function puedeSacar() { return !P.consulta && !!P.perfil && P.perfil.rol === 'director'; }
+  function puedeSacar() { return !P.consulta && !!P.perfil && !!EST && EST.sacar === true; }
   function celdaSesion(p) {
     if (sesiones === null) return '<span class="rol">—</span>';
     var l = sesionesDe(p.usuario), otras = l.filter(function (s) { return !s.esta; });

@@ -39,6 +39,7 @@
     mas: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
     msj: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M8 10.5h8M8 14h5"/>',
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
+    usr: '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1.5"/>',
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
@@ -67,7 +68,6 @@
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
-      { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' },   // bitácora de accesos: solo la ve el director
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
@@ -81,6 +81,12 @@
       { k: 'access-comisiones', v: 'axcom', t: 'Comisiones', d: 'Las comisiones del periodo según lo cobrado.' },   // antes en Access
       { k: 'comisiones-direccion', v: 'cdir', t: 'Comisiones de dirección', d: 'Facturas con comisión, gastos, reserva y utilidad del periodo.' },   // solo quien Daniel decidió
       { k: 'tes-reportes', v: 'trep', t: 'Reportes', d: 'Cobranza por cliente y facturas del periodo.' }] },
+    // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
+    // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
+    // (usr_estado(), portal/sql/82_usuarios.sql; bloque usr_tab.js)
+    { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas y accesos.', subs: [
+      { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña y regresos.' },
+      { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     { k: 'rh', t: 'RH', d: 'Recursos humanos: vacaciones, permisos, préstamos, colaboradores, eventos, altas y bajas.', subs: [
@@ -117,7 +123,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', msj: 'Chat', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'Ayuda', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
