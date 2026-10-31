@@ -1,8 +1,12 @@
 /* Portal PROFASE · avisos del chat al celular y a la computadora aunque el portal esté cerrado (30-oct-2026, pedido de
    Daniel). Este archivo lo instala el navegador cuando alguien activa los avisos en el chat (ajustes ⋮).
    - Solo recibe avisos y los enseña; no guarda páginas ni datos, ni cambia cómo carga el portal (no tiene «fetch»).
-   - El aviso llega cifrado desde la función «chat-push» de Supabase y dice quién escribió y en qué chat, nunca el texto
-     del mensaje. Al picarlo abre el portal en esa conversación (o la abre en la ventana del portal que ya esté abierta).
+   - El aviso llega cifrado desde la función «chat-push» de Supabase y dice quién escribió, en qué chat y lo que dice el
+     mensaje, como WhatsApp (desde el 30-oct-2026, 17:55, decisión de Daniel: «Con texto, siempre»; lo arma la base,
+     portal/sql/66_chat_push_texto.sql). Al picarlo abre el portal en esa conversación (o la abre en la ventana del portal
+     que ya esté abierta).
+   - El ícono chico (barra de arriba del celular) es un globito de chat blanco: Android lo pinta de un solo color, así que
+     no puede ser el signo PROFASE (nunca se pinta de un color); el signo y la foto de quien escribe van en grande.
    - En iPhone y iPad solo funciona con el portal agregado a la pantalla de inicio. */
 'use strict';
 self.addEventListener('install', function () { self.skipWaiting(); });
@@ -13,9 +17,9 @@ self.addEventListener('push', function (e) {
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = {}; }
   var titulo = String(d.titulo || 'Chat de PROFASE').slice(0, 80);
   var op = {
-    body: String(d.cuerpo || 'Tienes un mensaje nuevo en el chat').slice(0, 160),
+    body: String(d.cuerpo || 'Tienes un mensaje nuevo en el chat').slice(0, 300),
     icon: typeof d.icono === 'string' && /^(https:\/\/|\/)/.test(d.icono) ? d.icono : '/img/icono-192.png',
-    badge: '/img/icono-48.png',
+    badge: '/img/aviso-chat.png',
     tag: String(d.tag || 'chat'),
     renotify: true,
     data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/', conv: d.conv || null }
