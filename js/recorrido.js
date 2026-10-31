@@ -7,6 +7,14 @@
    Uso: PROFASE_RECORRIDO.corre({ pasos: [{ el: () => elemento o null, titulo, texto, etiqueta: 'Nuevo', icono: 'candado',
                                             antes: async () => {} }] }) → promesa: 'fin' o 'saltado'.
    Un paso sin «el» sale al centro, sin flechita. Si su parte no está a la vista, el paso se brinca.
+   «A la vista» es de verdad (30-oct-2026, Daniel con una captura del celular: el paso «En el menú RH» iluminaba un
+   pedazo vacío del Inicio): dentro de la pantalla, no escondida (visibility, display u opacidad) y no fuera de la
+   pantalla (el menú del celular cerrado vive a la izquierda, fuera de ella). PROFASE_RECORRIDO.aLaVista(el) es la
+   misma revisión; PROFASE_RECORRIDO.sePuede(el) es la que usan los recorridos para escoger entre varias partes: no
+   escondida y dentro de lo ancho de la pantalla (lo que está más abajo sí cuenta: el motor la acerca antes de iluminarla).
+   menu: 'rh' (y sub: 'rh-vacaciones', opcional): el paso abre ese módulo donde esté el menú de quien lo ve (riel, menú
+   arriba o el ☰ del celular, con PORTAL_MENU.ensena) e ilumina su tarjeta u opción; al pasar a otro paso o al terminar,
+   el menú se vuelve a cerrar solo.
    obligatorio: true (regla de Daniel, 30-oct-2026, para los cambios del chat: «que a todos nos obligues a verlo»):
    sin «Saltar» ni Esc; solo se sale llegando al final. */
 (function () {
@@ -74,6 +82,63 @@
     } catch (e) { /* se queda donde está */ }
   }
   function clamp(v, a, b) { return Math.max(a, Math.min(v, b)); }
+  // ¿se ve de verdad? (no escondida, no transparente, y al menos un pedazo dentro de la pantalla)
+  function aLaVista(el) {
+    try {
+      var g = caja(el);
+      if (!g) return false;
+      var x = el, w = el.ownerDocument.defaultView;
+      while (x) {
+        if (x.nodeType === 1) {
+          var cs = w.getComputedStyle(x);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse' || +cs.opacity < 0.05) return false;
+        }
+        if (x.parentElement) { x = x.parentElement; continue; }
+        // sube al marco de la pestaña, si vive dentro de uno
+        x = w.frameElement || null; w = x ? x.ownerDocument.defaultView : null;
+      }
+      var vw = innerWidth, vh = innerHeight;
+      var ancho = Math.min(g.x + g.w, vw) - Math.max(g.x, 0), alto = Math.min(g.y + g.h, vh) - Math.max(g.y, 0);
+      return ancho >= Math.min(g.w, 24) * 0.6 && alto >= Math.min(g.h, 16) * 0.6;
+    } catch (e) { return false; }
+  }
+  // para escoger entre varias partes: no escondida y dentro de lo ancho de la pantalla (lo de más abajo sí cuenta)
+  function sePuede(el) {
+    try {
+      var g = caja(el);
+      if (!g) return false;
+      var x = el, w = el.ownerDocument.defaultView;
+      while (x) {
+        if (x.nodeType === 1) {
+          var cs = w.getComputedStyle(x);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse' || +cs.opacity < 0.05) return false;
+        }
+        if (x.parentElement) { x = x.parentElement; continue; }
+        x = w.frameElement || null; w = x ? x.ownerDocument.defaultView : null;
+      }
+      return Math.min(g.x + g.w, innerWidth) - Math.max(g.x, 0) >= Math.min(g.w, 24) * 0.6;
+    } catch (e) { return false; }
+  }
+  function dormir(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
+  var menuAbierto = false;
+  function sueltaMenu() {
+    if (!menuAbierto) return false;
+    menuAbierto = false;
+    try { if (window.PORTAL_MENU && window.PORTAL_MENU.suelta) window.PORTAL_MENU.suelta(); } catch (e) { /* ya cerrado */ }
+    return true;
+  }
+  // abre el módulo «k» del menú donde esté (riel, arriba o ☰ del celular) y regresa lo que se ilumina
+  async function abreMenu(k, sub) {
+    var M = window.PORTAL_MENU;
+    if (!M || !M.ensena) return null;
+    var c = null;
+    try { c = M.ensena(k); } catch (e) { c = null; }
+    menuAbierto = true;
+    await dormir(320);   // el ☰ del celular se desliza en .2 s
+    if (!c) return null;
+    var o = sub ? c.querySelector('a[data-k="' + sub + '"]') : null;
+    return o && aLaVista(o) ? o : c;
+  }
 
   var activo = false;
   function corre(def) {
@@ -93,6 +158,7 @@
       function termina(como) {
         if (!activo) return;
         activo = false; clearInterval(tick);
+        sueltaMenu();
         removeEventListener('resize', acomoda); removeEventListener('keydown', tecla, true);
         capa.remove();
         try { antesFoco && antesFoco.focus && antesFoco.focus(); } catch (e) { /* sin foco */ }
@@ -142,6 +208,8 @@
         i = n;
         var p = pasos[i];
         globo.style.visibility = 'hidden'; luz.hidden = true; flecha.hidden = true;
+        if (sueltaMenu()) await dormir(220);
+        if (!activo || i !== n) return;
         if (p.antes) {
           // mientras se abre lo que sigue (por ejemplo, el chat), la pantalla se oscurece y dice «Un momento…»
           capa.classList.add('sin-luz'); espera.hidden = false;
@@ -150,10 +218,17 @@
         }
         if (!activo || i !== n) return;
         el = null;
-        if (p.el) {
+        if (p.menu) {
+          el = await abreMenu(p.menu, p.sub);
+          if (!activo || i !== n) return;
+          if (!el || !aLaVista(el)) { sueltaMenu(); el = null; }
+          if (!el && !p.el) { muestra(n + dir, dir); return; }   // ese módulo no está en su menú: se brinca
+        }
+        if (!el && p.el) {
           try { el = typeof p.el === 'function' ? p.el() : document.querySelector(p.el); } catch (e) { el = null; }
           if (!el || !caja(el)) { muestra(n + dir, dir); return; }   // no está a la vista: se brinca
           dentro(el);
+          if (!aLaVista(el)) { muestra(n + dir, dir); return; }      // fuera de la pantalla o escondida: se brinca
         }
         capa.querySelector('.rc-cab').innerHTML = (p.icono && ICONOS[p.icono] ? '<span class="rc-ic">' + ICONOS[p.icono] + '</span>' : '')
           + (p.etiqueta ? '<span class="rc-et">' + esc(p.etiqueta) + '</span>' : '');
@@ -188,5 +263,5 @@
       muestra(0, 1);
     });
   }
-  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; } };
+  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede };
 })();

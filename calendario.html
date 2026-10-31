@@ -35,8 +35,9 @@
    «Calendario» de las tres vistas. Banda azul con el resumen del mes, sub pestañas (Calendario, Próximos,
    Colaboradores, Eventos) y el contenido abajo.
    Quién hace qué lo decide la base (portal/sql/16_calendario.sql): todos consultan; captura quien esté en
-   cal_captura (Fernando Cadengo, Daniel, Alex Luna y Andrea Reyna). Del cumpleaños solo se guarda el día y el mes; quien no autorizó publicarlo
-   solo lo ve quien captura. Los días festivos e inhábiles no se guardan: se calculan aquí.
+   cal_captura (Fernando Cadengo, Daniel, Alex Luna y Andrea Reyna). Del cumpleaños solo se guarda el día y el mes. Todos
+   salen publicados (Daniel, 30-oct-2026, 20:56: «todos debemos tener fecha de cumpleaños y recordatorio y calendario»;
+   la base los marca así sola: portal/sql/75_cumple_todos.sql). Los días festivos e inhábiles no se guardan: se calculan aquí.
    Cumpleaños de clientes (29-oct, pedido de Fernando): los contactos de los clientes activos de DECOMSA, leídos del
    Access cada 3 horas (nube/access_nube.py → access/cumple_equipo para dirección y gerentes; access/cumple_<usuario>
    para cada contador, los de sus clientes como contador asignado; portal/sql/27_cumple_clientes.sql). Solo día y mes.
@@ -192,6 +193,10 @@ main .wrap{padding-block:18px 40px;display:grid;gap:16px}
 .item .ss{display:block;font-size:12.5px;color:var(--ink-2);font-weight:400}
 .empty{color:var(--ink-3);font-size:13.5px;padding:8px 0}
 .note{font-size:12px;color:var(--ink-3);line-height:1.45;margin:0}
+/* RH › Colaboradores: quién tiene usuario en el portal y todavía no tiene su cumpleaños (Daniel, 30-oct-2026: «todos
+   debemos tener fecha de cumpleaños») */
+.sincumple{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--accent-soft);color:var(--ink);border-left:4px solid var(--accent);font-size:14px;line-height:1.45;overflow-wrap:anywhere}
+.sincumple b{color:var(--accent-ink)}
 
 /* próximos y eventos */
 .grp{display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 16px;padding:10px 0;border-top:1px solid var(--line)}
@@ -369,6 +374,7 @@ td.emp{min-width:260px}
               <button type="button" class="btn" data-excel data-acc="excel-col">Descargar Excel</button>
             </div>
           </div>
+          <div class="sincumple" id="sinCumple" role="status" hidden></div>
           <input type="file" id="xlsIn" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
           <div class="filters">
             <input type="search" id="q" placeholder="Buscar por nombre" aria-label="Buscar por nombre">
@@ -376,7 +382,7 @@ td.emp{min-width:260px}
             <select id="fMes" aria-label="Mes de cumpleaños"><option value="">Todos los meses</option></select>
           </div>
           <div class="tablebox"><table>
-            <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th class="solo-colab-ve">Autorizó publicar</th><th class="solo-colab"></th></tr></thead>
+            <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th class="solo-colab"></th></tr></thead>
             <tbody id="colBody"></tbody>
           </table></div>
           <p class="note" style="margin-top:10px" id="colNota"></p>
@@ -531,7 +537,21 @@ td.emp{min-width:260px}
   }
 
   /* ---------- qué hay en cada día ---------- */
-  function publicados(){ return colab.filter(function(c){ return c.autoriza===true; }); }
+  function publicados(){ return colab; }   // todos salen (Daniel, 30-oct-2026)
+  // Quién tiene usuario en el portal y no está en Colaboradores (sin cumpleaños): solo a quien los captura (RH)
+  var sinCumple=[], pidiendoSC=false;
+  async function pideSinCumple(){
+    if(!colabCap||pidiendoSC) return; pidiendoSC=true;
+    try{ var r=await window.PORTAL.sb.rpc('cal_sin_cumple'); if(!r.error&&Array.isArray(r.data)) sinCumple=r.data; }catch(e){}
+    pidiendoSC=false; pintaSinCumple();
+  }
+  function pintaSinCumple(){
+    var b=$('sinCumple'); if(!b) return;
+    var l=sinCumple.filter(function(u){ return !colab.some(function(c){ return norm(c.nombre)===norm(u.nombre); }); });
+    b.hidden=!colabCap||!l.length;
+    if(!b.hidden) b.innerHTML='<b>'+(l.length===1?'Le falta su cumpleaños':'Les falta su cumpleaños')+':</b> '+l.map(function(u){ return esc(u.nombre); }).join(', ')
+      +'. '+(l.length===1?'Tiene':'Tienen')+' usuario en el portal y no '+(l.length===1?'está':'están')+' en Colaboradores; con «Agregar colaborador» sale en el Calendario y le llega su felicitación.';
+  }
   function delDia(y,m,d){
     var out=[], pub=publicados(), k=key(y,m,d);
     pub.forEach(function(c){
@@ -845,12 +865,11 @@ td.emp{min-width:260px}
       return '<tr><td><div class="who">'+avatar(c)+(cap?'<button type="button" class="nomb" data-edit-col="'+esc(c.id)+'" aria-label="Editar a '+esc(c.nombre)+'">'+esc(c.nombre)+LAPIZ+'</button>':esc(c.nombre))+'</div></td><td class="nw">'+esc(c.area||'')+'</td>'
         +'<td class="nw">'+c.dia+' de '+MESES[c.mes-1]+'</td>'
         +'<td class="nw">'+(i?'<span class="num">'+i.getDate()+'-'+MES3[i.getMonth()]+'-'+i.getFullYear()+'</span> · '+(an<1?'menos de un año':an+(an===1?' año':' años')):'—')+'</td>'
-        +(colabVe?'<td>'+(c.autoriza?'<span class="pill">Sí</span>':'<span class="pill no">No · no se publica</span>')+'</td>':'')
         +(cap?'<td class="nw"><button type="button" class="link" data-edit-col="'+esc(c.id)+'">Editar</button><button type="button" class="link danger" data-del-col="'+esc(c.id)+'">Quitar</button></td>':'')
         +'</tr>';
-    }).join(''):'<tr><td colspan="6" class="empty">'+(colab.length?'Nadie coincide con la búsqueda.':'Todavía no hay colaboradores capturados.')+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">'+(colab.length?'Nadie coincide con la búsqueda.':'Todavía no hay colaboradores capturados.')+'</td></tr>';
     $('colNota').textContent=cap
-      ? 'Del cumpleaños solo se guarda el día y el mes, sin el año, para no exponer la edad (dato personal). Quien no autorizó publicarlo solo aparece aquí, en la lista de RH: la base no se lo muestra a nadie más. La fecha de ingreso lleva el año porque con ella se calculan los aniversarios y los días de vacaciones. Si alguien deja el despacho, regístralo en RH › Altas y bajas (así queda su baja); «Quitar» es solo para un error de captura.'
+      ? 'Del cumpleaños solo se guarda el día y el mes, sin el año, para no exponer la edad. Todos salen en el Calendario, en el aviso del día y en su felicitación. La fecha de ingreso lleva el año porque con ella se calculan los aniversarios y los días de vacaciones. Si alguien deja el despacho, regístralo en RH › Altas y bajas (así queda su baja); «Quitar» es solo para un error de captura.'
       : colabCap ? 'Los colaboradores se capturan en RH › Colaboradores.'
       : 'Del cumpleaños solo se guarda el día y el mes. Si tus datos no están o hay que corregirlos, avísale a RH (Alex Luna o Andrea Reyna).';
     enlaza($('colBody'));
@@ -1039,7 +1058,7 @@ td.emp{min-width:260px}
 
   function abrirColab(c){
     var nuevo=!c;
-    c=c||{nombre:'',area:'Contabilidad',dia:1,mes:HOY.getMonth()+1,ingreso:'',autoriza:false,foto:null};
+    c=c||{nombre:'',area:'Contabilidad',dia:1,mes:HOY.getMonth()+1,ingreso:'',autoriza:true,foto:null};
     ventana('<form id="fCol" novalidate><h3>'+(nuevo?'Agregar colaborador':'Editar colaborador')+'</h3>'
       +'<p class="sub">Del cumpleaños solo se pide el día y el mes.</p><div class="fg">'
       +'<div class="f full"><label for="cNom">Nombre completo</label><input id="cNom" value="'+esc(c.nombre)+'" autocomplete="off" maxlength="80"></div>'
@@ -1052,7 +1071,6 @@ td.emp{min-width:260px}
         : '<div class="f full"><label for="cFoto">Foto (opcional)</label><input id="cFoto" type="file" accept="image/*">'
           +(c.foto?'<label class="chk"><input type="checkbox" id="cSinFoto"><span>Quitar la foto actual</span></label>':'')
           +'<small>Si tiene usuario en el portal y foto de perfil, se usa esa en lugar de esta.</small></div>')
-      +'<label class="chk f full"><input type="checkbox" id="cAut"'+(c.autoriza?' checked':'')+'><span>El colaborador autorizó que su cumpleaños (día y mes) se publique en el portal. Si no, se guarda pero no sale en el calendario ni en el aviso.</span></label>'
       +'</div><div class="err" id="cErr" role="alert"></div>'
       +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="submit" class="btn primary">'+(nuevo?'Agregar':'Guardar cambios')+'</button></div></form>',
     function(ov,cerrar){
@@ -1071,7 +1089,7 @@ td.emp{min-width:260px}
         btn.disabled=true; err.textContent='';
         try{
           if(fi) foto=await achica(fi);
-          var datos=Object.assign({nombre:nom,area:ov.querySelector('#cArea').value,dia:dia,mes:mes,ingreso:ing,autoriza:ov.querySelector('#cAut').checked,foto:foto}, firma());
+          var datos=Object.assign({nombre:nom,area:ov.querySelector('#cArea').value,dia:dia,mes:mes,ingreso:ing,autoriza:true,foto:foto}, firma());
           if(nuevo){ var ref=await db.collection('cal_colab').add(datos); colab.push(Object.assign({id:ref.id},datos)); }
           else { await db.doc('cal_colab/'+c.id).set(datos); Object.assign(colab.filter(function(x){ return x.id===c.id; })[0]||{},datos); }
           cerrar(); render(); toast(nuevo?nom+' agregado':'Cambios guardados');
@@ -1190,8 +1208,8 @@ td.emp{min-width:260px}
   }
 
   /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
-  var COLS=['Nombre completo','Área','Día de cumpleaños','Mes de cumpleaños','Fecha de ingreso','Autorizó publicar (Sí/No)'];
-  var ANCHOS=[36,18,12,14,16,16,14];
+  var COLS=['Nombre completo','Área','Día de cumpleaños','Mes de cumpleaños','Fecha de ingreso'];
+  var ANCHOS=[36,18,12,14,16,14];
   function cuandoTxt(){ return new Date().toLocaleString('es-MX',{timeZone:'America/Monterrey',dateStyle:'medium',timeStyle:'short'}); }
   function fechaXls(k){ var p=String(k||'').split('-'); return p.length===3?new Date(Date.UTC(+p[0],+p[1]-1,+p[2])):null; }
   // con PROFASE_MARCA.guardar(): el mismo libro sale en Excel o, con su botón «PDF» al lado, en PDF (siempre juntos)
@@ -1253,22 +1271,21 @@ td.emp{min-width:260px}
     });
   }
   // hoja de colaboradores: la misma forma que la plantilla, para poder bajarla, corregirla y volver a subirla
-  function hojaColab(MK, wb, filas, conAut, plantilla){
+  function hojaColab(MK, wb, filas, plantilla){
     var ws=wb.addWorksheet('Colaboradores');
-    var head=conAut?COLS.slice():COLS.slice(0,5);
+    var head=COLS.slice();
     if(!plantilla) head.push('Años en PROFASE');
     ws.columns=head.map(function(_,i){ return {width:ANCHOS[i]||14}; });
     var g=MK.encabezado(wb, ws, head.length, {titulo: plantilla?'Plantilla de colaboradores · Calendario del equipo':'Colaboradores · Calendario del equipo',
       lineas: plantilla
         ? ['Un renglón por colaborador, desde el renglón de abajo de los encabezados. Del cumpleaños solo el día y el mes (sin año).',
-           'Área: '+AREAS.join(', ')+'. Mes: número (1 a 12) o nombre. Fecha de ingreso: dd/mm/aaaa. Autorizó publicar: Sí o No.',
+           'Área: '+AREAS.join(', ')+'. Mes: número (1 a 12) o nombre. Fecha de ingreso: dd/mm/aaaa.',
            'Si un nombre ya existe en el portal, se actualizan sus datos; si no, se agrega.']
-        : [filas.length+(filas.length===1?' colaborador':' colaboradores')+(conAut?'':' (solo los que autorizaron publicar su cumpleaños)'), 'Exportado el '+cuandoTxt()+' (hora de Monterrey)']});
+        : [filas.length+(filas.length===1?' colaborador':' colaboradores'), 'Exportado el '+cuandoTxt()+' (hora de Monterrey)']});
     head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
     MK.cabecera(ws, g, 1, head.length);
     filas.forEach(function(c,k){
       var r=ws.getRow(g+1+k), v=[c.nombre, c.area||'', c.dia, c.mes, fechaXls(c.ingreso)];
-      if(conAut) v.push(c.autoriza?'Sí':'No');
       if(!plantilla) v.push(anios(c));
       r.values=v; r.getCell(5).numFmt='dd/mm/yyyy';
     });
@@ -1291,7 +1308,7 @@ td.emp{min-width:260px}
     await conBoton(btn, async function(){
       var MK=window.PROFASE_MARCA, EX=await MK.excelJS();
       var wb=MK.libro(EX,'Colaboradores · Calendario del equipo');
-      hojaColab(MK, wb, filtrados(), colabVe, false);
+      hojaColab(MK, wb, filtrados(), false);
       await guardaLibro(wb, 'Colaboradores PROFASE.xlsx');
     });
   }
@@ -1299,7 +1316,7 @@ td.emp{min-width:260px}
     await conBoton(btn, async function(){
       var MK=window.PROFASE_MARCA, EX=await MK.excelJS();
       var wb=MK.libro(EX,'Plantilla de colaboradores · Calendario del equipo');
-      hojaColab(MK, wb, colab.slice().sort(ordenCol), true, true);
+      hojaColab(MK, wb, colab.slice().sort(ordenCol), true);
       await guardaLibro(wb, 'Plantilla colaboradores PROFASE.xlsx');
     });
   }
@@ -1367,7 +1384,7 @@ td.emp{min-width:260px}
       tabla[n].forEach(function(c, col){
         var t=norm(c);
         if(/^nombre/.test(t)) m.nombre=col; else if(/^area/.test(t)) m.area=col; else if(/^dia/.test(t)) m.dia=col;
-        else if(/^mes/.test(t)) m.mes=col; else if(/ingreso/.test(t)) m.ingreso=col; else if(/autoriz/.test(t)) m.autoriza=col;
+        else if(/^mes/.test(t)) m.mes=col; else if(/ingreso/.test(t)) m.ingreso=col;
       });
       if(m.nombre!=null&&m.dia!=null&&m.mes!=null){ fh=n; mapa=m; }
     }
@@ -1384,8 +1401,7 @@ td.emp{min-width:260px}
       var dd=v('dia'); r.dia=typeof dd==='number'?dd:parseInt(norm(dd),10);
       if(!(r.dia>=1&&r.dia<=31&&r.dia%1===0)||(r.mes&&r.dia>MAXD[r.mes-1])) r.errores.push('día no válido');
       r.ingreso=aFecha(v('ingreso')); if(!r.ingreso) r.errores.push('fecha de ingreso no válida');
-      var au=norm(v('autoriza')); r.autoriza=/^(si|s|x|1|true|verdadero)$/.test(au);
-      if(au && !r.autoriza && !/^(no|n|0|false|falso)$/.test(au)) r.errores.push('«Autorizó» debe ser Sí o No');
+      r.autoriza=true;
       if(vistos[norm(nom)]) r.errores.push('nombre repetido en el archivo');
       vistos[norm(nom)]=1;
       r.existe=colab.filter(function(x){ return norm(x.nombre)===norm(nom); })[0]||null;
@@ -1399,7 +1415,7 @@ td.emp{min-width:260px}
       +'<p class="sub">'+filas.length+(filas.length===1?' renglón':' renglones')+' en el archivo: '+nuevos+' nuevos, '+cambian+' que ya existían (se actualizan)'+(mal?' y <b>'+mal+' con errores</b>, que no se guardan':'')+'.</p>'
       +'<div class="prev"><table><thead><tr><th>Renglón</th><th>Nombre</th><th>Cumpleaños</th><th>Qué pasa</th></tr></thead><tbody>'
       +filas.map(function(r){ return '<tr'+(r.errores.length?' class="mal"':'')+'><td class="num">'+r.fila+'</td><td>'+esc(r.nombre)+'</td><td class="nw">'+(r.dia&&r.mes&&!r.errores.length?r.dia+' de '+MESES[r.mes-1]:'—')+'</td><td>'
-        +(r.errores.length?esc(r.errores.join('; ')):(r.existe?'Se actualiza':'Nuevo')+(r.autoriza?'':' · no se publica'))+'</td></tr>'; }).join('')
+        +(r.errores.length?esc(r.errores.join('; ')):(r.existe?'Se actualiza':'Nuevo'))+'</td></tr>'; }).join('')
       +'</tbody></table></div><div class="err" id="sErr" role="alert"></div>'
       +'<div class="mact"><button type="button" class="btn" data-x>Cancelar</button><button type="button" class="btn primary" data-ok'+(ok.length?'':' disabled')+'>Guardar '+ok.length+'</button></div>',
     function(ov,cerrar){
@@ -1461,7 +1477,7 @@ td.emp{min-width:260px}
   }
   function limpiaCol(ds){
     var o=ds.data()||{};
-    return {id:ds.id, nombre:String(o.nombre||''), area:o.area||'', dia:+o.dia||1, mes:+o.mes||1, ingreso:o.ingreso||'', autoriza:o.autoriza===true, foto:o.foto||null};
+    return {id:ds.id, nombre:String(o.nombre||''), area:o.area||'', dia:+o.dia||1, mes:+o.mes||1, ingreso:o.ingreso||'', autoriza:true, foto:o.foto||null};
   }
   async function arranca(){
     if(!(window.claude && window.PORTAL)){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
@@ -1484,7 +1500,7 @@ td.emp{min-width:260px}
     renderLegend(); render(); cargaCli();
 
     db.collection('cal_colab').onSnapshot(function(snap){
-      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render(); pideFotos();
+      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render(); pideFotos(); pideSinCumple();
     }, function(){ cargaCol=true; toast('Se perdió la conexión con los datos. Recarga la página si no vuelve sola.'); render(); });
     db.collection('cal_eventos').onSnapshot(function(snap){
       eventos=snap.docs.map(function(ds){ var o=ds.data()||{}; return {id:ds.id, titulo:String(o.titulo||''), fecha:o.fecha||'', hora:o.hora||'', lugar:o.lugar||'', desc:o.desc||'',
