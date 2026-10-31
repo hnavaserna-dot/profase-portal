@@ -14,6 +14,9 @@
      pone al lado un adorno aparte (js/temporada.js: arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el
      14 de febrero, banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
      solo color de la propuesta #3; el menú de arriba de esa propuesta se quedó igual.
+   - Picar el signo PROFASE (el del encabezado o el del ☰, con su adorno de temporada) lleva al Inicio, en celular,
+     iPad y computadora (Daniel, 31-oct-2026: «si desde ahí le pico al logo de profase; me mandes a home»). Lo reparte
+     js/portal.js (P.alInicio, P.signoInicio); aquí, PORTAL_MENU.alInicio().
    - Riel de íconos (29-oct-2026, propuesta de Gabriel): en computadora el menú arranca como una tira de íconos grandes
      con su nombre corto e «Inicio» arriba; al picar o pasar el mouse sale la tarjeta del módulo, como en el celular
      (qué es y cada opción con su explicación). En el celular arranca con el menú arriba. Cada quien puede cambiarlo
@@ -572,6 +575,8 @@
     document.addEventListener('click', function (e) { if (popAbierto && !retiene && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
     side.querySelector('.pm-cab button').onclick = function () { abre(false); };
     if (window.PROFASE_TEMPORADA) window.PROFASE_TEMPORADA.pon(logo);   // js/temporada.js
+    // el signo del ☰ también lleva al Inicio (el del encabezado ya lo marcó js/portal.js; Daniel, 31-oct-2026)
+    if (window.PORTAL && window.PORTAL.signoInicio) window.PORTAL.signoInicio(side.querySelector('.pm-cab'));
     scrim.onclick = function () { abre(false); };
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
@@ -706,6 +711,19 @@
   }
   window.PORTAL_MENU = {
     ir: function (k) { return !!sw && ir(k); },
+    // el signo PROFASE lleva al Inicio de quien entró (js/portal.js, P.alInicio; Daniel, 31-oct-2026): cierra el ☰ y
+    // las tarjetas abiertas, abre el Inicio y sube hasta arriba
+    alInicio: function () {
+      if (!sw) return false;
+      var i = inicio();
+      if (!i) return false;
+      if (document.body.classList.contains('pm-abierto')) abre(false);
+      if (popAbierto) abrePop('');
+      cierraFly();
+      if (!ir(i.k)) return false;
+      try { window.scrollTo(0, 0); var m = document.scrollingElement; if (m) m.scrollTop = 0; } catch (e) { /* sin página */ }
+      return true;
+    },
     ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); },
     modulos: function () { return sw ? datosModulos() : []; },
     // la sección abierta (para el botón «?» de ayuda, portal/guia_tab.js): su clave, su nombre y su módulo

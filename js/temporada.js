@@ -16,6 +16,13 @@
        menús (la propuesta #9 la había quitado de junto al signo). Pedido de Daniel (31-oct-2026, 16:31): que el Santa
        y la banderita también se muevan: el Santa se ríe meciéndose (con la borla y la boca) y la banderita ondea.
      · Dos adornos chicos arriba a la derecha, junto a la campanita (propuesta #9); quietos, solo brincan si se pican.
+     · En celular, iPad y computadora por igual, en cualquier navegador (Daniel, 31-oct-2026, desde su iPhone: «Hay forma
+       de ver desde aquí la arañita? Y las demás animaciones que pondrás?»; «y también en la ipad y laptop»): en el
+       celular salen los dos adornos chicos (antes solo uno) y cada dibujo lleva tamaño fijo (fija()). En el iPhone la
+       arañita salía en el ☰ pero no en el encabezado (pegado arriba): Safari no la pintaba dentro de un recuadro con
+       «overflow:hidden» que se mueve con «transform». Ahora el hilo es su propia raya que crece y se encoge y la arañita
+       se mueve con «bottom»; sin recortes.
+     · Picar el signo (o su adorno) lleva al Inicio (js/portal.js, P.alInicio).
    - Con «reducir movimiento» del dispositivo, todo se queda quieto.
    ?temporada=navidad en la dirección deja ver otra temporada para revisarla (amor, patrias, muertos o navidad). */
 (function () {
@@ -137,6 +144,10 @@
 
   // junto al signo de cada menú (clases ptc-, para no chocar con las de la escena de la entrada)
   var JUNTO = { muertos: 'arana', navidad: 'santa', amor: 'corazon', patrias: 'bandera' };
+  // ancho de cada dibujo junto al signo (px); el alto sale de su viewBox. Van con tamaño fijo porque Safari (iPhone, iPad
+  // y Mac) no siempre saca el alto de un dibujo con «height:auto» y dejaba la arañita fuera de su recuadro, sin verse
+  // (Daniel, 31-oct-2026, con una captura de su iPhone: «Hay forma de ver desde aquí la arañita?»).
+  var JUNTO_ANCHO = { arana: 13, santa: 17, corazon: 13, bandera: 15 };
   var JUNTO_SVG = {
     arana: '<svg viewBox="0 8 16 18" fill="none" stroke="currentColor" stroke-linecap="round">'
       + '<path d="M5.6 15.2 2 12.6 1 9.6M5.4 16.6 1.2 15.6 0 13.4M5.6 18.2 1.6 19.6.6 22.4M6.2 19.4 3.8 22.6 3.6 25.2'
@@ -213,16 +224,20 @@
     + '.pt-chicos{display:inline-flex;align-items:flex-end;gap:4px;flex:none;margin-right:2px}'
     + '.pt-chicos button{width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer;display:block;border-radius:6px}'
     + '.pt-chicos button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}.pt-chicos svg{display:block;width:100%;height:100%;overflow:visible}'
-    + '@media (max-width:600px){.pt-chicos button:last-child{display:none}.pt-chicos button{width:24px;height:24px}}'
+    + '@media (max-width:600px){.pt-chicos{gap:2px}.pt-chicos button{width:24px;height:24px}}'
     // junto al signo de cada menú: el adorno a un lado (aparta su lugar para no encimarse en «PROFASE»)
     + '.ptc-caja.ptc-caja{position:relative;display:block;flex:none;padding-right:15px}'   // doble: le gana a «.pm-cab span» del menú ☰
-    + '.ptc-adorno{position:absolute;left:32px;pointer-events:none}.ptc-adorno svg{display:block;width:100%;height:auto;overflow:visible}'
+    + '.ptc-adorno{position:absolute;left:32px;pointer-events:none}.ptc-adorno svg{display:block;flex:none;overflow:visible}'
     // la arañita: el hilo sale de la orilla de arriba (--ptc-d lo mide junto()) y ella baja y sube
-    + '.ptc-arana{top:calc(-1 * var(--ptc-d,10px));width:13px;height:calc(var(--ptc-d,10px) + 28px);overflow:hidden;color:#2B3445}'
+    // Sin recortes ni «transform»: en el iPhone (Safari) la arañita no se pintaba dentro del encabezado pegado arriba
+    // (sí en el ☰; Daniel, 31-oct-2026, 17:08). Ahora el hilo es su propia raya, que crece y se encoge, y la arañita baja
+    // y sube moviendo su «bottom», al mismo compás; nada depende de «overflow:hidden».
+    + '.ptc-arana{top:calc(-1 * var(--ptc-d,10px));width:13px;height:calc(var(--ptc-d,10px) + 28px);overflow:visible;color:#2B3445}'
     + ':root[data-theme="dark"] .ptc-arana,.ptc-oscuro .ptc-arana{color:#E5EAF2}'
-    + '.ptc-cae{position:absolute;display:block;left:0;right:0;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
-    + '.ptc-cae:before{content:"";position:absolute;left:50%;bottom:calc(100% - 4px);width:1px;margin-left:-.5px;height:400px;background:currentColor;opacity:.55}'
-    + '@keyframes ptc-baja{from{transform:translateY(-16px)}to{transform:translateY(0)}}'
+    + '.ptc-hilo{position:absolute;display:block;left:6px;top:0;width:1px;height:calc(100% - 14px);background:currentColor;opacity:.55;animation:ptc-hilo 2.8s ease-in-out infinite alternate}'
+    + '@keyframes ptc-hilo{from{height:calc(100% - 30px)}to{height:calc(100% - 14px)}}'
+    + '.ptc-cae{position:absolute;display:block;left:0;width:13px;height:15px;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
+    + '@keyframes ptc-baja{from{bottom:19px}to{bottom:3px}}'
     + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-bandera{top:0;width:15px}'
     // el Santa riéndose: se mece y brinca, la borla se balancea y la boca se abre tres veces; luego descansa
     + '.ptc-jojo{transform-origin:10px 23px;animation:ptc-jojo 2.4s ease-in-out infinite}'
@@ -240,6 +255,16 @@
     + '.ptc-sombra{opacity:0;animation:ptc-sombra 1.3s ease-in-out infinite}@keyframes ptc-sombra{0%,100%{opacity:0}50%{opacity:.28}}'
     + '.ptc-lat{transform-origin:50% 60%;animation:ptc-lat 1.6s ease-in-out infinite}@keyframes ptc-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
     + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *,.ptc-adorno,.ptc-adorno *{animation:none!important}.pt-nieve{display:none}}';
+  // Tamaño fijo de un dibujo: ancho en px y alto según su viewBox (Safari no siempre lo calcula solo con height:auto)
+  function fija(svg, ancho) {
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) return;
+    if (ancho) {
+      var alto = Math.round(ancho * vb[3] / vb[2] * 10) / 10;
+      svg.setAttribute('width', ancho); svg.setAttribute('height', alto);
+      svg.style.width = ancho + 'px'; svg.style.height = alto + 'px';
+    } else svg.style.aspectRatio = vb[2] + ' / ' + vb[3];   // el ancho lo da su caja; el alto, su proporción
+  }
   function ponCss() {
     if (document.getElementById('ptemp-css')) return;
     var st = document.createElement('style'); st.id = 'ptemp-css'; st.textContent = CSS; (document.head || document.documentElement).appendChild(st);
@@ -268,6 +293,7 @@
     var e = document.createElement('div'); e.className = 'pt-escena'; e.setAttribute('aria-hidden', 'true');
     e.innerHTML = lista.map(function (x, i) { return '<div class="' + x[0] + '" style="' + x[2] + '" data-i="' + i + '">' + x[1] + '</div>'; }).join('');
     panel.insertBefore(e, panel.firstChild);
+    e.querySelectorAll('svg').forEach(function (g) { fija(g); });
     var nieve = e.querySelector('.pt-nieve');
     if (nieve) for (var n = 0; n < 40; n++) {
       var s = document.createElement('i'), z = 2 + Math.random() * 5;
@@ -304,7 +330,9 @@
     var caja = document.createElement('span'); caja.className = 'ptc-caja' + (oscuro ? ' ptc-oscuro' : '');
     img.parentNode.insertBefore(caja, img); caja.appendChild(img);
     var a = document.createElement('span'); a.className = 'ptc-adorno ptc-' + cual; a.setAttribute('aria-hidden', 'true');
-    a.innerHTML = cual === 'arana' ? '<span class="ptc-cae">' + JUNTO_SVG.arana + '</span>' : JUNTO_SVG[cual];
+    a.innerHTML = cual === 'arana' ? '<span class="ptc-hilo"></span><span class="ptc-cae">' + JUNTO_SVG.arana + '</span>' : JUNTO_SVG[cual];
+    a.style.width = JUNTO_ANCHO[cual] + 'px';
+    fija(a.querySelector('svg'), JUNTO_ANCHO[cual]);
     caja.appendChild(a);
     if (cual !== 'arana') return;
     var ref = caja.closest('header,nav') || caja.parentNode;

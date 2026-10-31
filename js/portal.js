@@ -179,6 +179,59 @@
   };
   document.addEventListener('pointerdown', function () { menuAMarcos('afuera'); menuAFuera(); }, true);
 
+  /* ---- El signo PROFASE lleva al Inicio (regla de Daniel, 31-oct-2026, 16:18 y 16:23: «si desde ahí le pico al logo de
+     profase; me mandes a home… ponlo para todo lo nuevo y todo lo viejo»; «y también en la ipad y laptop»). En cualquier
+     pantalla (celular, iPad, computadora), picar el signo de arriba de una vista (o su «PROFASE · Asesoría Contable, Legal y
+     Fiscal»), el del menú ☰, el de una página abierta sola o el de la barra de una pestaña (QUO › Membresías) lleva al Inicio de quien entró: dentro de una vista, con el
+     menú (PORTAL_MENU.alInicio(), js/menu.js), aunque se pique desde una pestaña en marco; en una página abierta sola,
+     a su vista (#inicio). El adorno de temporada junto al signo (.ptc-caja, js/temporada.js) también lleva. El signo no
+     cambia (sigue siendo la imagen oficial); solo se puede picar. No llevan al Inicio: la entrada, la pantalla de cierre,
+     las ventanas de bienvenida y los documentos (cotizaciones, PDF). Un signo nuevo de encabezado usa una de estas
+     clases o data-al-inicio. construir.py (exige_signo_inicio()) lo cuida. ---- */
+  var SIGNO_INICIO = '.band img.logo, .band img#logo, .pm-cab img, .pm-cab > span:not(.ptc-caja), .band .brandtxt, .topbar .brand img.mark, [data-al-inicio]';
+  P.alInicio = function () {
+    try {
+      var t = window.top;
+      if (t.PORTAL_MENU && t.PORTAL_MENU.alInicio && t.PORTAL_MENU.alInicio()) return true;
+    } catch (e) { /* marco de otro sitio */ }
+    var rol = P.perfil ? (P.perfil.rolReal || P.perfil.rol) : ROL;
+    var a = PAGINA[rol] ? PAGINA[rol] + '#inicio' : './';
+    try { window.top.location.href = a; } catch (e) { location.href = a; }
+    return true;
+  };
+  P.signoInicio = function (raiz) {
+    (raiz && raiz.matches && raiz.matches(SIGNO_INICIO) ? [raiz] : (raiz || document).querySelectorAll(SIGNO_INICIO)).forEach(function (el) {
+      if (el.getAttribute('data-inicio-listo')) return;
+      el.setAttribute('data-inicio-listo', '1');
+      el.setAttribute('role', 'link'); el.setAttribute('tabindex', '0');
+      el.setAttribute('title', 'Ir al Inicio'); el.setAttribute('aria-label', 'PROFASE · Ir al Inicio');
+    });
+  };
+  (function signoAlInicio() {
+    var st = document.createElement('style');
+    st.textContent = SIGNO_INICIO + ',.ptc-caja{cursor:pointer;-webkit-tap-highlight-color:transparent}'
+      + '[data-inicio-listo]:focus-visible{outline:2px solid #F07A1E;outline-offset:3px;border-radius:4px}';
+    (document.head || document.documentElement).appendChild(st);
+    function cual(t) {
+      if (!t || !t.closest) return null;
+      var el = t.closest(SIGNO_INICIO);
+      if (el) return el;
+      var c = t.closest('.ptc-caja');   // el adorno de temporada junto al signo
+      return c ? c.querySelector(SIGNO_INICIO) : null;
+    }
+    document.addEventListener('click', function (e) {
+      var el = cual(e.target);
+      if (!el || el.hidden) return;
+      e.preventDefault();
+      P.alInicio();
+    });
+    document.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.matches && e.target.matches(SIGNO_INICIO)) { e.preventDefault(); P.alInicio(); }
+    });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { P.signoInicio(); });
+    else P.signoInicio();
+  })();
+
   /* ---- Solo consulta (29-oct-2026): Héctor Nava Ramos (usuario hnava), papá de Daniel, ve todo lo que ve Daniel
      pero no cambia nada. El candado de verdad está en la base (portal/sql/19_solo_consulta.sql): ahí se detiene
      cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
