@@ -25,13 +25,13 @@
   var ACCIONES = {
     'cot.crear': ['Cotizaciones', 'Creó cotización'], 'cot.emitir': ['Cotizaciones', 'Emitió cotización'],
     'cot.editar': ['Cotizaciones', 'Editó cotización'], 'cot.corregir': ['Cotizaciones', 'Corrigió cotización ya emitida'],
-    'cot.estatus': ['Cotizaciones', 'Cambió estatus'], 'cot.pdf': ['Cotizaciones', 'Descargó PDF'],
+    'cot.estatus': ['Cotizaciones', 'Cambió estatus'], 'cot.pdf': ['Cotizaciones', 'Descargó PDF'], 'cot.correo': ['Cotizaciones', 'Mandó por correo'],
     'srv.alta': ['Servicios y precios', 'Agregó servicio'], 'srv.cambio': ['Servicios y precios', 'Cambió servicio'],
     'ase.alta': ['Asesores', 'Agregó asesor'], 'ase.cambio': ['Asesores', 'Cambió asesor'],
     'cli.alta': ['Clientes', 'Agregó cliente'], 'cli.cambio': ['Clientes', 'Editó cliente'], 'cli.baja': ['Clientes', 'Eliminó cliente'],
     'aj.cambio': ['Ajustes', 'Cambió ajustes'], 'bk.descarga': ['Respaldos', 'Descargó respaldo']
   };
-  var ACC_COT = { 'cot.crear': 'Creada', 'cot.emitir': 'Emitida', 'cot.editar': 'Editada', 'cot.corregir': 'Corregida después de emitida', 'cot.pdf': 'PDF descargado' };
+  var ACC_COT = { 'cot.crear': 'Creada', 'cot.emitir': 'Emitida', 'cot.editar': 'Editada', 'cot.corregir': 'Corregida después de emitida', 'cot.pdf': 'PDF descargado', 'cot.correo': 'Por correo' };
 
   // ================= Utilidades =================
   var $ = function (s, r) { return (r || document).querySelector(s); };
@@ -486,7 +486,9 @@
       return;
     }
     if (locked) {
-      a.innerHTML = '<button type="button" class="btn primary" data-act="pdf">Descargar PDF</button><button type="button" class="btn" data-act="dup">Duplicar</button>'
+      a.innerHTML = '<button type="button" class="btn primary" data-act="pdf">Descargar PDF</button>'
+        + (puedeMandar(draft) ? '<button type="button" class="btn" data-act="mail">Mandar por correo</button>' : '')
+        + '<button type="button" class="btn" data-act="dup">Duplicar</button>'
         + '<span class="spacer"></span><button type="button" class="btn ghost" data-act="new">Nueva cotización</button>';
     } else {
       var emitida = editing != null && draft.estatus !== 'borrador';
@@ -609,10 +611,11 @@
       var b = e.target.closest('[data-act]'); if (!b) return;
       var act = b.dataset.act, f = b.dataset.folio ? Number(b.dataset.folio) : null;
       var q = f != null ? S.cots.find(function (x) { return x.folio === f; }) : null;
-      if (YO.consulta && /^(save|emit|dup|new|unlock)$/.test(act)) return;
+      if (YO.consulta && /^(save|emit|dup|new|unlock|mail)$/.test(act)) return;
       if (act === 'save') guardar(false);
       if (act === 'emit') guardar(true);
       if (act === 'pdf') descargarPDF(q ? deFila(q) : (editing != null ? draft : null));
+      if (act === 'mail') { var qm = q || (editing != null ? S.cots.find(function (x) { return x.folio === draft.folio; }) : null); abreCorreo(qm ? deFila(qm) : null); }
       if (act === 'dup') duplicar(q ? deFila(q) : draft);
       if (act === 'new') nueva();
       if (act === 'unlock') { adminUnlock = true; renderEdHead(); }
@@ -745,6 +748,87 @@
       if (q.folio != null) logEv('cot.pdf', q.folio, folioTxt(q) + ' · ' + q.cliente);
     } catch (e) { console.error(e); toast('No se pudo armar el PDF.'); }
   }
+  // ================= Mandar por correo (Daniel, 30-oct-2026, 23:10: «agrégale el botón a cotizador DECOMSA») =================
+  // Lo manda la función «cotizaciones» de Supabase (tipo 'dec') desde cumplimiento@, con el mismo PDF de los dos logos.
+  // Qué se manda, a quién y quién puede lo decide la base (cot_envio_preparar, portal/sql/83_cotizaciones_correo.sql): solo
+  // emitidas o aceptadas y nunca en solo consulta. Si el cliente contesta, la respuesta llega a los correos que da la base
+  // (los gerentes, Elisa y la dirección). Aquí solo se arma el PDF y se enseña lo que dice la base.
+  var MAIL = null;
+  function puedeMandar(q) { return !!q && q.folio != null && !YO.consulta && !!YO.puede && (q.estatus === 'enviada' || q.estatus === 'aceptada'); }
+  function correosTxt(t) { return String(t || '').split(/[,;\s]+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+  function correosCliente(q) {
+    var c = q.cliente_id ? S.clientes.find(function (x) { return x.id === q.cliente_id; }) : null, l = [];
+    var todos = correosTxt(c && c.correo).concat(String(q.telefono || '').match(/[^\s@;,<>"\/]+@[^\s@;,<>"\/]+\.[^\s@;,<>"\/]+/g) || []);
+    todos.forEach(function (x) { x = x.toLowerCase(); if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) && l.indexOf(x) < 0) l.push(x); });
+    return l.slice(0, 5);
+  }
+  function msgCorreo(clase, t) { var m = $('#mail-msg'); m.className = 'dmsg' + (clase ? ' ' + clase : ''); m.textContent = t || ''; }
+  function cierraCorreo() { $('#mail-ov').hidden = true; MAIL = null; }
+  async function abreCorreo(q) {
+    if (!puedeMandar(q)) return;
+    MAIL = q;
+    $('#mail-tit').textContent = 'Mandar ' + folioTxt(q) + ' por correo';
+    $('#mail-de').textContent = 'Revisando de dónde sale…';
+    $('#mail-para').value = correosCliente(q).join(', '); $('#mail-cc').value = '';
+    $('#mail-asu').value = 'Cotización ' + folioTxt(q) + ' · ' + q.cliente;
+    $('#mail-men').value = 'Buen día' + (q.contacto ? ', ' + q.contacto : '') + ':\n\nTe compartimos la cotización ' + folioTxt(q) + ' para ' + q.cliente + '.\n\nQuedamos atentos a tus comentarios.';
+    $('#mail-env').hidden = true; $('#mail-env').innerHTML = '';
+    msgCorreo('', ''); $('#mail-ok').disabled = true;
+    $('#mail-ov').hidden = false;
+    try { $('#mail-para').focus(); } catch (e) { /* sin foco */ }
+    try {
+      var r = await sb.rpc('cot_correo_datos', { p_folio: q.folio }); if (r.error) throw r.error;
+      if (MAIL !== q) return;
+      var d = r.data || {};
+      $('#mail-de').textContent = 'Sale de ' + (d.remitente || 'cumplimiento@profase.com.mx') + ' con el PDF adjunto (con los dos logos). Si el cliente contesta, la respuesta les llega a '
+        + (d.responder || []).join(', ') + '.' + (d.modo === 'prueba' ? ' En prueba: por ahora solo llega al correo de prueba.' : '');
+      var env = d.envios || [];
+      if (env.length) {
+        $('#mail-env').innerHTML = '<b>Ya se mandó:</b><br>' + env.slice(0, 3).map(function (e) {
+          return esc(fmtDT(e.cuando)) + ' a ' + esc((e.para || []).join(', ')) + (e.estado === 'prueba' ? ' (prueba)' : e.estado === 'error' ? ' (no salió)' : '') + (e.quien ? ' · ' + esc(e.quien) : '');
+        }).join('<br>');
+        $('#mail-env').hidden = false;
+      }
+      if (d.modo === 'apagado') msgCorreo('warn', 'El envío por correo está apagado por ahora.');
+      else if (!d.manda) msgCorreo('warn', 'Tu usuario no manda cotizaciones por correo.');
+      else if (efectivo(q) === 'vencida') msgCorreo('warn', 'Ojo: esta cotización ya venció (' + fdate(addDays(q.fecha, q.vigencia)) + ').');
+      $('#mail-ok').disabled = !d.manda || d.modo === 'apagado';
+    } catch (e) { if (MAIL === q) msgCorreo('bad', mensajeError(e, 'No se pudo revisar. Revisa tu conexión e intenta de nuevo.')); }
+  }
+  async function mandaCorreo() {
+    var q = MAIL; if (!q) return;
+    var para = correosTxt($('#mail-para').value), cc = correosTxt($('#mail-cc').value);
+    if (!para.length) { msgCorreo('bad', 'Escribe al menos un correo.'); return; }
+    if (!window.jspdf) { msgCorreo('bad', 'El generador de PDF no cargó. Recarga la página.'); return; }
+    $('#mail-ok').disabled = true; msgCorreo('', 'Armando el PDF y mandando…');
+    try {
+      await cargaLogos();
+      var b64 = String(pdfCotizacion(q).output('datauristring')).split(',')[1] || '';
+      var r = await sb.functions.invoke('cotizaciones', { body: { tipo: 'dec', folio: q.folio, para: para, cc: cc, asunto: $('#mail-asu').value, mensaje: $('#mail-men').value, pdf: b64 } });
+      var d = r.data;
+      if (r.error || !d || !d.ok) {
+        var t = d && d.error;
+        if (!t && r.error && r.error.context && typeof r.error.context.json === 'function') { try { t = (await r.error.context.json()).error; } catch (x) { t = ''; } }
+        throw new Error(t || (r.error && r.error.message) || 'No se pudo mandar');
+      }
+      if (MAIL !== q) return;
+      msgCorreo('ok', (d.modo === 'prueba' ? 'Prueba mandada a ' : 'Mandada a ') + (d.para || []).join(', ') + '.');
+      toast((d.modo === 'prueba' ? 'Prueba mandada: ' : 'Cotización mandada: ') + folioTxt(q));
+      setTimeout(function () { if (MAIL === q) cierraCorreo(); }, 1600);
+    } catch (e) {
+      if (MAIL !== q) return;
+      var m = (e && e.message) || '';
+      msgCorreo('bad', 'No se mandó: ' + (/Failed to fetch|NetworkError|network/i.test(m) || !m ? 'revisa tu conexión y vuelve a intentar.' : m));
+      $('#mail-ok').disabled = false;
+    }
+  }
+  function bindCorreo() {
+    $('#mail-ok').addEventListener('click', mandaCorreo);
+    $('#mail-no').addEventListener('click', cierraCorreo);
+    $('#mail-ov').addEventListener('click', function (e) { if (e.target === $('#mail-ov')) cierraCorreo(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#mail-ov').hidden) cierraCorreo(); });
+  }
+
   function nueva() {
     REN = null; REN_HECHA = false; pintaRenBanner();
     draft = nuevoDraft(); original = null; editing = null; touched = {}; adminUnlock = false;
@@ -808,7 +892,7 @@
           + '<td class="cl"><div title="' + esc(q.cliente) + '">' + esc(q.cliente) + '</div><small>' + esc(q.rfc) + '</small></td>'
           + '<td>' + esc(q.asesor && q.asesor.nombre ? q.asesor.nombre : '—') + '</td><td class="r">' + money(q.total) + '</td><td class="num">' + fdate(addDays(q.fecha, q.vigencia)) + '</td>'
           + '<td><select class="st st-' + ef + '" data-st="' + q.folio + '" aria-label="Estatus de ' + esc(folioTxt(q)) + '"' + (YO.consulta ? ' disabled' : '') + '>' + opcionesEstatus(q, ef).replace('<option value="" disabled>', '<option value="" disabled selected>') + '</select></td>'
-          + '<td><div class="acts"><button type="button" class="btn ghost sm" data-act="open" data-folio="' + q.folio + '">Abrir</button><button type="button" class="btn ghost sm" data-act="pdf" data-folio="' + q.folio + '">PDF</button>' + (YO.consulta ? '' : '<button type="button" class="btn ghost sm" data-act="dup" data-folio="' + q.folio + '">Duplicar</button>') + '</div></td></tr>';
+          + '<td><div class="acts"><button type="button" class="btn ghost sm" data-act="open" data-folio="' + q.folio + '">Abrir</button><button type="button" class="btn ghost sm" data-act="pdf" data-folio="' + q.folio + '">PDF</button>' + (puedeMandar(q) ? '<button type="button" class="btn ghost sm" data-act="mail" data-folio="' + q.folio + '">Correo</button>' : '') + (YO.consulta ? '' : '<button type="button" class="btn ghost sm" data-act="dup" data-folio="' + q.folio + '">Duplicar</button>') + '</div></td></tr>';
       }).join('') : '<tr><td colspan="8"><div class="empty">' + (S.cargado.cots ? (S.cots.length ? 'Ninguna cotización coincide con los filtros.' : 'Aún no hay cotizaciones. La primera que guardes aparecerá aquí con su folio.') : 'Cargando cotizaciones…') + '</div></td></tr>')
       + '</tbody></table></div>';
     $('#h-estatus').value = histF.estatus; $('#h-asesor').value = histF.asesor; $('#h-mes').value = histF.mes;
@@ -1260,7 +1344,7 @@
   }
   async function start() {
     draft = nuevoDraft();
-    bindEditor(); fillForm(); route();
+    bindEditor(); bindCorreo(); fillForm(); route();
     window.addEventListener('hashchange', route);
     if (window.ResizeObserver) new ResizeObserver(fitDoc).observe($('#pv-scale'));
     $('#v-catalogos').addEventListener('focusout', function () { setTimeout(function () { if (pendingCat && !$('#v-catalogos').contains(document.activeElement)) renderCat(); }, 50); });
