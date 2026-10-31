@@ -3,6 +3,107 @@
    Aquí se da esa misma interfaz encima de Supabase, para que la página funcione igual fuera de Claude.
    La llave publicable es pública por diseño: lo que cada quien puede leer o escribir lo cuidan las reglas
    de la base (RLS) según su rol, no esta página. */
+
+/* ---- Horas: siempre en formato de 24 horas y en hora de Monterrey (regla de Héctor Daniel, 31-oct-2026, 6:40:
+   «Quiero que todo lo relacionado a horas en el CRM sea en formato 24 horas y siempre hora MTY; cambia todas las
+   pantallas o donde se vea esto y déjalo escrito que siempre será 24 horas, tanto lo nuevo como lo viejo»).
+   Va aquí, una sola vez para todo el portal y antes que todo lo demás (aunque la base no conteste): cualquier fecha
+   con hora que una página o pestaña escriba con Intl.DateTimeFormat, toLocaleString o toLocaleTimeString sale con
+   reloj de 24 horas (de 00:00 a 23:59, con dos dígitos; nunca «a. m.» ni «p. m.», nunca «24:00») y, si la página no
+   dijo la zona, en la de Monterrey, abra quien abra y desde donde sea. Lo que es solo fecha (sin hora) no se toca.
+   Para lo nuevo: window.PROFASE_HORA (abajo). construir.py (exige_24h()) cuida que nadie lo quite ni vuelva a las
+   12 horas, y herramientas/pruebas/pantallas/prueba_24h.py lo comprueba en un navegador. ---- */
+(function horas24() {
+  'use strict';
+  var ZONA = 'America/Monterrey';
+  var I = window.Intl;
+  if (!I || !I.DateTimeFormat || I.DateTimeFormat.__h24) return;
+  var Orig = I.DateTimeFormat;
+  var DE_HORA = ['hour', 'minute', 'second', 'fractionalSecondDigits', 'dayPeriod', 'timeStyle'];
+  var DE_FECHA = ['weekday', 'era', 'year', 'month', 'day', 'dateStyle'];
+  function trae(o, l) { for (var i = 0; i < l.length; i++) if (o[l[i]] !== undefined) return true; return false; }
+  // porOmision: si sin campos la fecha sale con hora (toLocaleString y toLocaleTimeString sí; Intl.DateTimeFormat no)
+  function ajusta(o, porOmision) {
+    var x = o == null ? {} : Object(o);
+    if (!(trae(x, DE_HORA) || (porOmision && !trae(x, DE_FECHA)))) return o;
+    var n = {};
+    for (var k in x) n[k] = x[k];
+    delete n.hour12;                          // hour12 le gana a hourCycle; con él algunos navegadores ponen «24:00»
+    n.hourCycle = 'h23';
+    if (n.hour === 'numeric') n.hour = '2-digit';
+    if (!n.timeZone) n.timeZone = ZONA;
+    return n;
+  }
+  function DTF(locales, o) { return new Orig(locales, ajusta(o, false)); }
+  DTF.prototype = Orig.prototype;
+  DTF.supportedLocalesOf = Orig.supportedLocalesOf;
+  try { Object.defineProperty(DTF, '__h24', { value: true }); } catch (e) { DTF.__h24 = true; }
+  try { Object.defineProperty(I, 'DateTimeFormat', { value: DTF, writable: true, configurable: true }); } catch (e) { I.DateTimeFormat = DTF; }
+  var D = Date.prototype;
+  [['toLocaleString', true], ['toLocaleTimeString', true], ['toLocaleDateString', false]].forEach(function (m) {
+    var f = D[m[0]];
+    if (typeof f !== 'function') return;
+    D[m[0]] = function (locales, o) { return f.call(this, locales, ajusta(o, m[1])); };
+  });
+
+  function dos(n) { return (n < 10 ? '0' : '') + n; }
+  function fecha(d) { d = d instanceof Date ? d : new Date(d); return isNaN(d) ? null : d; }
+  function partes(d) {
+    var p = {};
+    new Orig('en-US', { timeZone: ZONA, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+      .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return { anio: +p.year, mes: +p.month, dia: +p.day, hora: +p.hour % 24, min: +p.minute, seg: +p.second };
+  }
+  function valida(v) {               // «9:5», «0905», «21:30» → «09:05», «21:30»; vacío → ''; otra cosa → null
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    var m = s.match(/^(\d{1,2})(?:[:.h](\d{1,2}))?$/) || s.match(/^(\d{2})(\d{2})$/);
+    if (!m) return null;
+    var h = +m[1], mi = m[2] == null ? 0 : +m[2];
+    return h > 23 || mi > 59 ? null : dos(h) + ':' + dos(mi);
+  }
+  var ES = 'width:auto;min-width:4.6em;padding:8px 6px;border:1px solid var(--line-2,#CBD5E1);border-radius:8px;background:var(--surface,#fff);color:inherit';
+  window.PROFASE_HORA = {
+    ZONA: ZONA,
+    // «18:40», en hora de Monterrey
+    hora: function (d) { d = fecha(d); if (!d) return ''; var p = partes(d); return dos(p.hora) + ':' + dos(p.min); },
+    // «31 oct 2026, 18:40» (sin el año: anio = false)
+    fechaHora: function (d, anio) {
+      d = fecha(d); if (!d) return '';
+      var o = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
+      if (anio !== false) o.year = 'numeric';
+      return new DTF('es-MX', o).format(d).replace(/\./g, '');
+    },
+    // «2026-10-31»: el día en Monterrey
+    dia: function (d) { d = fecha(d); if (!d) return ''; var p = partes(d); return p.anio + '-' + dos(p.mes) + '-' + dos(p.dia); },
+    // Para una celda de Excel con hora: Excel no sabe de zonas y enseña la hora tal cual viene, así que se le pasa
+    // la hora de Monterrey (si no, salía la hora de Londres, 6 horas adelante).
+    excel: function (d) { d = fecha(d); if (!d) return null; var p = partes(d); return new Date(Date.UTC(p.anio, p.mes - 1, p.dia, p.hora, p.min, p.seg)); },
+    valida: valida,
+    // Campo para capturar una hora, siempre de 24 horas (el campo de hora propio del navegador sale con «a. m./p. m.»
+    // en muchos equipos). Hora (-- y 00 a 23) y minutos (de 5 en 5, más el que ya traiga). Se lee con lee().
+    campo: function (id, valor, opcional) {
+      var v = valida(valor) || '', h = v ? v.slice(0, 2) : '', mi = v ? v.slice(3, 5) : '00', i, x;
+      var hs = opcional === false ? '' : '<option value="">--</option>';
+      for (i = 0; i < 24; i++) { x = dos(i); hs += '<option value="' + x + '"' + (x === h ? ' selected' : '') + '>' + x + '</option>'; }
+      var lista = [];
+      for (i = 0; i < 60; i += 5) lista.push(dos(i));
+      if (lista.indexOf(mi) < 0) { lista.push(mi); lista.sort(); }
+      var ms = lista.map(function (y) { return '<option value="' + y + '"' + (y === mi ? ' selected' : '') + '>' + y + '</option>'; }).join('');
+      return '<span class="ph-hora" style="display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap">'
+        + '<select id="' + id + '" aria-label="Hora (de 00 a 23)" style="' + ES + '">' + hs + '</select>'
+        + '<b aria-hidden="true">:</b>'
+        + '<select id="' + id + '-m" aria-label="Minutos" style="' + ES + '">' + ms + '</select>'
+        + '<small style="margin-left:2px">h</small></span>';
+    },
+    lee: function (raiz, id) {
+      var r = raiz || document, h = r.querySelector('#' + id), m = r.querySelector('#' + id + '-m');
+      if (!h || !h.value) return '';
+      return h.value + ':' + (m && m.value ? m.value : '00');
+    }
+  };
+})();
+
 (function () {
   'use strict';
   var SB_URL = 'https://arbykgauatkldznwwtjx.supabase.co';
