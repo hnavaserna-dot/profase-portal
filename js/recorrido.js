@@ -16,7 +16,9 @@
    arriba o el ☰ del celular, con PORTAL_MENU.ensena) e ilumina su tarjeta u opción; al pasar a otro paso o al terminar,
    el menú se vuelve a cerrar solo.
    obligatorio: true (regla de Daniel, 30-oct-2026, para los cambios del chat: «que a todos nos obligues a verlo»):
-   sin «Saltar» ni Esc; solo se sale llegando al final. */
+   sin «Saltar» ni Esc; solo se sale llegando al final.
+   Último paso de todos (regla de Daniel, 31-oct-2026, 5:04): dónde está SuperConta (IA) para sus dudas. Lo registra
+   PROFASE_RECORRIDO.alFinal(() => paso) (portal/guia_tab.js) y se agrega solo; sinCierre: true lo apaga (los de SuperConta). */
 (function () {
   'use strict';
   if (window.PROFASE_RECORRIDO) return;
@@ -140,12 +142,18 @@
     return o && aLaVista(o) ? o : c;
   }
 
-  var activo = false;
+  var activo = false, cierre = null;
   function corre(def) {
     if (activo || !def || !def.pasos || !def.pasos.length) return Promise.resolve('ocupado');
     activo = true;
     if (!document.getElementById('rc-css')) { var st = document.createElement('style'); st.id = 'rc-css'; st.textContent = CSS; document.head.appendChild(st); }
-    var pasos = def.pasos, i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
+    var pasos = def.pasos.slice(), i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
+    // Todos los recorridos terminan recordando dónde está SuperConta (IA) (regla de Daniel, 31-oct-2026, 5:04: «acaba todos
+    // los recorridos con recordarles dónde está SuperConta»). El paso lo da quien lo registra con alFinal() (guia_tab.js,
+    // el botón «?»); un recorrido que ya es de SuperConta lo apaga con sinCierre: true.
+    if (!def.sinCierre && typeof cierre === 'function') {
+      try { var ult = cierre(); if (ult && ult.titulo) pasos.push(ult); } catch (e) { /* sin cierre */ }
+    }
     var capa = document.createElement('div'); capa.className = 'rc-capa';
     capa.innerHTML = '<div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
       + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p>'
@@ -263,5 +271,6 @@
       muestra(0, 1);
     });
   }
-  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede };
+  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede,
+                                alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; } };
 })();

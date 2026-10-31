@@ -669,7 +669,7 @@
   // completo, menú arriba o ☰ del celular) para iluminarla. No cambia de pantalla ni de sección.
   function datosModulos() {
     return modulos().map(function (x) {
-      return { k: x.m.k, t: x.m.t, d: x.m.d || '', subs: x.subs.map(function (s) { return { k: s.k, t: nombre(s), d: s.d || '' }; }) };
+      return { k: x.m.k, t: x.m.t, d: x.m.d || '', subs: x.subs.map(function (s) { return { k: s.k, t: nombre(s), d: s.d || '', v: s.v }; }) };
     });
   }
   function ensena(k) {
@@ -707,6 +707,8 @@
     ir: function (k) { return !!sw && ir(k); },
     ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); },
     modulos: function () { return sw ? datosModulos() : []; },
+    // la sección abierta (para el botón «?» de ayuda, portal/guia_tab.js): su clave, su nombre y su módulo
+    actual: function () { var a = sw ? activo() : null; return a ? { k: a.k, t: nombre(a), v: a.v, m: a.m.k, mt: a.m.t } : null; },
     ensena: ensena,
     suelta: suelta
   };
