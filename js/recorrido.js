@@ -271,6 +271,55 @@
       muestra(0, 1);
     });
   }
-  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede,
+  // Un recorrido de lo nuevo, una sola vez por persona (31-oct-2026): el flujo de siempre de los recorridos de lo nuevo
+  // (después de su ventana de «Nuevos cambios», o al entrar si ya la cerró; nunca encima de otra ventana ni de otro
+  // recorrido; visto con recorrido_visto() y, en solo consulta, en su navegador), en un solo lugar para no repetirlo en
+  // cada pestaña. o = { id, liga, laVe: async (PORTAL, perfil) => true|false, pasos: [...] o async () => [...], fin }.
+  function unaVez(o) {
+    var dormir = function (ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); };
+    function vistoLocal() { try { return (JSON.parse(localStorage.getItem('profase-recorridos') || '[]') || []).indexOf(o.id) >= 0; } catch (e) { return false; } }
+    async function marcaVisto() {
+      var ok = false;
+      try { var r = await window.PORTAL.sb.rpc('recorrido_visto', { p_recorrido: o.id }); ok = !r.error && r.data === true; } catch (e) { /* sin red */ }
+      if (!ok) { try { var a = JSON.parse(localStorage.getItem('profase-recorridos') || '[]') || []; if (a.indexOf(o.id) < 0) a.push(o.id); localStorage.setItem('profase-recorridos', JSON.stringify(a)); } catch (e) { /* sin almacenamiento */ } }
+    }
+    async function vistos() { try { var r = await window.PORTAL.sb.rpc('recorridos_mios'); return r.error || !Array.isArray(r.data) ? null : r.data; } catch (e) { return null; } }
+    function hayVentana() {
+      return Array.prototype.some.call(document.querySelectorAll('[aria-modal="true"]'), function (d) {
+        if (d.closest('.rc-capa') || !d.getClientRects().length) return false;
+        var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
+      });
+    }
+    function ocupado() { return hayVentana() || document.hidden || activo; }
+    var esperando = false;
+    async function quiza(desdeAviso) {
+      if (esperando) return;
+      esperando = true;
+      try {
+        var P = window.PORTAL; if (!P) return;
+        var p = await P.listo; if (!p) return;
+        if (!(await o.laVe(P, p))) return;
+        var v = await vistos(); if (!v || v.indexOf(o.id) >= 0 || vistoLocal()) return;
+        if (!desdeAviso) await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
+        // espera a que no haya ventanas ni otro recorrido; un respiro (distinto para cada uno, para no encimarse) y otra vez
+        for (var n = 0; n < 6; n++) {
+          for (var i = 0; i < 3600 && ocupado(); i++) await dormir(500);
+          await dormir(400 + Math.floor(Math.random() * 1200));
+          if (!ocupado()) break;
+        }
+        if (ocupado()) return;
+        var pasos = typeof o.pasos === 'function' ? await o.pasos() : o.pasos;
+        if (!pasos || !pasos.length) return;
+        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!' });
+        if (como === 'fin' || como === 'saltado') marcaVisto();
+      } catch (e) { /* un recorrido nunca rompe la página */ } finally { esperando = false; }
+    }
+    addEventListener('profase:novedad-cerrada', function (ev) {
+      var l = (ev.detail && ev.detail.ligas) || [];
+      if (o.liga && l.indexOf(o.liga) >= 0) setTimeout(function () { quiza(true); }, 2000);
+    });
+    quiza(false);
+  }
+  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez,
                                 alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; } };
 })();

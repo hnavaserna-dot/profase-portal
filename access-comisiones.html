@@ -259,6 +259,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     <button type="button" role="tab" id="t-deb" aria-selected="false" aria-controls="p-deb" hidden>Por pagar</button>
     <button type="button" role="tab" id="t-pag" aria-selected="false" aria-controls="p-pag">Pagos hechos</button>
     <button type="button" role="tab" id="t-lig" aria-selected="false" aria-controls="p-lig" hidden>Qué factura cobra qué trabajo</button>
+    <button type="button" role="tab" id="t-sw" aria-selected="false" aria-controls="p-sw" hidden>Servicios de cada plantilla</button>
   </div>
   <div class="nota" id="error" hidden></div>
   <div class="ok-msg" id="okmsg" hidden></div>
@@ -355,6 +356,20 @@ tr.fila:hover td{background:var(--navy-soft)}
     </section>
     <p class="pie" id="pie-lig">Cada trabajo del mes se cobra con la factura de DECOMSA del mes siguiente del mismo servicio: se liga solo. Lo demás (anticipos, Coordinación y supervisión, anuales) se liga a mano, y a Daniel le llega un aviso.</p>
   </div>
+  <div id="p-sw" role="tabpanel" aria-labelledby="t-sw" hidden>
+    <section class="card" aria-labelledby="h-sw">
+      <header>
+        <div><h2 id="h-sw">Servicios de cada plantilla</h2><div class="sub" id="sw-sub">&nbsp;</div></div>
+        <div class="filtros">
+          <input type="search" id="sw-q" placeholder="Buscar plantilla o servicio" aria-label="Buscar plantilla o servicio">
+          <select id="sw-ver" aria-label="Cuáles"><option value="">Todas las plantillas</option><option value="sin">Con trabajo y sin servicio</option></select>
+        </div>
+      </header>
+      <div id="lista-sw"></div>
+      <div class="vacio" id="sw-vacia" hidden>No hay plantillas con esa búsqueda.</div>
+    </section>
+    <p class="pie">Qué servicio de DECOMSA cobra cada plantilla del WorkFlow (la «Relación plantilla–servicio» del Access). Con esto, cada trabajo del mes se liga solo con la factura del mes siguiente de su servicio. Un servicio no se repite en la misma plantilla, pero sí puede estar en varias. Quitar un servicio no deshace las ligas que ya se hicieron. Cada cambio de alguien que no es la dirección le llega a Daniel como aviso.</p>
+  </div>
 </div>
 
 <script>
@@ -362,7 +377,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey';
-  var E = null, R = [], PAGOS = [], DEBE = [], DET = [], LIG = null;
+  var E = null, R = [], PAGOS = [], DEBE = [], DET = [], LIG = null, SW = null;
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -389,9 +404,9 @@ tr.fila:hover td{background:var(--navy-soft)}
         av.push('<b>Ves tus comisiones</b>' + (E.deptos && E.deptos.length ? ' y, de tu equipo, la parte que sale del trabajo de ' + esc(E.deptos.join(' y ')) + ' (marcada «parte de tu departamento»; sin lo pagado, que es de toda su comisión).' : '.'));
       }
       if (E.modo !== 'portal') av.push('Hasta el lunes 2 de noviembre los pagos de comisión vienen del Access; desde ahí se marcan aquí («Por pagar»).');
-      if (E.todo && E.fac_modo !== 'portal') av.push('Las ligas factura–trabajo vienen del Access hasta el lunes 2 de noviembre; desde ahí se ligan aquí.');
+      if (E.todo && E.fac_modo !== 'portal') av.push('Las ligas factura–trabajo y los servicios de cada plantilla vienen del Access hasta el lunes 2 de noviembre; desde ahí se cambian aquí.');
       if (av.length) { $('aviso').hidden = false; $('aviso').innerHTML = av.join('<br>'); }
-      $('t-deb').hidden = !E.todo; $('t-lig').hidden = !E.todo;
+      $('t-deb').hidden = !E.todo; $('t-lig').hidden = !E.todo; $('t-sw').hidden = !E.todo;
       $('hora').textContent = E.calculado ? 'Calculado el ' + fecha(E.calculado) + ' ' + String(E.calculado).slice(11, 16) : '';
       var r = await Promise.all([rpc('ceq_resumen'), rpc('ceq_pagos_lista'), E.todo ? rpc('ceq_por_pagar') : Promise.resolve([])]);
       R = r[0] || []; PAGOS = r[1] || []; DEBE = r[2] || [];
@@ -639,6 +654,53 @@ tr.fila:hover td{background:var(--navy-soft)}
     catch (e) { mal(errTxt(e)); } finally { b.disabled = false; }
   };
 
+  /* ---------- Servicios de cada plantilla (la «Relación plantilla–servicio» del Access; portal/sql/101_plantilla_servicio.sql,
+     31-oct-2026). La ven quienes ven todas las comisiones; la cambian la dirección y quien corrige las ligas, desde el cambio
+     de facturación. Solo servicios de DECOMSA. ---------- */
+  function sinAcento(x) { return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  async function cargaSw() {
+    $('sw-sub').textContent = 'Cargando…';
+    try { SW = await rpc('fac_sw_lista'); } catch (e) { SW = null; mal(errTxt(e)); }
+    pintaSw();
+  }
+  function pintaSw() {
+    var Pl = (SW && SW.plantillas) || [], S = (SW && SW.servicios) || [], ed = !!(SW && SW.editable) && !P.consulta;
+    var q = sinAcento($('sw-q').value), sin = $('sw-ver').value === 'sin';
+    var L = Pl.filter(function (p) {
+      if (sin && (p.servicios.length || !p.trabajo)) return false;
+      return !q || sinAcento(p.nombre + ' ' + p.servicios.map(function (x) { return x.nombre; }).join(' ')).indexOf(q) >= 0;
+    });
+    var nsin = Pl.filter(function (p) { return p.trabajo && !p.servicios.length; }).length;
+    $('sw-sub').textContent = Pl.length + (Pl.length === 1 ? ' plantilla' : ' plantillas') + ' · ' + nsin + ' con trabajo y sin servicio'
+      + (SW && SW.modo !== 'portal' ? ' · por ahora solo para ver' : '');
+    $('lista-sw').innerHTML = L.map(function (p, i) {
+      var ya = {}; p.servicios.forEach(function (x) { ya[x.servicio] = 1; });
+      var libres = S.filter(function (x) { return !ya[x.id]; });
+      return '<div class="grupo"><div class="t">' + esc(p.nombre) + '</div><div class="d">' + (p.per === 12 ? 'Anual' : 'Mensual') + (p.trabajo ? '' : ' · sin trabajo generado') + '</div>'
+        + '<div class="facs">' + (p.servicios.length ? p.servicios.map(function (x) { return '<span class="fchip">' + esc(x.nombre) + (ed ? '<button type="button" data-swq="' + esc(x.id) + '" aria-label="Quitar ' + esc(x.nombre) + '">Quitar</button>' : '') + '</span>'; }).join('') : '<span class="chip ojo">sin servicio</span>') + '</div>'
+        + (ed && libres.length ? '<div class="ligar"><select data-swsel="' + i + '" aria-label="Servicio para agregar a ' + esc(p.nombre) + '"><option value="">Agregar un servicio…</option>' + libres.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.nombre) + '</option>'; }).join('') + '</select><button class="btn" type="button" data-swpon="' + i + '">Agregar</button></div>' : '')
+        + '</div>';
+    }).join('');
+    $('sw-vacia').hidden = L.length > 0;
+    Array.prototype.forEach.call($('lista-sw').querySelectorAll('[data-swpon]'), function (b) {
+      b.onclick = async function () {
+        var p = L[+b.dataset.swpon], s = $('lista-sw').querySelector('[data-swsel="' + b.dataset.swpon + '"]');
+        if (!s.value) { mal('Escoge el servicio.'); return; }
+        b.disabled = true;
+        try { await rpc('fac_sw_pon', { p_plantilla: p.id, p_servicio: +s.value }); bien('Servicio agregado a la plantilla.'); await cargaSw(); } catch (e) { mal(errTxt(e)); } finally { b.disabled = false; }
+      };
+    });
+    Array.prototype.forEach.call($('lista-sw').querySelectorAll('[data-swq]'), function (b) {
+      b.onclick = async function () {
+        var ok = await dialogo('Quitar el servicio', 'Desde ahora ese servicio ya no se ligará solo con los trabajos de esta plantilla. Las ligas que ya se hicieron no cambian.', false, 'Quitar');
+        if (!ok) return;
+        try { await rpc('fac_sw_quita', { p_id: +b.dataset.swq }); bien('Servicio quitado de la plantilla.'); await cargaSw(); } catch (e) { mal(errTxt(e)); }
+      };
+    });
+  }
+  $('sw-q').addEventListener('input', pintaSw);
+  $('sw-ver').addEventListener('change', pintaSw);
+
   /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
   function hoja(MK, wb, nombre, titulo, lineas, head, filas, anchos, montos) {
     var ws = wb.addWorksheet(nombre);
@@ -665,11 +727,12 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   function muestra(t) {
-    ['mes', 'det', 'deb', 'pag', 'lig'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; });
+    ['mes', 'det', 'deb', 'pag', 'lig', 'sw'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; });
     if (t === 'det' && !DET.length) cargaDet();
     if (t === 'lig' && !LIG) cargaLig();
+    if (t === 'sw' && !SW) cargaSw();
   }
-  ['mes', 'det', 'deb', 'pag', 'lig'].forEach(function (k) { $('t-' + k).onclick = function () { muestra(k); }; });
+  ['mes', 'det', 'deb', 'pag', 'lig', 'sw'].forEach(function (k) { $('t-' + k).onclick = function () { muestra(k); }; });
   ['f-anio', 'f-mes', 'f-per', 'f-pend'].forEach(function (k) { $(k).addEventListener('change', pintaMeses); });
   ['f-pper', 'f-pym', 'f-pfr'].forEach(function (k) { $(k).addEventListener('change', pintaPagos); });
   ['d-mes', 'd-per'].forEach(function (k) { $(k).addEventListener('change', cargaDet); });

@@ -184,6 +184,13 @@ tr.click:hover td{background:var(--navy-soft)}
 .rh-b{display:grid;gap:8px;padding:12px 14px}
 .rh-b .fila{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
 .rh-b .fila>div{min-width:0}
+/* «Quién puede qué» (31-oct-2026, 102_permisos_ver.sql): solo ver */
+.puestos{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px 14px}
+.puestos>div{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--surface-2);min-width:0;font-size:13px;overflow-wrap:anywhere}
+.puestos b{display:block;font-family:var(--f-display);font-stretch:85%;font-size:14px;margin-bottom:2px}
+.perms{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.perm{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12.5px;background:var(--surface);overflow-wrap:anywhere;max-width:100%}
+.perm i{font-style:normal;color:var(--muted);font-size:11.5px;font-weight:600;margin-right:4px}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -213,8 +220,16 @@ tr.click:hover td{background:var(--navy-soft)}
       <button type="button" role="tab" data-t="activo" aria-selected="true">Activos <span class="cta" id="n-activo">0</span></button>
       <button type="button" role="tab" data-t="pendiente" aria-selected="false">Por entrar <span class="cta" id="n-pendiente">0</span></button>
       <button type="button" role="tab" data-t="baja" aria-selected="false">Dados de baja <span class="cta" id="n-baja">0</span></button>
+      <button type="button" role="tab" data-t="permisos" aria-selected="false">Quién puede qué</button>
     </div>
-    <div class="card">
+    <div class="card" id="perm-card" hidden>
+      <header><div><h2>Quién puede qué</h2><div class="sub">Lo que hace cada puesto y, además, los permisos que tiene cada persona. Solo para ver: los permisos los decide la dirección.</div></div></header>
+      <div class="puestos" id="puestos"></div>
+      <div class="filtros"><input type="search" id="pq" placeholder="Buscar nombre o permiso" aria-label="Buscar nombre o permiso"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Nombre</th><th>Puesto</th><th>Además de su puesto</th></tr></thead><tbody id="perm-l"></tbody></table></div>
+      <p class="mut" id="perm-nota" hidden style="margin:0;padding:10px 14px"></p>
+    </div>
+    <div class="card" id="lista-card">
       <header><div><h2 id="h-lista">Activos</h2><div class="sub" id="sub-lista"></div></div></header>
       <div class="filtros"><input type="search" id="q" placeholder="Buscar nombre o usuario" aria-label="Buscar nombre o usuario"></div>
       <div class="tabla"><table class="resp"><thead><tr id="th"></tr></thead><tbody id="lista"></tbody></table></div>
@@ -235,7 +250,7 @@ tr.click:hover td{background:var(--navy-soft)}
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
-  var EST = null, ADMIN = false, LISTA = [], RHB = [], TAB = 'activo';
+  var EST = null, ADMIN = false, LISTA = [], RHB = [], TAB = 'activo', PERM = null;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function mty(s, conHora) {
@@ -292,7 +307,7 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- La lista ---------- */
   async function carga() {
-    LISTA = await rpc('usr_lista') || [];
+    LISTA = await rpc('usr_lista') || []; PERM = null;
     try { RHB = await rpc('usr_rh_bajas') || []; } catch (e) { RHB = []; }
     pinta();
   }
@@ -300,6 +315,8 @@ tr.click:hover td{background:var(--navy-soft)}
   function pinta() {
     ['activo', 'pendiente', 'baja'].forEach(function (t) { $('n-' + t).textContent = cuantos(t); });
     document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === TAB ? 'true' : 'false'); });
+    $('perm-card').hidden = TAB !== 'permisos'; $('lista-card').hidden = TAB === 'permisos'; $('pie').hidden = TAB === 'permisos';
+    if (TAB === 'permisos') { pintaRH(); return permisos(); }
     $('h-lista').textContent = { activo: 'Activos', pendiente: 'Por entrar', baja: 'Dados de baja' }[TAB];
     $('sub-lista').textContent = { activo: 'Quienes hoy entran al portal.', pendiente: 'Ya tienen su código, pero todavía no crean su contraseña.', baja: 'Ya no entran al portal; su historial se queda. Si alguien regresa, entra como usuario nuevo.' }[TAB];
     var q = norm($('q').value);
@@ -327,6 +344,29 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.onclick = function () { TAB = b.dataset.t; pinta(); }; });
   $('q').addEventListener('input', pinta);
+
+  /* ---------- Quién puede qué (la «Configuración de perfiles» del Access; solo ver, usr_permisos de 102_permisos_ver.sql).
+     En el portal no hay perfiles: cada quien tiene su puesto y, además, los permisos que la dirección le dio uno por uno.
+     La base decide qué sale (a Fernando Cadengo, sin lo privado de la dirección). ---------- */
+  async function permisos() {
+    if (!PERM) {
+      $('perm-l').innerHTML = '<tr><td class="vacio" colspan="3">Cargando…</td></tr>';
+      try { PERM = await rpc('usr_permisos'); } catch (e) { $('perm-l').innerHTML = ''; error(falla(e)); return; }
+    }
+    $('puestos').innerHTML = (PERM.puestos || []).map(function (x) { return '<div><b>' + esc(x.nombre) + '</b>' + esc(x.texto) + '</div>'; }).join('');
+    $('perm-nota').hidden = !PERM.nota; $('perm-nota').textContent = PERM.nota || '';
+    var q = norm($('pq').value);
+    var L = (PERM.usuarios || []).filter(function (u) {
+      return !q || norm(u.nombre + ' ' + u.usuario + ' ' + (u.permisos || []).map(function (x) { return x.m + ' ' + x.t; }).join(' ')).indexOf(q) >= 0;
+    });
+    $('perm-l').innerHTML = L.length ? L.map(function (u) {
+      var ps = u.permisos || [];
+      return '<tr><td class="w" data-l="Nombre"><div class="rs">' + esc(u.nombre) + '</div><div class="mut">' + esc(u.usuario) + '</div></td>'
+        + '<td data-l="Puesto">' + esc(ROL[u.rol] || u.rol) + '</td>'
+        + '<td class="w" data-l="Además de su puesto">' + (ps.length ? '<div class="perms">' + ps.map(function (x) { return '<span class="perm"><i>' + esc(x.m) + '</i>' + esc(x.t) + '</span>'; }).join('') + '</div>' : '<span class="mut">Solo lo de su puesto</span>') + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="3">Nadie con esa búsqueda.</td></tr>';
+  }
+  $('pq').addEventListener('input', function () { if (PERM) permisos(); });
 
   /* ---------- Las bajas que avisó RH ---------- */
   function pintaRH() {

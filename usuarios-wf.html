@@ -1,0 +1,339 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Usuarios › Workflow</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=02fcf75198"></script>
+<style>
+/* Portal PROFASE · menú Usuarios › Workflow (31-oct-2026): la pantalla «Usuarios» del Access que mandó Gabriel Cavazos,
+   con las personas del WorkFlow: cómo salen, su puesto, si salen como contador, sus teléfonos y cuántos clientes y
+   actividades tienen. Daniel (31-oct, 14:05): «dale acceso a Cadengo, Gabo y a mí»; ahí se corrigen los teléfonos y si
+   salen como contador. Altas, bajas y contraseñas siguen en Usuarios del portal. Todo por las funciones uwf_*
+   (portal/sql/103_usuarios_wf.sql); la página no lee tablas. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+.cias{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.cias button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.cias button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.cias button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.codigo{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:.08em;background:var(--navy-soft);border:1px dashed var(--navy);border-radius:10px;padding:12px 14px;text-align:center;overflow-wrap:anywhere}
+.paso{margin:0 0 8px;overflow-wrap:anywhere}
+.per{border-left:3px solid var(--line-strong);padding:4px 0 4px 10px;margin:0 0 8px}
+.per.vivo{border-left-color:var(--ok)}
+.per.fin{border-left-color:var(--red)}
+.lista-b{margin:0;padding:0;list-style:none}
+.lista-b li{padding:6px 0;border-top:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.lista-b li:first-child{border-top:0}
+.rh-b{display:grid;gap:8px;padding:12px 14px}
+.rh-b .fila{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.rh-b .fila>div{min-width:0}
+/* «Quién puede qué» (31-oct-2026, 102_permisos_ver.sql): solo ver */
+.puestos{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px 14px}
+.puestos>div{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--surface-2);min-width:0;font-size:13px;overflow-wrap:anywhere}
+.puestos b{display:block;font-family:var(--f-display);font-stretch:85%;font-size:14px;margin-bottom:2px}
+.perms{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.perm{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12.5px;background:var(--surface);overflow-wrap:anywhere;max-width:100%}
+.perm i{font-style:normal;color:var(--muted);font-size:11.5px;font-weight:600;margin-right:4px}
+.tels{display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums}
+.tels span{white-space:nowrap}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Usuarios</div>
+      <h1>Workflow</h1>
+      <p>Las personas del WorkFlow: cómo salen, su puesto, si salen como contador, sus teléfonos y cuántos clientes y actividades tienen. Las altas, bajas y contraseñas se hacen en Usuarios del portal, con Daniel o Fernando Cadengo.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <section id="todo" hidden>
+    <section class="kpis" aria-label="Resumen">
+      <div class="kpi"><div class="l">Personas</div><div class="v" id="k-per">0</div><div class="s">contadores y gerentes</div></div>
+      <div class="kpi"><div class="l">Salen como contador</div><div class="v" id="k-con">0</div><div class="s">en «Asignar contador»</div></div>
+      <div class="kpi"><div class="l">Actividades abiertas</div><div class="v" id="k-act">0</div><div class="s">de todos</div></div>
+    </section>
+    <div class="card" style="margin-top:16px">
+      <header><div><h2>Personas del WorkFlow</h2><div class="sub" id="sub">&nbsp;</div></div></header>
+      <div class="filtros">
+        <input type="search" id="q" placeholder="Buscar nombre o usuario" aria-label="Buscar nombre o usuario">
+        <select id="f-rol" aria-label="Puesto"><option value="">Todos los puestos</option><option value="contador">Contadores</option><option value="gerente">Gerentes</option></select>
+        <select id="f-con" aria-label="Sale como contador"><option value="">Salgan o no como contador</option><option value="si">Salen como contador</option><option value="no">No salen como contador</option></select>
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Nombre</th><th>Cómo sale en el WorkFlow</th><th>Puesto</th><th>Sale como contador</th><th>Teléfonos</th><th class="monto">Clientes</th><th class="monto">Plantillas</th><th class="monto">Abiertas</th><th></th></tr></thead><tbody id="lista"></tbody></table></div>
+    </div>
+    <p class="pie mut" style="margin:0 0 24px">«Clientes»: de cuántos es el contador asignado. «Plantillas»: en cuántos clientes es responsable o autoriza en alguna plantilla. «Abiertas»: sus actividades del WorkFlow sin terminar. «Sale como contador»: si se puede escoger en «Asignar contador» de Clientes › Base de clientes. «Cómo sale en el WorkFlow» no se cambia aquí: de ese nombre se cuelgan sus plantillas y sus clientes; si hay que corregirlo, pídeselo a Daniel o a Fernando Cadengo.</p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var ROL = { gerente: 'Gerente', contador: 'Contador' };
+  var EST = null, EDITA = false, LISTA = [];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function num(n) { return Number(n || 0).toLocaleString('es-MX'); }
+  function cuando(s) {
+    if (!s) return '';
+    try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(s)).replace(/\./g, ''); } catch (e) { return String(s).slice(0, 10); }
+  }
+
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('velo').hidden) cierra(); });
+
+  async function carga() { LISTA = await rpc('uwf_lista') || []; pinta(); }
+  function pinta() {
+    var q = norm($('q').value), r = $('f-rol').value, c = $('f-con').value;
+    var L = LISTA.filter(function (x) {
+      if (r && x.rol !== r) return false;
+      if (c === 'si' && !x.sale_contador) return false;
+      if (c === 'no' && x.sale_contador) return false;
+      return !q || norm(x.nombre + ' ' + x.usuario + ' ' + (x.nombre_wf || '')).indexOf(q) >= 0;
+    });
+    $('k-per').textContent = num(LISTA.length);
+    $('k-con').textContent = num(LISTA.filter(function (x) { return x.sale_contador; }).length);
+    $('k-act').textContent = num(LISTA.reduce(function (a, x) { return a + (x.wf_abiertas || 0); }, 0));
+    $('sub').textContent = L.length === LISTA.length ? LISTA.length + ' personas' : L.length + ' de ' + LISTA.length + ' personas';
+    if (!L.length) { $('lista').innerHTML = '<tr><td class="vacio" colspan="9">' + (q || r || c ? 'Nadie con esa búsqueda.' : 'Nadie por ahora.') + '</td></tr>'; return; }
+    $('lista').innerHTML = L.map(function (x, i) {
+      var tels = [x.tel_oficina && ('Oficina ' + x.tel_oficina), x.tel_movil && ('Móvil ' + x.tel_movil), x.tel_movil2 && ('Móvil 2 ' + x.tel_movil2)].filter(Boolean);
+      return '<tr' + (EDITA ? ' class="click" data-i="' + i + '"' : '') + '><td class="w" data-l="Nombre"><div class="rs">' + esc(x.nombre) + '</div><div class="mut">' + esc(x.usuario) + '</div></td>'
+        + '<td data-l="Cómo sale en el WorkFlow">' + (x.sin_nombre_wf ? chip('Sin nombre en el WorkFlow', 'ojo') : esc(x.nombre_wf)) + '</td>'
+        + '<td data-l="Puesto">' + esc(ROL[x.rol] || x.rol) + '</td>'
+        + '<td data-l="Sale como contador">' + (x.sale_contador ? chip('Sí', 'ok') : chip('No')) + '</td>'
+        + '<td data-l="Teléfonos">' + (tels.length ? '<div class="tels">' + tels.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div>' : '<span class="mut">—</span>') + '</td>'
+        + '<td class="monto" data-l="Clientes">' + num(x.clientes) + '</td>'
+        + '<td class="monto" data-l="Plantillas">' + num(x.wf_clientes) + '</td>'
+        + '<td class="monto" data-l="Abiertas">' + num(x.wf_abiertas) + '</td>'
+        + '<td data-l="">' + (EDITA ? '<button class="btn chico" type="button" data-i="' + i + '">Corregir</button>' : '') + '</td></tr>';
+    }).join('');
+    $('lista').querySelectorAll('[data-i]').forEach(function (el) {
+      el.onclick = function (e) { e.stopPropagation(); ficha(L[+el.dataset.i]); };
+    });
+  }
+  ['q'].forEach(function (k) { $(k).addEventListener('input', pinta); });
+  ['f-rol', 'f-con'].forEach(function (k) { $(k).addEventListener('change', pinta); });
+
+  function ficha(x) {
+    if (!EDITA) return;
+    var campo = function (id, l, v) { return '<div class="campo"><label for="' + id + '">' + esc(l) + '</label><input id="' + id + '" type="tel" inputmode="tel" maxlength="25" autocomplete="off" value="' + esc(v || '') + '"></div>'; };
+    abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol),
+      '<div class="sec"><h3>En el WorkFlow</h3><div class="in"><div class="dl"><span>Cómo sale</span><span>' + (x.sin_nombre_wf ? 'Sin nombre en el WorkFlow' : esc(x.nombre_wf)) + '</span>'
+        + '<span>Contador asignado de</span><span>' + num(x.clientes) + ' clientes</span><span>Responsable o autoriza en</span><span>' + num(x.wf_clientes) + ' clientes</span>'
+        + '<span>Actividades abiertas</span><span>' + num(x.wf_abiertas) + '</span>'
+        + (x.cambio ? '<span>Último cambio</span><span>' + esc(x.cambio.quien || '') + ', ' + esc(cuando(x.cambio.en)) + '</span>' : '') + '</div></div></div>'
+      + '<div class="sec"><h3>Corregir</h3><div class="in"><div class="campos">'
+        + campo('t-of', 'Teléfono de oficina', x.tel_oficina) + campo('t-mo', 'Teléfono móvil', x.tel_movil) + campo('t-m2', 'Teléfono móvil 2', x.tel_movil2)
+        + '<div class="campo chk ancho"><input type="checkbox" id="t-con"' + (x.sale_contador ? ' checked' : '') + (x.sin_nombre_wf ? ' disabled' : '') + '><label for="t-con">Sale como contador en «Asignar contador» de la Base de clientes</label></div>'
+        + (x.sin_nombre_wf ? '<p class="mut ancho" style="margin:0">Sin nombre en el WorkFlow no puede salir como contador: pídele a Daniel o a Fernando Cadengo que se lo pongan en Usuarios del portal.</p>' : '')
+        + '</div><div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="t-guarda">Guardar</button><button class="btn" type="button" id="t-cancela">Cancelar</button></div>'
+        + '<p class="mut" style="margin:10px 0 0">El cambio queda anotado con tu nombre en la historia de la persona (Usuarios del portal).</p></div></div>');
+    $('t-cancela').onclick = cierra;
+    $('t-guarda').onclick = async function () {
+      var b = this; b.disabled = true;
+      try {
+        var r = await rpc('uwf_guarda', { p_usuario: x.usuario, p: { tel_oficina: $('t-of').value, tel_movil: $('t-mo').value, tel_movil2: $('t-m2').value, sale_contador: $('t-con').checked } });
+        cierra(); avisa(r && r.cambios ? 'Listo: se guardó lo de ' + x.nombre + '.' : 'No había nada que cambiar.'); await carga();
+      } catch (e) { error(falla(e)); b.disabled = false; }
+    };
+  }
+
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('uwf_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es de la dirección, Fernando Cadengo y Gabriel Cavazos.');
+      EDITA = !!EST.edita && !P.consulta;
+      $('consulta').hidden = EDITA;
+      await carga();
+      $('todo').hidden = false; $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>
