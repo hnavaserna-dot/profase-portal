@@ -605,6 +605,18 @@
     return err.name === 'AuthRetryableFetchError' || st === 0 || st >= 500 || /fetch|network|timeout|timed out|tiempo/i.test(String(err.message || ''));
   }
 
+  // Identificador de un inicio de sesión: el «session_id» de la llave de Supabase (no cambia al renovarse la llave ni al
+  // recargar; cambia cada vez que la persona vuelve a entrar con su contraseña). Si no viene, la hora de su última entrada.
+  function sesionDe(s) {
+    try {
+      var b = String(s.access_token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      b += '===='.slice((b.length % 4) || 4);
+      var j = JSON.parse(decodeURIComponent(escape(atob(b))));
+      if (j && j.session_id) return 's:' + j.session_id;
+    } catch (e) { /* sigue abajo */ }
+    return s && s.user && s.user.last_sign_in_at ? 'e:' + s.user.last_sign_in_at : '';
+  }
+
   /* ---- Sesión: las páginas de rol exigen sesión y el rol correcto ---- */
   P.listo = (async function () {
     if (!ROL) return null;
@@ -631,6 +643,7 @@
     } else if (ROL !== 'todos' && p.rol !== ROL && (TAMBIEN[ROL] || []).indexOf(p.rol) < 0 && !(ROL === 'gerente' && P.equipo)) { location.replace(P.paginaDe(p.rol)); throw new Error('otra página'); }
     P.perfil = p; P.uid = s.user.id;
     P.creado = Date.parse(s.user.created_at || '') || 0;   // cuándo creó su acceso (ventana «Pon tu foto de perfil»)
+    P.sesionId = sesionDe(s);                                // este inicio de sesión (el mismo al recargar o cambiar de vista)
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
     try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
     // ¿Se le ofrece bajar el «Original» (sin la marca PROFASE)? Decisión de Daniel, 30-oct-2026: hoy solo el equipo
@@ -1142,20 +1155,28 @@
     var abre = function () { cerrar(); ov.hidden = false; $('pu-cambia').focus(); };
     // desde la ventana «Pon tu foto de perfil»: abre Perfil y, en el mismo clic, el selector de la foto
     abre.elegir = function () { abre(); $('pf-file').click(); };
+    abre.abierto = function () { return !ov.hidden; };
     return abre;
   }
 
-  /* ---- «Pon tu foto de perfil» (pedido de Daniel, 30-oct-2026: «como ya todos se están metiendo; a los que no tengan
-     foto de perfil (primero revisa www.profase.com.mx); pídeles mediante un pop up y guíalos a que carguen una foto»).
+  /* ---- «Pon tu foto de perfil» (pedido de Daniel, 30-oct-2026, 17:32: «como ya todos se están metiendo; a los que no
+     tengan foto de perfil (primero revisa www.profase.com.mx); pídeles mediante un pop up y guíalos a que carguen una
+     foto»; 18:13: «permite 3 clics a más tarde; que les aparezca el botón en 3 inicios de sesión pues; ya en la 4ta
+     obligados a foto de perfil»).
      - Primero se cargaron las fotos de www.profase.com.mx (acción «Fotos de perfil», nube/fotos_perfil.py); esta ventana
        sale solo a quien sigue sin foto: la base contestó y no hay «<id>.jpg» en la cubeta «fotos».
-     - Nada se lee ni se guarda aparte: la foto se sube igual que desde Perfil (la ventana abre Perfil y el selector).
-     - Una vez al día como máximo (con «Más tarde», Esc o fuera de la ventana, vuelve a salir al día siguiente que entre),
-       hasta que tenga foto. No sale en las primeras 2 horas de una cuenta nueva (si su foto está en www.profase.com.mx,
-       la acción se la pone sola en esa hora) ni en las pruebas automáticas.
-     - Nunca encima de otra ventana ni de un recorrido (Nuevos cambios, bienvenida, chat, cumpleaños…): espera a que no
-       haya ninguna y sale al final, después de ellos. ---- */
-  var CSS_FOTO = '.ov.fp-ov{z-index:80}'
+     - Sale en cada inicio de sesión (no al recargar ni al cambiar de vista) hasta que tenga foto. En los 3 primeros
+       inicios de sesión en que le sale trae «Más tarde» (cerrarla la deja para la siguiente vez que entre); a partir del
+       4.º es obligatoria: sin «Más tarde», sin Esc y sin cerrarse al picar fuera, hasta que guarde su foto.
+     - Las veces se cuentan en la base, para que valgan en todos sus equipos: recorrido_visto('foto-mas-tarde-N')
+       (portal/sql/59_recorridos.sql; sin ella, en su navegador). Qué inicio de sesión ya se contó o ya se dejó para
+       después queda en su navegador.
+     - Nada más se lee ni se guarda: la foto se sube igual que desde Perfil (la ventana abre Perfil y el selector). En la
+       obligatoria, si cierra Perfil sin guardar, la ventana vuelve.
+     - No sale en las primeras 2 horas de una cuenta nueva (si su foto está en www.profase.com.mx, la acción se la pone
+       sola en esa hora) ni en las pruebas automáticas de los demás. Nunca encima de otra ventana ni de un recorrido
+       (Nuevos cambios, bienvenida, chat, cumpleaños…): espera a que no haya ninguna y sale al final. ---- */
+  var CSS_FOTO = '.ov.fp-ov{z-index:95}'
     + '.dlg.fp-dlg{width:min(480px,100%);border-top-color:var(--accent)}'
     + '.fp-top{display:flex;justify-content:center;margin:2px 0 10px}'
     + '.fp-ci{position:relative;display:inline-block}'
@@ -1167,47 +1188,105 @@
     + '.fp-pasos li{counter-increment:fp;display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;font-size:13.5px;line-height:1.4;background:var(--navy-soft);border-radius:10px;padding:9px 11px}'
     + '.fp-pasos li::before{content:counter(fp);width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12.5px}'
     + ':root[data-theme="dark"] .fp-pasos li::before{background:var(--accent)}'
+    + '.fp-vez{font-size:12.5px;line-height:1.4;margin:0;padding:8px 11px;border-radius:10px;border:1px solid var(--line-strong);color:var(--muted)}'
+    + '.fp-vez b{color:var(--ink)}'
+    + '.fp-vez.ob{border-color:var(--accent);color:var(--ink);background:color-mix(in srgb,var(--accent) 10%,transparent)}'
     + '.dlg.fp-dlg .dacts{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}'
     + '.dlg.fp-dlg .dacts .btn{font-size:14px;padding:9px 14px}'
     + '.dlg.fp-dlg .dacts .btn.pu-ac{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600}'
     + '.dlg.fp-dlg .dacts .btn svg{width:17px;height:17px;display:block;flex:none}'
+    + '.dlg.fp-dlg .dacts .btn[hidden]{display:none}'
     + '@media (max-width:480px){.dlg.fp-dlg .dacts{flex-direction:column-reverse}.dlg.fp-dlg .dacts .btn{width:100%}}';
-  var FP_LUEGO = 'profase-foto-luego';
-  function hoyMty() {
-    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); }
-    catch (e) { return new Date().toISOString().slice(0, 10); }
+  var FP_VECES = 3;                              // inicios de sesión con «Más tarde»; al siguiente, obligatoria
+  var FP_RID = 'foto-mas-tarde-';                // en la base: foto-mas-tarde-1, -2 y -3
+  var FP_LUEGO = 'profase-foto-luego';           // el inicio de sesión en que picó «Más tarde» (ya no sale en ese)
+  var FP_CONTADA = 'profase-foto-contada';       // el inicio de sesión que ya se contó como una de las 3
+  var FP_LOCAL = 'profase-foto-veces';           // las veces, en su navegador (por si la base no las guarda)
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* nada */ } }
+  function sesionFoto() {
+    if (P.sesionId) return P.sesionId;
+    // sin identificador de la base: uno por pestaña del navegador
+    try { var t = sessionStorage.getItem('profase-foto-tab'); if (!t) { t = 't:' + Date.now() + Math.random(); sessionStorage.setItem('profase-foto-tab', t); } return t; }
+    catch (e) { return 't:sin'; }
   }
-  function fotoPospuesta() { try { return localStorage.getItem(FP_LUEGO) === hoyMty(); } catch (e) { return !!FOTO.luego; } }
-  function pospuesta() { FOTO.luego = true; try { localStorage.setItem(FP_LUEGO, hoyMty()); } catch (e) { /* nada */ } }
+  function vecesLocal() { try { var a = JSON.parse(lsGet(FP_LOCAL) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  async function vecesFoto() {
+    var n = 0;
+    try {
+      var r = await sb.rpc('recorridos_mios');
+      if (!r.error && Array.isArray(r.data)) n = r.data.filter(function (x) { return new RegExp('^' + FP_RID + '\\d+$').test(String(x)); }).length;
+    } catch (e) { n = 0; }
+    return Math.max(n, vecesLocal().length);
+  }
+  async function anotaVez(k) {
+    var ok = false;
+    try { var r = await sb.rpc('recorrido_visto', { p_recorrido: FP_RID + k }); ok = !r.error && r.data === true; } catch (e) { ok = false; }
+    if (!ok) { var a = vecesLocal(); a.push(sesionFoto()); lsSet(FP_LOCAL, JSON.stringify(a)); }
+  }
+  // ¿Esta vez trae «Más tarde» (y cuál de las 3 es) o ya es obligatoria? Cada inicio de sesión cuenta una sola vez.
+  async function turnoFoto() {
+    var ses = sesionFoto(), n = await vecesFoto();
+    if (lsGet(FP_CONTADA) === ses && n >= 1) return { obliga: false, vez: Math.min(n, FP_VECES) };
+    if (n >= FP_VECES) return { obliga: true, vez: n };
+    await anotaVez(n + 1); lsSet(FP_CONTADA, ses);
+    return { obliga: false, vez: n + 1 };
+  }
   var FP_ABRE = null;
   function ventanaFoto(p, perfil) {
     if (FP_ABRE) return FP_ABRE;
     var st = document.createElement('style'); st.textContent = CSS_FOTO; document.head.appendChild(st);
     var nom = String(p.nombre || '').trim().split(/\s+/)[0] || '';
     if (nom && nom === nom.toUpperCase()) nom = nom.charAt(0) + nom.slice(1).toLowerCase();   // «ALEX» → «Alex»
+    var hola = nom ? 'Hola, ' + esc(nom) + '. ' : '';
     var ov = document.createElement('div');
     ov.className = 'ov fp-ov'; ov.hidden = true;
     ov.innerHTML = '<div class="dlg fp-dlg" role="dialog" aria-modal="true" aria-labelledby="fp-h" aria-describedby="fp-s">'
       + '<div class="fp-top"><span class="fp-ci"><span class="pu-av l" data-pu-av></span><span class="fp-cam">' + ic('cam') + '</span></span></div>'
       + '<h2 id="fp-h">Pon tu foto de perfil</h2>'
-      + '<p class="sub" id="fp-s">' + (nom ? 'Hola, ' + esc(nom) + '. ' : '') + 'Ya casi todo el equipo trabaja en el portal y a ti todavía te ven con tus iniciales. '
-      + 'Tu foto sale junto a tu nombre en el chat, en el Calendario, en la ventana de cumpleaños y aquí arriba. Te toma un minuto:</p>'
+      + '<p class="sub" id="fp-s"></p>'
       + '<ol class="fp-pasos">'
       + '<li><span><b>Escoge tu foto.</b> Pícale a «Escoger mi foto» y escoge la que tú quieras. En la computadora, búscala en tus archivos; en el celular, tómala con la cámara o escógela de tu galería.</span></li>'
       + '<li><span><b>Acomódala.</b> Arrástrala para que tu cara quede dentro del círculo y usa la barra para acercar o alejar.</span></li>'
       + '<li><span><b>Guárdala.</b> Pícale a «Guardar foto» y listo: todo el equipo te ve igual en todo el portal.</span></li>'
       + '</ol>'
+      + '<p class="fp-vez" id="fp-vez"></p>'
       + '<div class="dacts"><button class="btn" type="button" id="fp-luego">Más tarde</button><button class="btn pu-ac" type="button" id="fp-sube">' + ic('cam') + ' Escoger mi foto</button></div>'
       + '</div>';
     document.body.appendChild(ov);
-    var sube = document.getElementById('fp-sube');
-    function cerrar() { ov.hidden = true; pospuesta(); }
-    document.getElementById('fp-luego').onclick = cerrar;
+    var dlg = ov.querySelector('.fp-dlg'), sube = document.getElementById('fp-sube'), luego = document.getElementById('fp-luego');
+    var T = { obliga: false, vez: 1 }, vigila = null;
+    function pinta() {
+      var compu = !(window.matchMedia && matchMedia('(pointer:coarse)').matches);
+      document.getElementById('fp-s').innerHTML = T.obliga
+        ? hola + 'Ya la dejaste para después ' + FP_VECES + ' veces; para seguir usando el portal, sube tu foto ahora. Te toma un minuto:'
+        : hola + 'Ya casi todo el equipo trabaja en el portal y a ti todavía te ven con tus iniciales. Tu foto sale junto a tu nombre en el chat, en el Calendario, en la ventana de cumpleaños y aquí arriba. Te toma un minuto:';
+      var v = document.getElementById('fp-vez');
+      v.className = 'fp-vez' + (T.obliga ? ' ob' : '');
+      v.innerHTML = T.obliga
+        ? (compu ? '¿No tienes una foto en esta computadora? Entra al portal desde tu celular y tómatela con la cámara.' : 'Tómatela con la cámara o escógela de tu galería.')
+        : T.vez >= FP_VECES
+          ? '<b>Última vez</b> que la puedes dejar para después (' + FP_VECES + ' de ' + FP_VECES + '): la próxima vez que entres al portal ya tendrás que subirla para seguir.'
+          : 'La puedes dejar para después hasta <b>' + FP_VECES + ' veces</b> (ésta es la ' + T.vez + '.ª); a la ' + (FP_VECES + 1) + '.ª vez que entres al portal ya tendrás que subirla para seguir.';
+      luego.hidden = T.obliga;
+      dlg.setAttribute('role', T.obliga ? 'alertdialog' : 'dialog');
+    }
+    function cerrar() { if (T.obliga) return; ov.hidden = true; lsSet(FP_LUEGO, sesionFoto()); }
+    luego.onclick = cerrar;
     ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) cerrar(); });
-    // en el mismo clic: se cierra esta ventana y se abren Perfil y el selector de la foto (el navegador lo exige así)
-    sube.onclick = function () { cerrar(); perfil.elegir(); };
-    FP_ABRE = function () { pintaFoto(p); ov.hidden = false; sube.focus(); };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) { e.preventDefault(); cerrar(); } });
+    // en el mismo clic: se abren Perfil y el selector de la foto (el navegador lo exige así)
+    sube.onclick = function () {
+      if (!T.obliga) { cerrar(); perfil.elegir(); return; }
+      // obligatoria: se esconde mientras está Perfil; si cierra Perfil sin guardar su foto, vuelve
+      ov.hidden = true; perfil.elegir();
+      clearInterval(vigila);
+      vigila = setInterval(function () {
+        if (FOTO.url) { clearInterval(vigila); return; }
+        if (!perfil.abierto() && ov.hidden) { clearInterval(vigila); FP_ABRE(T); }
+      }, 500);
+    };
+    FP_ABRE = function (t) { T = t || T; pinta(); pintaFoto(p); ov.hidden = false; sube.focus(); };
     return FP_ABRE;
   }
   var dormir = function (ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); };
@@ -1221,7 +1300,7 @@
     return hayVentana() || document.hidden || !!(window.PROFASE_RECORRIDO && window.PROFASE_RECORRIDO.activo && window.PROFASE_RECORRIDO.activo());
   }
   async function pideFoto(p, perfil, prueba) {
-    var falta = function () { return FOTO.sinFoto && !FOTO.url && !fotoPospuesta(); };
+    var falta = function () { return FOTO.sinFoto && !FOTO.url && lsGet(FP_LUEGO) !== sesionFoto(); };
     if (!prueba) {
       if (navigator.webdriver && !window.__PRUEBA_FOTO) return;    // las pruebas automáticas de los demás no la ven
       if (P.creado && Date.now() - P.creado < 2 * 3600e3) return;   // cuenta nueva: quizá su foto del sitio va en camino
@@ -1235,7 +1314,9 @@
       }
       if (ocupado() || !falta()) return;
     }
-    ventanaFoto(p, perfil)();
+    var t = await turnoFoto();
+    if (!prueba && (ocupado() || !falta())) return;
+    ventanaFoto(p, perfil)(t);
   }
 
   function encabezado(p) {
