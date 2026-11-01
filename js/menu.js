@@ -75,8 +75,11 @@
     /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
        todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
        también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */
-    { k: 'agd', t: 'Agenda', d: 'Tu calendario, tus recordatorios, tus pendientes y tus avisos de todos los días.', subs: [
+    { k: 'agd', t: 'Agenda', d: 'Tu calendario, los eventos del despacho, tus recordatorios, tus pendientes y tus avisos de todos los días.', subs: [
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
+      // Eventos PROFASE (Héctor Daniel, 1-nov-2026: sale de RH y va en Agenda): la posada y los festejos en lista y calendario para
+      // todos; el Reporte, a quien la base deja (ev_estado(), 114_eventos_reporte.sql). calendario.html?vista=eventos; bloque cal_tab.js
+      { k: 'eventos', v: 'evt', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho: confirma tu asistencia, en lista o en calendario.' },
       { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
       // Pendientes (31-oct-2026, pedido de Daniel; en «Agenda» desde el 1-nov, 04:54: «Si dale ya»): lo que hay que hacer, quién y
       // para cuándo, y las minutas que faltan de las reuniones con clientes (expedientes.html; 112_expedientes.sql; exp_tab.js)
@@ -114,7 +117,6 @@
       { k: 'rh-vacaciones', v: 'rhv', t: 'Vacaciones y permisos', d: 'Quién está fuera y cuántos días le quedan a cada quien.' },
       { k: 'rh-prestamos', v: 'rhp', t: 'Préstamos', d: 'Préstamos al personal, su autorización y sus descuentos.' },
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },
-      { k: 'rh-eventos', v: 'rhe', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho.' },
       { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' },
       { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
