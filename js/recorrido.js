@@ -290,7 +290,9 @@
         var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
       });
     }
-    function ocupado() { return hayVentana() || document.hidden || activo; }
+    // a medio escribir (PORTAL.escribiendo: la minuta de una reunión) tampoco se empieza un recorrido
+    function escribiendo() { try { var p = window.PORTAL; return !!(p && p.estaEscribiendo && p.estaEscribiendo()); } catch (e) { return false; } }
+    function ocupado() { return hayVentana() || document.hidden || activo || escribiendo(); }
     var esperando = false;
     async function quiza(desdeAviso) {
       if (esperando) return;

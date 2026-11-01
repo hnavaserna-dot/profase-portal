@@ -630,19 +630,43 @@
     setInterval(revisaInactividad, 30000);
   }
 
+  /* ---- A medio escribir (1-nov-2026, Daniel: «no quiero que se pierda lo ya tomado en notas por algún pop o algo
+     tuyo»). Una ventana donde se escribe algo largo (la minuta de una reunión, por ejemplo) llama
+     PORTAL.escribiendo('minuta', true) al abrirse (y otra vez cada vez que guarda) y PORTAL.escribiendo('minuta', false)
+     al cerrarse. Mientras tanto la página no se recarga por una versión nueva, el cierre temporal espera, jalar para
+     actualizar no hace nada, la ventana de la foto y los recorridos esperan, y el aviso de cerrar la reunión se queda
+     chico. Desde un marco se anota en la página de arriba. Si nadie lo renueva en 20 minutos se suelta solo (una
+     pestaña que se cerró sin avisar no detiene el portal para siempre). PORTAL.ocupado() = a media llamada o escribiendo. ---- */
+  var ESCRIBE = {}, ESCRIBE_MS = 20 * 60 * 1000;
+  P.escribiendo = function (clave, si) {
+    var a = arriba(); if (a && a.escribiendo) { try { return a.escribiendo(clave, si); } catch (e) { /* sigue aquí */ } }
+    clave = String(clave || 'algo');
+    if (si === false) delete ESCRIBE[clave]; else ESCRIBE[clave] = Date.now();
+  };
+  P.estaEscribiendo = function () {
+    var a = arriba(); if (a && a.estaEscribiendo) { try { return a.estaEscribiendo(); } catch (e) { /* sigue aquí */ } }
+    var t = Date.now(), k, hay = false;
+    for (k in ESCRIBE) { if (t - ESCRIBE[k] < ESCRIBE_MS) hay = true; else delete ESCRIBE[k]; }
+    return hay;
+  };
+  P.ocupado = function () {
+    var a = arriba(); if (a && a.ocupado) { try { return a.ocupado(); } catch (e) { /* sigue aquí */ } }
+    try { return !!(P.enLlamada && P.enLlamada()) || P.estaEscribiendo(); } catch (e) { return false; }
+  };
+
   /* ---- Cierre temporal (30-oct-2026, pedido de Daniel: «Saca a todos del CRM con ese aviso y cuando quede ya les
      avisamos»). Al abrir, portal/cierre.js (escrito al principio de cada página) ya revisa cierre.json; aquí, en la
      página de arriba que ya está abierta, se revisa cada minuto mientras está a la vista y al volver a ella. Si dice
      "cerrado": true, se guarda a dónde iba y se lleva a cerrado.html, que lo regresa solo al reabrir. No pasa por la
      base (cierre.json vive en profase-portal), así que funciona aunque la base no conteste. A media llamada del chat
-     espera a que cuelgue. ---- */
+     espera a que cuelgue, y a medio escribir (PORTAL.escribiendo), a que termine. ---- */
   (function () {
     if (window.parent !== window) return;
     if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
     var ultimaC = 0;
     function revisaCierre() {
       if (document.hidden || Date.now() - ultimaC < 20000) return;
-      try { if (P.enLlamada && P.enLlamada()) return; } catch (e) { /* sigue */ }
+      try { if (P.ocupado()) return; } catch (e) { /* sigue */ }
       ultimaC = Date.now();
       fetch('/cierre.json?t=' + Date.now(), { cache: 'no-store', credentials: 'omit' })
         .then(function (r) { return r.ok ? r.json() : null; })
@@ -721,8 +745,9 @@
       if (el) el.textContent = el.getAttribute('data-mmss') ? Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2) : String(s);
       return s;
     }
-    // a media llamada del chat (portal/llamada_tab.js) no se recarga: se espera a que cuelgue y luego sale la ventana
-    function enLlamada() { try { return !!(P.enLlamada && P.enLlamada()); } catch (e) { return false; } }
+    // a media llamada del chat (portal/llamada_tab.js) o a medio escribir (PORTAL.escribiendo: la minuta de una reunión)
+    // no se recarga: se espera a que cuelgue o termine y luego sale la ventana
+    function enLlamada() { try { return !!P.ocupado(); } catch (e) { return false; } }
     function esperaLlamada() {
       var ov = document.getElementById('pv-ov'); if (ov) ov.remove();
       var t = document.getElementById('pv-toast'); if (t) t.remove();
@@ -823,7 +848,7 @@
           || w.matchMedia('(display-mode: fullscreen)').matches;
       } catch (e) { return false; }
     }
-    function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && t.enLlamada && t.enLlamada()); } catch (e) { return false; } }
+    function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && (t.ocupado ? t.ocupado() : t.enLlamada && t.enLlamada())); } catch (e) { return false; } }
     function hastaArriba(w) {
       try { var se = w.document.scrollingElement || w.document.documentElement; return (se ? se.scrollTop : 0) <= 0 && (w.scrollY || 0) <= 0; } catch (e) { return true; }
     }
@@ -1707,7 +1732,8 @@
     });
   }
   function ocupado() {
-    return hayVentana() || document.hidden || !!(window.PROFASE_RECORRIDO && window.PROFASE_RECORRIDO.activo && window.PROFASE_RECORRIDO.activo());
+    return hayVentana() || document.hidden || !!(window.PROFASE_RECORRIDO && window.PROFASE_RECORRIDO.activo && window.PROFASE_RECORRIDO.activo())
+      || !!(window.PORTAL && window.PORTAL.estaEscribiendo && window.PORTAL.estaEscribiendo());
   }
   async function pideFoto(p, perfil, prueba) {
     var falta = function () { return FOTO.sinFoto && !FOTO.url && lsGet(FP_LUEGO) !== sesionFoto(); };
