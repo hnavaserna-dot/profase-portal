@@ -35,7 +35,73 @@
     { k: 'patrias', de: [9, 1], a: [9, 16], n: '¡Viva México!', f: '15 y 16 de septiembre' },
     { k: 'halloween', de: [10, 15], a: [10, 31], n: '¡Feliz Halloween!', f: '31 de octubre' },
     { k: 'muertos', de: [11, 1], a: [11, 3], n: '¡Feliz Día de Muertos!', f: '1 y 2 de noviembre' },
-    { k: 'navidad', de: [12, 1], a: [1, 6], n: '¡Feliz Navidad!', f: '25 de diciembre' }
+    { k: 'navidad', de: [12, 1], a: [12, 30], n: '¡Feliz Navidad!', f: '25 de diciembre' },
+    // fechas «chispa»: sus dibujos, en js/fechas/<p>.js
+    { k: 'anio', de: [12, 31], a: [1, 3], n: '¡Feliz Año Nuevo!', f: '1 de enero', p: 'enero-marzo' },
+    { k: 'reyes', de: [1, 4], a: [1, 6], n: '¡Feliz Día de Reyes!', f: '6 de enero', p: 'enero-marzo' },
+    { k: 'pizza', de: [1, 17], a: [1, 17], n: '¡Feliz Día de la Pizza!', f: '17 de enero', p: 'enero-marzo' },
+    { k: 'palomitas', de: [1, 19], a: [1, 19], n: '¡Feliz Día de las Palomitas!', f: '19 de enero', p: 'enero-marzo' },
+    { k: 'abrazo', de: [1, 21], a: [1, 21], n: '¡Feliz Día del Abrazo!', f: '21 de enero', p: 'enero-marzo' },
+    { k: 'croissant', de: [1, 30], a: [1, 30], n: '¡Feliz Día del Croissant!', f: '30 de enero', p: 'enero-marzo' },
+    { k: 'candelaria', de: [2, 1], a: [2, 2], n: '¡Feliz Día de la Candelaria!', f: '2 de febrero', p: 'enero-marzo' },
+    { k: 'constitucion', de: [2, 5], a: [2, 5], n: '¡Feliz Día de la Constitución!', f: '5 de febrero', p: 'enero-marzo' },
+    { k: 'bandera', de: [2, 23], a: [2, 24], n: '¡Feliz Día de la Bandera!', f: '24 de febrero', p: 'enero-marzo' },
+    { k: 'pi', de: [3, 14], a: [3, 14], n: '¡Feliz Día de Pi!', f: '14 de marzo', p: 'enero-marzo' },
+    { k: 'felicidad', de: [3, 20], a: [3, 20], n: '¡Feliz Día de la Felicidad!', f: '20 de marzo', p: 'enero-marzo' },
+    { k: 'primavera', de: [3, 21], a: [3, 21], n: '¡Feliz inicio de la primavera!', f: '21 de marzo', p: 'enero-marzo' },
+    { k: 'agua', de: [3, 22], a: [3, 22], n: '¡Feliz Día del Agua!', f: '22 de marzo', p: 'enero-marzo' },
+    { k: 'waffle', de: [3, 25], a: [3, 25], n: '¡Feliz Día del Waffle!', f: '25 de marzo', p: 'enero-marzo' },
+    { k: 'taco', de: [3, 31], a: [3, 31], n: '¡Feliz Día del Taco!', f: '31 de marzo', p: 'enero-marzo' },
+    { k: 'burrito', nth: [4, 4, 1], n: '¡Feliz Día del Burrito!', p: 'abril-mayo' },
+    { k: 'tierra', de: [4, 22], a: [4, 22], n: '¡Feliz Día de la Tierra!', f: '22 de abril', p: 'abril-mayo' },
+    { k: 'libro', de: [4, 23], a: [4, 23], n: '¡Feliz Día del Libro!', f: '23 de abril', p: 'abril-mayo' },
+    { k: 'pinguino', de: [4, 25], a: [4, 25], n: '¡Feliz Día del Pingüino!', f: '25 de abril', p: 'abril-mayo' },
+    { k: 'nino', de: [4, 29], a: [4, 30], n: '¡Feliz Día del Niño!', f: '30 de abril', p: 'abril-mayo' },
+    { k: 'trabajo', de: [5, 1], a: [5, 1], n: '¡Feliz Día del Trabajo!', f: '1 de mayo', p: 'abril-mayo' },
+    { k: 'albanil', de: [5, 3], a: [5, 3], n: '¡Feliz Día del Albañil!', f: '3 de mayo', p: 'abril-mayo' },
+    { k: 'espacio', de: [5, 4], a: [5, 4], n: '¡Feliz Día del Espacio!', f: '4 de mayo', p: 'abril-mayo' },
+    { k: 'madres', de: [5, 9], a: [5, 10], n: '¡Feliz Día de las Madres!', f: '10 de mayo', p: 'abril-mayo' },
+    { k: 'maestro', de: [5, 15], a: [5, 15], n: '¡Feliz Día del Maestro!', f: '15 de mayo', p: 'abril-mayo' },
+    { k: 'internet', de: [5, 17], a: [5, 17], n: '¡Feliz Día del Internet!', f: '17 de mayo', p: 'abril-mayo' },
+    { k: 'abejas', de: [5, 20], a: [5, 20], n: '¡Feliz Día de las Abejas!', f: '20 de mayo', p: 'abril-mayo' },
+    { k: 'estudiante', de: [5, 23], a: [5, 23], n: '¡Feliz Día del Estudiante!', f: '23 de mayo', p: 'abril-mayo' },
+    { k: 'contador', de: [5, 24], a: [5, 25], n: '¡Feliz Día del Contador!', f: '25 de mayo', p: 'abril-mayo' },
+    { k: 'hamburguesa', de: [5, 28], a: [5, 28], n: '¡Feliz Día de la Hamburguesa!', f: '28 de mayo', p: 'abril-mayo' },
+    { k: 'marina', de: [6, 1], a: [6, 1], n: '¡Feliz Día de la Marina!', f: '1 de junio', p: 'junio-julio' },
+    { k: 'churro', de: [6, 6], a: [6, 6], n: '¡Feliz Día del Churro!', f: '6 de junio', p: 'junio-julio' },
+    { k: 'oceanos', de: [6, 8], a: [6, 8], n: '¡Feliz Día de los Océanos!', f: '8 de junio', p: 'junio-julio' },
+    { k: 'sushi', de: [6, 18], a: [6, 18], n: '¡Feliz Día del Sushi!', f: '18 de junio', p: 'junio-julio' },
+    { k: 'padre', nth: [6, 0, 3], n: '¡Feliz Día del Padre!', p: 'junio-julio' },
+    { k: 'verano', de: [6, 21], a: [6, 21], n: '¡Feliz inicio del verano!', f: '21 de junio', p: 'junio-julio' },
+    { k: 'redes', de: [6, 30], a: [6, 30], n: '¡Feliz Día de las Redes Sociales!', f: '30 de junio', p: 'junio-julio' },
+    { k: 'ingeniero', de: [7, 1], a: [7, 1], n: '¡Feliz Día del Ingeniero!', f: '1 de julio', p: 'junio-julio' },
+    { k: 'ovni', de: [7, 2], a: [7, 2], n: '¡Feliz Día del OVNI!', f: '2 de julio', p: 'junio-julio' },
+    { k: 'chocolate', de: [7, 7], a: [7, 7], n: '¡Feliz Día del Chocolate!', f: '7 de julio', p: 'junio-julio' },
+    { k: 'abogado', de: [7, 12], a: [7, 12], n: '¡Feliz Día del Abogado!', f: '12 de julio', p: 'junio-julio' },
+    { k: 'papas', de: [7, 13], a: [7, 13], n: '¡Feliz Día de las Papas Fritas!', f: '13 de julio', p: 'junio-julio' },
+    { k: 'emoji', de: [7, 17], a: [7, 17], n: '¡Feliz Día del Emoji!', f: '17 de julio', p: 'junio-julio' },
+    { k: 'helado', nth: [7, 0, 3], n: '¡Feliz Día del Helado!', p: 'junio-julio' },
+    { k: 'aguacate', de: [7, 31], a: [7, 31], n: '¡Feliz Día del Aguacate!', f: '31 de julio', p: 'junio-julio' },
+    { k: 'sandia', de: [8, 3], a: [8, 3], n: '¡Feliz Día de la Sandía!', f: '3 de agosto', p: 'agosto-septiembre' },
+    { k: 'galleta', de: [8, 4], a: [8, 4], n: '¡Feliz Día de la Galleta!', f: '4 de agosto', p: 'agosto-septiembre' },
+    { k: 'gato', de: [8, 8], a: [8, 8], n: '¡Feliz Día del Gato!', f: '8 de agosto', p: 'agosto-septiembre' },
+    { k: 'zurdos', de: [8, 13], a: [8, 13], n: '¡Feliz Día de los Zurdos!', f: '13 de agosto', p: 'agosto-septiembre' },
+    { k: 'foto', de: [8, 19], a: [8, 19], n: '¡Feliz Día de la Fotografía!', f: '19 de agosto', p: 'agosto-septiembre' },
+    { k: 'perro', de: [8, 26], a: [8, 26], n: '¡Feliz Día del Perro!', f: '26 de agosto', p: 'agosto-septiembre' },
+    { k: 'abuelos', de: [8, 28], a: [8, 28], n: '¡Feliz Día de los Abuelos!', f: '28 de agosto', p: 'agosto-septiembre' },
+    { k: 'paella', de: [9, 20], a: [9, 20], n: '¡Feliz Día de la Paella!', f: '20 de septiembre', p: 'septiembre-diciembre' },
+    { k: 'paz', de: [9, 21], a: [9, 21], n: '¡Feliz Día de la Paz!', f: '21 de septiembre', p: 'agosto-septiembre' },
+    { k: 'quesadilla', de: [9, 25], a: [9, 25], n: '¡Feliz Día de la Quesadilla!', f: '25 de septiembre', p: 'septiembre-diciembre' },
+    { k: 'turismo', de: [9, 27], a: [9, 27], n: '¡Feliz Día del Turismo!', f: '27 de septiembre', p: 'agosto-septiembre' },
+    { k: 'maiz', de: [9, 29], a: [9, 29], n: '¡Feliz Día Nacional del Maíz!', f: '29 de septiembre', p: 'agosto-septiembre' },
+    { k: 'cafe', de: [10, 1], a: [10, 1], n: '¡Feliz Día del Café!', f: '1 de octubre', p: 'septiembre-diciembre' },
+    { k: 'dona', de: [11, 5], a: [11, 5], n: '¡Feliz Día de la Dona!', f: '5 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'nachos', de: [11, 6], a: [11, 6], n: '¡Feliz Día de los Nachos!', f: '6 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'cartero', de: [11, 12], a: [11, 12], n: '¡Feliz Día del Cartero!', f: '12 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'revolucion', de: [11, 20], a: [11, 20], n: '¡Feliz Día de la Revolución!', f: '20 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'musico', de: [11, 22], a: [11, 22], n: '¡Feliz Día del Músico!', f: '22 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'pastel', de: [11, 26], a: [11, 26], n: '¡Feliz Día del Pastel!', f: '26 de noviembre', p: 'septiembre-diciembre' },
+    { k: 'inocentes', de: [12, 28], a: [12, 28], n: '¡Feliz Día de los Inocentes!', f: '28 de diciembre', p: 'septiembre-diciembre' }
   ];
   var DIA = 864e5;
   function hoyMty() {
@@ -230,11 +296,11 @@
   };
 
   // junto al signo de cada menú (clases ptc-, para no chocar con las de la escena de la entrada)
-  var JUNTO = { halloween: 'arana', muertos: 'veladora', navidad: 'santa', amor: 'corazon', patrias: 'bandera' };
+  var JUNTO = { halloween: 'arana', muertos: 'veladora', navidad: 'santa', amor: 'corazon', patrias: 'banderita' };
   // ancho de cada dibujo junto al signo (px); el alto sale de su viewBox. Van con tamaño fijo porque Safari (iPhone, iPad
   // y Mac) no siempre saca el alto de un dibujo con «height:auto» y dejaba la arañita fuera de su recuadro, sin verse
   // (Daniel, 31-oct-2026, con una captura de su iPhone: «Hay forma de ver desde aquí la arañita?»).
-  var JUNTO_ANCHO = { arana: 13, santa: 17, corazon: 13, bandera: 15, veladora: 11 };
+  var JUNTO_ANCHO = { arana: 13, santa: 17, corazon: 13, banderita: 15, veladora: 11 };
   var JUNTO_SVG = {
     arana: '<svg viewBox="0 8 16 18" fill="none" stroke="currentColor" stroke-linecap="round">'
       + '<path d="M5.6 15.2 2 12.6 1 9.6M5.4 16.6 1.2 15.6 0 13.4M5.6 18.2 1.6 19.6.6 22.4M6.2 19.4 3.8 22.6 3.6 25.2'
@@ -251,19 +317,21 @@
       + '<ellipse class="ptc-boca" cx="10" cy="18.4" rx="1.3" ry=".75" fill="#9C2A2A"/>'
       + '<circle cx="10" cy="16.4" r=".8" fill="#E8836B"/></g></svg>',
     corazon: '<svg viewBox="0 0 16 16"><path class="ptc-lat" d="M8 14.2S1.4 10.1 1.4 5.6A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.6 1.6C14.6 10.1 8 14.2 8 14.2z" fill="#D6336C"/></svg>',
-    bandera: BANDERA_OLA(),
+    banderita: BANDERA_OLA(),   // también la usan el Día de la Bandera y el de la Revolución (JUNTO.<clave> = 'banderita')
     veladora: svg(VELADORA_CHICA)
   };
   /* ---------- fechas «chispa» (Daniel, 31-oct-2026, 20:48 a 21:02: «sí a todas»; en la entrada y adentro) ----------
-     fecha(x, c) da de alta una fecha: x = {k, de, a} (o nth), n (felicitación) y f (el día); c = sus dibujos como {vb, g}:
+     Sus dibujos viven en js/fechas/<parte>.js (TEMPORADAS dice cuál, p) y solo se bajan el día que tocan, para que el
+     portal siga ligero (regla «Siempre rápido»). Cada archivo se forma en PROFASE_TEMPORADA_FECHAS y, ya bajado, corre()
+     le pasa estas piezas (API) y pega su CSS. alta(k, c) arma la fecha k de TEMPORADAS con sus dibujos c, como {vb, g}:
      m (principal) y m2 (de compañía), mov y mov2 (cómo se mueven en la entrada: brinca, mece, flota, gira, late, vuela,
      saluda), lluvia (nieve, petalos, confeti, burbujas, estrellas, notas, corazones, numeros), dice (lo que dice cada
      dibujo al picarlo), j y jmov (el adorno de junto al signo; si no, m), c1 y c2 (los dos quietos; si no, m y m2) y
-     extra (más piezas de la escena). Su CSS propio va en CSS_FECHAS, con clases pt-<clave>-… */
-  var CSS_FECHAS = '';
-  function alta(x, c) {
-    TEMPORADAS.push(x);
-    var k = x.k, mv = c.mov || 'brinca', mv2 = c.mov2 || mv, d = c.dice || [], w = c.w || 104, w2 = c.w2 || 104, m2 = c.m2 || c.m;
+     extra (más piezas de la escena). Cada archivo regresa su CSS propio, con clases pt-<clave>-… */
+  function busca(k) { return TEMPORADAS.filter(function (x) { return x.k === k; })[0]; }
+  function alta(k, c) {
+    var x = busca(k); if (!x) return;
+    k = x.k; var mv = c.mov || 'brinca', mv2 = c.mov2 || mv, d = c.dice || [], w = c.w || 104, w2 = c.w2 || 104, m2 = c.m2 || c.m;
     ESCENAS[k] = (c.lluvia ? [['pt-lluvia ll-' + c.lluvia, '', 'inset:0']] : []).concat([
       ['pt-p pt-a-' + mv, svg(c.m), 'left:7%;bottom:22px;width:' + w + 'px', d[0] || x.n, 'pt-brinca'],
       ['pt-p pt-a-' + mv + ' pt-a-tarde pt-m-no', svg(c.m), 'left:29%;bottom:16px;width:' + Math.round(w * .55) + 'px', d[1] || d[0] || x.n, 'pt-brinca'],
@@ -275,7 +343,29 @@
     JUNTO[k] = k; JUNTO_ANCHO[k] = c.ja || Math.min(16, Math.round(19 * vb[2] / vb[3]));
     JUNTO_SVG[k] = svg(j, 'ptc-mov ptc-m-' + (c.jmov || mv));
   }
-  /* ---------- aquí van las fechas «chispa» ---------- */
+  var API = { alta: alta, svg: svg, FLOR: FLOR, PICADO: PICADO, COHETE: COHETE, CORAZON: CORAZON, BANDERA: BANDERA, BANDERITA: BANDERITA,
+    SOMBRERO: SOMBRERO, JUNTO: JUNTO };
+  var RUTA = (function () { var s = document.currentScript && document.currentScript.src; return s ? s.replace(/[^\/?#]*([?#].*)?$/, '') : 'js/'; })();
+  var hechas = 0, esperan = {};
+  function corre() {
+    var q = window.PROFASE_TEMPORADA_FECHAS || [], css = '';
+    for (; hechas < q.length; hechas++) { try { css += q[hechas](API) || ''; } catch (e) { /* un archivo malo no tumba los demás */ } }
+    if (!css) return;
+    var st = document.getElementById('ptemp-fechas');
+    if (!st) { st = document.createElement('style'); st.id = 'ptemp-fechas'; (document.head || document.documentElement).appendChild(st); }
+    st.textContent += css;
+  }
+  // con los dibujos de la fecha x ya puestos, sigue (si no se pueden bajar, no sale nada: solo el logo)
+  function conDibujos(x, listo) {
+    if (!x.p || ESCENAS[x.k]) return listo();
+    corre(); if (ESCENAS[x.k]) return listo();
+    if (esperan[x.p]) { esperan[x.p].push(listo); return; }
+    esperan[x.p] = [listo];
+    var s = document.createElement('script'); s.src = RUTA + 'fechas/' + x.p + '.js'; s.async = true;
+    s.onload = function () { corre(); var l = esperan[x.p]; esperan[x.p] = null; if (ESCENAS[x.k]) l.forEach(function (f) { f(); }); };
+    s.onerror = function () { esperan[x.p] = null; };
+    (document.head || document.documentElement).appendChild(s);
+  }
 
   // La banderita ondea: la tela va en 12 tiras que suben y bajan una tras otra (más cerca del asta, menos), con su sombra.
   function BANDERA_OLA() {
@@ -375,7 +465,7 @@
     + '@keyframes ptc-hilo{from{height:calc(100% - 30px)}to{height:calc(100% - 14px)}}'
     + '.ptc-cae{position:absolute;display:block;left:0;width:13px;height:15px;bottom:3px;animation:ptc-baja 2.8s ease-in-out infinite alternate}'
     + '@keyframes ptc-baja{from{bottom:19px}to{bottom:3px}}'
-    + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-bandera{top:0;width:15px}.ptc-veladora{top:-1px;width:11px}.ptc-gen{top:1px}'
+    + '.ptc-santa{bottom:-3px;width:17px}.ptc-corazon{top:2px;width:13px}.ptc-banderita{top:0;width:15px}.ptc-veladora{top:-1px;width:11px}.ptc-gen{top:1px}'
     // el adorno se puede picar (sale su felicitación); su zona de toque es un poco más grande que el dibujo, sin tapar el signo
     + '.ptc-adorno.ptc-adorno{pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}.ptc-adorno::before{content:"";position:absolute;inset:-6px -7px -6px 0}'
     + '.ptc-globo{position:fixed;z-index:1000;max-width:min(260px,calc(100vw - 16px));background:#fff;color:#1F3864;border:1px solid #D5DCE8;border-left:4px solid #F07A1E;'
@@ -411,7 +501,6 @@
     + '@keyframes ptc-o4{0%,100%{transform:translateY(-1.6px)}50%{transform:translateY(1.6px)}}'
     + '.ptc-sombra{opacity:0;animation:ptc-sombra 1.3s ease-in-out infinite}@keyframes ptc-sombra{0%,100%{opacity:0}50%{opacity:.28}}'
     + '.ptc-lat{transform-origin:50% 60%;animation:ptc-lat 1.6s ease-in-out infinite}@keyframes ptc-lat{0%,100%{transform:scale(1)}15%{transform:scale(1.15)}30%{transform:scale(1)}}'
-    + CSS_FECHAS
     + '@media (prefers-reduced-motion:reduce){.pt-escena *,.pt-chicos *,.ptc-adorno,.ptc-adorno *{animation:none!important}.pt-lluvia,.ptc-globo{display:none}}'
   // Tamaño fijo de un dibujo: ancho en px y alto según su viewBox (Safari no siempre lo calcula solo con height:auto)
   function fija(svg, ancho) {
@@ -559,13 +648,15 @@
     var x = actual(hoyMty());
     if (!x) return null;
     ponCss();
-    if (opc.grande) { var panel = logo && (logo.closest('.lado') || logo.parentNode); if (panel) escena(panel, x); }
-    else {
-      chicos(x);
-      junto(logo, x, false);
-      var cab = document.querySelector('.pm-cab img');
-      if (cab) junto(cab, x, true);
-    }
+    conDibujos(x, function () {
+      if (opc.grande) { var panel = logo && (logo.closest('.lado') || logo.parentNode); if (panel) escena(panel, x); }
+      else {
+        chicos(x);
+        junto(logo, x, false);
+        var cab = document.querySelector('.pm-cab img');
+        if (cab) junto(cab, x, true);
+      }
+    });
     return x.k;
   }
   // en(a, m, d): qué fecha sale ese día (para el calendario de animaciones)
