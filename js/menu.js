@@ -113,7 +113,12 @@
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
-    { k: 'rh', t: 'RH', d: 'Recursos humanos: vacaciones, permisos, préstamos, colaboradores, eventos, altas y bajas.', subs: [
+    // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
+    // (todos menos la dirección), Por autorizar (los gerentes) y Solicitudes (RH: Alex, HNR y Daniel)
+    { k: 'rh', t: 'RH', d: 'Recursos humanos: tus solicitudes y, para RH, vacaciones, préstamos, colaboradores, altas y bajas.', subs: [
+      { k: 'mis-solicitudes', v: 'rhs', t: 'Mis solicitudes', d: 'Pide vacaciones, permisos, incapacidad o un préstamo, y mira cómo va.' },
+      { k: 'por-autorizar', v: 'rha', t: 'Por autorizar', d: 'Lo que pide tu equipo: decide con un motivo de la lista.' },
+      { k: 'solicitudes-rh', v: 'rhb', t: 'Solicitudes', d: 'Todo lo que pide el equipo: decidir, en camino y por platicar.' },
       { k: 'rh-vacaciones', v: 'rhv', t: 'Vacaciones y permisos', d: 'Quién está fuera y cuántos días le quedan a cada quien.' },
       { k: 'rh-prestamos', v: 'rhp', t: 'Préstamos', d: 'Préstamos al personal, su autorización y sus descuentos.' },
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },

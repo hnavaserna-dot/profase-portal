@@ -1,0 +1,754 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · RH › Solicitudes</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ace630e224"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · RH › Mis solicitudes, Por autorizar y Solicitudes (1-nov-2026, pedido de Héctor Daniel; historial,
+   Parte 155). Tres pantallas en esta misma página: ?s=mis (todos menos la dirección: piden vacaciones, permisos,
+   incapacidad y préstamos, y ven solo «En revisión / Autorizada / No autorizada / Cancelada», nunca quién dijo que no ni
+   por qué), ?s=aut (los gerentes: deciden lo de su gente con un motivo de la lista y quedan enterados de los préstamos,
+   con monto y pagos, nunca el sueldo) y ?s=rh (RH: Alex decide con el expediente a la vista y platica con la persona
+   después de un «no»; HNR, solo consulta; Daniel). Quién ve qué lo decide la base (portal/sql/115_rh_solicitudes.sql) y
+   todo pasa por sus funciones rh_sol_*: los días hábiles, los descuentos y los avisos los calcula la base. Los
+   préstamos no llevan interés. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+/* Solicitudes de RH (115_rh_solicitudes.sql) */
+.ayuda{color:var(--muted);font-size:13px;margin:12px 0 0;overflow-wrap:anywhere}
+.lista{display:grid;gap:10px;padding:12px 14px}
+.it{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px 14px;display:grid;gap:8px;min-width:0}
+.it.pend{border-left:4px solid var(--accent)}
+.it .cab{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+.it .cab b{font-family:var(--f-display);font-stretch:85%;font-size:16px;overflow-wrap:anywhere}
+.it .det{font-size:13.5px;overflow-wrap:anywhere}
+.it .ctx{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.it .ctx>div{background:var(--surface-2);border-radius:10px;padding:8px 10px;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.it .ctx b{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:2px}
+.it .acc{display:flex;flex-wrap:wrap;gap:8px}
+.linea{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.linea li{border-left:3px solid var(--line-strong);padding:2px 0 2px 10px;font-size:13px;overflow-wrap:anywhere}
+.linea li.si{border-left-color:var(--ok)}
+.linea li.no{border-left-color:var(--red)}
+.linea li.esp{border-left-color:var(--accent)}
+.linea li .mut{display:block}
+.hablar{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin:16px 0 0;display:grid;gap:8px}
+.hablar h2{font-size:17px;color:var(--accent-ink)}
+.hablar .fila{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;background:var(--surface);border-radius:10px;padding:8px 10px}
+.hablar .fila>div{min-width:0;overflow-wrap:anywhere}
+.decide{display:flex;flex-wrap:wrap;gap:8px}
+.decide .btn{flex:1 1 160px}
+.plan{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.k-chico .v{font-size:20px}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">RH</div>
+      <h1 id="titulo">Solicitudes</h1>
+      <p id="bajada"></p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <!-- Mis solicitudes (todos menos la dirección) -->
+  <section id="s-mis" hidden>
+    <div class="nota" id="m-nolig" hidden>Tu usuario todavía no está ligado a tu ficha de RH. Pídele a Alex Luna que lo revise y aquí verás tus días y tus solicitudes.</div>
+    <div class="nota" id="m-cerrado" hidden>Las solicitudes se le abren al equipo en cuanto RH termine su carga inicial. Tú ya puedes probar esta pantalla.</div>
+    <section class="kpis" id="m-kpis" aria-label="Lo tuyo">
+      <div class="kpi"><div class="l">Días de vacaciones que te quedan</div><div class="v" id="k-disp">—</div><div class="s" id="k-disp-s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Ya programados</div><div class="v" id="k-prog">—</div><div class="s">vacaciones autorizadas por venir</div></div>
+      <div class="kpi"><div class="l">Tu siguiente aniversario</div><div class="v k-chico" id="k-aniv">—</div><div class="s" id="k-aniv-s">&nbsp;</div></div>
+      <div class="kpi" id="k-pre-box" hidden><div class="l">Préstamo por descontar</div><div class="v" id="k-pre">$0.00</div><div class="s" id="k-pre-s">&nbsp;</div></div>
+    </section>
+    <div class="card" style="margin-top:16px" id="m-card">
+      <header><div><h2>Mis solicitudes</h2><div class="sub" id="m-sub">&nbsp;</div></div>
+        <div class="acciones"><button class="btn acento" type="button" id="b-nueva">Nueva solicitud</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Qué pediste</th><th>Días</th><th>La pediste</th><th>Cómo va</th><th></th></tr></thead><tbody id="m-lista"></tbody></table></div>
+    </div>
+    <div class="card" id="m-pre-card" hidden>
+      <header><div><h2>Mis préstamos</h2><div class="sub">Sin interés. Cada descuento lo marca RH cuando se aplica en la nómina.</div></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Préstamo</th><th class="monto">Monto</th><th class="monto">Descontado</th><th class="monto">Falta</th><th>Siguiente descuento</th><th></th></tr></thead><tbody id="m-pre"></tbody></table></div>
+    </div>
+    <div class="card" id="m-aus-card" hidden>
+      <header><div><h2>Mis próximas ausencias</h2><div class="sub">Lo que ya quedó autorizado.</div></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Qué</th><th>Del</th><th>Al</th><th>Días</th><th>Regresas</th></tr></thead><tbody id="m-aus"></tbody></table></div>
+    </div>
+    <p class="ayuda" id="m-ayuda">Las vacaciones y los permisos los revisan primero tus gerentes y luego RH; la incapacidad la valida RH; los préstamos, RH y luego la dirección. Cuando se resuelva te llega un aviso a la campanita. Cualquier duda, con Alex Luna.</p>
+  </section>
+
+  <!-- Por autorizar (gerentes) -->
+  <section id="s-aut" hidden>
+    <nav class="tabs" id="a-tabs" role="tablist" aria-label="Qué ver">
+      <button type="button" role="tab" data-t="pend" aria-selected="true">Por decidir <span class="cta" id="a-n1">0</span></button>
+      <button type="button" role="tab" data-t="pre" aria-selected="false">Préstamos <span class="cta" id="a-n2">0</span></button>
+      <button type="button" role="tab" data-t="hist" aria-selected="false">Ya decididas</button>
+    </nav>
+    <div class="card"><div class="lista" id="a-lista"></div></div>
+    <p class="ayuda">Si dices que no, a la persona no le llega: le llega a RH, que platica con ella. Si alguien tiene dos gerentes, los dos tienen que decir que sí. De los préstamos solo te enteras; los decide RH y luego la dirección.</p>
+  </section>
+
+  <!-- Solicitudes (RH) -->
+  <section id="s-rh" hidden>
+    <div class="nota" id="r-cerrado" hidden>El equipo todavía no ve «Mis solicitudes»: se le abre solo, con su aviso y su recorrido, en cuanto termines la carga inicial de RH.</div>
+    <section class="kpis" aria-label="Resumen">
+      <div class="kpi"><div class="l">Por decidir</div><div class="v" id="r-k1">0</div><div class="s">te toca a ti</div></div>
+      <div class="kpi"><div class="l">Con los gerentes</div><div class="v" id="r-k2">0</div><div class="s">esperando su decisión</div></div>
+      <div class="kpi"><div class="l">Con la dirección</div><div class="v" id="r-k3">0</div><div class="s">préstamos por autorizar</div></div>
+      <div class="kpi"><div class="l">Por platicar</div><div class="v" id="r-k4">0</div><div class="s">después de un «no»</div></div>
+    </section>
+    <div class="hablar" id="r-hablar" hidden></div>
+    <nav class="tabs" id="r-tabs" role="tablist" aria-label="Qué ver">
+      <button type="button" role="tab" data-t="dec" aria-selected="true">Por decidir <span class="cta" id="r-n1">0</span></button>
+      <button type="button" role="tab" data-t="cam" aria-selected="false">En camino <span class="cta" id="r-n2">0</span></button>
+      <button type="button" role="tab" data-t="hab" aria-selected="false">Por platicar <span class="cta" id="r-n3">0</span></button>
+      <button type="button" role="tab" data-t="cer" aria-selected="false">Cerradas</button>
+      <button type="button" role="tab" data-t="tod" aria-selected="false">Todas</button>
+    </nav>
+    <div class="card">
+      <div class="filtros">
+        <input type="search" id="r-q" placeholder="Buscar nombre" aria-label="Buscar nombre">
+        <select id="r-tipo" aria-label="Tipo"><option value="">Todos los tipos</option><option value="vacaciones">Vacaciones</option><option value="permiso_goce">Permiso con goce</option><option value="permiso_sin">Permiso sin goce</option><option value="incapacidad">Incapacidad</option><option value="prestamo">Préstamos</option></select>
+        <button class="btn" type="button" id="r-xls" data-excel>Excel</button>
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Quién</th><th>Qué pidió</th><th>Días o monto</th><th>La pidió</th><th>Dónde va</th><th></th></tr></thead><tbody id="r-lista"></tbody></table></div>
+    </div>
+    <p class="ayuda">Quien pidió solo ve «En revisión», «Autorizada», «No autorizada» (cuando ya platicaste con él o ella) o «Cancelada»; nunca quién dijo que no ni por qué. Lo autorizado entra solo a Vacaciones y permisos y al Calendario de los gerentes y la dirección. Los préstamos que aceptas se piden a la dirección como siempre (RH › Préstamos).</p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var TIPOS = { vacaciones: 'Vacaciones', permiso_goce: 'Permiso con goce de sueldo', permiso_sin: 'Permiso sin goce de sueldo', incapacidad: 'Incapacidad', prestamo: 'Préstamo' };
+  var TIPO_CORTO = { vacaciones: 'Vacaciones', permiso_goce: 'Permiso con goce', permiso_sin: 'Permiso sin goce', incapacidad: 'Incapacidad', prestamo: 'Préstamo' };
+  var PER_PL = { semanal: 'semanales', quincenal: 'quincenales', mensual: 'mensuales' };
+  var PER_1 = { semanal: 'semanal', quincenal: 'quincenal', mensual: 'mensual' };
+  var EST_CHIP = { 'En revisión': 'ojo', 'Autorizada': 'ok', 'Registrada': 'ok', 'No autorizada': 'mal', 'Cancelada': '' };
+  var SEC = new URLSearchParams(location.search).get('s') || 'mis';
+  if (['mis', 'aut', 'rh'].indexOf(SEC) < 0) SEC = 'mis';
+  var ABRE_ID = new URLSearchParams(location.search).get('id') || '';
+  var CONSULTA = false, MIAS = null, AUT = null, BJ = null, AT = 'pend', RT = 'dec';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaL(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][d.getDay()] + ' ' + (+p[2]) + ' de ' + MESES_L[+p[1] - 1]; }
+  function cuando(t) { return t ? window.PROFASE_HORA.fechaHora(t, true) : ''; }
+  function dia(t) { return t ? fecha(window.PROFASE_HORA.dia(t)) : ''; }
+  function rango(a, b) { if (!a) return ''; return (!b || a === b) ? fechaL(a) : fechaL(a) + ' al ' + fechaL(b); }
+  function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function dias(n) { if (n == null || n === '') return ''; n = Number(n); return n.toLocaleString('es-MX', { maximumFractionDigits: 1 }) + (Math.abs(n) === 1 ? ' día' : ' días'); }
+  function pagos(x) { return x.pagos + (x.pagos === 1 ? ' pago ' + (PER_1[x.periodicidad] || '') : ' pagos ' + (PER_PL[x.periodicidad] || '')); }
+  function que(x) { return x.tipo === 'prestamo' ? 'Préstamo de ' + dinero(x.monto) + ' en ' + pagos(x) : (TIPO_CORTO[x.tipo] || x.tipo) + ', ' + rango(x.desde, x.hasta); }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function aviseAlPortal() { try { window.parent.postMessage({ tipo: 'rh-sol-cambio' }, location.origin); } catch (e) {} }
+
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('velo').hidden) cierra(); });
+  function msgEn(t, cls) { var m = $('v-msg'); if (!m) { error(t); return; } m.className = 'msg ' + (cls || 'mal'); m.textContent = t; m.hidden = !t; }
+  function pregunta(texto, si, alSi) {
+    var d = document.createElement('div'); d.className = 'pregunta';
+    d.innerHTML = '<div role="dialog" aria-modal="true"><p>' + esc(texto) + '</p><div class="acciones"><button class="btn" type="button" data-n>No</button><button class="btn acento" type="button" data-s>' + esc(si) + '</button></div></div>';
+    document.body.appendChild(d);
+    d.querySelector('[data-n]').onclick = function () { d.remove(); };
+    d.querySelector('[data-s]').onclick = function () { d.remove(); alSi(); };
+    try { d.querySelector('[data-s]').focus(); } catch (e) {}
+  }
+
+  /* ---------- Mis solicitudes ---------- */
+  async function cargaMis() { MIAS = await rpc('rh_sol_mias'); pintaMis(); }
+  function pintaMis() {
+    var m = MIAS || {};
+    $('m-nolig').hidden = m.ligado !== false;
+    ['m-kpis', 'm-card', 'm-ayuda'].forEach(function (id) { $(id).hidden = m.ligado === false; });
+    if (m.ligado === false) { $('m-pre-card').hidden = true; $('m-aus-card').hidden = true; return; }
+    $('m-cerrado').hidden = !(EST && EST.sol && !EST.sol.abierto);
+    var v = m.vac || {};
+    if (v.pendiente) { $('k-disp').textContent = '—'; $('k-disp-s').textContent = 'RH todavía no los carga'; $('k-prog').textContent = '—'; }
+    else { $('k-disp').textContent = dias(v.disponibles); $('k-disp-s').textContent = 'ya descontando lo programado'; $('k-prog').textContent = dias(v.programados); }
+    $('k-aniv').textContent = v.prox_aniv ? fecha(v.prox_aniv) : '—';
+    $('k-aniv-s').textContent = v.prox_aniv ? 'se te suman ' + dias(v.prox_dias) : ' ';
+    var falta = 0, prox = null;
+    (m.prestamos || []).forEach(function (p) { if (p.estado !== 'autorizado') return; (p.plan || []).forEach(function (x) { if (!x.aplicado) { falta += Number(x.monto); if (!prox || x.fecha < prox) prox = x.fecha; } }); });
+    $('k-pre-box').hidden = !falta; $('k-pre').textContent = dinero(falta); $('k-pre-s').textContent = prox ? 'siguiente descuento: ' + fecha(prox) : ' ';
+    var L = m.solicitudes || [];
+    $('m-sub').textContent = L.length ? L.length + (L.length === 1 ? ' solicitud' : ' solicitudes') : 'Todavía no has pedido nada';
+    $('b-nueva').hidden = CONSULTA;
+    $('m-lista').innerHTML = L.length ? L.map(function (x, i) {
+      return '<tr class="click" data-i="' + i + '"><td class="w" data-l="Qué pediste"><div class="rs">' + esc(TIPO_CORTO[x.tipo] || x.tipo) + '</div><div class="mut">'
+        + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : rango(x.desde, x.hasta)) + '</div></td>'
+        + '<td data-l="Días">' + (x.tipo === 'prestamo' ? '<span class="mut">—</span>' : esc(dias(x.dias))) + '</td>'
+        + '<td data-l="La pediste">' + esc(dia(x.creado)) + '</td>'
+        + '<td data-l="Cómo va">' + chip(x.estado, EST_CHIP[x.estado]) + '</td>'
+        + '<td data-l="">' + (x.cancelable && !CONSULTA ? '<button class="btn chico peligro" type="button" data-can="' + i + '">Cancelar</button>' : '') + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="5">Aquí vas a ver lo que pidas y cómo va. Empieza con «Nueva solicitud».</td></tr>';
+    $('m-lista').querySelectorAll('[data-can]').forEach(function (b) {
+      b.onclick = function (e) { e.stopPropagation(); var x = L[+b.dataset.can];
+        pregunta('¿Cancelar tu solicitud (' + que(x) + ')?', 'Sí, cancelar', async function () {
+          try { await rpc('rh_sol_cancela', { p_id: x.id }); avisa('Listo: la cancelaste.'); aviseAlPortal(); await cargaMis(); } catch (er) { error(falla(er)); }
+        }); };
+    });
+    $('m-lista').querySelectorAll('tr[data-i]').forEach(function (tr) { tr.onclick = function () { fichaMia(L[+tr.dataset.i]); }; });
+    var PR = m.prestamos || [];
+    $('m-pre-card').hidden = !PR.length;
+    $('m-pre').innerHTML = PR.map(function (p, i) {
+      var pag = Number(p.pagado || 0), sig = (p.plan || []).filter(function (x) { return !x.aplicado; })[0];
+      return '<tr class="click" data-p="' + i + '"><td class="w" data-l="Préstamo"><div class="rs">' + esc(pagos(p)) + '</div><div class="mut">' + (p.prestado ? 'Desde el ' + esc(fecha(p.prestado)) : '') + '</div></td>'
+        + '<td class="monto" data-l="Monto">' + dinero(p.monto) + '</td><td class="monto" data-l="Descontado">' + dinero(pag) + '</td>'
+        + '<td class="monto" data-l="Falta">' + dinero(Number(p.monto) - pag) + '</td>'
+        + '<td data-l="Siguiente descuento">' + (p.estado === 'liquidado' ? chip('Pagado', 'ok') : sig ? esc(fecha(sig.fecha)) + ' · ' + dinero(sig.monto) : '') + '</td>'
+        + '<td data-l=""><button class="btn chico" type="button">Ver descuentos</button></td></tr>';
+    }).join('');
+    $('m-pre').querySelectorAll('tr[data-p]').forEach(function (tr) { tr.onclick = function () { fichaPrestamo(PR[+tr.dataset.p]); }; });
+    var AU = m.ausencias || [];
+    $('m-aus-card').hidden = !AU.length;
+    $('m-aus').innerHTML = AU.map(function (a) {
+      return '<tr><td class="w" data-l="Qué">' + esc(a.tipo_txt) + '</td><td data-l="Del">' + esc(fecha(a.desde)) + '</td><td data-l="Al">' + esc(fecha(a.hasta)) + '</td>'
+        + '<td data-l="Días">' + esc(dias(a.dias)) + '</td><td data-l="Regresas">' + esc(fecha(a.regresa)) + '</td></tr>';
+    }).join('');
+  }
+  function fichaMia(x) {
+    abre(TIPOS[x.tipo] || x.tipo, 'La pediste el ' + dia(x.creado),
+      '<div class="sec"><h3>Tu solicitud</h3><div class="in"><div class="dl">'
+      + (x.tipo === 'prestamo'
+        ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
+        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>'
+          + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : ''))
+      + (x.nota ? '<span>Lo que escribiste</span><span>' + esc(x.nota) + '</span>' : '')
+      + '<span>Cómo va</span><span>' + chip(x.estado, EST_CHIP[x.estado]) + '</span></div></div></div>'
+      + '<p class="mut" style="margin:0">' + (x.estado === 'En revisión' ? 'Te llega un aviso a la campanita en cuanto se resuelva.' : x.estado === 'No autorizada' ? 'Cualquier duda, platícala con Alex Luna.' : '') + '</p>');
+  }
+  function fichaPrestamo(p) {
+    abre('Mi préstamo', dinero(p.monto) + ' en ' + pagos(p),
+      '<div class="sec"><h3>Descuentos</h3><div class="plan"><table><thead><tr><th>#</th><th>Nómina</th><th class="monto">Monto</th><th>Aplicado</th></tr></thead><tbody>'
+      + (p.plan || []).map(function (x) { return '<tr><td>' + x.n + '</td><td>' + esc(fecha(x.fecha)) + '</td><td class="monto">' + dinero(x.monto) + '</td><td>' + (x.aplicado ? chip('Sí', 'ok') : chip('Falta')) + '</td></tr>'; }).join('')
+      + '</tbody></table></div></div><p class="mut" style="margin:0">Sin interés. Si ves algo raro, platícalo con Alex Luna.</p>');
+  }
+  var TIPO_SEL = '<option value="">Escoge…</option><option value="vacaciones">Vacaciones</option><option value="permiso_goce">Permiso con goce de sueldo</option><option value="permiso_sin">Permiso sin goce de sueldo</option><option value="incapacidad">Incapacidad</option><option value="prestamo">Préstamo</option>';
+  function nueva() {
+    var v = (MIAS && MIAS.vac) || {};
+    abre('Nueva solicitud', 'Para RH',
+      '<div class="sec"><h3>¿Qué necesitas?</h3><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="n-tipo">Qué pides</label><select id="n-tipo">' + TIPO_SEL + '</select></div></div>'
+      + '<div id="n-aus" hidden><div class="campos" style="margin-top:10px">'
+        + '<div class="campo"><label for="n-desde">Desde</label><input type="date" id="n-desde" min="' + hoyISO() + '"></div>'
+        + '<div class="campo"><label for="n-hasta">Hasta (tu último día fuera)</label><input type="date" id="n-hasta" min="' + hoyISO() + '"></div>'
+        + '<div class="campo ancho"><span class="mut" id="n-dias">&nbsp;</span></div>'
+        + '<div class="campo ancho"><label for="n-cubre">Mientras, ¿a quién buscar?</label><input id="n-cubre" maxlength="200" autocomplete="off" placeholder="Opcional"></div>'
+      + '</div></div>'
+      + '<div id="n-pre" hidden><div class="campos" style="margin-top:10px">'
+        + '<div class="campo"><label for="n-monto">¿Cuánto necesitas?</label><input id="n-monto" inputmode="decimal" autocomplete="off" placeholder="Ej. 5000"></div>'
+        + '<div class="campo"><label for="n-pagos">¿En cuántos descuentos?</label><input id="n-pagos" inputmode="numeric" autocomplete="off" placeholder="Ej. 6"></div>'
+        + '<div class="campo"><label for="n-per">Cada cuándo</label><select id="n-per"><option value="quincenal">Quincenal (el 15 y fin de mes)</option><option value="semanal">Semanal</option><option value="mensual">Mensual</option></select></div>'
+        + '<div class="campo"><label for="n-primer">Desde la nómina del</label><input type="date" id="n-primer" min="' + hoyISO() + '"></div>'
+        + '<div class="campo ancho"><div class="plan" id="n-plan" hidden></div></div>'
+      + '</div></div>'
+      + '<div class="campos" style="margin-top:10px" id="n-nota-box" hidden><div class="campo ancho"><label for="n-nota" id="n-nota-l">Nota</label><textarea id="n-nota" maxlength="1000"></textarea></div></div>'
+      + '<div class="msg ojo" id="n-ojo" hidden style="margin-top:10px"></div>'
+      + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="n-manda">Enviar solicitud</button><button class="btn" type="button" id="n-cancela">Cancelar</button></div>'
+      + '<p class="mut" id="n-quien" style="margin:10px 0 0"></p></div></div>');
+    var T = function () { return $('n-tipo').value; };
+    function tipo() {
+      var t = T(), pre = t === 'prestamo';
+      $('n-aus').hidden = !t || pre; $('n-pre').hidden = !pre; $('n-nota-box').hidden = !t;
+      $('n-nota-l').textContent = pre ? '¿Para qué lo necesitas?' : t === 'incapacidad' ? '¿Qué pasó? (y el folio, si ya lo tienes)' : t === 'vacaciones' ? 'Nota (opcional)' : '¿Para qué es el permiso?';
+      $('n-desde').min = $('n-hasta').min = t === 'incapacidad' ? '' : hoyISO();
+      $('n-quien').textContent = !t ? '' : pre ? 'Lo revisa RH y luego la dirección. Tus gerentes quedan enterados.'
+        : t === 'incapacidad' ? 'La valida RH. Mándale tu comprobante a Alex Luna por el chat; él lo guarda en tu expediente.'
+        : (MIAS && MIAS.con_gerentes) ? 'La revisan primero tus gerentes y luego RH.' : 'La revisa RH.';
+      revisa();
+    }
+    var tc = 0;
+    async function revisa() {
+      var t = T(); $('n-ojo').hidden = true;
+      if (t && t !== 'prestamo') {
+        var a = $('n-desde').value, b = $('n-hasta').value || a;
+        if (a && !$('n-hasta').value) $('n-hasta').value = a;
+        if (a && b && b >= a) {
+          var mi = ++tc, n = null;
+          try { n = await rpc('rh_sol_dias', { p_desde: a, p_hasta: b }); } catch (e) {}
+          if (mi !== tc) return;
+          $('n-dias').textContent = n == null ? ' ' : n + (n === 1 ? ' día hábil' : ' días hábiles') + ' (de lunes a viernes, sin los días de descanso obligatorio)';
+          if (t === 'vacaciones' && n != null && !v.pendiente && n > Number(v.disponibles || 0)) {
+            $('n-ojo').textContent = 'Te quedan ' + dias(v.disponibles) + '. Puedes pedirlas, pero RH lo va a revisar.'; $('n-ojo').hidden = false;
+          }
+        } else $('n-dias').textContent = ' ';
+      } else if (t === 'prestamo') {
+        var m = Number(String($('n-monto').value).replace(/[$,\s]/g, '')), p = parseInt($('n-pagos').value, 10), f = $('n-primer').value;
+        if (m > 0 && p >= 1 && p <= 120 && f) {
+          var mi2 = ++tc, r = null;
+          try { r = await rpc('rh_sol_simula', { p_monto: m, p_pagos: p, p_periodicidad: $('n-per').value, p_primer: f }); } catch (e) {}
+          if (mi2 !== tc || !r) return;
+          $('n-plan').hidden = false;
+          $('n-plan').innerHTML = '<table><thead><tr><th>#</th><th>Nómina</th><th class="monto">Descuento</th></tr></thead><tbody>'
+            + (r.pagos || []).map(function (x) { return '<tr><td>' + x.n + '</td><td>' + esc(fecha(x.fecha)) + '</td><td class="monto">' + dinero(x.monto) + '</td></tr>'; }).join('') + '</tbody></table>';
+        } else $('n-plan').hidden = true;
+      }
+    }
+    $('n-tipo').onchange = tipo;
+    ['n-desde', 'n-hasta', 'n-monto', 'n-pagos', 'n-per', 'n-primer'].forEach(function (id) { $(id).addEventListener('change', revisa); $(id).addEventListener('input', revisa); });
+    $('n-cancela').onclick = cierra;
+    $('n-manda').onclick = async function () {
+      var b = this, t = T(); msgEn('');
+      if (!t) { msgEn('Escoge qué pides.'); return; }
+      var p = { tipo: t, nota: $('n-nota').value };
+      if (t === 'prestamo') { p.monto = String($('n-monto').value).replace(/[$,\s]/g, ''); p.pagos = String($('n-pagos').value).trim(); p.periodicidad = $('n-per').value; p.primer_pago = $('n-primer').value; }
+      else { p.desde = $('n-desde').value; p.hasta = $('n-hasta').value || $('n-desde').value; p.cubre = $('n-cubre').value; }
+      b.disabled = true;
+      try { await rpc('rh_sol_pide', { p: p }); cierra(); avisa('Listo: tu solicitud quedó enviada. Te llega un aviso cuando se resuelva.'); aviseAlPortal(); await cargaMis(); }
+      catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+    tipo();
+  }
+  $('b-nueva').onclick = nueva;
+
+  /* ---------- Por autorizar (gerentes) ---------- */
+  async function cargaAut() { AUT = await rpc('rh_sol_por_autorizar'); pintaAut(); }
+  function pintaAut() {
+    var L = (AUT && AUT.items) || [];
+    var pend = L.filter(function (x) { return x.paso === 'decide' && x.pendiente; }), pre = L.filter(function (x) { return x.paso === 'enterado'; }),
+        hist = L.filter(function (x) { return x.paso === 'decide' && !x.pendiente; });
+    $('a-n1').textContent = pend.length; $('a-n2').textContent = pre.filter(function (x) { return x.pendiente; }).length;
+    document.querySelectorAll('#a-tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.t === AT)); });
+    var V = AT === 'pend' ? pend : AT === 'pre' ? pre : hist;
+    if (!V.length) { $('a-lista').innerHTML = '<div class="vacio">' + (AT === 'pend' ? 'No tienes nada por decidir.' : AT === 'pre' ? 'No hay préstamos de tu equipo.' : 'Todavía no has decidido ninguna.') + '</div>'; return; }
+    $('a-lista').innerHTML = V.map(function (x) {
+      var i = L.indexOf(x), h = '<div class="it' + (x.pendiente ? ' pend' : '') + '" data-id="' + x.id + '"><div class="cab"><b>' + esc(x.nombre) + '</b><span class="mut">La pidió el ' + esc(dia(x.creado)) + '</span></div>';
+      if (x.paso === 'enterado') {
+        h += '<div class="det"><b>' + esc('Préstamo de ' + dinero(x.monto) + ' en ' + pagos(x)) + '</b>, desde la nómina del ' + esc(fecha(x.primer_pago)) + '.' + (x.nota ? '<br><span class="mut">Para qué: ' + esc(x.nota) + '</span>' : '') + '</div>'
+          + '<div class="det">' + chip(x.final || 'Con RH', /Autorizada/.test(x.final) ? 'ok' : /No autorizada/.test(x.final) ? 'mal' : 'ojo') + (x.comentario ? ' <span class="mut">Tu comentario: «' + esc(x.comentario) + '»</span>' : '') + '</div>'
+          + (CONSULTA ? '' : '<div class="acc">' + (x.pendiente ? '<button class="btn" type="button" data-ent="' + i + '">Enterado</button>' : '') + '<button class="btn" type="button" data-com="' + i + '">Dejar comentario a RH</button></div>');
+      } else {
+        var e = x.entregas || null, f = x.fuera || [];
+        h += '<div class="det"><b>' + esc(TIPOS[x.tipo] || x.tipo) + '</b>, ' + esc(rango(x.desde, x.hasta)) + ' · ' + esc(dias(x.dias)) + (x.cubre ? '<br><span class="mut">Mientras, buscar a: ' + esc(x.cubre) + '</span>' : '') + (x.nota ? '<br><span class="mut">Nota: ' + esc(x.nota) + '</span>' : '') + '</div>'
+          + '<div class="ctx"><div><b>Esos días también estarán fuera</b>' + (f.length ? f.map(function (o) { return esc(o.nombre) + ' · ' + esc(o.tipo) + ', ' + esc(fecha(o.desde)) + (o.hasta !== o.desde ? ' al ' + esc(fecha(o.hasta)) : '') + (o.estado === 'En revisión' ? ' <span class="mut">(en revisión)</span>' : ''); }).join('<br>') : 'Nadie más de tu equipo.') + '</div>'
+          + '<div><b>Sus entregas del WorkFlow</b>' + (e ? esc(e.abiertas) + ' abiertas · ' + '<span' + (e.vencidas ? ' class="neg"' : '') + '>' + esc(e.vencidas) + ' vencidas</span> · ' + esc(e.en_fechas) + ' vencen esos días' : 'Sin datos del WorkFlow.') + '</div>'
+          + ((x.otros || []).length ? '<div><b>También la decide</b>' + x.otros.map(function (o) { return esc(o.nombre) + ': ' + esc(o.estado); }).join('<br>') + '</div>' : '') + '</div>';
+        if (x.pendiente) h += CONSULTA ? '' : '<div class="decide"><button class="btn bien" type="button" data-si="' + i + '">Sí, autorizo</button><button class="btn peligro" type="button" data-no="' + i + '">No autorizo</button></div>';
+        else h += '<div class="det">Tú: ' + chip(x.decision === 'si' ? 'Sí' : 'No', x.decision === 'si' ? 'ok' : 'mal') + ' <span class="mut">' + esc(x.motivo) + (x.comentario ? ' · «' + esc(x.comentario) + '»' : '') + ' · ' + esc(cuando(x.en)) + '</span><br>Quedó: ' + esc(x.final) + '</div>';
+      }
+      return h + '</div>';
+    }).join('');
+    $('a-lista').querySelectorAll('[data-si]').forEach(function (b) { b.onclick = function () { decideGerente(L[+b.dataset.si], true); }; });
+    $('a-lista').querySelectorAll('[data-no]').forEach(function (b) { b.onclick = function () { decideGerente(L[+b.dataset.no], false); }; });
+    $('a-lista').querySelectorAll('[data-ent]').forEach(function (b) { b.onclick = async function () { try { await rpc('rh_sol_enterado', { p_id: L[+b.dataset.ent].id, p_comentario: '' }); aviseAlPortal(); await cargaAut(); } catch (e) { error(falla(e)); } }; });
+    $('a-lista').querySelectorAll('[data-com]').forEach(function (b) { b.onclick = function () { comentario(L[+b.dataset.com]); }; });
+  }
+  function motivosSel(lista, si) {
+    return '<option value="">Escoge el motivo…</option>' + (lista || []).filter(function (m) { return m.sentido === (si ? 'si' : 'no'); }).map(function (m) { return '<option value="' + esc(m.clave) + '">' + esc(m.texto) + '</option>'; }).join('');
+  }
+  function decideGerente(x, si) {
+    abre(si ? 'Autorizar' : 'No autorizar', x.nombre + ' · ' + (TIPO_CORTO[x.tipo] || x.tipo) + ', ' + rango(x.desde, x.hasta),
+      '<div class="sec"><h3>' + (si ? '¿Por qué sí?' : '¿Por qué no?') + '</h3><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="d-mot">Motivo</label><select id="d-mot">' + motivosSel(AUT.motivos, si) + '</select></div>'
+      + '<div class="campo ancho"><label for="d-com">Comentario para RH (opcional)</label><textarea id="d-com" maxlength="500"></textarea></div></div>'
+      + (si ? '' : '<div class="msg ojo" style="margin-top:10px">A ' + esc(x.nombre) + ' no le llega tu «no»: le llega a RH, que platica con él o ella.</div>')
+      + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px"><button class="btn ' + (si ? 'bien' : 'acento') + '" type="button" id="d-ok">' + (si ? 'Sí, autorizo' : 'No autorizo') + '</button><button class="btn" type="button" id="d-x">Cancelar</button></div></div></div>');
+    $('d-x').onclick = cierra;
+    $('d-ok').onclick = async function () {
+      var b = this; if (!$('d-mot').value) { msgEn('Escoge el motivo de la lista.'); return; }
+      b.disabled = true;
+      try {
+        var r = await rpc('rh_sol_decide_gerente', { p_id: x.id, p_si: si, p_motivo: $('d-mot').value, p_comentario: $('d-com').value });
+        cierra(); avisa(!si ? 'Listo: le llegó a RH, que va a platicar con ' + x.nombre + '.' : r && r.estado === 'gerentes' ? 'Listo. Falta que la decida el otro gerente.' : 'Listo: ahora la decide RH.');
+        aviseAlPortal(); await cargaAut();
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  function comentario(x) {
+    abre('Comentario para RH', 'Préstamo de ' + x.nombre,
+      '<div class="sec"><div class="in"><div class="campo"><label for="c-txt">Lo que quieras que sepa RH (solo lo ven RH y la dirección)</label><textarea id="c-txt" maxlength="500"></textarea></div>'
+      + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="c-ok">Mandar</button><button class="btn" type="button" id="c-x">Cancelar</button></div></div></div>');
+    $('c-x').onclick = cierra;
+    $('c-ok').onclick = async function () {
+      var b = this, t = $('c-txt').value.trim(); if (t.length < 2) { msgEn('Escribe tu comentario.'); return; }
+      b.disabled = true;
+      try { await rpc('rh_sol_enterado', { p_id: x.id, p_comentario: t }); cierra(); avisa('Listo: se lo mandaste a RH.'); aviseAlPortal(); await cargaAut(); }
+      catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  $('a-tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; AT = b.dataset.t; pintaAut(); });
+
+  /* ---------- Solicitudes (RH) ---------- */
+  async function cargaRh() { BJ = await rpc('rh_sol_bandeja'); pintaRh(); }
+  function grupo(x) {
+    if (x.por_hablar) return 'hab';
+    if (x.cancelada) return 'cer';
+    if (x.ef === 'rh') return 'dec';
+    if (x.ef === 'gerentes' || x.ef === 'direccion') return 'cam';
+    return 'cer';
+  }
+  function dondeVa(x) {
+    if (x.cancelada && !x.por_hablar) return chip('Cancelada');
+    if (x.por_hablar) return chip('Falta platicar', 'na');
+    if (x.ef === 'gerentes') return chip('Con los gerentes', 'az');
+    if (x.ef === 'rh') return chip(x.decido ? 'Te toca' : 'Con RH', 'ojo');
+    if (x.ef === 'direccion') return chip('Con la dirección', 'az');
+    if (x.ef === 'autorizada') return chip(x.tipo === 'incapacidad' ? 'Registrada' : 'Autorizada', 'ok');
+    if (x.ef === 'rechazada') return chip('No autorizada', 'mal');
+    return chip(x.ef);
+  }
+  function filtradas() {
+    var q = norm($('r-q').value), t = $('r-tipo').value;
+    return ((BJ && BJ.items) || []).filter(function (x) { return (RT === 'tod' || grupo(x) === RT) && (!t || x.tipo === t) && (!q || norm(x.nombre).indexOf(q) >= 0); });
+  }
+  function pintaRh() {
+    var L = (BJ && BJ.items) || [];
+    $('r-cerrado').hidden = !(BJ && !BJ.abierto);
+    var n = { dec: 0, cam: 0, hab: 0, dir: 0 };
+    L.forEach(function (x) { var g = grupo(x); if (g === 'dec' && x.decido) n.dec++; if (g === 'cam') n.cam++; if (g === 'hab') n.hab++; if (x.ef === 'direccion' && !x.cancelada) n.dir++; });
+    $('r-k1').textContent = n.dec; $('r-k2').textContent = L.filter(function (x) { return x.ef === 'gerentes' && !x.cancelada; }).length; $('r-k3').textContent = n.dir; $('r-k4').textContent = n.hab;
+    $('r-n1').textContent = L.filter(function (x) { return grupo(x) === 'dec'; }).length; $('r-n2').textContent = n.cam; $('r-n3').textContent = n.hab;
+    document.querySelectorAll('#r-tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.t === RT)); });
+    var H = L.filter(function (x) { return x.hablo_yo; });
+    $('r-hablar').hidden = !H.length;
+    $('r-hablar').innerHTML = '<h2>Te toca platicar</h2><div class="mut">A estas personas no les llegó el «no»: platícalo con cada una y márcalo.</div>'
+      + H.map(function (x) { return '<div class="fila"><div><b>' + esc(x.nombre) + '</b><div class="mut">' + esc(que(x)) + ' · no se autorizó el ' + esc(dia(x.rechazo_en)) + '</div></div><button class="btn acento chico" type="button" data-hab="' + L.indexOf(x) + '">Ya hablé</button></div>'; }).join('');
+    $('r-hablar').querySelectorAll('[data-hab]').forEach(function (b) { b.onclick = function () { hable(L[+b.dataset.hab]); }; });
+    var V = filtradas();
+    $('r-lista').innerHTML = V.length ? V.map(function (x) {
+      return '<tr class="click" data-i="' + L.indexOf(x) + '"><td class="w" data-l="Quién"><div class="rs">' + esc(x.nombre) + '</div></td>'
+        + '<td data-l="Qué pidió">' + esc(TIPO_CORTO[x.tipo] || x.tipo) + (x.tipo === 'prestamo' ? '' : '<div class="mut">' + esc(rango(x.desde, x.hasta)) + '</div>') + '</td>'
+        + '<td data-l="Días o monto">' + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : dias(x.dias)) + '</td>'
+        + '<td data-l="La pidió">' + esc(dia(x.creado)) + '</td><td data-l="Dónde va">' + dondeVa(x) + '</td>'
+        + '<td data-l=""><button class="btn chico" type="button">' + (x.decido ? 'Decidir' : x.hablo_yo ? 'Ya hablé' : 'Ver') + '</button></td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="6">' + (RT === 'dec' ? 'No hay nada por decidir.' : RT === 'hab' ? 'No hay pláticas pendientes.' : 'Nada por aquí.') + '</td></tr>';
+    $('r-lista').querySelectorAll('tr[data-i]').forEach(function (tr) { tr.onclick = function () { fichaRh(L[+tr.dataset.i]); }; });
+  }
+  function linea(x) {
+    var li = ['<li class="esp">Lo pidió el ' + esc(cuando(x.creado)) + (x.nota ? '<span class="mut">«' + esc(x.nota) + '»</span>' : '') + '</li>'];
+    (x.pasos || []).forEach(function (p) {
+      if (p.tipo === 'enterado') li.push('<li>' + esc(p.gerente) + ' (enterado)' + (p.visto ? ' · lo vio' : ' · no lo ha visto') + (p.comentario ? '<span class="mut">«' + esc(p.comentario) + '»</span>' : '') + '</li>');
+      else li.push('<li class="' + (p.decision === 'si' ? 'si' : p.decision === 'no' ? 'no' : 'esp') + '">' + esc(p.gerente) + ': ' + (p.decision ? (p.decision === 'si' ? 'sí' : 'no') + ' · ' + esc(p.motivo) + ' · ' + esc(cuando(p.en)) : 'falta que decida') + (p.comentario ? '<span class="mut">«' + esc(p.comentario) + '»</span>' : '') + '</li>');
+    });
+    if (x.rh) li.push('<li class="' + (x.rh.si ? 'si' : 'no') + '">RH, ' + esc(x.rh.quien) + ': ' + (x.rh.si ? 'sí' : 'no') + ' · ' + esc(x.rh.motivo) + ' · ' + esc(cuando(x.rh.en)) + (x.rh.comentario ? '<span class="mut">«' + esc(x.rh.comentario) + '»</span>' : '') + '</li>');
+    if (x.direccion) li.push('<li class="' + (x.direccion.estado === 'autorizado' || x.direccion.estado === 'liquidado' ? 'si' : x.direccion.estado === 'solicitado' ? 'esp' : 'no') + '">Dirección: '
+      + (x.direccion.estado === 'solicitado' ? 'por autorizar (RH › Préstamos)' : esc(x.direccion.estado === 'cancelado' ? 'cancelado' : x.direccion.estado === 'rechazado' ? 'no' : 'sí') + (x.direccion.quien ? ', ' + esc(x.direccion.quien) : '') + (x.direccion.en ? ' · ' + esc(cuando(x.direccion.en)) : ''))
+      + (x.direccion.comentario ? '<span class="mut">«' + esc(x.direccion.comentario) + '»</span>' : '') + '</li>');
+    if (x.cancelada) li.push('<li>La persona la canceló el ' + esc(cuando(x.cancelada)) + '</li>');
+    if (x.hablo) li.push('<li class="si">' + esc(x.hablo.quien) + ' habló con ' + esc(x.nombre) + ' el ' + esc(fecha(x.hablo.en)) + '<span class="mut">«' + esc(x.hablo.nota) + '»</span></li>');
+    return '<ul class="linea">' + li.join('') + '</ul>';
+  }
+  function expediente(x) {
+    var e = x.expediente || {}, v = e.vac || {}, a = e.anio || {}, pr = e.prestamos || {};
+    var anio = Object.keys(a).map(function (k) { return (TIPO_CORTO[k] || (k === 'falta' ? 'Faltas' : k)) + ': ' + dias(a[k].dias); }).join(' · ') || 'Nada este año';
+    return '<div class="dl"><span>Área</span><span>' + esc(e.area || '—') + '</span>'
+      + '<span>Días que le quedan</span><span>' + (v.pendiente ? 'Sin cargar' : esc(dias(v.disponibles)) + (v.programados ? ' (ya con ' + esc(dias(v.programados)) + ' programados)' : '')) + '</span>'
+      + '<span>Este año</span><span>' + esc(anio) + '</span>'
+      + '<span>Faltas (90 días)</span><span' + (e.faltas_90 ? ' class="neg"' : '') + '>' + esc(e.faltas_90 || 0) + '</span>'
+      + '<span>Préstamos vigentes</span><span>' + (pr.vigentes ? esc(pr.vigentes) + ' · falta ' + dinero(pr.saldo) : 'Ninguno') + '</span>'
+      + (x.tipo === 'prestamo' ? '<span>Sueldo mensual</span><span>' + (e.sueldo != null ? dinero(e.sueldo) : 'Sin capturar') + '</span>' : '')
+      + '<span>Solicitudes antes</span><span>' + esc((e.antes || {}).autorizadas || 0) + ' autorizadas · ' + esc((e.antes || {}).no || 0) + ' no</span></div>';
+  }
+  function fichaRh(x) {
+    var c = '<div class="sec"><h3>Lo que pidió</h3><div class="in"><div class="dl">'
+      + (x.tipo === 'prestamo'
+        ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
+        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>' + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : ''))
+      + '<span>Dónde va</span><span>' + dondeVa(x) + '</span></div></div></div>'
+      + '<div class="sec"><h3>Cómo ha ido</h3><div class="in">' + linea(x) + '</div></div>'
+      + '<div class="sec"><h3>Su expediente de RH</h3><div class="in">' + expediente(x) + '</div></div>';
+    if (x.decido) {
+      c += '<div class="sec"><h3>Tu decisión</h3><div class="in"><div class="campos">'
+        + (x.tipo === 'prestamo'
+          ? '<div class="campo"><label for="d-pag">Descuentos</label><input id="d-pag" inputmode="numeric" value="' + esc(x.pagos) + '"></div>'
+            + '<div class="campo"><label for="d-per">Cada cuándo</label><select id="d-per">' + ['quincenal', 'semanal', 'mensual'].map(function (p) { return '<option value="' + p + '"' + (p === x.periodicidad ? ' selected' : '') + '>' + PER_1[p].charAt(0).toUpperCase() + PER_1[p].slice(1) + '</option>'; }).join('') + '</select></div>'
+            + '<div class="campo"><label for="d-pri">Desde la nómina del</label><input type="date" id="d-pri" value="' + esc(x.primer_pago || '') + '"></div>'
+          : (x.tipo !== 'incapacidad' ? '<div class="campo"><label for="d-dias">Días que cuentan</label><input id="d-dias" inputmode="decimal" value="' + esc(x.dias) + '"></div>' : ''))
+        + '<div class="campo ancho"><label for="d-si">Decisión</label><select id="d-si"><option value="">Escoge…</option><option value="si">' + (x.tipo === 'prestamo' ? 'Sí: pedirlo a la dirección' : x.tipo === 'incapacidad' ? 'Sí: registrarla' : 'Sí: autorizar') + '</option><option value="no">No</option></select></div>'
+        + '<div class="campo ancho"><label for="d-mot">Motivo</label><select id="d-mot"><option value="">Primero escoge sí o no</option></select></div>'
+        + '<div class="campo ancho"><label for="d-com">Comentario (opcional; no le llega a la persona)</label><textarea id="d-com" maxlength="500"></textarea></div></div>'
+        + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
+        + '<div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="d-ok">Guardar decisión</button></div></div></div>';
+    }
+    if (x.hablo_yo) c += '<div class="acciones"><button class="btn acento" type="button" id="d-hab">Ya hablé con ' + esc(x.nombre) + '</button></div>';
+    abre(x.nombre, (TIPOS[x.tipo] || x.tipo) + ' · la pidió el ' + dia(x.creado), c);
+    if (x.decido) {
+      $('d-si').onchange = function () { $('d-mot').innerHTML = this.value ? motivosSel(BJ.motivos, this.value === 'si') : '<option value="">Primero escoge sí o no</option>'; };
+      $('d-ok').onclick = async function () {
+        var b = this, s = $('d-si').value; msgEn('');
+        if (!s) { msgEn('Escoge sí o no.'); return; }
+        if (!$('d-mot').value) { msgEn('Escoge el motivo de la lista.'); return; }
+        var aj = {};
+        if (x.tipo === 'prestamo') { aj.pagos = String($('d-pag').value).trim(); aj.periodicidad = $('d-per').value; aj.primer_pago = $('d-pri').value; }
+        else if ($('d-dias')) aj.dias = String($('d-dias').value).trim();
+        b.disabled = true;
+        try {
+          var r = await rpc('rh_sol_decide_rh', { p_id: x.id, p_si: s === 'si', p_motivo: $('d-mot').value, p_comentario: $('d-com').value, p: aj });
+          cierra();
+          avisa(s === 'no' ? 'Listo. Ahora platica con ' + x.nombre + ' y márcalo con «Ya hablé».' : r && r.estado === 'direccion' ? 'Listo: se pidió a la dirección (RH › Préstamos).' : 'Listo: quedó autorizada y ya está en el Calendario.');
+          aviseAlPortal(); await cargaRh();
+        } catch (e) { msgEn(falla(e)); b.disabled = false; }
+      };
+    }
+    if (x.hablo_yo) $('d-hab').onclick = function () { hable(x); };
+  }
+  function hable(x) {
+    abre('Ya hablé con ' + x.nombre, que(x),
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="h-f">Cuándo hablaron</label><input type="date" id="h-f" value="' + hoyISO() + '" max="' + hoyISO() + '"></div>'
+      + '<div class="campo ancho"><label for="h-n">Cómo te fue (lo ve la dirección)</label><textarea id="h-n" maxlength="1000"></textarea></div></div>'
+      + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="h-ok">Guardar</button><button class="btn" type="button" id="h-x">Cancelar</button></div>'
+      + '<p class="mut" style="margin:10px 0 0">Al guardar, ' + esc(x.nombre) + ' la ve «No autorizada» y le llega un aviso de que quedó cerrada (sin quién ni por qué).</p></div></div>');
+    $('h-x').onclick = cierra;
+    $('h-ok').onclick = async function () {
+      var b = this, n = $('h-n').value.trim(); if (n.length < 3) { msgEn('Escribe cómo te fue en la plática.'); return; }
+      b.disabled = true;
+      try { await rpc('rh_sol_hable', { p_id: x.id, p_fecha: $('h-f').value || null, p_nota: n }); cierra(); avisa('Listo: quedó cerrada.'); aviseAlPortal(); await cargaRh(); }
+      catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
+  $('r-tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; RT = b.dataset.t; pintaRh(); });
+  $('r-q').addEventListener('input', pintaRh);
+  $('r-tipo').addEventListener('change', pintaRh);
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('r-xls').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var V = filtradas(), titulo = 'Solicitudes de RH';
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo);
+      var head = ['Quién', 'Qué pidió', 'Desde', 'Hasta', 'Días', 'Monto', 'Descuentos', 'La pidió', 'Dónde va'];
+      ws.columns = [28, 26, 13, 13, 8, 14, 22, 14, 22].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Exportado el ' + window.PROFASE_HORA.fechaHora(new Date())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      V.forEach(function (x, i) {
+        var tmp = document.createElement('div'); tmp.innerHTML = dondeVa(x);
+        ws.getRow(f0 + 1 + i).values = [x.nombre, TIPOS[x.tipo] || x.tipo, x.desde ? fecha(x.desde) : '', x.hasta ? fecha(x.hasta) : '', x.tipo === 'prestamo' ? '' : Number(x.dias || 0),
+          x.tipo === 'prestamo' ? Number(x.monto) : '', x.tipo === 'prestamo' ? pagos(x) : '', dia(x.creado), tmp.textContent];
+      });
+      if (V.length) MK.cuerpo(ws, f0 + 1, f0 + V.length, 1, head.length);
+      ws.getColumn(6).numFmt = '$#,##0.00;-$#,##0.00';
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Solicitudes de RH.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- arranque ---------- */
+  var EST = null;
+  var TIT = { mis: ['Mis solicitudes', 'Pide aquí tus vacaciones, permisos, incapacidades y préstamos, y mira cómo va cada uno y cuántos días de vacaciones te quedan.'],
+              aut: ['Por autorizar', 'Las vacaciones y permisos que pide tu equipo, para que decidas con un motivo de la lista; y los préstamos, para que estés enterado.'],
+              rh: ['Solicitudes', 'Todo lo que pide el equipo: lo que te toca decidir con su expediente a la vista, lo que va en camino y con quién te toca platicar.'] };
+  async function recarga() { try { if (SEC === 'mis') await cargaMis(); else if (SEC === 'aut') await cargaAut(); else await cargaRh(); } catch (e) {} }
+  addEventListener('message', function (ev) { if (ev.origin === location.origin && ev.data && ev.data.tipo === 'rh-sol-recarga') recarga(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) recarga(); });
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      $('titulo').textContent = TIT[SEC][0]; $('bajada').textContent = TIT[SEC][1];
+      document.title = 'Portal PROFASE · RH › ' + TIT[SEC][0];
+      EST = await rpc('rh_estado');
+      var s = (EST && EST.sol) || {};
+      CONSULTA = !!P.consulta;
+      if (SEC === 'mis') { if (!s.mis) throw new Error('Esta pantalla todavía no está abierta para ti.'); await cargaMis(); }
+      else if (SEC === 'aut') { if (!s.gerente) throw new Error('Esta pantalla es de los gerentes.'); await cargaAut(); }
+      else { if (!s.bandeja) throw new Error('Esta pantalla es de RH.'); await cargaRh(); CONSULTA = CONSULTA || !BJ.puede; }
+      $('consulta').hidden = !P.consulta;
+      $('s-' + SEC).hidden = false; $('cargando').hidden = true;
+      if (SEC === 'rh') pintaRh();
+      if (ABRE_ID) {
+        var it = SEC === 'aut' ? ((AUT && AUT.items) || []).filter(function (x) { return String(x.id) === ABRE_ID; })[0]
+                : SEC === 'rh' ? ((BJ && BJ.items) || []).filter(function (x) { return String(x.id) === ABRE_ID; })[0] : null;
+        if (it && SEC === 'rh') fichaRh(it);
+        if (it && SEC === 'aut') { AT = it.paso === 'enterado' ? 'pre' : it.pendiente ? 'pend' : 'hist'; pintaAut(); try { document.querySelector('[data-id="' + it.id + '"]').scrollIntoView({ block: 'center' }); } catch (e) {} }
+      }
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>
