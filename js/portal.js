@@ -754,6 +754,144 @@
     location.replace('./');
   };
 
+  /* ---- Jalar para actualizar (31-oct-2026, pedido de Daniel: «Si agrégalo a todos»; «que se pueda hacer en cualquier
+     parte del crm»). En la app del celular o del iPad (el portal agregado a la pantalla de inicio con «Compartir ›
+     Agregar a pantalla de inicio», o instalado en Android) no hay barra del navegador ni el gesto de jalar hacia abajo
+     para volver a cargar. Aquí se da ese gesto en todo el portal: en cualquier vista, sección, pestaña en su marco
+     (también las de adentro, como QUO), en el Inicio, el Chat y en las páginas abiertas solas. Con la pantalla hasta
+     arriba se jala hacia abajo, sale el círculo debajo del encabezado (se pone naranja al llegar a la marca) y, al
+     soltar, se vuelve a cargar todo el portal en la misma sección y con la misma sesión, igual que Ctrl+R o Cmd+R.
+     No reinstala nada: el ícono de la pantalla de inicio sigue igual. En el navegador (Safari, Chrome) no hace nada,
+     porque ahí el gesto ya lo trae el navegador, y en la computadora tampoco (no hay dedo).
+     Para que no se dispare sin querer: solo cuenta si el dedo empezó con todo hasta arriba (la página, su marco y
+     cualquier recuadro que se desliza bajo el dedo; si se viene deslizando rápido hacia arriba y llega al tope, no
+     cuenta), si va hacia abajo y no de lado, y si se suelta pasando la marca (regresar el dedo lo cancela). Nunca
+     empieza en un campo de texto, dentro de una ventana, menú abierto, recorrido o aviso flotante (lo que está fijo en
+     la pantalla), en algo que se arrastra con el dedo (touch-action: none) ni a media llamada del chat. Escucha sin
+     detener el deslizamiento (passive): no hace más lento nada ni le pregunta nada a la base. Si algún día un recuadro
+     no debe usarlo, lleva data-sin-jalar. Prueba: herramientas/pruebas/pantallas/prueba_jalar.py (en profase-datos). ---- */
+  (function jalarParaActualizar() {
+    if (window.__profaseJalar) return;
+    window.__profaseJalar = true;
+    var MARCA = 64, MAX = 110, RESISTENCIA = 0.5;
+    function deArriba() { try { return window.top && window.top.document ? window.top : window; } catch (e) { return window; } }
+    function enApp() {
+      var w = deArriba();
+      try {
+        return w.navigator.standalone === true || w.matchMedia('(display-mode: standalone)').matches
+          || w.matchMedia('(display-mode: fullscreen)').matches;
+      } catch (e) { return false; }
+    }
+    function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && t.enLlamada && t.enLlamada()); } catch (e) { return false; } }
+    function hastaArriba(w) {
+      try { var se = w.document.scrollingElement || w.document.documentElement; return (se ? se.scrollTop : 0) <= 0 && (w.scrollY || 0) <= 0; } catch (e) { return true; }
+    }
+    // ¿Algo entre el dedo y la página impide jalar? (campo, algo fijo, algo que se arrastra o un recuadro ya deslizado)
+    function atorado(el) {
+      for (var n = el && el.nodeType === 1 ? el : el && el.parentElement; n && n.nodeType === 1; n = n.parentElement) {
+        var doc = n.ownerDocument;
+        if (n === doc.documentElement) break;
+        if (n.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [data-sin-jalar]')) return true;
+        var cs = doc.defaultView.getComputedStyle(n);
+        if (cs.position === 'fixed' || cs.touchAction === 'none') return true;
+        if (n.scrollTop > 0 && /(auto|scroll|overlay)/.test(cs.overflowY)) return true;
+      }
+      return false;
+    }
+    function sePuede(el) {
+      if (!enApp() || enLlamada() || atorado(el)) return false;
+      // esta página y las de afuera (si es una pestaña en su marco), todas hasta arriba y sin nada fijo encima del marco
+      for (var w = window, n = 0; n < 5; n++) {
+        if (!hastaArriba(w)) return false;
+        var p = null, fr = null;
+        try { p = w.parent; fr = w.frameElement; } catch (e) { p = null; }
+        if (!p || p === w) break;
+        if (fr && atorado(fr)) return false;
+        w = p;
+      }
+      return true;
+    }
+    function circulo() {
+      var d = deArriba().document, c = d.getElementById('pt-jalar');
+      if (c) return c;
+      if (!d.getElementById('pt-jalar-css')) {
+        var st = d.createElement('style'); st.id = 'pt-jalar-css';
+        st.textContent = '#pt-jalar{position:fixed;left:50%;top:env(safe-area-inset-top,0px);z-index:48;width:40px;height:40px;margin-left:-20px;'
+          + 'box-sizing:border-box;border-radius:50%;background:var(--surface,#fff);border:1px solid var(--line,#D5DCE8);'
+          + 'box-shadow:0 4px 14px rgba(19,32,54,.18);display:flex;align-items:center;justify-content:center;color:#1F3864;'
+          + 'pointer-events:none;opacity:0;transform:translateY(-44px);transition:opacity .15s}'
+          + '#pt-jalar svg{width:22px;height:22px}'
+          + '#pt-jalar.pt-listo{color:#F07A1E;border-color:#F07A1E}'
+          + '#pt-jalar.pt-va svg{animation:pt-jalar-gira .8s linear infinite}'
+          + '@keyframes pt-jalar-gira{to{transform:rotate(360deg)}}'
+          + ':root[data-theme="dark"] #pt-jalar{background:var(--surface,#16213A);border-color:var(--line,#2A3A5A);color:#C9D6EE}'
+          + ':root[data-theme="dark"] #pt-jalar.pt-listo{color:#F07A1E;border-color:#F07A1E}';
+        (d.head || d.documentElement).appendChild(st);
+      }
+      c = d.createElement('div'); c.id = 'pt-jalar'; c.setAttribute('aria-hidden', 'true');
+      c.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
+      (d.body || d.documentElement).appendChild(c);
+      return c;
+    }
+    // el círculo sale de debajo del encabezado de la página de arriba (o de la orilla, si la página no trae encabezado)
+    function bajoEncabezado() {
+      try {
+        var d = deArriba().document, h = d.querySelector('header.band') || d.querySelector('header');
+        if (h && h.getClientRects().length) { var r = h.getBoundingClientRect(); if (r.bottom > 0) return Math.round(r.bottom) + 'px'; }
+      } catch (e) { /* sigue */ }
+      return '';
+    }
+    function pinta(dist) {
+      var c = circulo(), s = c.firstChild;
+      if (!c.getAttribute('data-y')) { c.setAttribute('data-y', '1'); c.style.top = bajoEncabezado(); }
+      c.classList.toggle('pt-listo', dist >= MARCA);
+      c.style.opacity = String(Math.min(1, dist / 36));
+      c.style.transform = 'translateY(' + Math.round(dist - 32) + 'px)';
+      if (s) s.style.transform = 'rotate(' + Math.round(Math.min(dist, MARCA) / MARCA * 270) + 'deg)';
+    }
+    function quita() {
+      var c; try { c = deArriba().document.getElementById('pt-jalar'); } catch (e) { c = null; }
+      if (!c) return;
+      c.classList.remove('pt-listo'); c.removeAttribute('data-y');
+      c.style.opacity = '0'; c.style.transform = 'translateY(-44px)';
+    }
+    function actualiza() {
+      var c = circulo(), s = c.firstChild;
+      if (s) s.style.transform = '';
+      c.classList.add('pt-listo', 'pt-va');
+      c.style.opacity = '1'; c.style.transform = 'translateY(' + (MARCA - 32) + 'px)';
+      setTimeout(function () { try { deArriba().location.reload(); } catch (e) { location.reload(); } }, 150);
+    }
+    var ini = null, va = false, dist = 0;
+    function cancela() { if (ini) quita(); ini = null; va = false; dist = 0; }
+    document.addEventListener('touchstart', function (e) {
+      ini = null; va = false; dist = 0;
+      if (e.touches.length !== 1 || !sePuede(e.target)) return;
+      ini = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: true, capture: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!ini) return;
+      if (e.touches.length !== 1) return cancela();
+      var dx = e.touches[0].clientX - ini.x, dy = e.touches[0].clientY - ini.y;
+      if (!va) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (dy <= 0 || Math.abs(dx) * 1.2 > dy) return cancela();   // hacia arriba o de lado: no es jalar
+        va = true;
+      }
+      if (!hastaArriba(window)) return cancela();
+      dist = Math.min(MAX, Math.max(0, dy) * RESISTENCIA);
+      pinta(dist);
+    }, { passive: true, capture: true });
+    document.addEventListener('touchend', function () {
+      if (!ini) return;
+      var listo = va && dist >= MARCA && !enLlamada();
+      ini = null; va = false; dist = 0;
+      if (listo) actualiza(); else quita();
+    }, { passive: true, capture: true });
+    document.addEventListener('touchcancel', cancela, { passive: true, capture: true });
+  })();
+
   /* ---- Seguro de arranque (30-oct-2026, pedido de Daniel: «y un mensaje o algo de que avísenle a Héctor Daniel Nava
      que se cayó»). Las tres vistas traen escrito en su <head> el seguro (portal/arranque.js de profase-datos; lo pone
      construir.py): si la página no termina de entrar en 20 s, se recarga sola una vez y, si sigue igual, enseña el
