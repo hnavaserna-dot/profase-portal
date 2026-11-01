@@ -94,6 +94,7 @@
     { k: 'adm', t: 'Administración', d: 'El día a día del despacho.', subs: [
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Cumpleaños, aniversarios y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
       { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
+      { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)

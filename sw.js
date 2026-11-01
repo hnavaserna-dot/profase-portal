@@ -7,7 +7,10 @@
      que ya esté abierta).
    - El ícono chico (barra de arriba del celular) es un globito de chat blanco: Android lo pinta de un solo color, así que
      no puede ser el signo PROFASE (nunca se pinta de un color); el signo y la foto de quien escribe van en grande.
-   - En iPhone y iPad solo funciona con el portal agregado a la pantalla de inicio. */
+   - En iPhone y iPad solo funciona con el portal agregado a la pantalla de inicio.
+   - Desde el 31-oct-2026 también avisa de los Recordatorios (portal/sql/107_recordatorios_agenda.sql): llegan por la
+     misma función, al picarlos abren Administración › Recordatorios y, si el portal está al frente, la página enseña su
+     propia ventana con «Listo» y «Recuérdame en…» (aquí no se repite el aviso). */
 'use strict';
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
@@ -22,8 +25,10 @@ self.addEventListener('push', function (e) {
     badge: '/img/aviso-chat.png',
     tag: String(d.tag || 'chat'),
     renotify: true,
-    data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/', conv: d.conv || null }
+    data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/', conv: d.conv || null,
+            rcd: typeof d.rcd === 'number' ? d.rcd : null }
   };
+  if (op.data.rcd) op.requireInteraction = true;   // un recordatorio se queda hasta que lo piquen (el ícono chico sigue siendo el globito)
   // «te está llamando» (llamadas del chat, 63_chat_llamadas.sql): se queda hasta que la piquen y vibra
   if (d.llamada === true) { op.requireInteraction = true; op.vibrate = [400, 200, 400, 200, 400]; }
   // Si el portal está abierto y al frente, ya enseña su propio aviso dentro de la página; ahí no se repite.
@@ -32,6 +37,7 @@ self.addEventListener('push', function (e) {
   var apple = /Safari\//.test(ua) && !/Chrome|Chromium|Android|Edg\//.test(ua);
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ws) {
     var alFrente = ws.some(function (w) { return w.visibilityState === 'visible' && w.focused && /\/(director|gerentes|contadores)\.html/.test(w.url); });
+    if (alFrente && op.data.rcd) ws.forEach(function (w) { try { w.postMessage({ tipo: 'rcd-ahora', aviso: op.data.rcd }); } catch (x) {} });
     if (alFrente && !apple && op.tag !== 'chat-prueba') return null;
     return Promise.all([
       self.registration.showNotification(titulo, op),
@@ -47,7 +53,7 @@ self.addEventListener('notificationclick', function (e) {
     for (var i = 0; i < ws.length; i++) {
       var w = ws[i];
       if (w.url.indexOf(self.location.origin) === 0 && /\/(director|gerentes|contadores)\.html/.test(w.url)) {
-        w.postMessage({ tipo: 'chat-abre', conv: data.conv || null });
+        w.postMessage(data.rcd ? { tipo: 'rcd-abre', aviso: data.rcd } : { tipo: 'chat-abre', conv: data.conv || null });
         return w.focus ? w.focus() : null;
       }
     }
