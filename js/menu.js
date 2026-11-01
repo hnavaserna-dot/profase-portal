@@ -65,7 +65,8 @@
       { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' },   // antes Access › WorkFlow
       { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' }] },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
     // Clientes (31-oct-2026): la ficha de cada cliente y lo del SAT, juntos
-    { k: 'clis', t: 'Clientes', d: 'La ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
+    { k: 'clis', t: 'Clientes', d: 'El expediente y la ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
+      { k: 'expedientes', v: 'exp', t: 'Expedientes', d: 'Cada cliente por grupo y razón social: reuniones, notas, pendientes y documentos.' },   // 31-oct-2026, pedido de Daniel (112_expedientes.sql)
       { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026); antes en Administración
       { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' }] },   // antes Access › Clientes
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
@@ -74,9 +75,12 @@
     /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
        todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
        también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */
-    { k: 'agd', t: 'Agenda', d: 'Tu calendario, tus recordatorios y tus avisos de todos los días.', subs: [
+    { k: 'agd', t: 'Agenda', d: 'Tu calendario, tus recordatorios, tus pendientes y tus avisos de todos los días.', subs: [
       { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
       { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
+      // Pendientes (31-oct-2026, pedido de Daniel; en «Agenda» desde el 1-nov, 04:54: «Si dale ya»): lo que hay que hacer, quién y
+      // para cuándo, y las minutas que faltan de las reuniones con clientes (expedientes.html; 112_expedientes.sql; exp_tab.js)
+      { k: 'pendientes', v: 'pen', t: 'Pendientes', d: 'Lo tuyo, lo que pediste y lo que revisas, con fecha y avisos; y las minutas que te faltan.' },
       { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),

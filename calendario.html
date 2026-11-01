@@ -683,7 +683,15 @@ button.kpi:focus-visible{outline-offset:-3px}
      paquete que lee Tareas y proyectos y las renovaciones de ren_lista(), con sus mismas reglas. Las vacaciones siguen
      siendo solo para los gerentes y la dirección (rh_ausencias_cal()). La videollamada con gente de fuera la arma el
      portal de afuera (llamada_tab.js: window.parent.__llamada). */
-  var AG={est:null, ok:false, citas:[], pend:{items:[],vencidas:0}, tareas:[], ren:[], rcd:[], de:'', rango:null, vez:0, hora:0, otros:0};
+  var AG={est:null, ok:false, citas:[], pend:{items:[],vencidas:0}, tareas:[], ren:[], rcd:[], de:'', rango:null, vez:0, hora:0, otros:0,
+          exp:{motivos:[], citas:{}}, expCli:null, expCliHora:0};
+  /* Reuniones con clientes y prospectos (Daniel, 1-nov-2026, 0:35: «Una sola: la Agenda»): son estas mismas citas, con su
+     cliente (grupo y razón social, o todo el grupo) o su prospecto. Lo del cliente de cada cita, si le falta a uno su
+     minuta y la lista de motivos para cancelar los trae exp_citas_info() junto con agenda_lista(); se agendan con
+     exp_cita_guarda() (que llama a agenda_guarda()) y se cancelan con exp_cita_cancela(): quién la canceló (el cliente o
+     PROFASE), el motivo de la lista (nunca libre: «no lo dejes libre para llevar un control») y, ahí mismo, si se re
+     agenda (31-oct-2026, 23:14). La minuta se registra en Pendientes (window.parent.__expAbre). Todo lo decide la base
+     (portal/sql/112_expedientes.sql). */
   var VISTA='mes';
   try{ var v0=localStorage.getItem('portal.cal.vista'); VISTA=['dia','semana','mes'].indexOf(v0)>=0?v0:(window.innerWidth<700?'dia':'mes'); }catch(e){ VISTA=window.innerWidth<700?'dia':'mes'; }
   var LUGARES={profase:'En PROFASE', cliente:'Con el cliente', telefono:'Por teléfono', linea:'En línea', otro:'Otro lugar'};
@@ -754,10 +762,12 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(!forzar&&r&&r.de===AG.de&&r.d<=v[0]&&r.h>=v[1]) return;
     var vez=++AG.vez, de=quienes();
     try{
-      var res=await Promise.all([P.sb.rpc('agenda_lista',{p_desde:d,p_hasta:h,p_de:de}), P.sb.rpc('agenda_pendientes',{p_desde:d,p_hasta:h,p_de:de})]);
+      var res=await Promise.all([P.sb.rpc('agenda_lista',{p_desde:d,p_hasta:h,p_de:de}), P.sb.rpc('agenda_pendientes',{p_desde:d,p_hasta:h,p_de:de}),
+                                 P.sb.rpc('exp_citas_info',{p_desde:d,p_hasta:h}).then(null,function(){ return {error:true}; })]);
       if(vez!==AG.vez) return;
       AG.citas=!res[0].error&&Array.isArray(res[0].data)?res[0].data:[];
       AG.pend=!res[1].error&&res[1].data&&Array.isArray(res[1].data.items)?res[1].data:{items:[],vencidas:0};
+      if(!res[2].error&&res[2].data) AG.exp={motivos:res[2].data.motivos||[], citas:res[2].data.citas||{}};
     }catch(e){ if(vez!==AG.vez) return; }
     AG.rango={d:d,h:h,de:AG.de}; AG.hora=Date.now();   // también si falló: así no se vuelve a pedir en cada pintada
     render();
@@ -820,16 +830,28 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(AG.de&&w.quien) p.push('<span class="pl az">'+esc(persona(w.quien).nombre)+'</span>');
     return p.join('');
   }
+  // el cierre de una reunión con cliente (110_agenda_cierre.sql): se hizo, no se realizó, en curso o por cerrar
+  function cierrePl(ci){
+    if(!ci) return '';
+    if(ci.cierre==='se_hizo') return '<span class="pl bien">Se hizo</span>';
+    if(ci.cierre==='no_se_hizo') return '<span class="pl mal">No se realizó</span>';
+    if(ci.fase==='por_cerrar') return '<span class="pl ojo">'+(ci.yo_decido?'Te toca cerrarla':'Falta cerrarla')+'</span>';
+    if(ci.fase==='en_curso') return '<span class="pl az">En curso</span>';
+    return '';
+  }
   function itemAg(x){
     if(x.tipo==='cita'){
       var c=x.ci, v=c.video, hoy=c.dia===hoyK(), mia=c.dueno===yoU(), r=c.mi_respuesta;
       var quien=!mia?'<span class="pl az">Agenda de '+esc(c.dueno_nombre)+'</span>':'';
       var inv=(c.invitados||[]).length?'<span class="pl">'+plural(c.invitados.length,'invitado','invitados')+'</span>':'';
       var rr=r?'<span class="pl '+(r==='acepta'?'bien':r==='rechaza'?'mal':'ojo')+'">'+(r==='pendiente'?'Te invitó · contesta':RESP_TXT[r])+'</span>':'';
+      var ex=AG.exp.citas[c.id];
+      if(ex) rr+=(ex.prospecto?'<span class="pl az">Prospecto</span>':'')+(ex.debo?'<span class="pl mal">Falta lo tuyo en la minuta</span>':'');
+      rr+=cierrePl(c.cierre);
       return '<div class="item ag t-cita" data-cita="'+esc(c.id)+'" role="button" tabindex="0"><span class="hr num">'+esc(c.inicio)+'<small>'+esc(c.fin)+'</small></span><div class="tt">'
         +esc(c.titulo)+'<span class="ss">'+esc([lugarTxt(c), c.cliente?'Cliente '+c.cliente:''].filter(Boolean).join(' · '))+'</span>'
         +'<span class="pls">'+quien+(v?'<span class="pl vid">'+ico('video')+'Videollamada</span>':'')+inv+rr+'</span>'
-        +(v&&v.estado==='abierta'&&hoy?'<span class="acts"><button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">'+ico('video')+'Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>'
+        +(v&&v.estado==='abierta'&&hoy&&!(c.cierre&&c.cierre.cierre)?'<span class="acts"><button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">'+ico('video')+'Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>'
           +(c.edito||mia?'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button>':'')+'</span>':'')
         +'</div></div>';
     }
@@ -1004,30 +1026,69 @@ button.kpi:focus-visible{outline-offset:-3px}
 
   /* --- el detalle de una cita --- */
   async function abrirCita(id){
-    var c=citaPor(id);
-    try{ var r=await P.sb.rpc('agenda_cita',{p_id:id}); if(!r.error&&r.data) c=r.data; else if(!c){ toast('No encontré esa cita: quizá la cancelaron o ya no la ves.'); return; } }catch(e){ if(!c) return; }
+    var c=citaPor(id), ex=AG.exp.citas[id]||null;
+    try{
+      var rr=await Promise.all([P.sb.rpc('agenda_cita',{p_id:id}), P.sb.rpc('exp_reuniones',{p:{id:id}}).then(null,function(){ return {error:true}; })]);
+      var r=rr[0]; if(!r.error&&r.data) c=r.data; else if(!c){ toast('No encontré esa cita: quizá la cancelaron o ya no la ves.'); return; }
+      if(!rr[1].error&&Array.isArray(rr[1].data)) ex=rr[1].data[0]||null;
+    }catch(e){ if(!c) return; }
     var v=c.video, mia=c.dueno===yoU(), hoy=c.dia===hoyK();
     var h='<div class="cdet"><p class="eti">'+(c.estado==='cancelada'?'Cita cancelada':'Cita')+(mia?'':' · agenda de '+esc(c.dueno_nombre))+'</p><h3>'+esc(c.titulo)+'</h3>'
-      +'<p class="cwhen">'+ico('clock')+'<span>'+esc(mayus(fLarga(parse(c.dia))))+' · <b class="num">'+esc(c.inicio)+'–'+esc(c.fin)+'</b></span></p>'
+      +'<p class="cwhen">'+ico('clock')+'<span>'+esc(mayus(fLarga(parse(c.dia))))+' · <b class="num">'+esc(c.inicio)+'–'+esc(c.fin)+'</b>'
+        +(c.cierre&&c.cierre.fin_original?' <small>(era hasta las '+esc(c.cierre.fin_original)+')</small>':'')+'</span></p>'
       +'<p class="cwhen">'+ico('pin')+'<span>'+esc(lugarTxt(c))+'</span></p>'
-      +(c.cliente?'<p class="cwhen">'+ico('brief')+'<span>Cliente '+esc(c.cliente)+'</span></p>':'')
+      +(ex&&(ex.g||ex.pr)?'<p class="cwhen">'+ico('brief')+'<span>'+(ex.prospecto?'Prospecto ':'Cliente ')+'<b>'+esc(ex.cliente)+'</b>'+(ex.grupo&&ex.grupo!==ex.cliente?' · grupo '+esc(ex.grupo):'')+'</span></p>'
+          :c.cliente?'<p class="cwhen">'+ico('brief')+'<span>Cliente '+esc(c.cliente)+'</span></p>':'')
       +(c.recordar!=null?'<p class="cwhen">'+ico('bell')+'<span>Recordatorio: '+esc((RECS.filter(function(x){ return x[0]===String(c.recordar); })[0]||['',''])[1].toLowerCase())+' (campanita y celular)</span></p>':'')
       +(c.notas?'<p class="cnot">'+esc(c.notas)+'</p>':'');
-    if(v&&v.estado==='abierta'){
+    var ci=c.estado==='activa'?c.cierre:null, empezo=!!(ci&&ci.fase!=='antes');
+    if(ci&&ci.cierre==='se_hizo'){
+      h+='<div class="dsec"><h4>Se hizo<span class="n">'+(ci.asistieron||[]).length+'</span></h4><p class="note">La cerró '+esc(ci.por_nombre||'')
+        +(ci.en?', '+esc(window.PROFASE_HORA.fechaHora(ci.en))+'.':'.')+' Estuvieron:</p><div class="asisl">'
+        +(ci.asistieron||[]).map(function(a){ return '<span class="asis si">'+esc(a.nombre)+'</span>'; }).join('')+'</div></div>';
+    } else if(ci&&ci.cierre==='no_se_hizo'){
+      h+='<div class="dsec"><h4>No se realizó</h4><p class="note">Lo marcó '+esc(ci.por_nombre||'')+': '+esc(ci.motivo||'')+'</p></div>';
+    } else if(ci&&(ci.fase==='en_curso'||ci.fase==='por_cerrar')){
+      h+='<div class="rblk"><b>'+(ci.fase==='por_cerrar'?'Ya pasó la hora de fin y falta cerrarla':'La reunión está en curso')+'</b>'
+        +(ci.yo_decido?'<div class="btns"><button type="button" class="btn primary" data-cierra>Cerrar la reunión</button></div>'
+          +'<p class="note">Te toca a ti: vas primero de los de PROFASE que estuvieron. Si se alarga, ahí mismo le das más tiempo.</p>'
+          :'<p class="note">La cierra '+esc(ci.decide_nombre||'')+' (va primero de los de PROFASE que estuvieron).</p>')+'</div>';
+    }
+    if(v&&v.estado==='abierta'&&!(ci&&ci.cierre)){
       h+='<div class="cvid">'+ico('video')+'<div><b>Videollamada con gente de fuera</b><small>'+(hoy?'Ya se puede entrar. Al cliente le mandas la invitación; tú lo admites cuando llegue.':'Se puede entrar el día de la cita. Mándale ya la invitación al cliente.')+'</small>'
         +'<div class="acts">'+(hoy?'<button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>':'')
         +'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button></div></div></div>';
     }
     if((c.invitados||[]).length) h+='<div class="dsec"><h4>Del despacho<span class="n">'+c.invitados.length+'</span></h4><div class="asisl">'+c.invitados.map(function(i){
         return '<span class="asis '+(i.respuesta==='acepta'?'si':i.respuesta==='rechaza'?'no':'')+'" title="'+esc(i.motivo||'')+'">'+esc(i.nombre)+' · '+esc(RESP_TXT[i.respuesta]||'')+'</span>'; }).join('')+'</div></div>';
+    if(ex) h+=reuDet(ex, conCli0(ex));
     h+='<p class="note">'+(c.capturo&&c.capturo!==c.dueno?'La agendó '+esc(c.capturo_nombre)+'. ':'')+'</p>';
     if(c.mi_respuesta&&c.estado==='activa') h+='<div class="rblk"><b>¿Vas?</b><div class="btns"><button type="button" class="btn si" data-r="acepta" aria-pressed="'+(c.mi_respuesta==='acepta')+'">Sí voy</button><button type="button" class="btn no" data-r="rechaza" aria-pressed="'+(c.mi_respuesta==='rechaza')+'">No puedo</button></div><div class="err" id="rErr"></div></div>';
-    h+='<div class="mact">'+(c.edito&&c.estado==='activa'?'<button type="button" class="btn danger-t" data-cancela>Cancelar la cita</button><button type="button" class="btn" data-edita>Cambiar</button>':'')+'<button type="button" class="btn primary" data-x>Cerrar</button></div></div>';
+    // con cliente: cancelarla es antes de que empiece (con quién y el motivo de la lista); ya empezada, el cierre de la Agenda
+    var conCli=!!(ex&&(ex.g||ex.pr));
+    // ya empezada, ninguna se cancela: quien la cierra marca «No se realizó» (110_agenda_cierre.sql)
+    var cancela=c.estado==='activa'&&!empezo&&(conCli?ex.puede&&ex.puede.cancelar:c.edito);
+    var cambia=c.edito&&c.estado==='activa'&&!(conCli&&ex.empezo);
+    // la minuta (una por reunión): tomar notas desde que empieza; verla después
+    var minTxt=!ex||!minutero()?'':ex.puede&&ex.puede.minuta&&!ex.mi_minuta?(ex.debo?'Agregar lo mío a la minuta':'Tomar notas (minuta)')
+      :ex.ve_minuta&&ex.cierre!=='no_se_hizo'&&(ex.minutas||ex.empezo)?'Ver la minuta':'';
+    h+='<div class="mact">'+(cancela?'<button type="button" class="btn danger-t" data-cancela>Cancelar la cita</button>':'')
+      +(cambia?'<button type="button" class="btn" data-edita>Cambiar</button>':'')
+      +(conCli&&ex.expediente&&puedoAbrirExp()?'<button type="button" class="btn" data-exp>Ver expediente</button>':'')
+      +(minTxt?'<button type="button" class="btn" data-x>Cerrar</button><button type="button" class="btn primary" data-minuta>'+minTxt+'</button>':'<button type="button" class="btn primary" data-x>Cerrar</button>')+'</div></div>';
     ventana(h, function(ov,cerrar){
       ov.querySelector('[data-x]').onclick=cerrar;
       enlazaAg(ov, cerrar);
-      var ed=ov.querySelector('[data-edita]'); if(ed) ed.onclick=function(){ cerrar(); editaCita(c); };
-      var ca=ov.querySelector('[data-cancela]'); if(ca) ca.onclick=function(){
+      var ed=ov.querySelector('[data-edita]'); if(ed) ed.onclick=function(){ cerrar(); editaCita(c, null, ex); };
+      var xp=ov.querySelector('[data-exp]'); if(xp) xp.onclick=function(){ cerrar(); abreExp('exp', ex.pr?'prospecto='+ex.pr:'grupo='+ex.g+(ex.e?'&empresa='+ex.e:'')); };
+      var mn=ov.querySelector('[data-minuta]'); if(mn) mn.onclick=function(){ cerrar(); minutero().abre(c.id); };
+      var cz=ov.querySelector('[data-cierra]'); if(cz) cz.onclick=async function(){
+        var ok=false; try{ ok=!!(window.parent!==window&&window.parent.__reunion&&await window.parent.__reunion.abre(c.id)); }catch(e){}
+        if(ok) cerrar(); else toast('Ábrela desde el portal para cerrarla.');
+      };
+      ov.querySelectorAll('[data-cita-otra]').forEach(function(b){ b.onclick=function(){ cerrar(); abrirCita(b.dataset.citaOtra); }; });
+      var ca=ov.querySelector('[data-cancela]'); if(ca&&conCli) ca.onclick=function(){ cerrar(); cancelaReunion(c, ex); };
+      else if(ca) ca.onclick=function(){
         pregunta('¿Cancelar «'+c.titulo+'»?', 'A '+(mia?'tus invitados':c.dueno_nombre+' y a sus invitados')+' les llega el aviso a la campanita.'+(v?' La liga de la videollamada deja de servir.':''), 'Sí, cancelarla', true, async function(motivo){
           var r=await P.sb.rpc('agenda_cancela',{p_id:c.id, p_motivo:motivo||null});
           if(r.error) throw new Error(r.error.message);
@@ -1044,6 +1105,86 @@ button.kpi:focus-visible{outline-offset:-3px}
       }; });
     });
   }
+  /* --- reunión con cliente: sus minutas, quién la canceló y por qué, y si se re agendó --- */
+  function puedoAbrirExp(){ try{ return window.parent!==window&&typeof window.parent.__expAbre==='function'; }catch(e){ return false; } }
+  // la minuta se abre en Pendientes (window.__minuta de exp_tab.js)
+  function minutero(){ try{ var m=window.parent!==window?window.parent.__minuta:null; return m&&typeof m.abre==='function'?m:null; }catch(e){ return null; } }
+  function conCli0(ex){ return !!(ex&&(ex.g||ex.pr)); }
+  function abreExp(v, q){ try{ if(puedoAbrirExp()){ window.parent.__expAbre(v, q); return; } }catch(e){} toast('Abre el portal completo para ir a Pendientes.'); }
+  function reuDet(ex, cli){
+    var h='<div class="dsec"><h4>'+(cli?'Reunión con '+(ex.prospecto?'prospecto':'cliente'):'Reunión')+'</h4>';
+    if(ex.estado==='cancelada'){
+      h+='<p class="cnot">'+(ex.cancelo==='cliente'?'La canceló el cliente':ex.cancelo==='profase'?'La canceló PROFASE':'Se canceló')+(ex.motivo?': '+esc(ex.motivo):'')+(ex.cancelada_n?' · la marcó '+esc(ex.cancelada_n):'')+'</p>';
+      if(ex.reagendada_a) h+='<p class="cwhen">'+ico('clock')+'<span>Se re agendó para el '+esc(fLarga(parse(ex.reagendada_a.fecha)))+' a las <b class="num">'+esc(ex.reagendada_a.hora)+'</b>'
+        +(ex.reagendada_a.estado==='cancelada'?' (también se canceló)':'')+' · <button type="button" class="link" data-cita-otra="'+esc(ex.reagendada_a.id)+'">Ver</button></span></p>';
+    } else if(ex.cierre==='no_se_hizo'){
+      h+='<p class="cnot">No se realizó'+(ex.cierre_motivo?': '+esc(ex.cierre_motivo):'')+'</p>';
+    } else if(ex.cierre==='se_hizo'){
+      var as=(ex.asistentes||[]).filter(function(a){ return a.obligado; });
+      h+='<p class="sub" style="margin:2px 0 4px">Se hizo. Cada quien que estuvo agrega lo suyo a la minuta o marca «Nada que agregar».</p>'
+        +'<div class="asisl">'+as.map(function(a){ return '<span class="asis '+(a.minuta?'si':'no')+'">'+esc(a.u===yoU()?'Tú':a.n)+' · '+(a.minuta?'minuta lista':'falta lo suyo')+'</span>'; }).join('')+'</div>';
+    } else if(ex.empezo){
+      h+='<p class="sub" style="margin:2px 0 4px">Ya empezó: las notas de la minuta se pueden tomar desde ahora y se guardan solas.</p>';
+    } else {
+      h+='<p class="sub" style="margin:2px 0 4px">'+(cli?'Queda en el expediente del '+(ex.prospecto?'prospecto':'cliente')+'. ':'')+'Lleva minuta: desde que empiece se toman las notas y, si se hizo, cada quien que estuvo agrega lo suyo.</p>';
+    }
+    if(ex.reagendada_de) h+='<p class="cwhen">'+ico('clock')+'<span>Re agendada: antes era el '+esc(fLarga(parse(ex.reagendada_de.fecha)))+' a las <span class="num">'+esc(ex.reagendada_de.hora)+'</span>'
+      +(ex.reagendada_de.motivo?' ('+(ex.reagendada_de.cancelo==='cliente'?'el cliente: ':'PROFASE: ')+esc(ex.reagendada_de.motivo)+')':'')+'</span></p>';
+    return h+'</div>';
+  }
+  /* Cancelar una reunión con cliente (también la que no se hizo): quién y el motivo, siempre de la lista, y si se re
+     agenda ahí mismo (Daniel, 31-oct-2026, 23:14) */
+  function cancelaReunion(c, ex){
+    var mot=AG.exp.motivos||[], dur=aMin(c.fin)-aMin(c.inicio);
+    var d0=c.dia>hoyK()?c.dia:sumaD(hoyK(),1);
+    var html='<form id="fCan" novalidate><h3>'+(ex.paso?'La reunión no se hizo':'Cancelar la reunión')+'</h3>'
+      +'<p class="sub">«'+esc(c.titulo)+'» con '+esc(ex.cliente)+'. En su expediente queda quién la canceló y por qué.</p><div class="fg">'
+      +'<div class="f full"><span class="lbl">¿Quién la canceló?</span><div class="chips"><label class="chipc"><input type="radio" name="xLado" value="cliente">El cliente</label>'
+      +'<label class="chipc"><input type="radio" name="xLado" value="profase">PROFASE</label></div></div>'
+      +'<div class="f full"><label for="xMot">Motivo</label><select id="xMot" disabled><option value="">Primero escoge quién la canceló</option></select></div>'
+      +'<div class="f full"><span class="lbl">¿Se re agenda?</span><div class="chips"><label class="chipc"><input type="radio" name="xRe" value="si">Sí, con nueva fecha</label>'
+      +'<label class="chipc"><input type="radio" name="xRe" value="no">No, solo cancelarla</label></div></div>'
+      +'<div class="f full" id="xNueva" hidden><div class="dos"><div class="f"><label for="xDia">Nuevo día</label><input id="xDia" type="date" value="'+esc(d0)+'" min="'+esc(hoyK())+'"></div>'
+      +'<div class="f"><label for="xIni">Hora</label><div>'+window.PROFASE_HORA.campo('xIni', c.inicio, false)+'</div></div></div>'
+      +'<small>Dura lo mismo ('+(dur>0?dur+' min':'la misma duración')+') y lleva lo mismo: la agenda, el tema, el cliente, los invitados, el lugar y el recordatorio'+(c.video?', con una liga nueva de videollamada':'')+'. A todos les llega el aviso.</small></div>'
+      +'</div><div class="err" id="xErr" role="alert"></div>'
+      +'<div class="mact"><button type="button" class="btn" data-x>Regresar</button><button type="submit" class="btn danger" id="xOk">Cancelar la reunión</button></div></form>';
+    ventana(html, function(ov,cerrar){
+      var q=function(x){ return ov.querySelector(x); };
+      q('[data-x]').onclick=cerrar;
+      function lado(){ return (ov.querySelector('input[name=xLado]:checked')||{}).value||''; }
+      function re(){ return (ov.querySelector('input[name=xRe]:checked')||{}).value||''; }
+      ov.querySelectorAll('input[name=xLado]').forEach(function(i){ i.onchange=function(){
+        var l=lado(), m=q('#xMot'); m.disabled=false;
+        m.innerHTML='<option value="">Escoge el motivo</option>'+mot.filter(function(x){ return x.quien===l; }).map(function(x){ return '<option value="'+esc(x.k)+'">'+esc(x.t)+'</option>'; }).join('');
+      }; });
+      ov.querySelectorAll('input[name=xRe]').forEach(function(i){ i.onchange=function(){
+        var si=re()==='si'; q('#xNueva').hidden=!si; q('#xOk').textContent=si?'Cancelar y re agendar':'Cancelar la reunión'; q('#xOk').className='btn '+(si?'primary':'danger');
+      }; });
+      q('#fCan').onsubmit=async function(e){
+        e.preventDefault(); var er=q('#xErr'), ok=q('#xOk'), nueva=null; er.textContent='';
+        if(!lado()){ er.textContent='Escoge quién la canceló: el cliente o PROFASE.'; return; }
+        if(!q('#xMot').value){ er.textContent='Escoge el motivo de la lista.'; q('#xMot').focus(); return; }
+        if(!re()){ er.textContent='Escoge si se re agenda o solo se cancela.'; return; }
+        if(re()==='si'){
+          var d=q('#xDia').value, a=window.PROFASE_HORA.lee(ov,'xIni');
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ er.textContent='Escoge el nuevo día.'; return; }
+          if(!a){ er.textContent='Escoge la nueva hora.'; return; }
+          nueva={dia:d, inicio:a};
+        }
+        ok.disabled=true;
+        try{
+          var r=await P.sb.rpc('exp_cita_cancela',{p_id:c.id, p_lado:lado(), p_motivo:q('#xMot').value, p_reagenda:nueva});
+          if(r.error) throw new Error(r.error.message);
+          cerrar();
+          if(nueva){ toast('Re agendada: '+fLarga(parse(nueva.dia))+', '+nueva.inicio+' · les avisamos'); sel=nueva.dia; var dd=parse(nueva.dia); vista={y:dd.getFullYear(), m:dd.getMonth()}; }
+          else toast('Reunión cancelada · queda en su expediente');
+          await cargaAgenda(true);
+          if(nueva&&r.data&&r.data.nueva&&r.data.nueva.video&&r.data.nueva.video.invitacion) avisaVideo(r.data.nueva);
+        }catch(e2){ er.textContent=e2.message||'No se pudo'; ok.disabled=false; }
+      };
+    });
+  }
   // ventana para confirmar (con un campo de texto opcional)
   function pregunta(tit, txt, si, peligro, alSi, campo){
     ventana('<h3>'+esc(tit)+'</h3><p class="sub">'+esc(txt)+'</p>'+(campo?'<div class="f full"><label for="qTxt">'+esc(campo)+'</label><input id="qTxt" maxlength="200" autocomplete="off"></div>':'')
@@ -1058,9 +1199,19 @@ button.kpi:focus-visible{outline-offset:-3px}
 
   /* --- agendar o cambiar una cita --- */
   function horaSig(){ var m=ahoraMin(); m=isNaN(m)?540:Math.ceil((m+15)/30)*30; if(m<480) m=540; if(m>1200) m=540; return deMin(Math.min(m,1380)); }
-  async function editaCita(c, base){
+  async function editaCita(c, base, ex){
     if(!AG.ok||!AG.est) return;
     var e=AG.est, nuevo=!c; base=base||{};
+    // los clientes y prospectos que puede escoger (los de sus expedientes; la dirección y Eva, todos)
+    if(!AG.expCli||Date.now()-AG.expCliHora>300000){
+      try{ var rc=await P.sb.rpc('exp_cita_clientes'); if(!rc.error&&rc.data){ AG.expCli=rc.data; AG.expCliHora=Date.now(); } }catch(er0){}
+    }
+    if(c&&ex===undefined) ex=AG.exp.citas[c.id]||null;
+    var EC=AG.expCli, fijo=!!(ex&&ex.minutas>0);
+    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g?'cliente':'');
+    var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), e0=ex&&!ex.prospecto?ex.e:(base.e?+base.e:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
+    var gru0=EC&&g0?(EC.clientes||[]).filter(function(x){ return x.g===g0; })[0]:null;
+    if(EC&&pr0&&!(EC.prospectos||[]).some(function(x){ return x.id===pr0; })&&ex) EC.prospectos=(EC.prospectos||[]).concat([{id:pr0, nombre:ex.cliente}]);
     var dueno=c?c.dueno:(base.dueno||(AG.de&&AG.de!=='@equipo'&&(e.poner||[]).some(function(x){ return x.usuario===AG.de; })?AG.de:yoU()));
     var dia=c?c.dia:(base.dia&&base.dia>=hoyK()?base.dia:hoyK());
     var ini=c?c.inicio:(base.inicio||(dia===hoyK()?horaSig():'10:00')), fin=c?c.fin:deMin(Math.min(aMin(ini)+60, 1439));
@@ -1071,7 +1222,21 @@ button.kpi:focus-visible{outline-offset:-3px}
       +'<p class="sub">'+(nuevo?'Se guarda en la agenda que escojas. Si es la de otra persona, le llega el aviso.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
       +((e.poner||[]).length>1?'<div class="f full"><label for="cDue">¿En la agenda de quién?</label><select id="cDue">'+e.poner.map(function(p){ return '<option value="'+esc(p.usuario)+'"'+(p.usuario===dueno?' selected':'')+'>'+esc(p.usuario===yoU()?'La mía ('+p.nombre+')':p.nombre)+'</option>'; }).join('')+'</select></div>':'')
       +'<div class="f full"><label for="cTit">¿De qué es?</label><input id="cTit" maxlength="120" autocomplete="off" placeholder="Ej. Revisión de la declaración anual" value="'+esc(c?c.titulo:(base.titulo||''))+'"></div>'
-      +'<div class="f full"><label for="cCli">Cliente (opcional)</label><input id="cCli" list="cCliL" maxlength="100" autocomplete="off" placeholder="Escribe el grupo o el nombre" value="'+esc(c&&c.cliente||'')+'">'
+      +(!EC?'':fijo
+        ?'<div class="f full"><span class="lbl">'+(ex.prospecto?'Prospecto':'Cliente')+'</span><div><b>'+esc(ex.cliente)+'</b></div><small>Ya tiene minutas: su cliente ya no cambia.</small></div>'
+        :'<div class="f full"><span class="lbl">¿Es con un cliente?</span><div class="chips">'
+          +[['','No'],['cliente','Con un cliente'],['prospecto','Con un prospecto']].map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
+          +'</div><small id="cTipoN"></small></div>'
+          +'<div class="f full" id="cBoxCli" hidden><label for="cGru">Grupo</label><input id="cGru" list="cGruL" maxlength="200" autocomplete="off" placeholder="Escribe el nombre del grupo" value="'+esc(gru0?gru0.n:'')+'">'
+          +'<datalist id="cGruL">'+(EC.clientes||[]).map(function(x){ return '<option value="'+esc(x.n)+'"></option>'; }).join('')+'</datalist>'
+          +'<label for="cEmp" style="margin-top:8px">Razón social</label><select id="cEmp"></select></div>'
+          +'<div class="f full" id="cBoxPro" hidden><label for="cPro">Prospecto</label><select id="cPro"><option value="">Escoge el prospecto</option>'
+          +(EC.prospectos||[]).map(function(x){ return '<option value="'+x.id+'"'+(x.id===pr0?' selected':'')+'>'+esc(x.nombre)+'</option>'; }).join('')
+          +(EC.nuevo_prospecto?'<option value="nuevo">+ Uno nuevo</option>':'')+'</select>'
+          +'<div id="cProN" hidden><div style="display:grid;gap:6px;margin-top:8px"><input id="cProNom" maxlength="200" autocomplete="off" placeholder="Nombre del grupo (obligatorio)" aria-label="Nombre del grupo del prospecto">'
+          +'<input id="cProRaz" maxlength="300" autocomplete="off" placeholder="Razón social (opcional)" aria-label="Razón social del prospecto">'
+          +'<input id="cProCon" maxlength="300" autocomplete="off" placeholder="Contacto: nombre, teléfono o correo (opcional)" aria-label="Contacto del prospecto"></div></div></div>')
+      +'<div class="f full" id="cBoxLibre"><label for="cCli">'+(EC?'¿Con quién? (opcional)':'Cliente (opcional)')+'</label><input id="cCli" list="cCliL" maxlength="100" autocomplete="off" placeholder="Escribe el grupo o el nombre" value="'+esc(c&&!ex&&c.cliente||'')+'">'
       +'<datalist id="cCliL">'+gruposCli.map(function(g){ return '<option value="'+esc(g.g)+'">'+esc(g.emp.slice(0,2).join(', '))+'</option>'; }).join('')+'</datalist></div>'
       +'<div class="f full"><label for="cDia">Día</label><input id="cDia" type="date" value="'+esc(dia)+'" min="'+esc(sumaD(hoyK(),-1))+'"></div>'
       +'<div class="f full"><div class="dos"><div class="f"><label for="cIni">Empieza</label><div>'+window.PROFASE_HORA.campo('cIni', ini, false)+'</div></div>'
@@ -1163,6 +1328,50 @@ button.kpi:focus-visible{outline-offset:-3px}
         return out.sort();
       }
 
+      /* con quién es: sin cliente, un cliente (grupo y razón social, o todo el grupo) o un prospecto */
+      function tipoSel(){ if(!EC) return null; if(fijo) return 'fijo'; return (ov.querySelector('input[name=cTipo]:checked')||{}).value||''; }
+      function grupoSel(){ var t=norm(q('#cGru')?q('#cGru').value:''); return t?(EC.clientes||[]).filter(function(x){ return norm(x.n)===t; })[0]||null:null; }
+      function pintaEmp(){
+        var g=grupoSel(), sl=q('#cEmp'); if(!sl) return;
+        var v=sl.value||(g&&g.g===g0&&e0?String(e0):'');
+        sl.disabled=!g;
+        sl.innerHTML=g?'<option value="">Todo el grupo</option>'+(g.e||[]).map(function(x){ return '<option value="'+x.id+'"'+(String(x.id)===v?' selected':'')+'>'+esc(x.r)+'</option>'; }).join('')
+                      :'<option value="">Primero escoge el grupo</option>';
+      }
+      function pintaTipo(){
+        var t=tipoSel(); if(t===null) return;
+        if(q('#cBoxCli')) q('#cBoxCli').hidden=t!=='cliente';
+        if(q('#cBoxPro')) q('#cBoxPro').hidden=t!=='prospecto';
+        if(q('#cProN')) q('#cProN').hidden=!(t==='prospecto'&&q('#cPro').value==='nuevo');
+        q('#cBoxLibre').hidden=t!=='';
+        var n=q('#cTipoN'); if(n) n.textContent=t==='cliente'?'Queda en el expediente del cliente y lleva minuta: si se hizo, cada quien que estuvo agrega lo suyo.'
+          :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(dueSel()!=='daniel.nava'?' Héctor Daniel va a todas las de prospecto: lo invitamos.':''):'';
+      }
+      if(EC&&!fijo){
+        ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=pintaTipo; });
+        q('#cGru').addEventListener('input', pintaEmp); q('#cGru').addEventListener('change', pintaEmp);
+        q('#cPro').onchange=pintaTipo;
+        if(q('#cDue')) q('#cDue').addEventListener('change', pintaTipo);
+        pintaEmp();
+      }
+      if(EC) pintaTipo();
+      function liga(){
+        var t=tipoSel();
+        if(t===null||t==='fijo') return {ok:true};
+        if(t==='') return {ok:true, liga:{tipo:''}};
+        if(t==='cliente'){
+          var g=grupoSel(); if(!g) return {msg:'Escoge el grupo de la lista.', foco:'#cGru'};
+          return {ok:true, liga:{tipo:'cliente', grupo:g.g, empresa:q('#cEmp').value?+q('#cEmp').value:null}};
+        }
+        var pv=q('#cPro').value;
+        if(pv==='nuevo'){
+          var nm=q('#cProNom').value.trim(); if(nm.length<2) return {msg:'Escribe el nombre del grupo del prospecto.', foco:'#cProNom'};
+          return {ok:true, liga:{tipo:'prospecto', prospecto_nuevo:{nombre:nm, razon:q('#cProRaz').value.trim(), contacto:q('#cProCon').value.trim()}}};
+        }
+        if(!pv) return {msg:'Escoge el prospecto (o «Uno nuevo»).', foco:'#cPro'};
+        return {ok:true, liga:{tipo:'prospecto', prospecto:+pv}};
+      }
+
       pintaLugar(); pintaVideo(); pintaInv(); revisa();
       q('#fCita').onsubmit=async function(ev){
         ev.preventDefault();
@@ -1172,15 +1381,19 @@ button.kpi:focus-visible{outline-offset:-3px}
         if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ er.textContent='Escoge el día.'; return; }
         if(!a||!b){ er.textContent='Escoge la hora de inicio y la de fin.'; return; }
         if(aMin(b)<=aMin(a)){ er.textContent='La hora de fin tiene que ser después de la de inicio.'; return; }
-        var p={id:c?c.id:null, dueno:dueSel(), titulo:t, cliente:q('#cCli').value.trim(), dia:d, inicio:a, fin:b, lugar:lugSel(),
+        var L=liga(); if(!L.ok){ er.textContent=L.msg; if(L.foco&&q(L.foco)) q(L.foco).focus(); return; }
+        var p={id:c?c.id:null, dueno:dueSel(), titulo:t, cliente:q('#cBoxLibre').hidden?(c&&c.cliente||''):q('#cCli').value.trim(), dia:d, inicio:a, fin:b, lugar:lugSel(),
                lugar_texto:q('#cLtx').hidden?'':q('#cLtx').value.trim(), notas:q('#cNot').value.trim(),
                recordar:q('#cRec').value===''?null:+q('#cRec').value, invitados:invSel(), video:q('#cVid').checked&&!q('#cVidBox').hidden};
+        if(L.liga) p.liga=L.liga;
         await revisaYa();
         var hay=q('#cDisp').classList.contains('hay');
         async function guarda(){
           ok.disabled=true;
           try{
-            var r=await P.sb.rpc('agenda_guarda',{p:p}); if(r.error) throw new Error(r.error.message);
+            // con cliente o prospecto (o si la página sabe de expedientes), por exp_cita_guarda(), que llama a agenda_guarda()
+            var r=EC?await P.sb.rpc('exp_cita_guarda',{p:p}):await P.sb.rpc('agenda_guarda',{p:p}); if(r.error) throw new Error(r.error.message);
+            if(EC&&p.liga&&p.liga.prospecto_nuevo) AG.expCli=null;   // el prospecto nuevo ya sale en la lista
             cerrar(); toast(nuevo?'Cita agendada'+(p.dueno!==yoU()?' · le avisamos a '+persona(p.dueno).nombre:''):'Cambios guardados');
             sel=d; var dd=parse(d); vista={y:dd.getFullYear(), m:dd.getMonth()};
             await cargaAgenda(true);
@@ -1203,9 +1416,9 @@ button.kpi:focus-visible{outline-offset:-3px}
   function abreDesde(q){
     q=q||{};
     if(q.cita&&/^[0-9a-f-]{36}$/i.test(q.cita)){ tab='cal'; renderTabs(); abrirCita(q.cita); }
-    else if(q.nueva){ tab='cal'; renderTabs(); editaCita(null,{video:q.nueva==='video'}); }
+    else if(q.nueva){ tab='cal'; renderTabs(); editaCita(null,{video:q.nueva==='video', g:q.g, e:q.e, pr:q.pr}); }
   }
-  window.__agenda={ abre:function(q){ if(AG.ok) abreDesde(q); else AG.pendiente=q; } };
+  window.__agenda={ abre:function(q){ if(AG.ok) abreDesde(q); else AG.pendiente=q; }, recarga:function(){ if(AG.ok) cargaAgenda(true); } };
 
   async function arrancaAgenda(){
     if(RHMODO) return;
@@ -1213,7 +1426,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     renderVer(); render();
     await cargaAgenda(true);
     cargaOtros();
-    var u=new URLSearchParams(location.search), q0={cita:u.get('cita'), nueva:u.get('nueva')};
+    var u=new URLSearchParams(location.search), q0={cita:u.get('cita'), nueva:u.get('nueva'), g:u.get('g'), e:u.get('e'), pr:u.get('pr')};
     if(AG.pendiente){ q0=AG.pendiente; AG.pendiente=null; }
     abreDesde(q0);
     // al día: al volver a la pestaña (si pasó más de un minuto) y cada 2 minutos mientras se ve

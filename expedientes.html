@@ -1,0 +1,1163 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Expedientes y pendientes</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=3b0c9439de"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=2280475113"></script>
+<style>
+/* Portal PROFASE · Expediente del cliente, Pendientes y Reuniones (31-oct-2026, pedido de Daniel: «llevar un expediente
+   digital… por grupo y la razón social… tomar notas y de ahí mismo mandar pendientes al equipo PROFASE o a mí mismo, con
+   fechas de vencimientos, recordatorios y demás»). Tres pantallas en esta página:
+   ?s=pen  Pendientes: los míos, los que pedí, los que reviso (y todos, para la dirección y los gerentes).
+   ?s=exp  Expedientes: cada grupo con sus razones sociales (y los prospectos): reuniones, notas y minutas, pendientes y
+           documentos. Quién ve qué lo decide la base (portal/sql/112_expedientes.sql): la dirección todo; lo de DECOMSA,
+           los gerentes (Alex, si hay nómina) y el contador del cliente; lo solo de la otra compañía, la dirección y Frank;
+           y lo que Daniel comparta.
+   Las reuniones con clientes y prospectos son citas de la Agenda del Calendario (Daniel, 1-nov-2026: «Una sola: la
+   Agenda»): se agendan, mueven y cancelan allá (con quién la canceló y el motivo de la lista, y si se re agenda); aquí
+   salen en el expediente y, en Pendientes, las minutas que te faltan. «Siempre hay minuta»: cada quien que fue registra
+   la suya (HNR nunca queda obligado; Daniel lo cubre). ?minuta=<cita> abre la minuta y ?reunion=<cita> la reunión.
+   Todo pasa por las funciones exp_* y pend_*; la página no lee ni escribe tablas. Los archivos, en la cubeta privada
+   «expedientes»; al bajar un PDF sale el menú «Con marca PROFASE» / «Original (sin marca)» para todos (decisión de
+   Daniel, 31-oct-2026: «dame opción original y branding»; js/visor.js, opción expediente). Horas siempre de 24. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+/* --- Lo de esta pantalla --- */
+.vista-tit{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin:16px 0 4px}
+.vista-tit h2{font-size:22px;font-weight:750;overflow-wrap:anywhere}
+.atras{border:0;background:none;padding:6px 0;color:var(--navy);font-weight:700;cursor:pointer;font-size:13.5px}
+:root[data-theme="dark"] .atras{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .atras{color:var(--accent-ink)}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted);max-width:100%;overflow-wrap:anywhere;text-align:left}
+.chips button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rejilla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.rejilla .card{margin:0}
+.rejilla .ancha{grid-column:1/-1}
+.lista{margin:0;padding:0;list-style:none}
+.lista>li{padding:10px 14px;border-top:1px solid var(--line);min-width:0}
+.lista>li:first-child{border-top:0}
+.lista>li.click{cursor:pointer}
+.lista>li.click:hover{background:var(--navy-soft)}
+.lista .t{font-weight:650;overflow-wrap:anywhere}
+.lista .linea{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:3px}
+.cuando{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.cnt{display:inline-flex;gap:6px;flex-wrap:wrap}
+details.motivos{margin:0 14px 8px;font-size:13px}
+details.motivos>summary{cursor:pointer;color:var(--navy);font-weight:600;padding:2px 0}
+details.motivos ul{margin:6px 0 0;padding-left:18px}
+details.motivos li{padding:2px 0}
+details.nota-x{border-top:1px solid var(--line)}
+details.nota-x:first-child{border-top:0}
+details.nota-x>summary{list-style:none;cursor:pointer;padding:10px 14px}
+details.nota-x>summary::-webkit-details-marker{display:none}
+details.nota-x[open]>summary{background:var(--surface-2)}
+details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
+.texto{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px}
+.mini{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px}
+.renglon{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.3fr) minmax(0,1fr) auto;gap:6px;align-items:start;margin:0 0 8px}
+.renglon input,.renglon select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 8px;font-size:13.5px;width:100%;min-width:0}
+.renglon .ext{grid-column:2/3}
+.marcas{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.marcas label{display:flex;gap:7px;align-items:center;font-size:13.5px;min-width:0}
+.marcas input{width:17px;height:17px;flex:none;accent-color:var(--navy)}
+.marcas label.fijo{color:var(--muted)}
+.bit{margin:0;padding:0;list-style:none}
+.bit li{padding:8px 0;border-top:1px dashed var(--line);font-size:13px}
+.bit li:first-child{border-top:0}
+.bit .q{font-weight:650}
+.radio{display:flex;flex-wrap:wrap;gap:6px 16px}
+.radio label{display:flex;gap:6px;align-items:center;font-size:13.5px;color:var(--ink);font-weight:500}
+.radio input{width:17px;height:17px;accent-color:var(--navy)}
+.prio1{color:var(--red);font-weight:700}
+.img-velo{position:fixed;inset:0;background:rgba(10,18,32,.8);z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
+.img-velo img{max-width:100%;max-height:calc(100% - 64px);object-fit:contain;border-radius:8px;background:#fff}
+@media (max-width:900px){.rejilla{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){
+  .renglon{grid-template-columns:minmax(0,1fr)}
+  .renglon .ext{grid-column:auto}
+  .marcas{grid-template-columns:minmax(0,1fr)}
+  .vista-tit h2{font-size:19px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti" id="eti">Pendientes</div>
+      <h1 id="titulo">Pendientes</h1>
+      <p id="subt"></p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo; aquí sí puedes escribir tus notas y asignar pendientes.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <!-- ===== Pendientes ===== -->
+  <section id="s-pen" hidden>
+    <div class="card" id="min-card" hidden>
+      <header><div><h2>Te falta lo tuyo en la minuta <span class="chip mal" id="n-min">0</span></h2><div class="sub">De las reuniones que se hicieron y en las que estuviste: agrega lo tuyo (de qué se habló, lo que se concluyó y los pendientes) o marca «Nada que agregar». Siempre hay minuta, aunque se haya visto algo muy básico.</div></div></header>
+      <ul class="lista" id="min-l"></ul>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Pendientes">
+      <button type="button" role="tab" data-pv="mios" aria-selected="true">Míos <span class="cta" id="n-mios">0</span></button>
+      <button type="button" role="tab" data-pv="asigne" aria-selected="false">Los que pedí</button>
+      <button type="button" role="tab" data-pv="revisar" aria-selected="false">Por revisar <span class="cta" id="n-rev">0</span></button>
+      <button type="button" role="tab" data-pv="todos" aria-selected="false" id="t-todos" hidden>Todos</button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="h-pen">Mis pendientes</h2><div class="sub" id="pen-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-pen">Excel</button></div></header>
+      <div class="filtros">
+        <input type="search" id="q-pen" placeholder="Buscar qué, cliente o persona" aria-label="Buscar en los pendientes">
+        <select id="f-pen" aria-label="Cuáles"><option value="abiertos">Abiertos</option><option value="hechos">Hechos y cancelados</option><option value="todos">Todos</option></select>
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Qué</th><th>Cliente</th><th>Quién</th><th>Para cuándo</th><th>Estatus</th></tr></thead>
+        <tbody id="pen-l"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Expedientes ===== -->
+  <section id="s-exp" hidden>
+    <div id="exp-lista">
+      <div class="card" style="margin-top:16px">
+        <header><div><h2>Expedientes de clientes</h2><div class="sub">Cada grupo con sus razones sociales: reuniones, notas, pendientes y documentos.</div></div></header>
+        <div class="filtros">
+          <input type="search" id="q-exp" placeholder="Buscar grupo, razón social o RFC" aria-label="Buscar expediente">
+          <select id="f-exp" aria-label="Estatus"><option value="act">Activos e incubados</option><option value="todos">Todos (también inactivos)</option></select>
+        </div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Razones sociales</th><th>Pendientes</th><th>Notas</th><th>Documentos</th></tr></thead>
+          <tbody id="exp-l"></tbody></table></div>
+      </div>
+      <div class="card" id="pros-card" hidden>
+        <header><div><h2>Prospectos</h2><div class="sub">Con quienes hay citas y todavía no son clientes. Cuando uno se vuelve cliente, Héctor Daniel lo liga a su grupo.</div></div></header>
+        <div class="tabla"><table class="resp"><thead><tr><th>Prospecto</th><th>Próxima reunión</th><th>Reuniones</th><th>Pendientes</th><th>Notas</th></tr></thead>
+          <tbody id="pros-l"></tbody></table></div>
+      </div>
+    </div>
+    <div id="exp-ficha" hidden></div>
+  </section>
+
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div>
+  <p id="pq-t"></p><textarea id="pq-x" hidden aria-label="Escribe aquí"></textarea>
+  <div class="acciones"><button class="btn" type="button" id="pq-no">Cancelar</button><button class="btn acento" type="button" id="pq-si">Sí</button></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var H = window.PROFASE_HORA;
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  var Q = new URLSearchParams(location.search);
+  var SEC = Q.get('s') || 'pen';
+  if (['pen', 'exp'].indexOf(SEC) < 0) SEC = 'pen';   // (la de Reuniones de antes: sus ligas caen en Pendientes)
+  var EST = null, CONSULTA = false, ESCRIBE = false, YO = '', DIR = false;
+  var NOM = {}, ROL = {}, EQUIPO = [], INVITA = {};
+  var CLIS = [], ECLI = null, PROS = [];
+  var PV = 'mios', PEN = [], MIN = [], DOCS = {};
+  var ACT = null;                       // el expediente abierto: {g, e, pr, f (lo que dio la base), verHechos}
+  var ESTATUS = { abierto: ['Abierto', 'az'], proceso: ['En proceso', 'ojo'], revision: ['Por revisar', 'na'], hecho: ['Hecho', 'ok'], cancelado: ['Cancelado', ''] };
+  var TIPOS_DOC = [['acta', 'Acta constitutiva o asamblea'], ['poder', 'Poder notarial'], ['contrato', 'Contrato'], ['csf', 'Constancia de situación fiscal'],
+    ['opinion', 'Opinión de cumplimiento'], ['acuse', 'Acuse'], ['declaracion', 'Declaración'], ['oficio', 'Oficio de autoridad'], ['respuesta', 'Respuesta a un oficio'],
+    ['identificacion', 'Identificación'], ['domicilio', 'Comprobante de domicilio'], ['estado_cuenta', 'Estado de cuenta'], ['evidencia', 'Evidencia'], ['otro', 'Otro']];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function hoyISO() { try { return H && H.dia ? H.dia(new Date()) : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  var HOY = hoyISO();
+  function masDias(n) { var d = new Date(HOY + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaDia(s) { if (!s) return ''; var d = new Date(String(s).slice(0, 10) + 'T12:00:00Z'); return DIAS[d.getUTCDay()] + ' ' + fecha(s); }
+  function cuandoTs(t) { return H && H.fechaHora ? H.fechaHora(t) : fecha(t); }
+  function dias(s) { if (!s) return null; return Math.round((new Date(String(s).slice(0, 10) + 'T12:00:00Z') - new Date(HOY + 'T12:00:00Z')) / 86400000); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function nombre(u) { return NOM[u] || u || ''; }
+  function plural(n, s, p) { return n + ' ' + (n === 1 ? s : p); }
+  function venceChip(x) {
+    if (!x.vence) return '<span class="mut">Sin fecha</span>';
+    var d = dias(x.vence), abierto = ['abierto', 'proceso', 'revision'].indexOf(x.estatus) >= 0;
+    var t = '<span class="cuando">' + esc(fecha(x.vence)) + '</span>';
+    if (!abierto) return t;
+    if (d < 0) return t + ' ' + chip('Vencido · ' + plural(-d, 'día', 'días'), 'mal');
+    if (d === 0) return t + ' ' + chip('Hoy', 'ojo');
+    if (d === 1) return t + ' ' + chip('Mañana', 'ojo');
+    return t;
+  }
+  function estChip(s) { var e = ESTATUS[s] || [s, '']; return chip(e[0], e[1]); }
+
+  /* ---------- Preguntas y ventanas ---------- */
+  function pregunta(texto, siTxt, conTexto) {
+    return new Promise(function (res) {
+      $('pq-t').textContent = texto; $('pq-si').textContent = siTxt || 'Sí'; $('pq-x').hidden = !conTexto; $('pq-x').value = '';
+      $('pregunta').hidden = false;
+      try { (conTexto ? $('pq-x') : $('pq-no')).focus(); } catch (e) {}
+      function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
+      $('pq-si').onclick = function () {
+        if (conTexto) { var t = $('pq-x').value.trim(); if (!t) { $('pq-x').focus(); return; } fin(t); } else fin(true);
+      };
+      $('pq-no').onclick = function () { fin(false); };
+      pregunta.cierra = function () { fin(false); };
+    });
+  }
+  var DESPUES = null;   // qué hacer al cerrar la ficha (volver a pintar lo de atrás)
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo" id="v-cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra; $('ficha').scrollTop = 0;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; var f = DESPUES; DESPUES = null; if (f) f(); }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || document.querySelector('.pm-menu, .img-velo')) return;
+    if (!$('pregunta').hidden && pregunta.cierra) pregunta.cierra(); else if (!$('velo').hidden) cierra();
+  });
+  function msg(id, t, cls) { var m = $(id); if (!m) return; m.className = 'msg ' + (cls || 'mal'); m.textContent = t; m.hidden = !t; if (t) try { m.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+
+  /* ---------- Listas para escoger ---------- */
+  function opcEquipo(sel, op) {
+    op = op || {};
+    var asig = EST.asignables || [];   // a quién le puedo asignar: la regla de quién agenda a quién (la de la Agenda y los Recordatorios)
+    return '<option value="">' + esc(op.vacio || 'Escoge…') + '</option>'
+      + EQUIPO.filter(function (p) { return (asig.indexOf(p.u) >= 0 || p.u === sel) && (!op.solo || op.solo.indexOf(p.u) >= 0); })
+        .map(function (p) { return '<option value="' + esc(p.u) + '"' + (sel === p.u ? ' selected' : '') + '>' + esc(p.n) + (p.u === YO ? ' (yo)' : '') + '</option>'; }).join('')
+      + (op.externo ? '<option value="__ext"' + (sel === '__ext' ? ' selected' : '') + '>Alguien de fuera (el cliente u otro)</option>' : '');
+  }
+  function opcClientes(lista, g, interno) {
+    return (interno ? '<option value="">Interno (sin cliente)</option>' : '<option value="">Escoge el grupo…</option>')
+      + lista.map(function (c) { return '<option value="' + c.g + '"' + (+g === c.g ? ' selected' : '') + '>' + esc(c.n) + '</option>'; }).join('');
+  }
+  function opcRazones(lista, g, e) {
+    var c = lista.filter(function (x) { return x.g === +g; })[0];
+    return '<option value="">Todo el grupo</option>' + (c ? (c.e || []).map(function (x) { return '<option value="' + x.id + '"' + (+e === x.id ? ' selected' : '') + '>' + esc(x.r) + '</option>'; }).join('') : '');
+  }
+  function ligaRazones(lista, idG, idE) {
+    var g = $(idG), e = $(idE); if (!g || !e) return;
+    g.onchange = function () { e.innerHTML = opcRazones(lista, g.value, ''); e.disabled = !g.value; };
+    e.disabled = !g.value;
+  }
+
+  /* ================================ PENDIENTES ================================ */
+  var VISTAS_P = { mios: ['Mis pendientes', 'Lo que te toca hacer. Lo vencido sale primero.'], asigne: ['Los que pedí', 'Lo que tú le pediste a alguien.'],
+    revisar: ['Por revisar', 'Lo que te entregaron para que lo revises y lo des por hecho.'], todos: ['Todos los pendientes', 'Todo lo que ves: de tus expedientes y de tu equipo.'] };
+  async function cargaPen() {
+    PEN = await rpc('pend_lista', { p: { vista: PV, estatus: $('f-pen').value } });
+    pintaPen();
+  }
+  function penFiltrados() {
+    var q = norm($('q-pen').value);
+    return PEN.filter(function (x) { return !q || norm([x.titulo, x.detalle, x.cliente, x.grupo, x.resp_n, x.externo, x.por_n, x.revisa_n].join(' ')).indexOf(q) >= 0; });
+  }
+  function pintaPen() {
+    document.querySelectorAll('[data-pv]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pv') === PV ? 'true' : 'false'); });
+    $('h-pen').textContent = VISTAS_P[PV][0]; $('pen-sub').textContent = VISTAS_P[PV][1];
+    var L = penFiltrados();
+    $('pen-l').innerHTML = L.length ? L.map(function (x) {
+      return '<tr class="click" tabindex="0" data-pend="' + x.id + '"><td data-l="Qué" class="w"><span class="rs' + (x.prioridad === 1 ? ' prio1' : '') + '">' + esc(x.titulo) + '</span>'
+        + (x.prioridad === 1 ? ' ' + chip('Alta', 'mal') : '') + (x.privado ? ' ' + chip('Privado') : '') + (x.ndocs ? ' ' + chip(plural(x.ndocs, 'archivo', 'archivos')) : '')
+        + (x.detalle ? '<div class="mut">' + esc(x.detalle.slice(0, 140)) + (x.detalle.length > 140 ? '…' : '') + '</div>' : '') + '</td>'
+        + '<td data-l="Cliente">' + (x.cliente ? esc(x.cliente) + (x.pr ? ' ' + chip('Prospecto', 'na') : '') : '<span class="mut">Interno</span>') + '</td>'
+        + '<td data-l="Quién">' + esc(x.resp_n || x.externo) + (x.revisa ? '<div class="mut">Revisa ' + esc(x.revisa_n) + '</div>' : '') + (PV !== 'asigne' ? '<div class="mut">Pidió ' + esc(x.por_n) + '</div>' : '') + '</td>'
+        + '<td data-l="Para cuándo">' + venceChip(x) + '</td><td data-l="Estatus">' + estChip(x.estatus) + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="vacio">' + (PEN.length ? 'Nada coincide con la búsqueda.' : PV === 'mios' && $('f-pen').value === 'abiertos' ? 'No tienes pendientes abiertos. 🎉' : 'No hay pendientes aquí.') + '</td></tr>';
+    $('pen-l').querySelectorAll('[data-pend]').forEach(function (tr) {
+      var id = +tr.getAttribute('data-pend');
+      tr.onclick = function () { verPend(id); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verPend(id); } };
+    });
+  }
+  async function cuentaMios() {
+    try { EST = await rpc('exp_estado'); } catch (e) { return; }
+    $('n-mios').textContent = EST.mios.abiertos; $('n-rev').textContent = EST.mios.revisar;
+  }
+  document.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = async function () { PV = b.getAttribute('data-pv'); try { await cargaPen(); } catch (e) { error(falla(e)); } }; });
+  $('q-pen').oninput = pintaPen;
+  $('f-pen').onchange = async function () { try { await cargaPen(); } catch (e) { error(falla(e)); } };
+  $('x-pen').onclick = async function () {
+    var b = this, L = penFiltrados(); b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Pendientes'), ws = wb.addWorksheet('Pendientes');
+      var head = ['Qué', 'Detalle', 'Cliente', 'Lo hace', 'Lo revisa', 'Pidió', 'Para cuándo', 'Prioridad', 'Estatus'];
+      ws.columns = [40, 50, 34, 24, 22, 22, 14, 10, 14].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: VISTAS_P[PV][0], lineas: [nombre(YO), 'Exportado el ' + fecha(HOY)] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (x, i) { ws.getRow(f0 + 1 + i).values = [x.titulo, x.detalle, x.cliente || 'Interno', x.resp_n || x.externo, x.revisa_n, x.por_n, x.vence ? fecha(x.vence) : '', ['', 'Alta', 'Normal', 'Baja'][x.prioridad], (ESTATUS[x.estatus] || [x.estatus])[0]]; });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }]; MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Pendientes ' + HOY + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  var ACCIONES = [['proceso', 'Empezar', '', false], ['entregar', 'Entregar para revisión', 'acento', false], ['terminar', 'Dar por hecho', 'bien', false],
+    ['regresar', 'Regresar', '', true], ['reabrir', 'Reabrir', '', false], ['cancelar', 'Cancelar', 'peligro', true]];
+  async function verPend(id, tras) {
+    var x;
+    try { x = await rpc('pend_detalle', { p_id: id }); } catch (e) { error(falla(e)); return; }
+    var pu = x.puede || {};
+    x.docs.forEach(function (d) { DOCS[d.id] = d; });
+    var acc = ACCIONES.filter(function (a) { return pu[a[0]]; }).map(function (a) { return '<button class="btn ' + a[2] + '" type="button" data-acc="' + a[0] + '">' + a[1] + '</button>'; }).join('')
+      + (pu.editar ? '<button class="btn" type="button" id="p-edit">Editar</button>' : '');
+    abre(x.titulo, (x.cliente ? x.cliente + (x.pr ? ' · Prospecto' : '') : 'Interno') + ' · ' + (ESTATUS[x.estatus] || [x.estatus])[0],
+      '<div class="msg" id="p-msg" hidden></div>'
+      + '<div class="sec"><h3>Datos</h3><div class="in"><div class="dl">'
+      + '<span>Lo hace</span><span>' + esc(x.resp_n || x.externo) + '</span>'
+      + (x.revisa ? '<span>Lo revisa</span><span>' + esc(x.revisa_n) + '</span>' : '')
+      + '<span>Pidió</span><span>' + esc(x.por_n) + ' · ' + esc(cuandoTs(x.creado)) + '</span>'
+      + '<span>Para cuándo</span><span>' + venceChip(x) + '</span>'
+      + '<span>Prioridad</span><span>' + ['', 'Alta', 'Normal', 'Baja'][x.prioridad] + '</span>'
+      + '<span>Estatus</span><span>' + estChip(x.estatus) + (x.terminado ? ' <span class="mut">' + esc(x.terminado_n) + ', ' + esc(cuandoTs(x.terminado)) + '</span>' : '') + '</span>'
+      + (x.nota ? '<span>Salió de</span><span><button class="lnk" type="button" id="p-nota">La nota «' + esc(x.nota.titulo || 'sin título') + '» del ' + esc(fecha(x.nota.fecha)) + '</button></span>' : '')
+      + (x.origen === 'access' ? '<span>Salió de</span><span>Tareas y proyectos del Access</span>' : '')
+      + (x.privado ? '<span>Quién lo ve</span><span>Solo los involucrados y la dirección</span>' : '')
+      + '</div>' + (x.detalle ? '<div class="texto" style="margin-top:10px">' + esc(x.detalle) + '</div>' : '') + '</div></div>'
+      + (acc ? '<div class="acciones">' + acc + '</div>' : '')
+      + '<div class="sec"><h3>Evidencia</h3><div class="in">' + listaDocs(x.docs, false)
+      + (pu.evidencia && ESCRIBE ? '<div class="campos" style="margin-top:10px"><div class="campo ancho"><label for="p-arch">Subir evidencia (PDF, foto, XML, Word o Excel, hasta 25 MB)</label><input type="file" id="p-arch"></div></div><div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="p-sube">Subir</button></div>' : '')
+      + '</div></div>'
+      + '<div class="sec"><h3>Comentarios y bitácora</h3><div class="in"><ul class="bit">'
+      + x.bitacora.slice().reverse().map(function (b) { return '<li><span class="q">' + esc(b.quien) + '</span> <span class="mut">' + esc(cuandoTs(b.cuando)) + '</span><div class="texto">' + esc(b.texto) + '</div></li>'; }).join('')
+      + '</ul><div class="campo ancho" style="margin-top:10px"><label for="p-com">Comentario</label><textarea id="p-com" placeholder="Escribe un avance, una duda o lo que haga falta"></textarea></div>'
+      + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="p-comenta">Comentar</button></div></div></div>');
+    DESPUES = tras || refrescaTodo;
+    $('v-cuerpo').querySelectorAll('[data-acc]').forEach(function (b) {
+      b.onclick = async function () {
+        var a = ACCIONES.filter(function (z) { return z[0] === b.getAttribute('data-acc'); })[0], t = '';
+        if (a[3]) { t = await pregunta(a[0] === 'cancelar' ? '¿Por qué se cancela?' : '¿Por qué lo regresas? Dile qué falta.', a[1], true); if (!t) return; }
+        b.disabled = true;
+        try { await rpc('pend_estatus', { p_id: x.id, p_accion: a[0], p_texto: t }); avisa('Listo.'); verPend(x.id, tras); }
+        catch (e) { msg('p-msg', falla(e)); b.disabled = false; }
+      };
+    });
+    if ($('p-edit')) $('p-edit').onclick = function () { formPend(x); };
+    if ($('p-nota')) $('p-nota').onclick = function () { abreExp(x.g, null, x.pr); cierra(); };
+    $('p-comenta').onclick = async function () {
+      var t = $('p-com').value.trim(); if (!t) { $('p-com').focus(); return; }
+      this.disabled = true;
+      try { await rpc('pend_comenta', { p_id: x.id, p_texto: t }); verPend(x.id, tras); } catch (e) { msg('p-msg', falla(e)); this.disabled = false; }
+    };
+    if ($('p-sube')) $('p-sube').onclick = async function () {
+      var f = $('p-arch').files[0]; if (!f) { $('p-arch').focus(); return; }
+      this.disabled = true; this.textContent = 'Subiendo…';
+      try { await subeDoc({ pend: x.id, tipo: 'evidencia' }, f); avisa('Se subió «' + f.name + '».'); verPend(x.id, tras); }
+      catch (e) { msg('p-msg', falla(e)); this.disabled = false; this.textContent = 'Subir'; }
+    };
+    ligaDocs($('v-cuerpo'));
+  }
+
+  // Alta o cambio de un pendiente. ctx: {g, e, pr} para uno nuevo desde un expediente
+  function formPend(x, ctx) {
+    x = x || {}; ctx = ctx || {};
+    var g = x.id ? x.g : ctx.g, e = x.id ? x.e : ctx.e, pr = x.id ? x.pr : ctx.pr, fijo = !!(x.id && x.origen !== 'manual') || !!pr;
+    var resp = x.id ? (x.resp || (x.externo ? '__ext' : '')) : (ctx.resp || '');
+    abre(x.id ? 'Editar pendiente' : 'Nuevo pendiente', x.id ? x.titulo : 'Qué hay que hacer, quién, para cuándo',
+      '<div class="msg" id="f-msg" hidden></div><div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo ancho"><label for="f-t">Qué hay que hacer</label><input id="f-t" maxlength="200" value="' + esc(x.titulo || '') + '"></div>'
+      + '<div class="campo ancho"><label for="f-d">Detalle (opcional)</label><textarea id="f-d" maxlength="10000">' + esc(x.detalle || '') + '</textarea></div>'
+      + (pr ? '<div class="campo ancho"><label>Prospecto</label><div>' + esc(ctx.prNombre || x.cliente || '') + '</div></div>'
+        : '<div class="campo"><label for="f-g">Cliente</label><select id="f-g"' + (fijo ? ' disabled' : '') + '>' + opcClientes(CLIS, g, true) + '</select></div>'
+        + '<div class="campo"><label for="f-e">Razón social</label><select id="f-e"' + (fijo ? ' disabled' : '') + '>' + opcRazones(CLIS, g, e) + '</select></div>')
+      + '<div class="campo"><label for="f-r">Quién lo hace</label><select id="f-r">' + opcEquipo(resp, { externo: true }) + '</select></div>'
+      + '<div class="campo" id="c-ext"' + (resp === '__ext' ? '' : ' hidden') + '><label for="f-x">Quién (de fuera)</label><input id="f-x" maxlength="200" placeholder="El cliente, su contador…" value="' + esc(x.externo || '') + '"></div>'
+      + '<div class="campo"><label for="f-rv">Quién lo revisa (opcional)</label><select id="f-rv">' + opcEquipo(x.revisa || '', { vacio: 'Nadie (lo da por hecho quien lo hace)' }) + '</select></div>'
+      + '<div class="campo"><label for="f-v">Para cuándo</label><input type="date" id="f-v" value="' + esc(x.vence || '') + '"></div>'
+      + '<div class="campo"><label for="f-p">Prioridad</label><select id="f-p">' + [[1, 'Alta'], [2, 'Normal'], [3, 'Baja']].map(function (o) { return '<option value="' + o[0] + '"' + ((x.prioridad || 2) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="f-a">Recordarle antes</label><select id="f-a">' + [0, 1, 2, 3, 5, 7, 10, 15].map(function (n) { return '<option value="' + n + '"' + ((x.avisar == null ? 3 : x.avisar) === n ? ' selected' : '') + '>' + (n ? plural(n, 'día antes', 'días antes') : 'Solo el día') + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo chk ancho"><input type="checkbox" id="f-priv"' + (x.privado ? ' checked' : '') + '><label for="f-priv">Privado: solo lo ven los involucrados y la dirección</label></div>'
+      + '</div></div></div><div class="acciones"><button class="btn acento" type="button" id="f-ok">' + (x.id ? 'Guardar' : 'Dar de alta') + '</button><button class="btn" type="button" id="f-no">Cancelar</button></div>');
+    DESPUES = x.id ? function () { verPend(x.id); } : (ctx.despues || refrescaTodo);
+    if ($('f-g')) ligaRazones(CLIS, 'f-g', 'f-e');
+    $('f-r').onchange = function () { $('c-ext').hidden = this.value !== '__ext'; };
+    $('f-no').onclick = cierra;
+    $('f-ok').onclick = async function () {
+      var r = $('f-r').value, p = { titulo: $('f-t').value.trim(), detalle: $('f-d').value, responsable: r === '__ext' ? '' : r, externo: r === '__ext' ? $('f-x').value.trim() : '',
+        revisa: $('f-rv').value, vence: $('f-v').value, prioridad: $('f-p').value, avisar: $('f-a').value, privado: $('f-priv').checked };
+      if (x.id) p.id = x.id;
+      if (pr) p.prospecto = pr; else { p.grupo = $('f-g').value; p.empresa = $('f-e').value; }
+      if (!p.titulo) { msg('f-msg', 'Escribe qué hay que hacer.'); $('f-t').focus(); return; }
+      this.disabled = true;
+      try { await rpc('pend_guarda', { p: p }); avisa(x.id ? 'Se guardó el pendiente.' : 'Listo: le llegó el aviso a quien lo hace.'); cierra(); }
+      catch (e) { msg('f-msg', falla(e)); this.disabled = false; }
+    };
+    try { $('f-t').focus(); } catch (e) {}
+  }
+
+  /* ================================ DOCUMENTOS ================================ */
+  function tipoDoc(k) { var t = TIPOS_DOC.filter(function (x) { return x[0] === k; })[0]; return t ? t[1] : k; }
+  function esPdf(d) { return /\.pdf$/i.test(d.nombre || ''); }
+  function esImg(d) { return /\.(jpe?g|png|webp|heic|heif)$/i.test(d.nombre || ''); }
+  function tamano(b) { b = +b || 0; return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+  function listaDocs(L, conQuitar) {
+    if (!L.length) return '<div class="mut">Todavía no hay archivos.</div>';
+    return '<ul class="lista" style="margin:0 -14px">' + L.map(function (d) {
+      DOCS[d.id] = d;
+      return '<li><div class="t">' + esc(d.nombre) + '</div><div class="linea">' + chip(tipoDoc(d.tipo), 'az') + '<span class="mut">' + esc(d.por) + ' · ' + esc(cuandoTs(d.subido)) + ' · ' + tamano(d.bytes) + '</span></div>'
+        + (d.nota ? '<div class="mut">' + esc(d.nota) + '</div>' : '')
+        + '<div class="acciones" style="margin-top:6px">' + (esPdf(d) || esImg(d) ? '<button class="btn chico" type="button" data-xver="' + d.id + '">Ver</button>' : '')
+        + '<button class="btn chico" type="button" data-xbaja="' + d.id + '">Bajar</button>'
+        + (conQuitar && d.quita ? '<button class="btn chico peligro" type="button" data-xquita="' + d.id + '">Quitar</button>' : '') + '</div></li>';
+    }).join('') + '</ul>';
+  }
+  // un archivo: primero su renglón (la base da su número), luego la cubeta privada «expedientes» y al final «listo»
+  async function subeDoc(p, f) {
+    if (f.size > 25 * 1024 * 1024) throw new Error('«' + f.name + '» pesa más de 25 MB');
+    var id = await rpc('exp_doc_nuevo', { p: Object.assign({}, p, { nombre: f.name, bytes: f.size }) });
+    var u = await P.sb.storage.from('expedientes').upload(String(id), f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    if (u.error) throw u.error;
+    await rpc('exp_doc_listo', { p_id: id });
+    return id;
+  }
+  async function bytesDoc(d, intento) {
+    var b;
+    if (intento === 2) {
+      var s = await P.sb.storage.from('expedientes').createSignedUrl(String(d.id), 60);
+      if (s.error || !s.data || !s.data.signedUrl) throw new Error('No se pudo traer el archivo');
+      var res = await fetch(s.data.signedUrl, { cache: 'no-store', credentials: 'omit' });
+      if (!res.ok) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await res.arrayBuffer());
+    } else {
+      var r = await P.sb.storage.from('expedientes').download(String(d.id));
+      if (r.error || !r.data) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await r.data.arrayBuffer());
+    }
+    // los PDF se ven con la marca PROFASE; al bajarlos, cada quien escoge con marca u original (Daniel, 31-oct-2026)
+    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: d.nombre }); if (m) b = m; }
+    return b;
+  }
+  var VISOR = window.PROFASE_VISOR ? window.PROFASE_VISOR.nuevo({
+    trae: bytesDoc, esPdf: esPdf, expediente: true,
+    nombre: function (d) { return String(d.nombre || 'documento').replace(/[\\/:*?"<>|]/g, '_'); },
+    doc: function (el) { return DOCS[+(el.getAttribute('data-xver') || el.getAttribute('data-xbaja'))]; },
+    alVer: function (d) { anota(d, 'ver'); }, alBajar: function (d) { anota(d, 'bajar'); }
+  }) : null;
+  function anota(d, como) { try { rpc('exp_doc_anota', { p_id: d.id, p_como: como }); } catch (e) {} try { P.registrar('descarga', 'Expediente · ' + d.nombre); } catch (e) {} }
+  async function verFoto(d, btn) {
+    btn.disabled = true;
+    try {
+      var b = await bytesDoc(d, 1), url = URL.createObjectURL(new Blob([b])), v = document.createElement('div');
+      v.className = 'img-velo'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-modal', 'true'); v.setAttribute('aria-label', d.nombre);
+      v.innerHTML = '<img alt="' + esc(d.nombre) + '"><button class="btn" type="button">Cerrar</button>';
+      v.querySelector('img').src = url;
+      var fin = function () { v.remove(); URL.revokeObjectURL(url); document.removeEventListener('keydown', tec, true); try { btn.focus(); } catch (e) {} };
+      var tec = function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fin(); } };
+      v.onclick = function (e) { if (e.target === v || e.target.tagName === 'BUTTON') fin(); };
+      document.addEventListener('keydown', tec, true);
+      document.body.appendChild(v); v.querySelector('button').focus();
+      anota(d, 'ver');
+    } catch (e) { error(falla(e)); }
+    btn.disabled = false;
+  }
+  function ligaDocs(raiz) {
+    raiz.querySelectorAll('[data-xver]').forEach(function (b) {
+      var d = DOCS[+b.getAttribute('data-xver')];
+      b.onclick = function () { if (esImg(d)) verFoto(d, b); else if (VISOR) VISOR.ver(d, b); };
+    });
+    raiz.querySelectorAll('[data-xbaja]').forEach(function (b) {
+      var d = DOCS[+b.getAttribute('data-xbaja')];
+      b.onclick = function () { if (VISOR) VISOR.baja(d, b); };
+    });
+    raiz.querySelectorAll('[data-xquita]').forEach(function (b) {
+      b.onclick = async function () {
+        var d = DOCS[+b.getAttribute('data-xquita')];
+        var t = await pregunta('¿Por qué se quita «' + d.nombre + '»? (no se borra: deja de verse)', 'Quitar', true); if (!t) return;
+        try { await rpc('exp_doc_quita', { p_id: d.id, p_motivo: t }); avisa('Se quitó el documento.'); recargaFicha(); } catch (e) { error(falla(e)); }
+      };
+    });
+    if (VISOR) try { VISOR.precarga(Object.keys(DOCS).map(function (k) { return DOCS[k]; }).filter(esPdf).slice(0, 3), function () { return true; }); } catch (e) {}
+  }
+  function formDoc(ctx) {
+    var emps = (ACT && ACT.f && ACT.f.empresas) || [];
+    abre('Subir documento', ctx.nombre || '',
+      '<div class="msg" id="d-msg" hidden></div><div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="d-t">Qué documento es</label><select id="d-t">' + TIPOS_DOC.filter(function (t) { return t[0] !== 'evidencia'; }).map(function (t) { return '<option value="' + t[0] + '">' + esc(t[1]) + '</option>'; }).join('') + '</select></div>'
+      + (ctx.pr ? '' : '<div class="campo"><label for="d-e">De qué razón social</label><select id="d-e"><option value="">Del grupo</option>' + emps.map(function (x) { return '<option value="' + x.id + '"' + (+ctx.e === x.id ? ' selected' : '') + '>' + esc(x.razon) + '</option>'; }).join('') + '</select></div>')
+      + '<div class="campo ancho"><label for="d-f">Archivo (PDF, foto, XML, Word o Excel, hasta 25 MB)</label><input type="file" id="d-f"></div>'
+      + '<div class="campo ancho"><label for="d-n">Nota (opcional)</label><input id="d-n" maxlength="1000" placeholder="Por ejemplo: vigente hasta…"></div>'
+      + '</div></div></div><div class="acciones"><button class="btn acento" type="button" id="d-ok">Subir</button><button class="btn" type="button" id="d-no">Cancelar</button></div>');
+    DESPUES = recargaFicha;
+    $('d-no').onclick = cierra;
+    $('d-ok').onclick = async function () {
+      var f = $('d-f').files[0]; if (!f) { msg('d-msg', 'Escoge el archivo.'); return; }
+      this.disabled = true; this.textContent = 'Subiendo…';
+      try {
+        await subeDoc({ grupo: ctx.g, empresa: ctx.pr ? '' : $('d-e').value, prospecto: ctx.pr || '', tipo: $('d-t').value, nota: $('d-n').value }, f);
+        avisa('Se subió «' + f.name + '».'); cierra();
+      } catch (e) { msg('d-msg', falla(e)); this.disabled = false; this.textContent = 'Subir'; }
+    };
+  }
+
+  /* ================================ NOTAS Y MINUTAS ================================ */
+  function renglonPend(i) {
+    return '<div class="renglon" data-rp="' + i + '"><input data-k="titulo" maxlength="200" placeholder="Qué hay que hacer" aria-label="Qué hay que hacer">'
+      + '<select data-k="responsable" aria-label="Quién lo hace">' + opcEquipo('', { vacio: 'Quién lo hace…', externo: true }) + '</select>'
+      + '<input type="date" data-k="vence" aria-label="Para cuándo">'
+      + '<button class="btn chico" type="button" data-quita-r aria-label="Quitar este pendiente">✕</button>'
+      + '<input class="ext" data-k="externo" maxlength="200" placeholder="Quién (de fuera)" aria-label="Quién lo hace (de fuera)" hidden></div>';
+  }
+  // ctx: {g, e, pr, nombre}
+  function formNota(n, ctx) {
+    n = n || {}; ctx = ctx || {};
+    var comp = (n.comp || []).map(function (c) { return c.u; });
+    var otros = EQUIPO.filter(function (p) { return p.u !== YO && p.rol !== 'director'; });
+    abre(n.id ? 'Editar nota' : 'Nueva nota', ctx.nombre || '',
+      '<div class="msg" id="n-msg" hidden></div>'
+      + '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="n-f">Fecha</label><input type="date" id="n-f" value="' + esc(n.fecha || HOY) + '"></div>'
+      + (ctx.pr || n.id ? '' : '<div class="campo"><label for="n-e">De qué razón social</label><select id="n-e"><option value="">De todo el grupo</option>' + ((ACT && ACT.f && ACT.f.empresas) || []).map(function (x) { return '<option value="' + x.id + '"' + (+ctx.e === x.id ? ' selected' : '') + '>' + esc(x.razon) + '</option>'; }).join('') + '</select></div>')
+      + '<div class="campo ancho"><label for="n-t">Título</label><input id="n-t" maxlength="200" value="' + esc(n.titulo || '') + '" placeholder="Reunión con…"></div>'
+      + '<div class="campo ancho"><label for="n-x">Nota</label><textarea id="n-x" style="min-height:140px">' + esc(n.texto || '') + '</textarea></div>'
+      + '<div class="campo ancho"><label for="n-c">Conclusiones</label><textarea id="n-c">' + esc(n.conclusion || '') + '</textarea></div>'
+      + '</div></div></div>'
+      + (n.id ? '' : '<div class="sec"><h3>Pendientes que salieron</h3><div class="in"><div class="mut" style="margin-bottom:8px">Cada uno le llega a quien lo hace, con su fecha y sus recordatorios.</div><div id="n-pends"></div>'
+        + '<button class="btn chico" type="button" id="n-mas">+ Agregar pendiente</button></div></div>')
+      + '<div class="sec"><h3>Quién la ve</h3><div class="in"><div class="mut" style="margin-bottom:8px">La dirección siempre la ve. Escoge con quién compartirla.</div>'
+      + '<div class="campo chk" style="margin-bottom:8px"><input type="checkbox" id="n-todos"' + (n.todos ? ' checked' : '') + '><label for="n-todos">Que la vean todos los que ven este expediente</label></div>'
+      + '<div class="marcas">' + otros.map(function (p) {
+        return '<label><input type="checkbox" data-comp="' + esc(p.u) + '"' + (comp.indexOf(p.u) >= 0 ? ' checked' : '') + '>' + esc(p.n) + '</label>';
+      }).join('') + '</div></div></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="n-ok">Guardar</button><button class="btn" type="button" id="n-no">Cancelar</button></div>');
+    DESPUES = ctx.despues || recargaFicha;
+    var nr = 0;
+    function agrega() {
+      var w = document.createElement('div'); w.innerHTML = renglonPend(nr++); var r = w.firstElementChild; $('n-pends').appendChild(r);
+      r.querySelector('[data-k="responsable"]').onchange = function () { r.querySelector('[data-k="externo"]').hidden = this.value !== '__ext'; };
+      r.querySelector('[data-quita-r]').onclick = function () { r.remove(); };
+      try { r.querySelector('input').focus(); } catch (e) {}
+    }
+    if ($('n-mas')) $('n-mas').onclick = agrega;
+    $('n-no').onclick = cierra;
+    $('n-ok').onclick = async function () {
+      var p = { fecha: $('n-f').value, titulo: $('n-t').value.trim(), texto: $('n-x').value, conclusion: $('n-c').value, todos: $('n-todos').checked,
+        comparte: Array.prototype.map.call(document.querySelectorAll('[data-comp]:checked'), function (c) { return c.getAttribute('data-comp'); }) };
+      if (n.id) p.id = n.id;
+      else if (ctx.pr) p.prospecto = ctx.pr;
+      else { p.grupo = ctx.g; p.empresa = $('n-e') ? $('n-e').value : (ctx.e || ''); }
+      if (!p.titulo && !p.texto.trim()) { msg('n-msg', 'Escribe la nota.'); $('n-x').focus(); return; }
+      if (!n.id) {
+        p.pendientes = [];
+        var malo = null;
+        document.querySelectorAll('#n-pends [data-rp]').forEach(function (r) {
+          var v = function (k) { var el = r.querySelector('[data-k="' + k + '"]'); return el ? el.value.trim() : ''; };
+          if (!v('titulo') && !v('responsable')) return;
+          var resp = v('responsable');
+          if (!v('titulo') || !resp || (resp === '__ext' && !v('externo'))) malo = r;
+          p.pendientes.push({ titulo: v('titulo'), responsable: resp === '__ext' ? '' : resp, externo: resp === '__ext' ? v('externo') : '', vence: v('vence') });
+        });
+        if (malo) { msg('n-msg', 'A cada pendiente ponle qué hay que hacer y quién lo hace.'); try { malo.querySelector('input').focus(); } catch (e) {} return; }
+      }
+      this.disabled = true;
+      try {
+        var r = await rpc('exp_nota_guarda', { p: p });
+        avisa('Se guardó la nota' + (r.pendientes.length ? ' y salieron ' + plural(r.pendientes.length, 'pendiente', 'pendientes') : '') + '.');
+        cierra();
+      } catch (e) { msg('n-msg', falla(e)); this.disabled = false; }
+    };
+    try { $('n-t').focus(); } catch (e) {}
+  }
+
+  /* ================================ LA MINUTA DE UNA REUNIÓN ================================ */
+  // Una por cita (Daniel, 1-nov-2026, 05:00; CLAUDE.md, «Reuniones y minutas»): «Comentarios de la reunión» (lo de cada
+  // quien o «Nada que agregar»), «Comentarios de dirección» (solo la dirección) y sus pendientes (uno o varios responsables,
+  // de la razón social o de todo el grupo). Se escribe desde que empieza la cita y se guarda sola mientras se escribe;
+  // mientras está abierta avisa que alguien escribe (PORTAL.escribiendo) para que nada la tape ni la borre.
+  var MINUTA = null;                    // la abierta: {id, pend: [guardados pendientes], t: reloj}
+  function escribiendo(si) {
+    [window.PORTAL, (function () { try { return window.parent !== window ? window.parent.PORTAL : null; } catch (e) { return null; } })()]
+      .forEach(function (x) { try { if (x && typeof x.escribiendo === 'function') x.escribiendo('minuta', si); } catch (e) {} });
+  }
+  function hora(t) { try { return H && H.hora ? H.hora(t) : ''; } catch (e) { return ''; } }
+  async function formMinuta(id, tras) {
+    var m;
+    try { m = await rpc('exp_minuta', { p_cita: id }); } catch (e) { error(falla(e)); return; }
+    var c = m.cita, pu = m.puede || {}, mia = m.mia || { texto: '', conclusion: '', nada: false }, otros = (m.partes || []).filter(function (x) { return !x.mia; });
+    var asig = m.asignables || [], razones = m.razones || [];
+    var hayCli = !!(c.g || c.pr);
+    var linea = function (x) {
+      return '<li><div class="linea"><span class="t">' + esc(x.n) + '</span>' + (x.nada ? chip('Nada que agregar') : '') + '<span class="mut">' + esc(cuandoTs(x.editada)) + '</span></div>'
+        + (x.texto ? '<div class="texto">' + esc(x.texto) + '</div>' : '') + (x.conclusion ? '<div class="mini">Lo que se concluyó</div><div class="texto">' + esc(x.conclusion) + '</div>' : '') + '</li>';
+    };
+    var pendLi = function (x) { return '<li class="click" tabindex="0" data-pend="' + x.id + '"><div class="t">' + esc(x.titulo) + '</div><div class="linea">' + estChip(x.estatus) + venceChip(x) + '<span class="mut">' + esc(x.resp_n) + (x.cliente ? ' · ' + esc(x.cliente) : '') + '</span></div></li>'; };
+    abre('Minuta de la reunión', c.titulo + ' · ' + fechaDia(c.fecha) + ' ' + c.hora + (c.cliente ? ' · ' + c.cliente : ''),
+      '<div class="msg" id="m-msg" hidden></div>'
+      + (m.obligada ? '<div class="msg ojo">La reunión se hizo y te falta lo tuyo: escribe de qué se habló y lo que se concluyó, o marca «Nada que agregar». Siempre hay minuta, aunque se haya visto algo muy básico.</div>' : '')
+      + (c.cierre === 'no_se_hizo' ? '<div class="msg">Esta reunión no se realizó' + (c.cierre_motivo ? ': ' + esc(c.cierre_motivo) : '') + '. No lleva minuta.</div>' : '')
+      + (!pu.escribir && c.cierre !== 'no_se_hizo' && !c.empezo ? '<div class="msg">La minuta se escribe cuando empiece la reunión.</div>' : '')
+      + '<div class="sec"><h3>Comentarios de la reunión</h3><div class="in">'
+      + (otros.length ? '<ul class="lista" style="margin:-4px -14px 10px">' + otros.map(linea).join('') + '</ul>' : (pu.escribir ? '' : '<div class="mut">Todavía nadie escribe.</div>'))
+      + (pu.escribir ? '<div class="campos">'
+        + '<div class="campo ancho"><label for="m-x">Lo tuyo: de qué se habló</label><textarea id="m-x" style="min-height:130px" placeholder="Aunque sea algo muy básico">' + esc(mia.texto) + '</textarea></div>'
+        + '<div class="campo ancho"><label for="m-c">Lo que se concluyó</label><textarea id="m-c">' + esc(mia.conclusion) + '</textarea></div>'
+        + '<div class="campo ancho chk"><input type="checkbox" id="m-nada"' + (mia.nada ? ' checked' : '') + '><label for="m-nada">Nada que agregar</label></div>'
+        + '<div class="mut" id="m-gu" aria-live="polite">' + (mia.editada ? 'Guardado a las ' + esc(hora(mia.editada)) : 'Se guarda solo mientras escribes') + '</div></div>' : '')
+      + '</div></div>'
+      + (m.dir ? '<div class="sec"><h3>Comentarios de dirección</h3><div class="in"><div class="mut" style="margin-bottom:8px">Precios, costos y lo que no deba ver nadie más: solo los ven Héctor Daniel y Héctor Nava Ramos.</div>'
+        + (pu.dir ? '<div class="campo"><textarea id="m-d" style="min-height:90px" aria-label="Comentarios de dirección">' + esc(m.dir.texto || '') + '</textarea></div>'
+          : (m.dir.texto ? '<div class="texto">' + esc(m.dir.texto) + '</div>' : '<div class="mut">Sin comentarios.</div>'))
+        + (m.dir.editada ? '<div class="mut" style="margin-top:6px">Lo escribió ' + esc(m.dir.por) + ' · ' + esc(cuandoTs(m.dir.editada)) + '</div>' : '') + '</div></div>' : '')
+      + '<div class="sec"><h3>Pendientes que salieron</h3><div class="in">'
+      + '<ul class="lista" id="m-pl" style="margin:-4px -14px 8px">' + ((m.pendientes || []).map(pendLi).join('') || '<li class="vacio" style="padding:4px 14px">Todavía no hay pendientes de esta reunión.</li>') + '</ul>'
+      + (pu.escribir ? '<div class="campos" id="m-pf">'
+        + '<div class="campo ancho"><label for="m-pt">Qué hay que hacer</label><input id="m-pt" maxlength="200" placeholder="Ej. Mandar la propuesta al cliente"></div>'
+        + (hayCli && !c.pr ? '<div class="campo"><label for="m-pe">De qué</label><select id="m-pe"><option value="">Todo el grupo</option>' + razones.map(function (x) { return '<option value="' + x.id + '"' + (x.id === c.e ? ' selected' : '') + '>' + esc(x.r) + '</option>'; }).join('') + '</select></div>' : '')
+        + '<div class="campo"><label for="m-pv">Para cuándo</label><input type="date" id="m-pv" min="' + esc(HOY) + '"></div>'
+        + '<div class="campo ancho"><label>Quién lo hace (uno o varios: a cada uno le llega el suyo)</label><div class="marcas" id="m-pr">'
+        + EQUIPO.filter(function (p) { return asig.indexOf(p.u) >= 0; }).map(function (p) { return '<label><input type="checkbox" data-mr="' + esc(p.u) + '">' + esc(p.u === YO ? p.n + ' (yo)' : p.n) + '</label>'; }).join('') + '</div></div>'
+        + '<div class="campo ancho"><div class="acciones"><button class="btn" type="button" id="m-pa">Agregar pendiente</button></div></div></div>' : '')
+      + '</div></div>'
+      + '<div class="acciones">' + (pu.escribir ? '<button class="btn acento" type="button" id="m-ok">Listo</button>' : '')
+      + (c.expediente && !(ACT && SEC === 'exp') && hayCli ? '<button class="btn" type="button" id="m-exp">Ver el expediente</button>' : '') + '</div>');
+    // guardar solo mientras escribe: lo que cambió, a los 1.2 s de dejar de escribir (y al cerrar, por donde se cierre)
+    var cola = {}, reloj = null;
+    async function guarda() {
+      clearTimeout(reloj); reloj = null;
+      var va = cola; cola = {};
+      if (!Object.keys(va).length) return;
+      va.cita = id;
+      try { var r = await rpc('exp_minuta_guarda', { p: va }); if ($('m-gu')) $('m-gu').textContent = 'Guardado a las ' + hora(r.editada); if ($('m-msg') && $('m-msg').classList.contains('mal')) msg('m-msg', ''); }
+      catch (e) { Object.keys(va).forEach(function (k) { if (k !== 'cita' && !(k in cola)) cola[k] = va[k]; }); if ($('m-msg')) msg('m-msg', falla(e)); else error(falla(e)); }
+    }
+    function cambia(k, v) { cola[k] = v; clearTimeout(reloj); reloj = setTimeout(guarda, 1200); if ($('m-gu')) $('m-gu').textContent = 'Guardando…'; }
+    MINUTA = { id: id };
+    escribiendo(true);
+    var alSalir = function (f) { return function () { guarda(); escribiendo(false); MINUTA = null; if (f) f(); }; };
+    DESPUES = alSalir(tras || refrescaTodo);
+    if ($('m-x')) $('m-x').oninput = function () { cambia('texto', this.value); if (this.value.trim() && $('m-nada').checked) { $('m-nada').checked = false; MINUTA.cola.nada = false; } };
+    if ($('m-c')) $('m-c').oninput = function () { cambia('conclusion', this.value); };
+    if ($('m-nada')) $('m-nada').onchange = function () { cambia('nada', this.checked); guarda(); };
+    if ($('m-d')) $('m-d').oninput = function () { cambia('dir', this.value); };
+    if ($('m-ok')) $('m-ok').onclick = async function () {
+      await guarda();
+      var t = $('m-x') ? $('m-x').value.trim() : '', k = $('m-c') ? $('m-c').value.trim() : '';
+      if (m.obligada && !t && !k && !($('m-nada') && $('m-nada').checked)) { msg('m-msg', 'Escribe lo tuyo o marca «Nada que agregar».'); try { $('m-x').focus(); } catch (e) {} return; }
+      if (Object.keys(cola).length) return;   // no se pudo guardar: el mensaje ya está arriba
+      avisa('Se guardó la minuta.'); cierra();
+    };
+    if ($('m-exp')) $('m-exp').onclick = async function () { await guarda(); DESPUES = alSalir(null); cierra(); abreExp(c.g, null, c.pr); };
+    function ligaPend() {
+      $('m-pl').querySelectorAll('[data-pend]').forEach(function (li) {
+        var pid = +li.getAttribute('data-pend');
+        var va = async function () { await guarda(); DESPUES = alSalir(null); cierra(); verPend(pid, function () { formMinuta(id, tras); }); };
+        li.onclick = va; li.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); va(); } };
+      });
+    }
+    ligaPend();
+    if ($('m-pa')) $('m-pa').onclick = async function () {
+      var b = this, t = $('m-pt').value.trim(), resp = Array.prototype.map.call(document.querySelectorAll('[data-mr]:checked'), function (x) { return x.getAttribute('data-mr'); });
+      if (!t) { msg('m-msg', 'Escribe qué hay que hacer.'); $('m-pt').focus(); return; }
+      if (!resp.length) { msg('m-msg', 'Escoge quién lo hace (una o varias personas).'); return; }
+      b.disabled = true;
+      try {
+        var r = await rpc('exp_minuta_pend', { p: { cita: id, titulo: t, responsables: resp, vence: $('m-pv').value, empresa: $('m-pe') ? $('m-pe').value : '' } });
+        var ul = $('m-pl'); if (ul.querySelector('.vacio')) ul.innerHTML = '';
+        ul.insertAdjacentHTML('beforeend', (r.lista || []).map(pendLi).join(''));
+        ligaPend();
+        $('m-pt').value = ''; $('m-pv').value = ''; document.querySelectorAll('[data-mr]:checked').forEach(function (x) { x.checked = false; });
+        msg('m-msg', resp.length === 1 ? 'Se agregó el pendiente y le avisamos.' : 'Se agregaron ' + resp.length + ' pendientes (uno para cada quien) y les avisamos.', 'bien');
+      } catch (e) { msg('m-msg', falla(e)); }
+      b.disabled = false;
+    };
+    try { if ($('m-x')) $('m-x').focus(); } catch (e) {}
+  }
+  // desde fuera (window.__minuta.abre de exp_tab.js, con la pestaña ya abierta)
+  window.__expMinuta = function (id) { if (MINUTA && MINUTA.id === id && !$('velo').hidden) return; if (!$('velo').hidden) cierra(); formMinuta(id); };
+
+  /* ================================ REUNIONES (citas de la Agenda) ================================ */
+  // Se agendan, mueven y cancelan en el Calendario (window.parent.__calAbre, de cal_tab.js); aquí se ven y se registra la minuta
+  function calAbre(q) { try { if (window.parent !== window && typeof window.parent.__calAbre === 'function') { window.parent.__calAbre(q); return true; } } catch (e) {} return false; }
+  function hayCal() { try { return window.parent !== window && typeof window.parent.__calAbre === 'function'; } catch (e) { return false; } }
+  function duracion(r) { var a = String(r.hora || '').split(':'), b = String(r.fin || '').split(':'); var m = (+b[0] * 60 + +b[1]) - (+a[0] * 60 + +a[1]); return m > 0 ? m : 0; }
+  function reuLinea(r) {
+    var chips = '';
+    if (r.estado === 'cancelada') chips += chip('Cancelada · ' + (r.cancelo === 'cliente' ? 'el cliente' : 'PROFASE'), r.cancelo === 'cliente' ? 'ojo' : 'mal') + (r.reagendada_a ? chip('Re agendada', 'az') : '');
+    else if (r.cierre === 'no_se_hizo') chips += chip('No se realizó', 'ojo');
+    else if (r.debo) chips += chip('Te falta lo tuyo en la minuta', 'mal');
+    else if (r.mi_minuta) chips += chip('Tu minuta ✓', 'ok');
+    if (r.estado !== 'cancelada' && r.reagendada_de) chips += chip('Re agendada', 'az');
+    if (r.prospecto) chips += chip('Prospecto', 'na');
+    if (r.minutas) chips += chip('Minuta · ' + plural(r.minutas, 'persona', 'personas'), 'az');
+    return '<li class="click" tabindex="0" data-reu="' + esc(r.id) + '"><div class="linea"><span class="cuando">' + esc(fechaDia(r.fecha)) + ' · ' + esc(r.hora) + '</span>' + chips + '</div>'
+      + '<div class="t">' + esc(r.titulo) + '</div>' + (r.estado === 'cancelada' && r.motivo ? '<div class="mut">Motivo: ' + esc(r.motivo) + (r.reagendada_a ? ' · nueva fecha: ' + esc(fechaDia(r.reagendada_a.fecha)) + ' ' + esc(r.reagendada_a.hora) : '') + '</div>' : '')
+      + '<div class="mut">' + esc(r.cliente) + (r.lugar ? ' · ' + esc(r.lugar) : '') + ' · '
+      + esc(r.asistentes.map(function (a) { return a.n; }).join(', ')) + '</div></li>';
+  }
+  function ligaReus(raiz, L, tras, minuta) {
+    raiz.querySelectorAll('[data-reu]').forEach(function (li) {
+      var r = L.filter(function (x) { return String(x.id) === li.getAttribute('data-reu'); })[0]; if (!r) return;
+      var va = function () { if (minuta && r.puede && r.puede.minuta) formMinuta(r.id, tras); else verReu(r, tras); };
+      li.onclick = va;
+      li.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); va(); } };
+    });
+  }
+  // las minutas que me faltan (obligatorias), arriba de Pendientes
+  async function cargaMin() {
+    try { MIN = await rpc('exp_reuniones', { p: { vista: 'sin_minuta' } }) || []; } catch (e) { MIN = []; }
+    $('n-min').textContent = MIN.length; $('min-card').hidden = !MIN.length;
+    $('min-l').innerHTML = MIN.map(reuLinea).join('');
+    ligaReus($('min-l'), MIN, refrescaTodo, true);
+  }
+
+  function verReu(r, tras) {
+    var pu = r.puede || {};
+    abre(r.titulo, fechaDia(r.fecha) + ' · ' + r.hora + ' · ' + r.cliente,
+      '<div class="msg" id="r-msg" hidden></div>'
+      + (r.debo ? '<div class="msg mal">Ya pasó y te falta tu minuta: siempre hay minuta, aunque se haya visto algo muy básico.</div>' : '')
+      + '<div class="sec"><h3>La reunión</h3><div class="in"><div class="dl">'
+      + '<span>Cuándo</span><span><b>' + esc(fechaDia(r.fecha)) + ', ' + esc(r.hora) + '–' + esc(r.fin) + '</b>' + (duracion(r) ? ' · ' + esc(plural(duracion(r), 'minuto', 'minutos')) : '') + '</span>'
+      + '<span>' + (r.prospecto ? 'Prospecto' : 'Cliente') + '</span><span>' + esc(r.cliente) + (r.grupo && r.grupo !== r.cliente ? ' <span class="mut">(' + esc(r.grupo) + ')</span>' : '') + '</span>'
+      + (r.lugar ? '<span>Dónde</span><span>' + esc(r.lugar) + '</span>' : '')
+      + '<span>En la agenda de</span><span>' + esc(r.dueno_n) + (r.agendo && r.agendo !== r.dueno ? ' <span class="mut">(la agendó ' + esc(r.agendo_n) + ')</span>' : '') + '</span>'
+      + (r.con_dir && EST.eva && !r.asistentes.some(function (a) { return a.u === EST.eva; }) ? '<span>' + esc(nombre(EST.eva)) + '</span><span>No va; se entera</span>' : '')
+      + (r.cierre === 'se_hizo' ? '<span>Se hizo</span><span>Estuvieron ' + esc(r.asistentes.map(function (a) { return a.n; }).join(', ')) + '</span>' : '')
+      + (r.cierre === 'no_se_hizo' ? '<span>No se realizó</span><span>' + esc(r.cierre_motivo || '') + '</span>' : '')
+      + (r.estado === 'cancelada' ? '<span>Cancelada</span><span>La canceló ' + (r.cancelo === 'cliente' ? 'el cliente' : 'PROFASE') + (r.motivo ? ': ' + esc(r.motivo) : '') + (r.cancelada_n ? ' <span class="mut">(lo marcó ' + esc(r.cancelada_n) + ')</span>' : '') + '</span>' : '')
+      + (r.reagendada_a ? '<span>Re agendada</span><span>Para el ' + esc(fechaDia(r.reagendada_a.fecha)) + ' a las ' + esc(r.reagendada_a.hora) + (r.reagendada_a.estado === 'cancelada' ? ' <span class="mut">(esa también se canceló)</span>' : '') + '</span>' : '')
+      + (r.reagendada_de ? '<span>Antes</span><span>Era el ' + esc(fechaDia(r.reagendada_de.fecha)) + ' a las ' + esc(r.reagendada_de.hora) + ' <span class="mut">(la canceló ' + (r.reagendada_de.cancelo === 'cliente' ? 'el cliente' : 'PROFASE') + (r.reagendada_de.motivo ? ': ' + esc(r.reagendada_de.motivo) : '') + ')</span></span>' : '')
+      + '</div></div></div>'
+      + '<div class="sec"><h3>' + (r.cierre === 'se_hizo' ? 'Quiénes estuvieron y la minuta' : 'Quiénes van') + '</h3><div class="in"><ul class="lista" style="margin:0 -14px">' + r.asistentes.map(function (a) {
+        return '<li><div class="linea"><span class="t">' + esc(a.n) + '</span>'
+          + (r.estado === 'cancelada' || r.cierre !== 'se_hizo' ? '' : !a.obligado ? chip('Lo cubre Héctor Daniel') : a.minuta ? chip('Minuta ✓', 'ok') : chip('Falta lo suyo', 'mal'))
+          + '</div></li>';
+      }).join('') + '</ul></div></div>'
+      + (r.estado !== 'cancelada' && hayCal() ? '<div class="mut" style="margin:0 2px 10px">Para moverla, cancelarla (con quién la canceló y el motivo) o re agendarla, ábrela en el Calendario.</div>' : '')
+      + '<div class="acciones">'
+      + (pu.minuta && !r.mi_minuta ? '<button class="btn acento" type="button" id="r-min">' + (r.debo ? 'Agregar lo mío a la minuta' : 'Tomar notas (minuta)') + '</button>'
+        : r.ve_minuta && (r.minutas || r.empezo) && r.cierre !== 'no_se_hizo' ? '<button class="btn' + (pu.minuta ? ' acento' : '') + '" type="button" id="r-min">Ver la minuta</button>' : '')
+      + (r.expediente && !(ACT && SEC === 'exp') ? '<button class="btn" type="button" id="r-exp">Ver el expediente</button>' : '')
+      + (hayCal() ? '<button class="btn" type="button" id="r-cal">Abrir en el Calendario</button>' : '')
+      + '</div>');
+    DESPUES = tras || refrescaTodo;
+    if ($('r-min')) $('r-min').onclick = function () { var d = DESPUES; DESPUES = null; cierra(); formMinuta(r.id, d); };
+    if ($('r-exp')) $('r-exp').onclick = function () { DESPUES = null; cierra(); abreExp(r.g, null, r.pr); };
+    if ($('r-cal')) $('r-cal').onclick = function () { DESPUES = null; cierra(); calAbre({ cita: r.id }); };
+  }
+
+  /* ================================ EXPEDIENTES ================================ */
+  function pintaLista() {
+    var q = norm($('q-exp').value), todos = $('f-exp').value === 'todos';
+    var L = CLIS.filter(function (c) {
+      var es = c.e.filter(function (x) { return todos || x.st !== 0; });
+      if (!es.length) return false;
+      return !q || norm(c.n + ' ' + c.e.map(function (x) { return x.r + ' ' + x.rfc; }).join(' ')).indexOf(q) >= 0;
+    });
+    $('exp-l').innerHTML = L.length ? L.map(function (c) {
+      return '<tr class="click" tabindex="0" data-g="' + c.g + '"><td data-l="Cliente" class="w"><span class="rs">' + esc(c.n) + '</span></td>'
+        + '<td data-l="Razones sociales">' + esc(c.e.length === 1 ? c.e[0].r : plural(c.e.length, 'razón social', 'razones sociales')) + '</td>'
+        + '<td data-l="Pendientes">' + (c.np ? chip(String(c.np), 'az') + (c.nv ? ' ' + chip(plural(c.nv, 'vencido', 'vencidos'), 'mal') : '') : '<span class="mut">—</span>') + '</td>'
+        + '<td data-l="Notas">' + (c.nn || '<span class="mut">—</span>') + '</td><td data-l="Documentos">' + (c.nd || '<span class="mut">—</span>') + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="vacio">' + (CLIS.length ? 'Nada coincide con la búsqueda.' : 'Todavía no tienes expedientes de clientes.') + '</td></tr>';
+    $('exp-l').querySelectorAll('[data-g]').forEach(function (tr) {
+      var g = +tr.getAttribute('data-g');
+      tr.onclick = function () { abreExp(g, null, null); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abreExp(g, null, null); } };
+    });
+    $('pros-card').hidden = !PROS.length;
+    $('pros-l').innerHTML = PROS.map(function (x) {
+      return '<tr class="click" tabindex="0" data-pr="' + x.id + '"><td data-l="Prospecto" class="w"><span class="rs">' + esc(x.nombre) + '</span> ' + chip('Prospecto', 'na') + (x.razon ? '<div class="mut">' + esc(x.razon) + '</div>' : '') + '</td>'
+        + '<td data-l="Próxima reunión">' + (x.proxima ? esc(fecha(x.proxima)) : '<span class="mut">—</span>') + '</td><td data-l="Reuniones">' + x.reuniones + '</td>'
+        + '<td data-l="Pendientes">' + (x.np || '<span class="mut">—</span>') + '</td><td data-l="Notas">' + (x.nn || '<span class="mut">—</span>') + '</td></tr>';
+    }).join('');
+    $('pros-l').querySelectorAll('[data-pr]').forEach(function (tr) {
+      var pr = +tr.getAttribute('data-pr');
+      tr.onclick = function () { abreExp(null, null, pr); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abreExp(null, null, pr); } };
+    });
+  }
+  $('q-exp').oninput = pintaLista; $('f-exp').onchange = pintaLista;
+
+  async function abreExp(g, e, pr) {
+    if (SEC !== 'exp') {   // en su pestaña de Expedientes (si la tiene); si no, aquí mismo
+      var extra = (pr ? 'pr=' + pr : 'g=' + g) + (e ? '&e=' + e : '');
+      try { if (window.top !== window.self && window.top.__expAbre) { window.top.__expAbre('exp', extra); return; } } catch (err) {}
+      location.href = 'expedientes.html?s=exp&' + extra; return;
+    }
+    ACT = { g: g, e: e, pr: pr, verHechos: false };
+    await recargaFicha();
+    try { window.scrollTo(0, 0); } catch (err) {}
+  }
+  function cierraExp() { ACT = null; $('exp-ficha').hidden = true; $('exp-lista').hidden = false; pintaActs(); }
+  async function recargaFicha() {
+    if (!ACT) { if (SEC === 'exp') { try { CLIS = await rpc('exp_lista'); PROS = await rpc('exp_prospectos'); pintaLista(); } catch (e) {} } return refrescaTodo(); }
+    try {
+      var f = await rpc('exp_ficha', { p_grupo: ACT.g, p_empresa: ACT.e, p_prospecto: ACT.pr });
+      if (f.ya_cliente) { ACT = { g: f.g, e: f.empresa, pr: null }; return recargaFicha(); }
+      ACT.f = f;
+      var pe = await rpc('pend_lista', { p: ACT.pr ? { vista: 'prospecto', prospecto: ACT.pr, estatus: ACT.verHechos ? 'todos' : 'abiertos' } : { vista: 'cliente', grupo: ACT.g, empresa: ACT.e, estatus: ACT.verHechos ? 'todos' : 'abiertos' } });
+      pintaFicha(f, pe);
+    } catch (e) { error(falla(e)); cierraExp(); }
+  }
+  function pintaFicha(f, pe) {
+    $('exp-lista').hidden = true; $('exp-ficha').hidden = false;
+    var dir = !!EST.direccion, pr = ACT.pr;
+    var razones = f.empresas || [];
+    var h = '<div class="vista-tit"><div style="min-width:0"><button class="atras" type="button" id="e-atras">← Todos los expedientes</button>'
+      + '<h2>' + esc(f.nombre) + (pr ? ' ' + chip('Prospecto', 'na') : '') + '</h2>'
+      + (pr && f.prospecto ? '<div class="mut">' + esc([f.prospecto.razon, f.prospecto.contacto].filter(Boolean).join(' · ')) + ' · lo registró ' + esc(f.prospecto.por) + '</div>' : '') + '</div>'
+      + '<div class="acciones">'
+      + (ESCRIBE || EST.notas ? '<button class="btn acento" type="button" id="e-nota">Nueva nota</button>' : '')
+      + (hayCal() ? '<button class="btn" type="button" id="e-reu">Agendar reunión</button>' : '')
+      + (ESCRIBE || EST.notas ? '<button class="btn" type="button" id="e-pend">Nuevo pendiente</button>' : '')
+      + (ESCRIBE ? '<button class="btn" type="button" id="e-doc">Subir documento</button>' : '')
+      + (EST.comparte && !pr ? '<button class="btn" type="button" id="e-comp">Compartir</button>' : '')
+      + (EST.comparte && pr ? '<button class="btn" type="button" id="e-liga">Ya es cliente: ligar</button>' : '')
+      + '</div></div>';
+    if (!pr && razones.length > 1) {
+      h += '<div class="chips" role="group" aria-label="Razón social"><button type="button" data-re="" aria-pressed="' + (!ACT.e) + '">Todo el grupo</button>'
+        + razones.map(function (x) { return '<button type="button" data-re="' + x.id + '" aria-pressed="' + (+ACT.e === x.id) + '">' + esc(x.razon) + '</button>'; }).join('') + '</div>';
+    }
+    h += '<div class="rejilla">';
+    // razones sociales
+    if (!pr) {
+      var rs = ACT.e ? razones.filter(function (x) { return x.id === +ACT.e; }) : razones;
+      h += '<div class="card"><header><h2>' + (rs.length === 1 ? 'Razón social' : 'Razones sociales') + '</h2></header><ul class="lista">' + rs.map(function (x) {
+        var fiel = x.fiel ? dias(x.fiel) : null, sel = x.sellos ? dias(x.sellos) : null;
+        return '<li><div class="t">' + esc(x.razon) + '</div><div class="linea"><span class="mut">' + esc(x.rfc) + '</span>'
+          + chip(x.st === 1 ? 'Activo' : x.st === 2 ? 'Incubado' : 'Inactivo', x.st === 1 ? 'ok' : x.st === 2 ? 'ojo' : '')
+          + (x.nomina ? chip('Nómina', 'az') : '') + '</div>'
+          + '<div class="mut">' + esc([x.municipio, x.estado].filter(Boolean).join(', ')) + (x.contador && x.contador.length ? ' · Contador: ' + esc(x.contador.join(', ')) : '') + '</div>'
+          + (fiel != null && fiel < 90 ? '<div>' + chip('e.firma ' + (fiel < 0 ? 'vencida' : 'vence el ' + fecha(x.fiel)), fiel < 0 ? 'mal' : 'ojo') + '</div>' : '')
+          + (sel != null && sel < 90 ? '<div>' + chip('Sellos ' + (sel < 0 ? 'vencidos' : 'vencen el ' + fecha(x.sellos)), sel < 0 ? 'mal' : 'ojo') + '</div>' : '')
+          + (dir && x.compartido && x.compartido.length ? '<div class="mut">Compartida con: ' + x.compartido.map(function (c) { return esc(c.n) + ' <button class="lnk" type="button" data-qcomp="' + esc(c.u) + '" data-qe="' + x.id + '">quitar</button>'; }).join(', ') + '</div>' : '')
+          + '</li>';
+      }).join('') + (dir && f.compartido && f.compartido.length ? '<li class="mut">Grupo compartido con: ' + f.compartido.map(function (c) { return esc(c.n) + ' <button class="lnk" type="button" data-qcomp="' + esc(c.u) + '" data-qe="">quitar</button>'; }).join(', ') + '</li>' : '') + '</ul></div>';
+    }
+    // reuniones
+    var prox = f.reuniones.filter(function (r) { return !r.paso && r.estado !== 'cancelada'; }).reverse(), pas = f.reuniones.filter(function (r) { return r.paso || r.estado === 'cancelada'; });
+    var rc = f.reu_cuenta || {};
+    h += '<div class="card"><header><div><h2>Reuniones</h2><div class="sub">Las citas con este ' + (pr ? 'prospecto' : 'cliente') + ' de la Agenda del Calendario · ' + (prox.length ? plural(prox.length, 'próxima', 'próximas') : 'Sin reuniones próximas')
+      + ' · ' + plural(rc.hechas || 0, 'hecha', 'hechas') + (rc.cliente ? ' · ' + plural(rc.cliente, 'cancelada por el cliente', 'canceladas por el cliente') : '')
+      + (rc.profase ? ' · ' + plural(rc.profase, 'cancelada por PROFASE', 'canceladas por PROFASE') : '') + (rc.reagendadas ? ' · ' + plural(rc.reagendadas, 're agendada', 're agendadas') : '') + '</div></div></header>'
+      + (f.reu_motivos && f.reu_motivos.length ? '<details class="motivos"><summary>Canceladas por motivo</summary><ul>' + f.reu_motivos.map(function (m) {
+        return '<li><span class="mut">' + (m.quien === 'cliente' ? 'Cliente' : 'PROFASE') + '</span> · ' + esc(m.t) + ' <b>' + m.n + '</b></li>';
+      }).join('') + '</ul></details>' : '')
+      + '<ul class="lista" id="e-reus">' + (prox.concat(pas.slice(0, 12)).map(reuLinea).join('') || '<li class="vacio">Todavía no hay reuniones.</li>') + '</ul></div>';
+    // pendientes
+    h += '<div class="card"><header><div><h2>Pendientes</h2><div class="sub">' + (ACT.verHechos ? 'Todos' : 'Abiertos') + '</div></div><div class="acciones"><button class="btn chico" type="button" id="e-hechos">' + (ACT.verHechos ? 'Solo abiertos' : 'Ver también los hechos') + '</button></div></header>'
+      + '<ul class="lista" id="e-pends">' + (pe.map(function (x) {
+        return '<li class="click" tabindex="0" data-pend="' + x.id + '"><div class="t' + (x.prioridad === 1 ? ' prio1' : '') + '">' + esc(x.titulo) + '</div><div class="linea">' + estChip(x.estatus) + venceChip(x)
+          + '<span class="mut">' + esc(x.resp_n || x.externo) + '</span>' + (x.privado ? chip('Privado') : '') + '</div></li>';
+      }).join('') || '<li class="vacio">No hay pendientes ' + (ACT.verHechos ? '' : 'abiertos ') + 'aquí.</li>') + '</ul></div>';
+    // notas
+    h += '<div class="card ancha"><header><div><h2>Notas y minutas</h2><div class="sub">Cada quien ve las suyas, las que le compartieron y las que son para todos; la dirección, todas.</div></div></header>'
+      + (f.notas.length ? f.notas.map(function (n) {
+        return '<details class="nota-x"><summary><div class="linea"><span class="cuando">' + esc(fecha(n.fecha)) + '</span>' + (n.reunion ? chip('Minuta', 'az') : '') + (n.todos ? chip('Para todos', 'ok') : '') + '<span class="mut">' + esc(n.autor_n) + '</span></div>'
+          + '<div class="t">' + esc(n.titulo || 'Nota') + '</div></summary><div class="in">'
+          + (n.texto ? '<div class="texto">' + esc(n.texto) + '</div>' : '')
+          + (n.conclusion ? '<div><div class="mini">Conclusiones</div><div class="texto">' + esc(n.conclusion) + '</div></div>' : '')
+          + (n.pendientes.length ? '<div><div class="mini">Pendientes que salieron</div><ul class="lista" style="margin:0 -14px">' + n.pendientes.map(function (x) {
+            return '<li class="click" tabindex="0" data-pend="' + x.id + '"><div class="t">' + esc(x.titulo) + '</div><div class="linea">' + estChip(x.estatus) + venceChip(x) + '<span class="mut">' + esc(x.resp_n) + '</span></div></li>';
+          }).join('') + '</ul></div>' : '')
+          + '<div class="mut">' + (n.comp.length ? 'Compartida con ' + esc(n.comp.map(function (c) { return c.n; }).join(', ')) : n.todos ? '' : 'Solo la ven quien la escribió y la dirección') + (n.editada ? ' · editada ' + esc(cuandoTs(n.editada)) : '') + '</div>'
+          + (n.mia && (ESCRIBE || EST.notas) ? '<div class="acciones"><button class="btn chico" type="button" data-enota="' + n.id + '">Editar</button><button class="btn chico peligro" type="button" data-bnota="' + n.id + '">Quitar</button></div>' : '')
+          + '</div></details>';
+      }).join('') : '<div class="vacio">Todavía no hay notas.</div>') + '</div>';
+    // documentos
+    h += '<div class="card ancha"><header><div><h2>Documentos</h2><div class="sub">Al bajar un PDF escoges si va con la marca PROFASE o en original.</div></div></header><div class="in" style="padding:0 14px 10px">' + listaDocs(f.docs, true) + '</div></div>';
+    h += '</div>';
+    $('exp-ficha').innerHTML = h;
+    pintaActs();
+    var ctx = { g: ACT.g, e: ACT.e, pr: pr, nombre: f.nombre, prNombre: f.nombre, despues: recargaFicha };
+    $('e-atras').onclick = cierraExp;
+    if ($('e-nota')) $('e-nota').onclick = function () { formNota(null, ctx); };
+    if ($('e-reu')) $('e-reu').onclick = function () { calAbre(pr ? { nueva: 'cita', pr: pr } : { nueva: 'cita', g: ACT.g, e: ACT.e }); };
+    if ($('e-pend')) $('e-pend').onclick = function () { formPend(null, ctx); };
+    if ($('e-doc')) $('e-doc').onclick = function () { formDoc(ctx); };
+    if ($('e-comp')) $('e-comp').onclick = function () { formComparte(f); };
+    if ($('e-liga')) $('e-liga').onclick = function () { formLiga(f); };
+    $('e-hechos').onclick = function () { ACT.verHechos = !ACT.verHechos; recargaFicha(); };
+    document.querySelectorAll('[data-re]').forEach(function (b) { b.onclick = function () { ACT.e = b.getAttribute('data-re') ? +b.getAttribute('data-re') : null; recargaFicha(); }; });
+    ligaReus($('exp-ficha'), f.reuniones, recargaFicha);
+    $('exp-ficha').querySelectorAll('[data-pend]').forEach(function (li) {
+      var id = +li.getAttribute('data-pend');
+      li.onclick = function () { verPend(id, recargaFicha); };
+      li.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verPend(id, recargaFicha); } };
+    });
+    $('exp-ficha').querySelectorAll('[data-enota]').forEach(function (b) { b.onclick = function () { formNota(f.notas.filter(function (n) { return n.id === +b.getAttribute('data-enota'); })[0], ctx); }; });
+    $('exp-ficha').querySelectorAll('[data-bnota]').forEach(function (b) {
+      b.onclick = async function () {
+        if (!(await pregunta('¿Quitar esta nota? Deja de verse (no se borra).', 'Quitar'))) return;
+        try { await rpc('exp_nota_borra', { p_id: +b.getAttribute('data-bnota') }); recargaFicha(); } catch (e) { error(falla(e)); }
+      };
+    });
+    $('exp-ficha').querySelectorAll('[data-qcomp]').forEach(function (b) {
+      b.onclick = async function () {
+        try { await rpc('exp_comparte', { p_grupo: ACT.g, p_empresa: b.getAttribute('data-qe') ? +b.getAttribute('data-qe') : null, p_usuario: b.getAttribute('data-qcomp'), p_quitar: true }); recargaFicha(); }
+        catch (e) { error(falla(e)); }
+      };
+    });
+    ligaDocs($('exp-ficha'));
+  }
+  function formComparte(f) {
+    abre('Compartir expediente', f.nombre,
+      '<div class="msg" id="c-msg" hidden></div><div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="c-u">Con quién</label><select id="c-u">' + '<option value="">Escoge…</option>' + EQUIPO.filter(function (p) { return p.rol !== 'director'; }).map(function (p) { return '<option value="' + esc(p.u) + '">' + esc(p.n) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="c-e">Qué</label><select id="c-e"><option value="">Todo el grupo</option>' + (f.empresas || []).map(function (x) { return '<option value="' + x.id + '">' + esc(x.razon) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo ancho mut">Ve el expediente completo de lo que compartas (reuniones, pendientes, documentos y las notas para todos), como si fuera suyo. Le llega el aviso.</div>'
+      + '</div></div></div><div class="acciones"><button class="btn acento" type="button" id="c-ok">Compartir</button><button class="btn" type="button" id="c-no">Cancelar</button></div>');
+    DESPUES = recargaFicha;
+    $('c-no').onclick = cierra;
+    $('c-ok').onclick = async function () {
+      if (!$('c-u').value) { msg('c-msg', 'Escoge con quién.'); return; }
+      this.disabled = true;
+      try { await rpc('exp_comparte', { p_grupo: ACT.g, p_empresa: $('c-e').value ? +$('c-e').value : null, p_usuario: $('c-u').value, p_quitar: false }); avisa('Se compartió.'); cierra(); }
+      catch (e) { msg('c-msg', falla(e)); this.disabled = false; }
+    };
+  }
+  async function formLiga(f) {
+    if (!ECLI) { try { ECLI = await rpc('exp_cita_clientes'); } catch (e) { ECLI = { clientes: [], prospectos: [] }; } }
+    var RC = ECLI.clientes || [];
+    abre('Ya es cliente', f.nombre,
+      '<div class="msg" id="l-msg" hidden></div><div class="sec"><div class="in"><div class="mut" style="margin-bottom:10px">Escoge su grupo y su razón social en la Base de clientes (dalo de alta ahí primero). Sus reuniones, notas, pendientes y documentos pasan a ese expediente.</div><div class="campos">'
+      + '<div class="campo"><label for="l-g">Grupo</label><select id="l-g">' + opcClientes(RC, '', false) + '</select></div>'
+      + '<div class="campo"><label for="l-e">Razón social</label><select id="l-e">' + opcRazones(RC, '', '') + '</select></div>'
+      + '</div></div></div><div class="acciones"><button class="btn acento" type="button" id="l-ok">Ligar</button><button class="btn" type="button" id="l-no">Cancelar</button></div>');
+    ligaRazones(RC, 'l-g', 'l-e');
+    $('l-no').onclick = cierra;
+    $('l-ok').onclick = async function () {
+      if (!$('l-g').value) { msg('l-msg', 'Escoge el grupo.'); return; }
+      this.disabled = true;
+      try {
+        var r = await rpc('exp_prospecto_liga', { p_id: ACT.pr, p_grupo: +$('l-g').value, p_empresa: $('l-e').value ? +$('l-e').value : null });
+        avisa('Listo: ya es parte de su expediente de cliente.'); PROS = await rpc('exp_prospectos'); CLIS = await rpc('exp_lista'); ECLI = null;
+        ACT = { g: r.grupo, e: null, pr: null }; DESPUES = recargaFicha; cierra();
+      } catch (e) { msg('l-msg', falla(e)); this.disabled = false; }
+    };
+  }
+
+  /* ================================ Arriba y arranque ================================ */
+  function pintaActs() {
+    var a = '';
+    if (SEC === 'pen' && (ESCRIBE || EST.notas)) a = '<button class="btn acento" type="button" id="b-nuevo">Nuevo pendiente</button>';
+    if (SEC === 'exp' && !ACT && hayCal()) a = '<button class="btn" type="button" id="b-agenda">Agendar reunión</button>';
+    $('acts').innerHTML = a;
+    if ($('b-nuevo')) $('b-nuevo').onclick = function () { formPend(null, {}); };
+    if ($('b-agenda')) $('b-agenda').onclick = function () { calAbre({ nueva: 'cita' }); };
+  }
+  async function refrescaTodo() {
+    try {
+      await cuentaMios();
+      if (SEC === 'pen') { await cargaPen(); await cargaMin(); }
+      else if (ACT) await recargaFicha();
+      else { CLIS = await rpc('exp_lista'); PROS = await rpc('exp_prospectos'); pintaLista(); }
+    } catch (e) { error(falla(e)); }
+  }
+  function seVe() { if (document.hidden) return false; try { var fe = window.frameElement; if (fe && !fe.getClientRects().length) return false; } catch (e) {} return true; }
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('exp_estado');
+      if (!EST) throw new Error('Entra al portal para continuar');
+      YO = EST.yo; DIR = !!EST.direccion; CONSULTA = !!P.consulta || !!EST.consulta; ESCRIBE = !!EST.escribe && !CONSULTA;
+      EQUIPO = EST.equipo || []; EQUIPO.forEach(function (x) { NOM[x.u] = x.n; ROL[x.u] = x.rol; });
+      $('consulta').hidden = !CONSULTA;
+      $('t-todos').hidden = !(DIR || P.perfil && P.perfil.rol === 'gerente');
+      $('n-mios').textContent = EST.mios.abiertos; $('n-rev').textContent = EST.mios.revisar;
+      CLIS = await rpc('exp_lista');
+      try { PROS = await rpc('exp_prospectos'); } catch (e) { PROS = []; }
+      if (SEC === 'pen') {
+        $('eti').textContent = 'Pendientes'; $('titulo').textContent = 'Pendientes';
+        $('subt').textContent = 'Lo que hay que hacer, quién y para cuándo. Te avisa la campanita antes, el día y si se vence.';
+        if (Q.get('v') && VISTAS_P[Q.get('v')]) PV = Q.get('v');
+        await cargaPen(); await cargaMin(); $('s-pen').hidden = false;
+        if (+Q.get('pend')) verPend(+Q.get('pend'));
+        else if (Q.get('nuevo') && (ESCRIBE || EST.notas)) formPend(null, {});   // el «+» de Pendientes del Inicio
+      } else {
+        $('eti').textContent = 'Clientes'; $('titulo').textContent = 'Expedientes';
+        $('subt').textContent = 'El expediente de cada cliente por grupo y razón social: reuniones, notas, pendientes y documentos.';
+        pintaLista(); $('s-exp').hidden = false;
+        if (+Q.get('g') || +Q.get('pr')) { ACT = { g: +Q.get('g') || null, e: +Q.get('e') || null, pr: +Q.get('pr') || null, verHechos: false }; await recargaFicha(); }
+      }
+      pintaActs();
+      $('cargando').hidden = true;
+      // una reunión desde fuera (el Calendario, el Inicio o la campanita): su minuta o la reunión
+      var qm = Q.get('minuta') || Q.get('reunion');
+      if (qm && /^[0-9a-f-]{36}$/i.test(qm)) {
+        try {
+          var una = (await rpc('exp_reuniones', { p: { id: qm } }))[0];
+          if (una && Q.get('minuta') && una.ve_minuta) formMinuta(una.id, refrescaTodo);
+          else if (una) verReu(una, refrescaTodo);
+          else error('No encontré esa reunión: quizá se canceló o no la ves.');
+        } catch (e) { error(falla(e)); }
+      }
+      // la página abierta se pone al día sola cada 2 minutos (solo si se ve: en un marco escondido no pregunta)
+      setInterval(function () { if (seVe() && $('velo').hidden && $('pregunta').hidden) refrescaTodo(); }, 120000);
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>
