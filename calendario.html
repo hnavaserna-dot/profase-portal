@@ -1288,6 +1288,8 @@ button.kpi:focus-visible{outline-offset:-3px}
     }
     if(c&&ex===undefined) ex=AG.exp.citas[c.id]||null;
     var EC=AG.expCli, fijo=!!(ex&&ex.minutas>0);
+    // una cita nueva con un prospecto (desde su expediente) solo la agendan la dirección y Eva (119)
+    if(!c&&base.pr&&EC&&EC.puede_prospecto===false){ toast('Las citas con un prospecto las agendan H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva.'); return; }
     var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g?'cliente':ahora?'cliente':'');
     var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), e0=ex&&!ex.prospecto?ex.e:(base.e?+base.e:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
     var gru0=EC&&g0?(EC.clientes||[]).filter(function(x){ return x.g===g0; })[0]:null;
@@ -1307,7 +1309,9 @@ button.kpi:focus-visible{outline-offset:-3px}
       +(!EC?'':fijo
         ?'<div class="f full"><span class="lbl">'+(ex.prospecto?'Prospecto':'Cliente')+'</span><div><b>'+esc(ex.cliente)+'</b></div><small>Ya tiene minutas: su cliente ya no cambia.</small></div>'
         :'<div class="f full"><span class="lbl">¿Es con un cliente?</span><div class="chips">'
-          +[['','No'],['cliente','Con un cliente'],['prospecto','Con un prospecto']].map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
+          // con un prospecto solo agendan la dirección y Eva (119; Daniel, 1-nov-2026, 16:18)
+          +[['','No'],['cliente','Con un cliente'],['prospecto','Con un prospecto']].filter(function(t){ return t[0]!=='prospecto'||EC.puede_prospecto!==false||tipo0==='prospecto'; })
+            .map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
           +'</div><small id="cTipoN"></small></div>'
           +'<div class="f full" id="cBoxCli" hidden><label for="cGru">Grupo</label><input id="cGru" list="cGruL" maxlength="200" autocomplete="off" placeholder="Escribe el nombre del grupo" value="'+esc(gru0?gru0.n:'')+'">'
           +'<datalist id="cGruL">'+(EC.clientes||[]).map(function(x){ return '<option value="'+esc(x.n)+'"></option>'; }).join('')+'</datalist>'
@@ -1326,7 +1330,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       +'<div class="f full"><div class="disp" id="cDisp" aria-live="polite"></div></div>'
       +'<div class="f full"><span class="lbl">¿Dónde?</span><div class="chips" id="cLug">'+Object.keys(LUGARES).map(function(k){ return '<label class="chipc"><input type="radio" name="cLug" value="'+k+'"'+(lugar===k?' checked':'')+'>'+LUGARES[k]+'</label>'; }).join('')+'</div>'
       +'<input id="cLtx" maxlength="200" autocomplete="off" style="margin-top:6px" value="'+esc(c&&c.lugar_texto||'')+'"></div>'
-      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.</small></span></label></div>'
+      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.'+(EC&&EC.cliente_con_video?' Con videollamada siempre escoges el cliente: el grupo y la razón social, o todo el grupo.':'')+'</small></span></label></div>'
       +'<div class="f full"><span class="lbl">Invitar a alguien del despacho (opcional)</span><input id="cIBus" type="search" placeholder="Buscar por nombre" autocomplete="off" aria-label="Buscar persona del despacho">'
       +'<div class="chips" id="cISel"></div><div class="pers" id="cIPers" hidden>'+gente.map(function(g){ return '<label data-n="'+esc(norm(g.nombre))+'"><input type="checkbox" name="cInv" value="'+esc(g.usuario)+'"'+(inv.indexOf(g.usuario)>=0?' checked':'')+'>'+esc(g.nombre)+'</label>'; }).join('')+'</div></div>'
       +'<div class="f"><label for="cRec">Recordatorio</label><select id="cRec">'+RECS.map(function(r){ return '<option value="'+r[0]+'"'+(r[0]===rec?' selected':'')+'>'+r[1]+'</option>'; }).join('')+'</select><small>A la campanita y al celular de quien tiene la cita y de sus invitados</small></div>'
@@ -1449,8 +1453,21 @@ button.kpi:focus-visible{outline-offset:-3px}
         pintaEmp();
       }
       if(EC) pintaTipo();
+      /* Los gerentes, en una videollamada, siempre escogen el cliente (119; Daniel, 1-nov-2026, 16:18): con la
+         videollamada prendida, «No» no se puede escoger y pasa a «Con un cliente». La base también lo revisa. */
+      function conVideo(){ return !!(q('#cVid')&&q('#cVid').checked&&!q('#cVidBox').hidden); }
+      function obligaCli(){
+        if(!EC||fijo||!EC.cliente_con_video) return;
+        var v=conVideo(), no=ov.querySelector('input[name=cTipo][value=""]');
+        if(!no) return;
+        no.disabled=v; no.parentElement.style.opacity=v?'.45':'';
+        if(v&&no.checked){ var cl=ov.querySelector('input[name=cTipo][value="cliente"]'); if(cl){ cl.checked=true; pintaTipo(); } }
+      }
+      if(q('#cVid')) q('#cVid').addEventListener('change', obligaCli);
+      if(q('#cDue')) q('#cDue').addEventListener('change', obligaCli);
       function liga(){
         var t=tipoSel();
+        if(t==='' && EC && EC.cliente_con_video && conVideo()) return {msg:'Con videollamada escoge el cliente: el grupo y la razón social, o todo el grupo.', foco:'#cGru'};
         if(t===null||t==='fijo') return {ok:true};
         if(t==='') return {ok:true, liga:{tipo:''}};
         if(t==='cliente'){
@@ -1466,7 +1483,7 @@ button.kpi:focus-visible{outline-offset:-3px}
         return {ok:true, liga:{tipo:'prospecto', prospecto:+pv}};
       }
 
-      pintaLugar(); pintaVideo(); pintaInv(); revisa();
+      pintaLugar(); pintaVideo(); pintaInv(); revisa(); obligaCli();
       if(ahora&&q('#cGru')&&!q('#cBoxCli').hidden) setTimeout(function(){ try{ q('#cGru').focus({preventScroll:true}); }catch(er){} }, 80);   // lo primero: el cliente
       q('#fCita').onsubmit=async function(ev){
         ev.preventDefault();
