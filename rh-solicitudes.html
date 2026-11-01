@@ -42,9 +42,12 @@
    todo pasa por sus funciones rh_sol_*: los días hábiles, los descuentos y los avisos los calcula la base. Los
    préstamos no llevan interés.
    ?s=cob (1-nov-2026, Parte 165; portal/sql/117_cobertura_ausencias.sql): «Coberturas», el plan de cobertura de cada
-   ausencia: lo arma su gerente (Daniel, si se va un gerente); lo del SAT se cubre o se deja terminado antes (la fecha del
-   SAT nunca se mueve y la Profase no se recorre); quien cubre solo ve lo que cubre y solo mientras dura; la dirección
-   nunca entra. Todo por las funciones cob_*. */
+   ausencia: lo arma su gerente; lo del SAT se cubre o se deja terminado antes (la fecha del SAT nunca se mueve y la
+   Profase no se recorre); quien cubre solo ve lo que cubre y solo mientras dura; la dirección nunca entra. Desde 120
+   (Parte 170: «no me hagas a mí meterme a la operación»): cada gerente arma el suyo antes de irse y escoge, obligatorio,
+   qué gerente cubre sus autorizaciones; si no lo deja armado, el primer gerente que lo toma («Tomar»); quien no tiene
+   gerente en su área, lo arma RH; si sale RH, escoge quién decide lo de RH (otro gerente, la dirección o Andrea), que en
+   ?s=rh ve solo lo que le toca decidir o platicar y solo mientras dura. Todo por las funciones cob_*. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -274,6 +277,7 @@ tr.click:hover td{background:var(--navy-soft)}
   <!-- Solicitudes (RH) -->
   <section id="s-rh" hidden>
     <div class="nota" id="r-cerrado" hidden>El equipo todavía no ve «Mis solicitudes»: se le abre solo, con su aviso y su recorrido, en cuanto termines la carga inicial de RH.</div>
+    <div class="msg ojo" id="r-cubre" hidden style="margin:0 0 12px"></div>
     <section class="kpis" aria-label="Resumen">
       <div class="kpi"><div class="l">Por decidir</div><div class="v" id="r-k1">0</div><div class="s">te toca a ti</div></div>
       <div class="kpi"><div class="l">Con los gerentes</div><div class="v" id="r-k2">0</div><div class="s">esperando su decisión</div></div>
@@ -318,7 +322,7 @@ tr.click:hover td{background:var(--navy-soft)}
       </div>
       <div class="lista" id="c-lista"></div>
     </div>
-    <p class="ayuda">El plan sale solo cuando RH registra unas vacaciones, un permiso o una incapacidad, con lo de esa persona que vence esos días y hasta el día que regresa. La fecha del SAT nunca se mueve y la Profase no se recorre por una ausencia. Quien cubre ve y trabaja solo lo que le tocó, solo mientras la persona no está, y el responsable y quien autoriza no cambian. A la dirección nunca se le pausa ni se le pasa nada.</p>
+    <p class="ayuda">El plan sale solo cuando RH registra unas vacaciones, un permiso o una incapacidad, con lo de esa persona que vence esos días y hasta el día que regresa. Lo arma su gerente; cada gerente arma el suyo antes de irse y escoge qué gerente cubre sus autorizaciones (es obligatorio); si no lo deja armado, el primer gerente que lo toma. Quien no tiene gerente en su área, lo arma RH; si sale RH, escoge antes quién decide lo de RH. La fecha del SAT nunca se mueve y la Profase no se recorre por una ausencia. Quien cubre ve y trabaja solo lo que le tocó, solo mientras la persona no está, y el responsable y quien autoriza no cambian. A la dirección nunca se le pausa ni se le pasa nada.</p>
   </section>
 </div>
 
@@ -622,7 +626,10 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   function pintaRh() {
     var L = (BJ && BJ.items) || [];
-    $('r-cerrado').hidden = !(BJ && !BJ.abierto);
+    $('r-cerrado').hidden = !(BJ && !BJ.abierto) || !!(BJ && BJ.cubre);
+    // 120: quien cubre a RH mientras no está: solo lo que le toca decidir o platicar, y solo esos días
+    $('r-cubre').hidden = !(BJ && BJ.cubre);
+    if (BJ && BJ.cubre) $('r-cubre').textContent = 'Cubres a ' + BJ.cubre.nombre + ' hasta el ' + fechaL(BJ.cubre.hasta) + ' (regresa el ' + fechaL(BJ.cubre.regresa) + '): aquí te sale solo lo que te toca decidir o platicar mientras no está. El expediente de RH de cada persona es solo para decidir. Los préstamos que aceptes se piden a la dirección, como siempre.';
     var n = { dec: 0, cam: 0, hab: 0, dir: 0 };
     L.forEach(function (x) { var g = grupo(x); if (g === 'dec' && x.decido) n.dec++; if (g === 'cam') n.cam++; if (g === 'hab') n.hab++; if (x.ef === 'direccion' && !x.cancelada) n.dir++; });
     $('r-k1').textContent = n.dec; $('r-k2').textContent = L.filter(function (x) { return x.ef === 'gerentes' && !x.cancelada; }).length; $('r-k3').textContent = n.dir; $('r-k4').textContent = n.hab;
@@ -748,16 +755,20 @@ tr.click:hover td{background:var(--navy-soft)}
   function cobChips(p) {
     var c = [];
     if (p.estado === 'terminado') c.push(chip('Ya regresó'));
-    else if (p.faltan) c.push(chip(p.faltan + (p.faltan === 1 ? ' con fecha del SAT sin cubrir' : ' con fecha del SAT sin cubrir'), 'mal'));
+    else if (p.faltan) c.push(chip(p.faltan + ' con fecha del SAT sin cubrir', 'mal'));
+    else if (p.falta_aut) c.push(chip('Falta escoger quién cubre sus autorizaciones', 'mal'));
+    else if (p.falta_rh) c.push(chip('Falta escoger quién decide lo de RH', 'mal'));
     else if (p.sin_decidir) c.push(chip(p.sin_decidir + ' por decidir', 'ojo'));
     else c.push(chip('Listo', 'ok'));
+    if (p.sin_plan && p.estado === 'abierto') c.push(chip('Sin plan: lo toma el primer gerente', 'na'));
+    if (p.tomo_n) c.push(chip('Lo tomó ' + p.tomo_n, 'az'));
     if (p.estado === 'abierto' && p.empezo) c.push(chip('Fuera hoy', 'az'));
     if (p.tipo === 'incapacidad') c.push(chip('Incapacidad: no se planea con anticipación'));
     return c.join(' ');
   }
   function pintaCob() {
     var todos = (COB && COB.planes) || [], act = todos.filter(cobActual);
-    $('c-k1').textContent = act.filter(function (p) { return p.edita && p.sin_decidir; }).length;
+    $('c-k1').textContent = act.filter(function (p) { return (p.arma_yo && (p.sin_decidir || p.falta_aut || p.falta_rh)) || p.puede_tomar; }).length;
     $('c-k2').textContent = act.reduce(function (n, p) { return n + (p.edita || p.titular ? (p.faltan || 0) : 0); }, 0);
     $('c-k3').textContent = act.filter(function (p) { return p.empezo; }).length;
     $('c-k4').textContent = (COBE && COBE.cubro) || 0;
@@ -767,20 +778,24 @@ tr.click:hover td{background:var(--navy-soft)}
     if (!V.length) { $('c-lista').innerHTML = '<div class="vacio">' + (CT === 'act' ? 'Nadie de tu equipo tiene una ausencia próxima. Cuando RH registre unas vacaciones, un permiso o una incapacidad, su plan sale aquí solo.' : 'No hay planes anteriores (últimos 90 días).') + '</div>'; return; }
     $('c-lista').innerHTML = V.map(function (p) {
       var i = todos.indexOf(p), soloMio = !p.edita && p.titular !== YO && (p.items || []).length > 0 && (p.items || []).every(function (it) { return it.cubre === YO; });
-      return '<div class="it' + (p.faltan && p.edita ? ' sat' : p.sin_decidir && p.edita ? ' pend' : '') + '" data-id="' + p.id + '">'
-        + '<div class="cab"><b>' + esc(p.nombre) + '</b><span class="mut">' + esc(p.tipo_txt) + ', ' + esc(rango(p.desde, p.hasta)) + ' · regresa el ' + esc(fechaL(p.regresa)) + '</span></div>'
+      var urge = (p.arma_yo || p.puede_tomar) && (p.faltan || p.falta_aut || p.falta_rh), toca = p.puede_tomar || (p.arma_yo && p.sin_decidir);
+      return '<div class="it' + (urge ? ' sat' : toca ? ' pend' : '') + '" data-id="' + p.id + '">'
+        + '<div class="cab"><b>' + esc(p.propio ? 'Tu plan' : p.nombre) + '</b><span class="mut">' + esc(p.tipo_txt) + ', ' + esc(rango(p.desde, p.hasta)) + ' · regresa el ' + esc(fechaL(p.regresa)) + '</span></div>'
         + '<div class="det">' + cobChips(p) + '</div>'
         + '<div class="ctx">'
         + (soloMio ? '<div><b>Lo que cubres</b>' + esc(cobCuenta(p, 'wf')) + ' del WorkFlow</div>'
                    : '<div><b>Vence esos días</b>' + esc(cobCuenta(p, 'wf')) + ' del WorkFlow · ' + esc(cobCuenta(p, 'pend')) + ' pendientes · ' + esc(cobCuenta(p, 'cita')) + ' citas'
                      + (p.rcd ? ' · ' + esc(p.rcd) + ' recordatorios pausados' : '') + '</div>'
-                     + '<div><b>Lo arma</b>' + esc((p.arma || []).join(', ')) + '</div>'
+                     + '<div><b>Lo arma</b>' + esc((p.arma || []).join(', ') || 'El primer gerente que lo tome') + '</div>'
                      + '<div><b>Sus avisos también le llegan a</b>' + esc(p.suplente_n || 'Nadie todavía') + '</div>'
-                     + (p.es_gerente ? '<div><b>Sus autorizaciones de RH las cubre</b>' + esc(p.aut_cubre_n || '') + '</div>' : ''))
+                     + (p.aut_nec ? '<div><b>Sus autorizaciones de RH las cubre</b>' + esc(p.aut_cubre_n || 'Falta escoger (es obligatorio)') + '</div>' : '')
+                     + (p.es_rh ? '<div><b>Lo de RH lo decide</b>' + esc(p.rh_cubre_n || 'Falta escoger (es obligatorio)') + '</div>' : ''))
         + '</div>'
-        + '<div class="acc"><button class="btn ' + (p.edita && p.sin_decidir ? 'acento' : '') + '" type="button" data-cp="' + i + '">' + (p.edita && p.estado === 'abierto' ? 'Armar el plan' : 'Ver el plan') + '</button></div></div>';
+        + '<div class="acc">' + (p.puede_tomar && !CONSULTA ? '<button class="btn acento" type="button" data-tm="' + i + '">Tomar</button>' : '')
+        + '<button class="btn ' + (!p.puede_tomar && p.arma_yo && (p.sin_decidir || p.falta_aut || p.falta_rh) ? 'acento' : '') + '" type="button" data-cp="' + i + '">' + (p.arma_yo && p.estado === 'abierto' ? 'Armar el plan' : 'Ver el plan') + '</button></div></div>';
     }).join('');
     $('c-lista').querySelectorAll('[data-cp]').forEach(function (b) { b.onclick = function () { fichaCob(todos[+b.dataset.cp]); }; });
+    $('c-lista').querySelectorAll('[data-tm]').forEach(function (b) { b.onclick = function () { cobToma(todos[+b.dataset.tm], b); }; });
   }
   function cobOpciones(p, it) {
     var o = '<option value="">' + (it.clase === 'pend' ? 'Escoge a quién pasa o cambia la fecha…' : 'Escoge quién lo cubre…') + '</option>';
@@ -815,28 +830,53 @@ tr.click:hover td{background:var(--navy-soft)}
     if (!L.length) return '';
     return '<div class="sec"><h3>' + esc(titulo) + '</h3><div class="in cob-grid">' + (nota ? '<div class="mut">' + nota + '</div>' : '') + L.map(function (it) { return cobItem(p, it); }).join('') + '</div></div>';
   }
+  // 120: quien cubre sus autorizaciones (obligatorio; ya no hay respaldo a la dirección) y, si se va RH, quién decide lo de RH
   function cobGerentes(p) {
-    var o = '<option value="">Héctor Daniel Nava (si no escoges)</option>';
+    var o = '<option value="">Escoge al gerente…</option>';
     (p.gerentes || []).forEach(function (g) { o += '<option value="' + esc(g.u) + '"' + (p.aut_cubre === g.u ? ' selected' : '') + '>' + esc(g.n) + '</option>'; });
     return o;
   }
+  function cobRhOpc(p) {
+    var o = '<option value="">Escoge quién…</option>';
+    (p.rh_opciones || []).forEach(function (g) { o += '<option value="' + esc(g.u) + '"' + (p.rh_cubre === g.u ? ' selected' : '') + '>' + esc(g.n) + '</option>'; });
+    return o;
+  }
+  async function cobToma(p, b) {
+    if (b) b.disabled = true;
+    try {
+      var np = await rpc('cob_toma', { p_plan: p.id });
+      avisa('Listo: lo tomaste. Ahora tú armas su plan.'); aviseAlPortal(); try { window.parent.postMessage({ tipo: 'cob-cambio' }, location.origin); } catch (e) {}
+      await cargaCob();
+      if (np && np.id) fichaCob(np);
+    } catch (e) { error(falla(e)); if (b) b.disabled = false; try { await cargaCob(); } catch (er) {} }
+  }
   function cobCuerpo(p) {
     var ed = p.edita && !CONSULTA, c = '';
-    if (p.faltan && ed) c += '<div class="msg mal">Falta decir quién cubre ' + (p.faltan === 1 ? 'una actividad' : p.faltan + ' actividades') + ' con fecha del SAT. La fecha del SAT no se mueve.</div>';
+    if (p.puede_tomar && !CONSULTA) c += '<div class="msg ojo">No quedó armado. El primer gerente que lo toma arma su plan' + (p.es_rh ? ' y decide lo de RH mientras no está' : p.aut_nec ? ' y cubre sus autorizaciones de RH' : '') + '.<div class="acciones" style="margin-top:8px"><button class="btn acento" type="button" id="c-toma">Tomar</button></div></div>';
+    else if (p.propio && ed) c += '<div class="msg ojo">Es tu plan: déjalo armado antes de irte. Reparte lo tuyo entre otro gerente o tu gente' + (p.es_rh ? ' y escoge quién decide lo de RH mientras no estás' : p.aut_nec ? ' y escoge qué gerente cubre tus autorizaciones de RH' : '') + '.</div>';
+    if (p.faltan && ed) c += '<div class="msg mal" style="margin-top:8px">Falta decir quién cubre ' + (p.faltan === 1 ? 'una actividad' : p.faltan + ' actividades') + ' con fecha del SAT. La fecha del SAT no se mueve.</div>';
+    if (p.falta_aut && p.aut_elige && !CONSULTA) c += '<div class="msg mal" style="margin-top:8px">Falta escoger qué gerente cubre ' + (p.propio ? 'tus' : 'sus') + ' autorizaciones de RH: es obligatorio.</div>';
+    if (p.falta_rh && p.rh_elige && !CONSULTA) c += '<div class="msg mal" style="margin-top:8px">Falta escoger quién decide lo de RH mientras ' + (p.propio ? 'no estás' : 'no está') + ': es obligatorio.</div>';
     c += '<div class="sec"><h3>Quién y cuándo</h3><div class="in"><div class="dl">'
       + '<span>Fuera</span><span>' + esc(p.tipo_txt) + ', ' + esc(rango(p.desde, p.hasta)) + '</span>'
       + '<span>Regresa</span><span>' + esc(fechaL(p.regresa)) + '</span>'
-      + '<span>Lo arma</span><span>' + esc((p.arma || []).join(', ')) + '</span>'
+      + '<span>Lo arma</span><span>' + esc((p.arma || []).join(', ') || 'El primer gerente que lo tome') + '</span>'
+      + (p.tomo_n ? '<span>Lo tomó</span><span>' + esc(p.tomo_n) + ' (no quedó armado)</span>' : '')
       + (ed ? '' : '<span>Sus avisos también le llegan a</span><span>' + esc(p.suplente_n || 'Nadie todavía') + '</span>')
-      + (p.es_gerente && !(p.aut_elige && !CONSULTA) ? '<span>Sus autorizaciones de RH</span><span>Las cubre ' + esc(p.aut_cubre_n || '') + '</span>' : '')
+      + (p.aut_nec && !(p.aut_elige && !CONSULTA) ? '<span>Sus autorizaciones de RH</span><span>' + esc(p.aut_cubre_n ? 'Las cubre ' + p.aut_cubre_n : 'Falta escoger (es obligatorio)') + '</span>' : '')
+      + (p.es_rh && !(p.rh_elige && !CONSULTA) ? '<span>Lo de RH</span><span>' + esc(p.rh_cubre_n ? 'Lo decide ' + p.rh_cubre_n : 'Falta escoger (es obligatorio)') + '</span>' : '')
       + (p.rcd ? '<span>Recordatorios</span><span>' + esc(p.rcd) + ' pausados: le suenan el día que regresa</span>' : '<span>Recordatorios</span><span>Los suyos se pausan y le suenan el día que regresa</span>')
       + '</div>';
     if (ed) {
       c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-sup">Sus avisos de renovaciones y las autorizaciones que le pidan en el WorkFlow también le llegan a</label><select id="c-sup"><option value="">Nadie</option>'
         + (p.candidatos || []).map(function (x) { return '<option value="' + esc(x.u) + '"' + (p.suplente === x.u ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join('') + '</select></div></div>';
     }
-    if (p.es_gerente && p.aut_elige && !CONSULTA) {
-      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-aut">Sus autorizaciones de RH (Por autorizar) las cubre</label><select id="c-aut">' + cobGerentes(p) + '</select></div></div>';
+    if (p.aut_nec && p.aut_elige && !CONSULTA) {
+      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-aut">' + (p.propio ? 'Tus' : 'Sus') + ' autorizaciones de RH (Por autorizar) las cubre (obligatorio)</label><select id="c-aut">' + cobGerentes(p) + '</select></div></div>';
+    }
+    if (p.es_rh && p.rh_elige && !CONSULTA) {
+      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-rh">Lo de RH (decidir las solicitudes y la plática después de un «no») lo decide (obligatorio)</label><select id="c-rh">' + cobRhOpc(p) + '</select>'
+        + '<div class="mut" style="margin-top:4px">Ve el expediente de RH de cada persona solo para decidir y solo mientras ' + (p.propio ? 'no estás' : 'no está') + '. Los préstamos los sigue autorizando la dirección.</div></div></div>';
     }
     if (ed && p.sin_decidir) {
       c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-todo">Que lo cubra todo una persona (lo que falta decidir)</label><select id="c-todo"><option value="">Escoge…</option>'
@@ -866,7 +906,9 @@ tr.click:hover td{background:var(--navy-soft)}
       } catch (e) { msgEn(falla(e)); }
     };
     var s1 = $('c-sup'); if (s1) s1.onchange = function () { var v1 = this.value || null; guarda(function () { return rpc('cob_suplente', { p_plan: p.id, p_usuario: v1 }); }, 'Listo: sus avisos también le llegan a quien escogiste.'); };
-    var s2 = $('c-aut'); if (s2) s2.onchange = function () { var v2 = this.value || null; guarda(function () { return rpc('cob_aut', { p_plan: p.id, p_gerente: v2 }); }, 'Listo: ya quedó quién cubre sus autorizaciones.'); };
+    var s2 = $('c-aut'); if (s2) s2.onchange = function () { var v2 = this.value || null; if (!v2) { msgEn('Escoge al gerente: es obligatorio.'); return; } guarda(function () { return rpc('cob_aut', { p_plan: p.id, p_gerente: v2 }); }, 'Listo: ya quedó quién cubre las autorizaciones.'); };
+    var s4 = $('c-rh'); if (s4) s4.onchange = function () { var v4 = this.value || null; if (!v4) { msgEn('Escoge quién decide lo de RH: es obligatorio.'); return; } guarda(function () { return rpc('cob_rh', { p_plan: p.id, p_usuario: v4 }); }, 'Listo: ya quedó quién decide lo de RH mientras no está.'); };
+    var tm = $('c-toma'); if (tm) tm.onclick = function () { this.disabled = true; guarda(function () { return rpc('cob_toma', { p_plan: p.id }); }, 'Listo: lo tomaste. Ahora tú armas su plan.'); };
     var t1 = $('c-todo-ok'); if (t1) t1.onclick = function () { if (!$('c-todo').value) { msgEn('Escoge a la persona.'); return; } this.disabled = true; var v3 = $('c-todo').value; guarda(function () { return rpc('cob_todo', { p_plan: p.id, p_cubre: v3 }); }, 'Listo: lo que faltaba lo cubre quien escogiste.'); };
     (p.items || []).forEach(function (it) {
       var sel = $('ci-' + it.id); if (!sel) return;
