@@ -71,7 +71,10 @@
       { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' }] },   // antes Access › Clientes
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
     { k: 'msj', t: 'Chat', d: 'Mensajes y archivos con el equipo, 1 a 1 y en grupos.', subs: [
-      { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' }] },
+      { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' },
+      // Héctor Daniel, 1-nov-2026, 13:45 («Si»): un acceso a las videollamadas con clientes (las citas con videollamada de la
+      // Agenda; una sola versión). Solo a la dirección y los gerentes (chat_sala_puedo(); el botón lo pone llamada_tab.js)
+      { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' }] },
     /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
        todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
        también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */

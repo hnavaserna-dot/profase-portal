@@ -1274,27 +1274,34 @@ button.kpi:focus-visible{outline-offset:-3px}
 
   /* --- agendar o cambiar una cita --- */
   function horaSig(){ var m=ahoraMin(); m=isNaN(m)?540:Math.ceil((m+15)/30)*30; if(m<480) m=540; if(m>1200) m=540; return deMin(Math.min(m,1380)); }
+  // «Nueva ahora» (videollamada con cliente): los siguientes 5 minutos redondos, para que empiece en este momento
+  function horaYa(){ var m=ahoraMin(); if(isNaN(m)) return horaSig(); m=Math.ceil((m+1)/5)*5; return deMin(Math.min(m,1380)); }
   async function editaCita(c, base, ex){
     if(!AG.ok||!AG.est) return;
     var e=AG.est, nuevo=!c; base=base||{};
+    // «Nueva ahora» (Héctor Daniel, 1-nov-2026, 13:45: Chat › «Videollamada con cliente»): la misma forma, hoy, empezando
+    // en este momento, con la videollamada prendida y el cliente primero; por dentro es una cita como todas
+    var ahora=nuevo&&base.ahora===true;
     // los clientes y prospectos que puede escoger (los de sus expedientes; la dirección y Eva, todos)
     if(!AG.expCli||Date.now()-AG.expCliHora>300000){
       try{ var rc=await P.sb.rpc('exp_cita_clientes'); if(!rc.error&&rc.data){ AG.expCli=rc.data; AG.expCliHora=Date.now(); } }catch(er0){}
     }
     if(c&&ex===undefined) ex=AG.exp.citas[c.id]||null;
     var EC=AG.expCli, fijo=!!(ex&&ex.minutas>0);
-    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g?'cliente':'');
+    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g?'cliente':ahora?'cliente':'');
     var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), e0=ex&&!ex.prospecto?ex.e:(base.e?+base.e:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
     var gru0=EC&&g0?(EC.clientes||[]).filter(function(x){ return x.g===g0; })[0]:null;
     if(EC&&pr0&&!(EC.prospectos||[]).some(function(x){ return x.id===pr0; })&&ex) EC.prospectos=(EC.prospectos||[]).concat([{id:pr0, nombre:ex.cliente}]);
     var dueno=c?c.dueno:(base.dueno||(AG.de&&AG.de!=='@equipo'&&(e.poner||[]).some(function(x){ return x.usuario===AG.de; })?AG.de:yoU()));
     var dia=c?c.dia:(base.dia&&base.dia>=hoyK()?base.dia:hoyK());
-    var ini=c?c.inicio:(base.inicio||(dia===hoyK()?horaSig():'10:00')), fin=c?c.fin:deMin(Math.min(aMin(ini)+60, 1439));
+    if(ahora) dia=hoyK();
+    var ini=c?c.inicio:(base.inicio||(ahora?horaYa():dia===hoyK()?horaSig():'10:00')), fin=c?c.fin:deMin(Math.min(aMin(ini)+60, 1439));
     var lugar=c?c.lugar:'profase', inv=c?(c.invitados||[]).map(function(i){ return i.usuario; }):[], video=c?!!(c.video&&c.video.estado==='abierta'):base.video===true;
     var rec=c?(c.recordar==null?'':String(c.recordar)):'30';
     var gente=(e.directorio||[]).filter(function(p){ return p.usuario!==yoU(); });
-    var html='<form id="fCita" novalidate><h3>'+(nuevo?'Nueva cita':'Cambiar la cita')+'</h3>'
-      +'<p class="sub">'+(nuevo?'Se guarda en la agenda que escojas. Si es la de otra persona, le llega el aviso.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
+    var html='<form id="fCita" novalidate><h3>'+(ahora?'Videollamada con cliente, ahora':nuevo?'Nueva cita':'Cambiar la cita')+'</h3>'
+      +'<p class="sub">'+(ahora?'Empieza en este momento. Escoge el cliente, a quién invitas del despacho y hasta qué hora; al agendarla te damos la liga para mandársela.'
+        :nuevo?'Se guarda en la agenda que escojas. Si es la de otra persona, le llega el aviso.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
       +((e.poner||[]).length>1?'<div class="f full"><label for="cDue">¿En la agenda de quién?</label><select id="cDue">'+e.poner.map(function(p){ return '<option value="'+esc(p.usuario)+'"'+(p.usuario===dueno?' selected':'')+'>'+esc(p.usuario===yoU()?'La mía ('+p.nombre+')':p.nombre)+'</option>'; }).join('')+'</select></div>':'')
       +'<div class="f full"><label for="cTit">¿De qué es?</label><input id="cTit" maxlength="120" autocomplete="off" placeholder="Ej. Revisión de la declaración anual" value="'+esc(c?c.titulo:(base.titulo||''))+'"></div>'
       +(!EC?'':fijo
@@ -1426,6 +1433,14 @@ button.kpi:focus-visible{outline-offset:-3px}
         var n=q('#cTipoN'); if(n) n.textContent=t==='cliente'?'Queda en el expediente del cliente y lleva minuta: si se hizo, cada quien que estuvo agrega lo suyo.'
           :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(dueSel()!=='daniel.nava'?' Héctor Daniel va a todas las de prospecto: lo invitamos.':''):'';
       }
+      // en «Nueva ahora», mientras no escriban el tema, se llama como el cliente que escojan
+      var titAuto=ahora&&!q('#cTit').value.trim();
+      q('#cTit').addEventListener('input', function(){ titAuto=false; });
+      function titDe(n){ if(titAuto&&n) q('#cTit').value='Videollamada con '+n; }
+      if(ahora&&EC&&!fijo){
+        q('#cGru').addEventListener('change', function(){ var g=grupoSel(); if(g) titDe(g.n); });
+        q('#cPro').addEventListener('change', function(){ var o=q('#cPro').selectedOptions[0]; if(o&&o.value&&o.value!=='nuevo') titDe(o.textContent); });
+      }
       if(EC&&!fijo){
         ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=pintaTipo; });
         q('#cGru').addEventListener('input', pintaEmp); q('#cGru').addEventListener('change', pintaEmp);
@@ -1452,6 +1467,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       }
 
       pintaLugar(); pintaVideo(); pintaInv(); revisa();
+      if(ahora&&q('#cGru')&&!q('#cBoxCli').hidden) setTimeout(function(){ try{ q('#cGru').focus({preventScroll:true}); }catch(er){} }, 80);   // lo primero: el cliente
       q('#fCita').onsubmit=async function(ev){
         ev.preventDefault();
         var er=q('#cErr'), ok=q('#cOk'), d=q('#cDia').value, a=iniSel(), b=finSel(), t=q('#cTit').value.trim();
@@ -1495,7 +1511,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   function abreDesde(q){
     q=q||{};
     if(q.cita&&/^[0-9a-f-]{36}$/i.test(q.cita)){ tab='cal'; renderTabs(); abrirCita(q.cita); }
-    else if(q.nueva){ tab='cal'; renderTabs(); editaCita(null,{video:q.nueva==='video', g:q.g, e:q.e, pr:q.pr}); }
+    else if(q.nueva){ tab='cal'; renderTabs(); editaCita(null,{video:q.nueva==='video', g:q.g, e:q.e, pr:q.pr, ahora:q.nueva==='video'&&(q.ahora===true||q.ahora==='1')}); }
   }
   window.__agenda={ abre:function(q){ if(AG.ok) abreDesde(q); else AG.pendiente=q; }, recarga:function(){ if(AG.ok) cargaAgenda(true); } };
 
@@ -1505,7 +1521,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     renderVer(); render();
     await cargaAgenda(true);
     cargaOtros();
-    var u=new URLSearchParams(location.search), q0={cita:u.get('cita'), nueva:u.get('nueva'), g:u.get('g'), e:u.get('e'), pr:u.get('pr')};
+    var u=new URLSearchParams(location.search), q0={cita:u.get('cita'), nueva:u.get('nueva'), g:u.get('g'), e:u.get('e'), pr:u.get('pr'), ahora:u.get('ahora')};
     if(AG.pendiente){ q0=AG.pendiente; AG.pendiente=null; }
     abreDesde(q0);
     // al día: al volver a la pestaña (si pasó más de un minuto) y cada 2 minutos mientras se ve
