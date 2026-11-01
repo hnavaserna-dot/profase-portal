@@ -184,7 +184,8 @@
      pantalla (celular, iPad, computadora), picar el signo de arriba de una vista (o su «PROFASE · Asesoría Contable, Legal y
      Fiscal»), el del menú ☰, el de una página abierta sola o el de la barra de una pestaña (QUO › Membresías) lleva al Inicio de quien entró: dentro de una vista, con el
      menú (PORTAL_MENU.alInicio(), js/menu.js), aunque se pique desde una pestaña en marco; en una página abierta sola,
-     a su vista (#inicio). El adorno de temporada junto al signo (.ptc-caja, js/temporada.js) también lleva. El signo no
+     a su vista (#inicio). El adorno de temporada junto al signo (.ptc-adorno, js/temporada.js) ya no lleva: al picarlo
+     dice qué día es («¡Feliz Día de Muertos!»; Daniel, 31-oct-2026, 20:48 y 20:56); lo demás de su caja sí. El signo no
      cambia (sigue siendo la imagen oficial); solo se puede picar. No llevan al Inicio: la entrada, la pantalla de cierre,
      las ventanas de bienvenida y los documentos (cotizaciones, PDF). Un signo nuevo de encabezado usa una de estas
      clases o data-al-inicio. construir.py (exige_signo_inicio()) lo cuida. ---- */
@@ -216,7 +217,8 @@
       if (!t || !t.closest) return null;
       var el = t.closest(SIGNO_INICIO);
       if (el) return el;
-      var c = t.closest('.ptc-caja');   // el adorno de temporada junto al signo
+      if (t.closest('.ptc-adorno')) return null;   // el adorno de temporada dice qué día es (js/temporada.js)
+      var c = t.closest('.ptc-caja');   // la caja del signo con su adorno
       return c ? c.querySelector(SIGNO_INICIO) : null;
     }
     document.addEventListener('click', function (e) {
