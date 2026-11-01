@@ -536,6 +536,69 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
   })();
 
+  /* ---- Ventanas dentro de una pantalla, en el celular (Daniel, 1-nov-2026, 12:43: «Ya»; lo encontró la revisión
+     completa del 1-nov con «Menú arriba»). En el celular cada pantalla vive en su marco, con el alto de la pantalla menos
+     el encabezado; arriba del marco van la franja «Privado · …» y, con «Menú arriba», la tira de íconos, que se van al
+     deslizar. Una ventana que se abre dentro de la pantalla se acomoda a su marco, así que, con la página hasta arriba,
+     su parte de abajo (sus botones) quedaba fuera hasta que uno deslizaba. Al abrirse una ventana, la página de afuera
+     se desliza sola lo necesario para que el marco quede completo a la vista, justo debajo del encabezado (y lo mismo
+     con un marco dentro de otro). En la computadora y el iPad el marco ya cabe y no se mueve nada. Vale para todas las
+     pantallas, las de hoy y las nuevas: basta que su ventana lleve role="dialog" o aria-modal="true", como todas.
+     construir.py (exige_ventanas_marco) no publica si se quita. ---- */
+  (function ventanasEnMarco() {
+    var SEL = '[aria-modal="true"],[role="dialog"],[role="alertdialog"],dialog[open]';
+    function seVe(d) {
+      if (!d.getClientRects().length) return false;
+      var cs = getComputedStyle(d);
+      return cs.visibility !== 'hidden' && cs.display !== 'none';
+    }
+    function hayVentana() {
+      var l = document.querySelectorAll(SEL);
+      for (var i = 0; i < l.length; i++) if (seVe(l[i])) return true;
+      return false;
+    }
+    // dónde termina el encabezado pegado arriba de esa página (si lo tiene)
+    function topeFijo(doc) {
+      var h = doc.querySelector('header.band') || doc.querySelector('body > header');
+      if (!h) return 0;
+      var cs = doc.defaultView.getComputedStyle(h);
+      if (cs.position !== 'sticky' && cs.position !== 'fixed') return 0;
+      return Math.max(0, h.getBoundingClientRect().bottom);
+    }
+    function alinea() {
+      for (var w = window, n = 0; n < 4; n++) {
+        var p = null, fe = null;
+        try { p = w.parent; fe = w.frameElement; } catch (e) { return; }   // otro origen: no se toca
+        if (!p || p === w || !fe || !fe.getClientRects().length) return;
+        var r = fe.getBoundingClientRect(), alto = p.innerHeight, tope = topeFijo(p.document);
+        if (r.bottom > alto + 1 && r.top > tope + 1) {
+          try { p.scrollBy(0, Math.min(r.top - tope, r.bottom - alto)); } catch (e) { /* nada */ }
+        }
+        w = p;
+      }
+    }
+    var habia = false, espera = null;
+    function revisa() {
+      clearTimeout(espera);
+      espera = setTimeout(function () {
+        var hay = hayVentana();
+        if (hay && !habia) alinea();   // solo al abrirse: si la persona desliza después, no se le regresa
+        habia = hay;
+      }, 30);
+    }
+    function arranca() {
+      var fe = null;
+      try { fe = window.parent !== window ? window.frameElement : null; } catch (e) { fe = null; }
+      if (!fe || !document.body) return;   // página abierta sola o de otro origen: no hay marco que acomodar
+      if (window.MutationObserver) {
+        new MutationObserver(revisa).observe(document.body, { childList: true, subtree: true, attributes: true,
+          attributeFilter: ['hidden', 'class', 'style', 'open', 'aria-hidden'] });
+      }
+      revisa();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
+  })();
+
   P.usuarioLimpio = function (u) {
     return String(u || '').split('@')[0].normalize('NFD').replace(/[̀-ͯ]/g, '')
       .toLowerCase().trim().replace(/\s+/g, '.');
