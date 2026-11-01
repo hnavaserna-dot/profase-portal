@@ -119,6 +119,20 @@
     function font(s, b) { d.setFont('helvetica', b ? 'bold' : 'normal'); d.setFontSize(s); }
     function text(t, x, y, o) { d.text(String(t == null ? '' : t), x, y, o || {}); }
     function fit(t, w) { t = String(t == null ? '' : t); while (t.length > 1 && d.getTextWidth(t) > w) t = t.slice(0, -2) + '…'; return t; }
+    // El nombre del cliente, su contacto y los datos para pago van completos, nunca con «…» (revisión a fondo de Daniel,
+    // 31-oct-2026: el nombre largo del cliente salía cortado en la cotización). Si no cabe, la letra se achica hasta
+    // 2/3; si aun así no cabe y hay lugar (dos), se parte en dos renglones; solo un texto larguísimo llevaría «…».
+    function entra(t, x, y, w, tam, negrita, dos) {
+      t = String(t == null ? '' : t); var s = tam;
+      font(s, negrita);
+      while (s > tam * 2 / 3 && d.getTextWidth(t) > w) { s -= 0.25; font(s, negrita); }
+      if (d.getTextWidth(t) <= w) { text(t, x, y); font(tam, negrita); return; }
+      if (dos) {
+        var ls = d.splitTextToSize(t, w);
+        text(ls[0], x, y - 4.5); text(fit(ls.slice(1).join(' '), w), x, y + 2.5);
+      } else text(fit(t, w), x, y);
+      font(tam, negrita);
+    }
 
     if (LOGO.dec) d.addImage(LOGO.dec, 'JPEG', L, 30, 118, 36);
     if (LOGO.pro) d.addImage(LOGO.pro, 'JPEG', R - 66, 16, 66, 66);
@@ -130,7 +144,7 @@
      ['Contacto:', q.contacto, 'Vigencia (días):', String(q.vigencia == null ? '' : q.vigencia)],
      ['Teléfono / correo:', q.telefono, 'Válida hasta:', fdate(addDays(q.fecha, q.vigencia))]].forEach(function (r) {
       font(9, true); color(C.navy2); text(r[0], L, y);
-      font(9, false); text(fit(r[1], 238), 130, y);
+      entra(r[1], 130, y, 238, 9, false, true);
       stroke(C.lb, 0.6); d.line(128, y + 4, 372, y + 4);
       font(9, true); color(C.navy2); text(r[2], 476, y, { align: 'right' });
       font(9, false); color(C.navy); text(r[3], R, y, { align: 'right' });
@@ -194,7 +208,7 @@
     fill(C.navy); d.rect(L, py, 270, 14, 'F'); font(8.5, true); color(C.w); text('Datos para pago', L + 5, py + 10); py += 14;
     [['Beneficiario:', pago.beneficiario], ['RFC:', pago.rfc], ['Banco:', pago.banco], ['Cuenta:', pago.cuenta, true], ['CLABE:', pago.clabe, true]].forEach(function (r) {
       font(7.5, true); color(C.navy2); text(r[0], L + 4, py + 9);
-      font(7.5, !!r[2]); color(C.tx); text(fit(r[1] || '', 186), L + 80, py + 9);
+      color(C.tx); entra(r[1] || '', L + 80, py + 9, 186, 7.5, !!r[2], false);
       stroke(C.ln, 0.4); d.line(L, py + 12, L + 270, py + 12); py += 12;
     });
 

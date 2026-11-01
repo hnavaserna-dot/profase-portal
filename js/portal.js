@@ -367,7 +367,7 @@
     avisoManual();
   };
   var CSS_MODO = '.pt-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(10,18,32,.5);display:grid;place-items:center;padding:16px;box-sizing:border-box}'
-    + '.pt-dlg{width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;background:#fff;color:#1A2333;border-radius:14px;'
+    + '.pt-dlg{width:min(440px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;background:#fff;color:#1A2333;border-radius:14px;'
     + 'border-top:4px solid #F07A1E;box-shadow:0 18px 50px rgba(0,0,0,.3);padding:20px 20px 16px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;text-align:left}'
     + '.pt-dlg h2{margin:0 0 8px;font-size:17px;color:#1F3864}.pt-dlg p{margin:0 0 10px}.pt-dlg b{font-weight:700}'
     + '.pt-ic{width:42px;height:42px;border-radius:50%;background:#E6ECF6;color:#1F3864;display:grid;place-items:center;margin-bottom:10px}.pt-ic svg{width:22px;height:22px;display:block}'
@@ -451,10 +451,14 @@
       + '@media (pointer:coarse) and (max-width:900px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}}'
       + '@supports (-webkit-touch-callout:none){' + FECHAS + '{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;text-align:left}'
       + FECHAS.split(',').map(function (s) { return s + '::-webkit-date-and-time-value'; }).join(',') + '{text-align:left;min-height:1.2em;margin:0}}'
+      // En las tablas las palabras no se parten a la mitad (regla de Daniel: «nunca a media palabra»; revisión a fondo,
+      // 31-oct-2026: «COMPA / ÑÍA», «N0200 / 2», «INVENTA / DO»). overflow-wrap:anywhere encogía la columna hasta partir
+      // cada palabra; break-word solo parte lo que de verdad no cabe y, si la tabla no cabe, se desliza en su recuadro.
+      + 'td,th,td *,th *{overflow-wrap:break-word!important}'
       + '.pt-desliza{scroll-behavior:smooth;overscroll-behavior-x:contain}'
-      + '.pt-desliza.pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
-      + '.pt-desliza.pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
-      + '.pt-desliza.pt-izq.pt-der{-webkit-mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent)}';
+      + ':is(.pt-desliza,.pt-tabla).pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
+      + ':is(.pt-desliza,.pt-tabla).pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
+      + ':is(.pt-desliza,.pt-tabla).pt-izq.pt-der{-webkit-mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent)}';
     function pon() {
       if (document.getElementById('pt-pantallas')) return;
       var st = document.createElement('style'); st.id = 'pt-pantallas'; st.textContent = css;
@@ -462,13 +466,21 @@
     }
     pon();
     var TIRAS = '[role="tablist"],nav.tabs,.tabs,.wtabs,.qsw,.subtabs,.seg,.wmv';
+    // [role="group"]: tiras de botones como los meses de Comisiones de dirección, los filtros del chat y las secciones de
+    // la campanita (revisión a fondo, 31-oct-2026: se cortaban en la orilla sin aviso y el mes escogido quedaba fuera).
+    // Se desvanecen y dejan a la vista lo escogido, pero sin el desplazamiento suave de las tiras de pestañas.
+    var GRUPOS = '[role="group"]';
     function escogida(t) { return t.querySelector('[aria-selected="true"],[aria-current="page"],[aria-current="true"],[aria-pressed="true"],.on,.active'); }
-    function marca(t, centra) {
+    // Cambia una clase solo si de verdad cambia: poner la que ya está también avisa a los MutationObserver y la
+    // revisión de abajo se volvía a disparar sola sin parar mientras hubiera una tira que se desliza (31-oct-2026).
+    function clase(t, c, si) { if (t.classList.contains(c) !== !!si) t.classList.toggle(c, !!si); }
+    function marca(t, centra, base) {
+      base = base || 'pt-desliza';
       var cs = getComputedStyle(t);
       if (!/(auto|scroll)/.test(cs.overflowX) || t.scrollWidth <= t.clientWidth + 2) {
-        t.classList.remove('pt-desliza', 'pt-izq', 'pt-der'); return;
+        clase(t, base, false); clase(t, 'pt-izq', false); clase(t, 'pt-der', false); return;
       }
-      t.classList.add('pt-desliza');
+      clase(t, base, true);
       if (centra) {
         var e = escogida(t);
         if (e) {
@@ -477,8 +489,17 @@
           if (a < t.scrollLeft + 24 || b > t.scrollLeft + t.clientWidth - 24) t.scrollLeft = Math.max(0, a - (t.clientWidth - (b - a)) / 2);
         }
       }
-      t.classList.toggle('pt-izq', t.scrollLeft > 4);
-      t.classList.toggle('pt-der', t.scrollLeft + t.clientWidth < t.scrollWidth - 4);
+      clase(t, 'pt-izq', t.scrollLeft > 4);
+      clase(t, 'pt-der', t.scrollLeft + t.clientWidth < t.scrollWidth - 4);
+    }
+    /* Tablas anchas (revisión a fondo de Daniel, 31-oct-2026, 21:56): en el celular y el iPad una tabla que no cabe
+       se desliza dentro de su recuadro, pero la última columna quedaba partida en la orilla sin que nada avisara que
+       hay más. Ahora su recuadro se desvanece en la orilla donde hay más columnas, igual que las tiras de pestañas. */
+    function cajaDe(tb) {
+      for (var e = tb.parentElement, i = 0; e && e !== document.body && i < 6; e = e.parentElement, i++) {
+        if (/(auto|scroll)/.test(getComputedStyle(e).overflowX)) return e;
+      }
+      return null;
     }
     var espera = null;
     function todas(centra) {
@@ -486,15 +507,23 @@
       espera = setTimeout(function () {
         if (!document.body) return;
         document.querySelectorAll(TIRAS).forEach(function (t) { try { marca(t, centra); } catch (e) { /* nada */ } });
+        document.querySelectorAll(GRUPOS).forEach(function (t) { try { if (!t.matches(TIRAS)) marca(t, centra, 'pt-tabla'); } catch (e) { /* nada */ } });
+        var tablas = document.querySelectorAll('table');
+        for (var i = 0; i < tablas.length && i < 80; i++) {
+          try { var c = cajaDe(tablas[i]); if (c && !c.matches(TIRAS) && !c.matches(GRUPOS)) marca(c, false, 'pt-tabla'); } catch (e) { /* nada */ }
+        }
       }, 120);
     }
     document.addEventListener('scroll', function (e) {
       var t = e.target;
       if (t && t.classList && t.classList.contains('pt-desliza')) marca(t, false);
+      else if (t && t.classList && t.classList.contains('pt-tabla')) marca(t, false, 'pt-tabla');
     }, true);
     document.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest(TIRAS) : null;
+      var g = !t && e.target && e.target.closest ? e.target.closest(GRUPOS) : null;
       if (t) setTimeout(function () { marca(t, true); }, 60);
+      else if (g) setTimeout(function () { marca(g, true, 'pt-tabla'); }, 60);
       else todas(false);
     }, true);
     window.addEventListener('resize', function () { todas(true); });
@@ -1329,7 +1358,7 @@
     + '.pu-cons svg{width:15px;height:15px;display:block;flex:none}'
     + ':root[data-theme="dark"] .pu-cons{color:var(--accent)}'
     + '@media (max-width:900px){.pu-nom,.pu-btn .pu-car{display:none}.pu-btn{padding:3px}.pu-cons b{display:none}.pu-cons{padding:8px}'
-    + '.pu-dd{position:fixed;right:12px;top:var(--pu-top,64px);width:min(270px,calc(100vw - 24px));max-height:calc(100vh - var(--pu-top,64px) - 12px);overflow-y:auto}}';
+    + '.pu-dd{position:fixed;right:12px;top:var(--pu-top,64px);width:min(270px,calc(100vw - 24px));max-height:calc(100vh - var(--pu-top,64px) - 12px);max-height:calc(100dvh - var(--pu-top,64px) - 12px);overflow-y:auto}}';
   var IC = {
     perfil: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     clave: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',

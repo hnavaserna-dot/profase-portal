@@ -219,7 +219,7 @@
     + 'body.pm-mini .pm-mod{margin-bottom:6px}'
     + 'body.pm-mini .pm-mb{flex-direction:column;justify-content:center;gap:5px;padding:10px 0 8px;border-radius:14px}'
     + 'body.pm-mini .pm-mb .pm-ic{width:26px;height:26px}'
-    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#A9BBD8;white-space:normal;overflow:visible;text-overflow:clip;text-align:center;line-height:1.25;padding:0 4px}'
+    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#A9BBD8;white-space:normal;overflow:visible;text-overflow:clip;text-align:center;line-height:1.25;padding:0 2px}'
     + 'body.pm-mini .pm-mb .pm-lbl .pm-lg{display:none}body.pm-mini .pm-mb .pm-lbl .pm-ct{display:inline}'
     + 'body.pm-mini .pm-mod.on>.pm-mb{background:rgba(240,122,30,.18);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}body.pm-mini .pm-mod.on>.pm-mb .pm-lbl{color:#fff}'
     + 'body.pm-mini .pm-mod.con-aviso>.pm-mb::after{left:auto;right:14px;top:8px}'
