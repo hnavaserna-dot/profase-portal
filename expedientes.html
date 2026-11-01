@@ -260,7 +260,7 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
   <!-- ===== Pendientes ===== -->
   <section id="s-pen" hidden>
     <div class="card" id="min-card" hidden>
-      <header><div><h2>Te falta lo tuyo en la minuta <span class="chip mal" id="n-min">0</span></h2><div class="sub">De las reuniones que se hicieron y en las que estuviste: agrega lo tuyo (de qué se habló, lo que se concluyó y los pendientes) o marca «Nada que agregar». Siempre hay minuta, aunque se haya visto algo muy básico.</div></div></header>
+      <header><div><h2>Te falta lo tuyo en la minuta <span class="chip mal" id="n-min">0</span></h2><div class="sub">De las reuniones que se hicieron y en las que estuviste: agrega lo tuyo (de qué se habló, lo que se concluyó y los pendientes). Siempre hay minuta, aunque se haya visto algo muy básico; desde el día siguiente de la reunión ya no se puede dejar para después.</div></div></header>
       <ul class="lista" id="min-l"></ul>
     </div>
     <div class="tabs" role="tablist" aria-label="Pendientes">
@@ -730,9 +730,11 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
 
   /* ================================ LA MINUTA DE UNA REUNIÓN ================================ */
   // Una por cita (Daniel, 1-nov-2026, 05:00; CLAUDE.md, «Reuniones y minutas»): «Comentarios de la reunión» (lo de cada
-  // quien o «Nada que agregar»), «Comentarios de dirección» (solo la dirección) y sus pendientes (uno o varios responsables,
-  // de la razón social o de todo el grupo). Se escribe desde que empieza la cita y se guarda sola mientras se escribe;
-  // mientras está abierta avisa que alguien escribe (PORTAL.escribiendo) para que nada la tape ni la borre.
+  // quien), «Comentarios de dirección» (solo la dirección) y sus pendientes (uno o varios responsables, de la razón social
+  // o de todo el grupo). Se escribe desde que empieza la cita y se guarda sola mientras se escribe; mientras está abierta
+  // avisa que alguien escribe (PORTAL.escribiendo) para que nada la tape ni la borre. Lo de cada quien cuenta solo con al
+  // menos 80 letras reales y 8 palabras (Daniel, 1-nov-2026, 08:39 a 08:43: «que no le pongan un punto»; la regla y lo que
+  // falta los da la base, 113_minuta_obligatoria.sql); ya no hay «Nada que agregar».
   var MINUTA = null;                    // la abierta: {id, pend: [guardados pendientes], t: reloj}
   function escribiendo(si) {
     [window.PORTAL, (function () { try { return window.parent !== window ? window.parent.PORTAL : null; } catch (e) { return null; } })()]
@@ -742,17 +744,19 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
   async function formMinuta(id, tras) {
     var m;
     try { m = await rpc('exp_minuta', { p_cita: id }); } catch (e) { error(falla(e)); return; }
-    var c = m.cita, pu = m.puede || {}, mia = m.mia || { texto: '', conclusion: '', nada: false }, otros = (m.partes || []).filter(function (x) { return !x.mia; });
+    var c = m.cita, pu = m.puede || {}, mia = m.mia || { texto: '', conclusion: '' }, otros = (m.partes || []).filter(function (x) { return !x.mia; });
+    var regla = m.regla || { letras: 80, palabras: 8 }, faltan = m.faltan || { letras: regla.letras, palabras: regla.palabras }, lista = !!m.lista;
     var asig = m.asignables || [], razones = m.razones || [];
     var hayCli = !!(c.g || c.pr);
     var linea = function (x) {
-      return '<li><div class="linea"><span class="t">' + esc(x.n) + '</span>' + (x.nada ? chip('Nada que agregar') : '') + '<span class="mut">' + esc(cuandoTs(x.editada)) + '</span></div>'
+      return '<li><div class="linea"><span class="t">' + esc(x.n) + '</span><span class="mut">' + esc(cuandoTs(x.editada)) + '</span></div>'
         + (x.texto ? '<div class="texto">' + esc(x.texto) + '</div>' : '') + (x.conclusion ? '<div class="mini">Lo que se concluyó</div><div class="texto">' + esc(x.conclusion) + '</div>' : '') + '</li>';
     };
     var pendLi = function (x) { return '<li class="click" tabindex="0" data-pend="' + x.id + '"><div class="t">' + esc(x.titulo) + '</div><div class="linea">' + estChip(x.estatus) + venceChip(x) + '<span class="mut">' + esc(x.resp_n) + (x.cliente ? ' · ' + esc(x.cliente) : '') + '</span></div></li>'; };
     abre('Minuta de la reunión', c.titulo + ' · ' + fechaDia(c.fecha) + ' ' + c.hora + (c.cliente ? ' · ' + c.cliente : ''),
       '<div class="msg" id="m-msg" hidden></div>'
-      + (m.obligada ? '<div class="msg ojo">La reunión se hizo y te falta lo tuyo: escribe de qué se habló y lo que se concluyó, o marca «Nada que agregar». Siempre hay minuta, aunque se haya visto algo muy básico.</div>' : '')
+      + (m.obligada ? '<div class="msg ojo">' + (m.atrasada ? 'La reunión fue antes de hoy y ya no se puede dejar para después: ' : 'La reunión se hizo y te falta lo tuyo: ')
+          + 'escribe de qué se habló y lo que se concluyó (al menos ' + regla.letras + ' letras). Siempre hay minuta, aunque se haya visto algo muy básico.</div>' : '')
       + (c.cierre === 'no_se_hizo' ? '<div class="msg">Esta reunión no se realizó' + (c.cierre_motivo ? ': ' + esc(c.cierre_motivo) : '') + '. No lleva minuta.</div>' : '')
       + (!pu.escribir && c.cierre !== 'no_se_hizo' && !c.empezo ? '<div class="msg">La minuta se escribe cuando empiece la reunión.</div>' : '')
       + '<div class="sec"><h3>Comentarios de la reunión</h3><div class="in">'
@@ -760,7 +764,7 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
       + (pu.escribir ? '<div class="campos">'
         + '<div class="campo ancho"><label for="m-x">Lo tuyo: de qué se habló</label><textarea id="m-x" style="min-height:130px" placeholder="Aunque sea algo muy básico">' + esc(mia.texto) + '</textarea></div>'
         + '<div class="campo ancho"><label for="m-c">Lo que se concluyó</label><textarea id="m-c">' + esc(mia.conclusion) + '</textarea></div>'
-        + '<div class="campo ancho chk"><input type="checkbox" id="m-nada"' + (mia.nada ? ' checked' : '') + '><label for="m-nada">Nada que agregar</label></div>'
+        + '<div class="campo ancho"><div class="msg" id="m-falta" aria-live="polite"></div></div>'
         + '<div class="mut" id="m-gu" aria-live="polite">' + (mia.editada ? 'Guardado a las ' + esc(hora(mia.editada)) : 'Se guarda solo mientras escribes') + '</div></div>' : '')
       + '</div></div>'
       + (m.dir ? '<div class="sec"><h3>Comentarios de dirección</h3><div class="in"><div class="mut" style="margin-bottom:8px">Precios, costos y lo que no deba ver nadie más: solo los ven Héctor Daniel y Héctor Nava Ramos.</div>'
@@ -786,23 +790,33 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
       var va = cola; cola = {};
       if (!Object.keys(va).length) return;
       va.cita = id;
-      try { var r = await rpc('exp_minuta_guarda', { p: va }); if ($('m-gu')) $('m-gu').textContent = 'Guardado a las ' + hora(r.editada); if ($('m-msg') && $('m-msg').classList.contains('mal')) msg('m-msg', ''); }
+      try { var r = await rpc('exp_minuta_guarda', { p: va }); if ($('m-gu')) $('m-gu').textContent = 'Guardado a las ' + hora(r.editada); if ($('m-msg') && $('m-msg').classList.contains('mal')) msg('m-msg', '');
+        if (r && r.faltan) { faltan = r.faltan; lista = !!r.lista; pintaFalta(); } }
       catch (e) { Object.keys(va).forEach(function (k) { if (k !== 'cita' && !(k in cola)) cola[k] = va[k]; }); if ($('m-msg')) msg('m-msg', falla(e)); else error(falla(e)); }
     }
     function cambia(k, v) { cola[k] = v; clearTimeout(reloj); reloj = setTimeout(guarda, 1200); if ($('m-gu')) $('m-gu').textContent = 'Guardando…'; }
+    // cuánto le falta para que cuente lo suyo (lo dice la base en cada guardado: la misma regla)
+    function pintaFalta() {
+      var el = $('m-falta'); if (!el) return;
+      if (lista) { el.className = 'msg bien'; el.textContent = 'Listo: lo tuyo ya cuenta en la minuta.'; return; }
+      var l = +faltan.letras || 0, w = +faltan.palabras || 0;
+      el.className = 'msg ojo';
+      el.textContent = 'Para que cuente lo tuyo te faltan ' + (l ? l + (l === 1 ? ' letra' : ' letras') : '') + (l && w ? ' y ' : '')
+        + (w ? w + (w === 1 ? ' palabra' : ' palabras') : '') + ' (cuentan letras y números, no espacios, puntos ni letras repetidas).';
+    }
+    pintaFalta();
     MINUTA = { id: id };
     escribiendo(true);
     var alSalir = function (f) { return function () { guarda(); escribiendo(false); MINUTA = null; if (f) f(); }; };
     DESPUES = alSalir(tras || refrescaTodo);
-    if ($('m-x')) $('m-x').oninput = function () { cambia('texto', this.value); if (this.value.trim() && $('m-nada').checked) { $('m-nada').checked = false; MINUTA.cola.nada = false; } };
+    if ($('m-x')) $('m-x').oninput = function () { cambia('texto', this.value); };
     if ($('m-c')) $('m-c').oninput = function () { cambia('conclusion', this.value); };
-    if ($('m-nada')) $('m-nada').onchange = function () { cambia('nada', this.checked); guarda(); };
     if ($('m-d')) $('m-d').oninput = function () { cambia('dir', this.value); };
     if ($('m-ok')) $('m-ok').onclick = async function () {
       await guarda();
       var t = $('m-x') ? $('m-x').value.trim() : '', k = $('m-c') ? $('m-c').value.trim() : '';
-      if (m.obligada && !t && !k && !($('m-nada') && $('m-nada').checked)) { msg('m-msg', 'Escribe lo tuyo o marca «Nada que agregar».'); try { $('m-x').focus(); } catch (e) {} return; }
       if (Object.keys(cola).length) return;   // no se pudo guardar: el mensaje ya está arriba
+      if (m.obligada && !lista) { msg('m-msg', 'Todavía no cuenta lo tuyo: escribe un poco más de qué se habló y lo que se concluyó.'); pintaFalta(); try { $('m-x').focus(); } catch (e) {} return; }
       avisa('Se guardó la minuta.'); cierra();
     };
     if ($('m-exp')) $('m-exp').onclick = async function () { await guarda(); DESPUES = alSalir(null); cierra(); abreExp(c.g, null, c.pr); };
