@@ -842,14 +842,14 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
   function reuLinea(r) {
     var chips = '';
     if (r.estado === 'cancelada') chips += chip('Cancelada · ' + (r.cancelo === 'cliente' ? 'el cliente' : 'PROFASE'), r.cancelo === 'cliente' ? 'ojo' : 'mal') + (r.reagendada_a ? chip('Re agendada', 'az') : '');
-    else if (r.cierre === 'no_se_hizo') chips += chip('No se realizó', 'ojo');
+    else if (r.cierre === 'no_se_hizo') chips += chip('No se realizó' + (r.no_lado ? ' · ' + (r.no_lado === 'cliente' ? 'el cliente' : 'PROFASE') : ''), r.no_lado === 'profase' ? 'mal' : 'ojo') + (r.reagendada_a ? chip('Re agendada', 'az') : '');
     else if (r.debo) chips += chip('Te falta lo tuyo en la minuta', 'mal');
     else if (r.mi_minuta) chips += chip('Tu minuta ✓', 'ok');
     if (r.estado !== 'cancelada' && r.reagendada_de) chips += chip('Re agendada', 'az');
     if (r.prospecto) chips += chip('Prospecto', 'na');
     if (r.minutas) chips += chip('Minuta · ' + plural(r.minutas, 'persona', 'personas'), 'az');
     return '<li class="click" tabindex="0" data-reu="' + esc(r.id) + '"><div class="linea"><span class="cuando">' + esc(fechaDia(r.fecha)) + ' · ' + esc(r.hora) + '</span>' + chips + '</div>'
-      + '<div class="t">' + esc(r.titulo) + '</div>' + (r.estado === 'cancelada' && r.motivo ? '<div class="mut">Motivo: ' + esc(r.motivo) + (r.reagendada_a ? ' · nueva fecha: ' + esc(fechaDia(r.reagendada_a.fecha)) + ' ' + esc(r.reagendada_a.hora) : '') + '</div>' : '')
+      + '<div class="t">' + esc(r.titulo) + '</div>' + ((r.estado === 'cancelada' ? r.motivo : r.cierre === 'no_se_hizo' ? r.no_motivo : '') ? '<div class="mut">Motivo: ' + esc(r.estado === 'cancelada' ? r.motivo : r.no_motivo) + (r.reagendada_a ? ' · nueva fecha: ' + esc(fechaDia(r.reagendada_a.fecha)) + ' ' + esc(r.reagendada_a.hora) : '') + '</div>' : '')
       + '<div class="mut">' + esc(r.cliente) + (r.lugar ? ' · ' + esc(r.lugar) : '') + ' · '
       + esc(r.asistentes.map(function (a) { return a.n; }).join(', ')) + '</div></li>';
   }
@@ -884,7 +884,7 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
       + (r.cierre === 'no_se_hizo' ? '<span>No se realizó</span><span>' + esc(r.cierre_motivo || '') + '</span>' : '')
       + (r.estado === 'cancelada' ? '<span>Cancelada</span><span>La canceló ' + (r.cancelo === 'cliente' ? 'el cliente' : 'PROFASE') + (r.motivo ? ': ' + esc(r.motivo) : '') + (r.cancelada_n ? ' <span class="mut">(lo marcó ' + esc(r.cancelada_n) + ')</span>' : '') + '</span>' : '')
       + (r.reagendada_a ? '<span>Re agendada</span><span>Para el ' + esc(fechaDia(r.reagendada_a.fecha)) + ' a las ' + esc(r.reagendada_a.hora) + (r.reagendada_a.estado === 'cancelada' ? ' <span class="mut">(esa también se canceló)</span>' : '') + '</span>' : '')
-      + (r.reagendada_de ? '<span>Antes</span><span>Era el ' + esc(fechaDia(r.reagendada_de.fecha)) + ' a las ' + esc(r.reagendada_de.hora) + ' <span class="mut">(la canceló ' + (r.reagendada_de.cancelo === 'cliente' ? 'el cliente' : 'PROFASE') + (r.reagendada_de.motivo ? ': ' + esc(r.reagendada_de.motivo) : '') + ')</span></span>' : '')
+      + (r.reagendada_de ? '<span>Antes</span><span>Era el ' + esc(fechaDia(r.reagendada_de.fecha)) + ' a las ' + esc(r.reagendada_de.hora) + ' <span class="mut">(' + (r.reagendada_de.no_se_hizo ? 'no se realizó, de parte de ' : 'la canceló ') + (r.reagendada_de.cancelo === 'cliente' ? 'el cliente' : 'PROFASE') + (r.reagendada_de.motivo ? ': ' + esc(r.reagendada_de.motivo) : '') + ')</span></span>' : '')
       + '</div></div></div>'
       + '<div class="sec"><h3>' + (r.cierre === 'se_hizo' ? 'Quiénes estuvieron y la minuta' : 'Quiénes van') + '</h3><div class="in"><ul class="lista" style="margin:0 -14px">' + r.asistentes.map(function (a) {
         return '<li><div class="linea"><span class="t">' + esc(a.n) + '</span>'
@@ -998,9 +998,12 @@ details.nota-x .in{padding:10px 14px 14px;display:grid;gap:8px}
     var rc = f.reu_cuenta || {};
     h += '<div class="card"><header><div><h2>Reuniones</h2><div class="sub">Las citas con este ' + (pr ? 'prospecto' : 'cliente') + ' de la Agenda del Calendario · ' + (prox.length ? plural(prox.length, 'próxima', 'próximas') : 'Sin reuniones próximas')
       + ' · ' + plural(rc.hechas || 0, 'hecha', 'hechas') + (rc.cliente ? ' · ' + plural(rc.cliente, 'cancelada por el cliente', 'canceladas por el cliente') : '')
-      + (rc.profase ? ' · ' + plural(rc.profase, 'cancelada por PROFASE', 'canceladas por PROFASE') : '') + (rc.reagendadas ? ' · ' + plural(rc.reagendadas, 're agendada', 're agendadas') : '') + '</div></div></header>'
-      + (f.reu_motivos && f.reu_motivos.length ? '<details class="motivos"><summary>Canceladas por motivo</summary><ul>' + f.reu_motivos.map(function (m) {
-        return '<li><span class="mut">' + (m.quien === 'cliente' ? 'Cliente' : 'PROFASE') + '</span> · ' + esc(m.t) + ' <b>' + m.n + '</b></li>';
+      + (rc.profase ? ' · ' + plural(rc.profase, 'cancelada por PROFASE', 'canceladas por PROFASE') : '')
+      + (rc.no_cliente ? ' · ' + plural(rc.no_cliente, 'no se realizó por el cliente', 'no se realizaron por el cliente') : '')
+      + (rc.no_profase ? ' · ' + plural(rc.no_profase, 'no se realizó por PROFASE', 'no se realizaron por PROFASE') : '')
+      + (rc.reagendadas ? ' · ' + plural(rc.reagendadas, 're agendada', 're agendadas') : '') + '</div></div></header>'
+      + (f.reu_motivos && f.reu_motivos.length ? '<details class="motivos"><summary>Canceladas y no realizadas, por motivo</summary><ul>' + f.reu_motivos.map(function (m) {
+        return '<li><span class="mut">' + (m.tipo === 'no_se_hizo' ? 'No se realizó' : 'Cancelada') + ' · ' + (m.quien === 'cliente' ? 'Cliente' : 'PROFASE') + '</span> · ' + esc(m.t) + ' <b>' + m.n + '</b></li>';
       }).join('') + '</ul></details>' : '')
       + '<ul class="lista" id="e-reus">' + (prox.concat(pas.slice(0, 12)).map(reuLinea).join('') || '<li class="vacio">Todavía no hay reuniones.</li>') + '</ul></div>';
     // pendientes
