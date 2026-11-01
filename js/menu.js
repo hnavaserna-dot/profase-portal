@@ -35,6 +35,7 @@
   var IC = {
     wf: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>',
     rep: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    agd: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="m9 15 2 2 4-4"/>',   // Agenda: calendario con palomita
     adm: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
     quo: '<circle cx="11.5" cy="11.5" r="7.5"/><path d="m16.5 16.5 4 4"/>',
     ayuda: '<path d="M12 3.5l1.8 4.9 4.9 1.8-4.9 1.8L12 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/><path d="M5.5 2.8l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/>',   // destellos: la IA del portal
@@ -70,6 +71,13 @@
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
     { k: 'msj', t: 'Chat', d: 'Mensajes y archivos con el equipo, 1 a 1 y en grupos.', subs: [
       { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' }] },
+    /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
+       todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
+       también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */
+    { k: 'agd', t: 'Agenda', d: 'Tu calendario, tus recordatorios y tus avisos de todos los días.', subs: [
+      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
+      { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
+      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
     // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/79_tesoreria.sql)
@@ -91,10 +99,7 @@
     // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
     { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
       { k: 'superconta', v: 'sc', t: 'Pregúntale a SuperConta', d: 'Pregúntale como a alguien del equipo; contesta con los datos del portal.' }] },
-    { k: 'adm', t: 'Administración', d: 'El día a día del despacho.', subs: [
-      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
-      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
-      { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
+    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores y cambios al portal.', subs: [
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
@@ -136,7 +141,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
