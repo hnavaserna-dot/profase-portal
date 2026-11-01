@@ -527,6 +527,12 @@ audio.ad-med{width:280px;max-width:100%}
   .velo{padding:12px;align-items:end}
   .suelta{border-radius:0}
 }
+.reu-bar{display:flex;align-items:center;gap:10px;margin:0 12px 8px;padding:9px 12px;border:1px solid var(--line-strong);border-left:4px solid var(--accent);border-radius:10px;background:var(--surface);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.reu-bar .ic{width:20px;height:20px;flex:none;color:var(--accent)}
+.reu-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.reu-t b{font-size:14px;font-weight:600}
+.reu-t small{font-size:12px;color:var(--muted,var(--ink-3,#5A6577));overflow-wrap:anywhere}
+.reu-n{flex:none;background:var(--accent);color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:2px 8px}
 @media (prefers-reduced-motion: reduce){.gira{animation:none}.m-op,.sw i,.sw i::after{transition:none}}
 </style></head><body>
 <div class="app" id="app" hidden>
@@ -539,6 +545,7 @@ audio.ad-med{width:280px;max-width:100%}
     <div class="busca"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Buscar chat o persona" aria-label="Buscar chat o persona" autocomplete="off"></div>
     <div class="chips" role="group" aria-label="Qué ver"><button type="button" data-f="todo" aria-pressed="true">Todos</button><button type="button" data-f="sin" aria-pressed="false">Sin leer</button><button type="button" data-f="grupos" aria-pressed="false">Grupos</button><button type="button" data-f="personas" aria-pressed="false">Personas</button></div>
     <button type="button" class="eq-bar" id="eq-bar" hidden aria-pressed="false" aria-controls="convs"><span class="pe" data-e="off"></span><span class="eq-t" id="eq-t">Equipo conectado</span><span class="eq-ver" id="eq-ver">Ver todos</span></button>
+    <button type="button" class="reu-bar" id="reu-bar" hidden><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg><span class="reu-t"><b>Reuniones con clientes</b><small id="reu-s">Videollamadas con gente de fuera</small></span><span class="reu-n" id="reu-n" hidden></span></button>
     <div class="inv" id="push-inv" hidden role="region" aria-label="Avisos del chat"></div>
     <div class="convs" id="convs" role="list"></div>
   </section>
@@ -813,7 +820,9 @@ audio.ad-med{width:280px;max-width:100%}
     if (pend) abre(pend); else if (h) abre(h[1]);
     revisaInv();
     pintaMiEst();
+    vigilaReuniones();
   })();
+  $('#reu-bar').onclick = function () { var l = LL(); try { if (l && l.reuniones) l.reuniones(); } catch (e) { /* sin reuniones */ } setTimeout(pintaReuniones, 800); };
   // «● En línea» debajo del título: abre el mismo selector del menú de la foto, arriba a la derecha
   $('#mi-est').onclick = function () { var x = ESTA(); try { if (x) x.abre(); } catch (e) { /* sin estatus */ } };
 
@@ -1013,6 +1022,28 @@ audio.ad-med{width:280px;max-width:100%}
   // ---------------------------------------------------------------- llamadas (las hace la página de arriba: portal/llamada_tab.js)
   function LL() { var a = arriba(); try { return a && a.__llamada ? a.__llamada : null; } catch (e) { return null; } }
   function puedeLlamar() { var l = LL(); try { return !!(l && l.puede()); } catch (e) { return false; } }
+  /* Reuniones con clientes (31-oct-2026, Daniel: «tener una videollamada con clientes o gente fuera de nuestro equipo…
+     que quede muy claro el cómo hacerlo»). La franja sale a quien la base deja hacer reuniones (dirección y gerentes) o a
+     quien ya está en una; dice cuántos esperan para entrar. Todo lo hace la página de arriba (llamada_tab.js); aquí no
+     se pregunta nada a la base. */
+  var REU_T = 0;
+  async function pintaReuniones() {
+    var l = LL(), b = $('#reu-bar'); if (!b) return;
+    if (!l || !l.reuniones) { b.hidden = true; return; }
+    var puedo = false, s = [];
+    try { puedo = await l.puedoReuniones(); s = l.salas() || []; } catch (e) { puedo = false; }
+    b.hidden = !puedo && !s.length;
+    if (b.hidden) return;
+    var esp = 0, hoy = 0;
+    s.forEach(function (x) { esp += (x.esperando || []).length; if (x.hoy) hoy++; });
+    var n = $('#reu-n'); n.hidden = !esp; n.textContent = esp ? esp + (esp === 1 ? ' espera' : ' esperan') : '';
+    $('#reu-s').textContent = esp ? 'Alguien espera que lo admitas' : hoy ? (hoy === 1 ? 'Tienes 1 reunión hoy' : 'Tienes ' + hoy + ' reuniones hoy') : 'Videollamadas con gente de fuera';
+  }
+  function vigilaReuniones() {
+    clearInterval(REU_T);
+    REU_T = setInterval(function () { if (!document.hidden) pintaReuniones(); }, 10000);
+    pintaReuniones();
+  }
   function pintaLlamada() {
     if (!ACT) return;
     var l = LL(), puede = puedeLlamar(), viva = null;

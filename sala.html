@@ -1,0 +1,1309 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>PROFASE · Videollamada</title>
+<link rel="icon" type="image/png" href="/img/icono-48.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<!-- Sala de PROFASE para gente de fuera (31-oct-2026, pedido de Héctor Daniel: «tener una videollamada con clientes o
+     gente fuera de nuestro equipo… En vez de usar Zoom usar nuestra plataforma… pero no quiero poner en riesgo nada»;
+     «así podemos también garantizarnos que los clientes se pueden dar cuenta de lo que es nuestro CRM»).
+     - Se abre con la liga que manda alguien de PROFASE: sala.html#<liga> (lo de después de # no viaja al servidor).
+     - El invitado no tiene usuario ni sesión: esta página usa su propio cliente de la base sin sesión (aunque en ese
+       navegador alguien del despacho tenga el portal abierto) y solo llama a las cuatro funciones del invitado
+       (chat_sala_publica, chat_sala_pide, chat_sala_yo, chat_sala_salgo; portal/sql/109_agenda_reuniones.sql). No lee
+       nada del portal: ni tablas, ni archivos, ni el chat.
+     - Escribe su nombre, pide entrar y espera; nadie entra hasta que alguien de PROFASE de esa reunión lo admite. Ya
+       admitido, la base le da el canal de la llamada y la llamada es la misma de siempre (llamada_tab.js va escrito aquí
+       dentro: una sola versión). Nadie la graba.
+     - Signo PROFASE oficial (img/signo.png, nunca redibujado); claro u oscuro como el dispositivo; horas de 24. -->
+<script src="js/supabase.js?v=bb37eb706b"></script>
+<script src="js/portal.js?v=984f325078"></script>
+<style>
+:root{
+  --bg:#F4F6FA; --card:#FFFFFF; --ink:#0E1A2E; --muted:#5A6577; --line:#C9D1DE; --line-2:#DCE2EB;
+  --navy:#1F3864; --accent:#F07A1E; --soft:#FFF1E4; --soft-ink:#1B2433; --btn:#1F3864; --btn-ink:#FFFFFF;
+  --deep:#0A1222; --deep-2:#14274A; --surface:#FFFFFF; --surface-2:#EEF2F7;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B1220; --card:#151C28; --ink:#E7ECF4; --muted:#A9B4C6; --line:#2A3A58; --line-2:#2A3542;
+  --navy:#A9C1EE; --soft:#33261A; --soft-ink:#F7DCC2; --btn:#2E5AA8; --btn-ink:#FFFFFF; --surface:#151C28; --surface-2:#1C2530; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1220; --card:#151C28; --ink:#E7ECF4; --muted:#A9B4C6; --line:#2A3A58; --line-2:#2A3542;
+  --navy:#A9C1EE; --soft:#33261A; --soft-ink:#F7DCC2; --btn:#2E5AA8; --btn-ink:#FFFFFF; --surface:#151C28; --surface-2:#1C2530; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));
+  background:radial-gradient(120% 90% at 30% 20%,var(--deep-2) 0%,var(--deep) 70%);
+  font-family:"Public Sans","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;font-size:15px;line-height:1.45;color:var(--ink)}
+[hidden]{display:none!important}
+.marca{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;color:#fff}
+.signo{width:70px;height:auto;display:block}
+.wm{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-weight:700;letter-spacing:.24em;margin-left:.24em;font-size:21px;line-height:1}
+.tag{font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-size:12px;font-style:italic;color:#AAB6CC;margin-top:6px}
+.caja{width:min(460px,100%);background:var(--card);border-radius:16px;border-top:4px solid var(--accent);
+  box-shadow:0 18px 50px rgba(0,0,0,.3);padding:22px 22px 20px}
+.eti{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--accent);margin:0 0 6px}
+h1{margin:0 0 6px;font-size:21px;line-height:1.25;color:var(--navy);overflow-wrap:anywhere}
+p{margin:0 0 12px}
+.de{color:var(--muted);font-size:14px;margin:0 0 14px}
+.de b{color:var(--ink);font-weight:600}
+.cuando{display:inline-flex;align-items:center;gap:6px;background:var(--soft);color:var(--soft-ink);border-radius:999px;padding:4px 12px;font-weight:600;font-size:13.5px;margin:0 0 16px}
+.cuando svg{width:15px;height:15px;color:var(--accent)}
+.prev{position:relative;aspect-ratio:16/10;background:#16264A;border-radius:12px;overflow:hidden;display:grid;place-items:center;margin:0 0 12px}
+.prev video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.prev .ini{width:72px;height:72px;border-radius:50%;background:#2B4C86;color:#fff;display:grid;place-items:center;font-weight:700;font-size:24px;border:3px solid rgba(255,255,255,.15)}
+.prev .tg{position:absolute;left:10px;bottom:10px;display:flex;gap:8px}
+.prev .tg button{width:44px;height:44px;border-radius:50%;border:0;display:grid;place-items:center;background:rgba(5,10,20,.55);color:#fff;cursor:pointer;padding:0}
+.prev .tg button.off{background:#fff;color:#0B1528}
+.prev .tg svg{width:20px;height:20px}
+.prev .ver{position:absolute;right:10px;bottom:10px;border:0;border-radius:10px;background:rgba(5,10,20,.55);color:#fff;font:inherit;font-size:13px;font-weight:600;padding:8px 12px;cursor:pointer}
+label.l{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+input.nom{width:100%;font:inherit;font-size:16px;border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:var(--surface);color:var(--ink);margin:0 0 12px}
+input.nom:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+button.pri{width:100%;font:inherit;font-size:16px;font-weight:700;min-height:48px;padding:10px 20px;border:0;border-radius:12px;background:var(--accent);color:#fff;cursor:pointer}
+button.sec{font:inherit;font-size:15px;font-weight:600;min-height:44px;padding:8px 18px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.err{color:#C0362C;font-size:14px;min-height:1.2em;margin:8px 0 0}
+.nota{font-size:12.5px;color:var(--muted);margin:12px 0 0;display:flex;gap:8px;align-items:flex-start}
+.nota svg{width:15px;height:15px;flex:none;margin-top:2px;color:var(--accent)}
+.espera{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
+.anillo{width:64px;height:64px;border-radius:50%;border:5px solid var(--soft);border-top-color:var(--accent);animation:gira 1s linear infinite;margin:6px 0 10px}
+@keyframes gira{to{transform:rotate(360deg)}}
+.centro{text-align:center}
+.bt{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.pie{color:#8E9BB3;font-size:12px;text-align:center}
+@media (max-width:400px){.caja{padding:18px 16px 16px}h1{font-size:19px}}
+@media (prefers-reduced-motion: reduce){.anillo{animation:none}}
+</style>
+</head>
+<body>
+<div class="marca">
+  <img class="signo" src="img/signo.png" alt="PROFASE">
+  <div><div class="wm">PROFASE</div><div class="tag">Asesoría Contable, Legal y Fiscal</div></div>
+</div>
+
+<main class="caja" aria-live="polite">
+  <section id="s-carga" class="centro"><div class="espera"><div class="anillo" aria-hidden="true"></div><p>Abriendo tu reunión…</p></div></section>
+
+  <section id="s-msg" class="centro" hidden>
+    <p class="eti">Videollamada con PROFASE</p>
+    <h1 id="m-t"></h1>
+    <p id="m-p" class="de"></p>
+    <div class="bt" id="m-bt"></div>
+  </section>
+
+  <section id="s-pide" hidden>
+    <p class="eti">Videollamada con PROFASE</p>
+    <h1 id="p-tema"></h1>
+    <p class="de" id="p-de"></p>
+    <p class="cuando" id="p-cuando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span></span></p>
+    <div class="prev" id="p-prev">
+      <span class="ini" id="p-ini" aria-hidden="true">?</span>
+      <video id="p-vid" playsinline autoplay muted hidden></video>
+      <div class="tg">
+        <button type="button" id="p-mic" aria-pressed="true" aria-label="Entrar con el micrófono prendido" title="Micrófono"></button>
+        <button type="button" id="p-cam" aria-pressed="true" aria-label="Entrar con la cámara prendida" title="Cámara"></button>
+      </div>
+      <button type="button" class="ver" id="p-ver">Ver mi cámara</button>
+    </div>
+    <form id="p-form" novalidate>
+      <label class="l" for="p-nom">Tu nombre</label>
+      <input class="nom" id="p-nom" autocomplete="name" maxlength="60" placeholder="Ej. Juan Pérez" required>
+      <button type="submit" class="pri" id="p-entra">Pedir entrar</button>
+      <p class="err" id="p-err" role="alert"></p>
+    </form>
+    <p class="nota"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      <span>La llamada va cifrada y nadie la graba. Tu cámara y tu micrófono solo se usan mientras estás en la reunión. No tienes que instalar nada.</span></p>
+  </section>
+
+  <section id="s-espera" class="centro" hidden>
+    <div class="espera">
+      <div class="anillo" aria-hidden="true"></div>
+      <p class="eti">Sala de espera</p>
+      <h1>Ya avisamos a PROFASE</h1>
+      <p class="de" id="e-p">En cuanto te admitan, entras a la reunión. No cierres esta página.</p>
+      <button type="button" class="sec" id="e-sale">Cancelar</button>
+    </div>
+  </section>
+</main>
+<p class="pie">PROFASE · San Pedro Garza García, Nuevo León</p>
+
+<script>window.__SALA_INVITADO=true;</script>
+<script>
+/* ===== Portal PROFASE · Llamadas del chat interno (30-oct-2026, pedido de Daniel). Va en las tres vistas.
+   Daniel (12:33): «sí quiero que se haga; más porque mi intención es que ya no salgan nunca del CRM». Sus decisiones
+   (12:34): voz, video y compartir pantalla; 1 a 1 y grupos de hasta 6. Su papá (hnava) también llama (12:45).
+   Desde las 17:52 (Fernando Barbosa: en el grupo de Contabilidad son 7; Daniel: «hay que aumentarlo») caben 10.
+   - Se llama desde el encabezado de una conversación del chat (teléfono o cámara). En un grupo de más de 10 se escoge a
+     quién (hasta 9). Si ya hay una llamada en esa conversación, el botón dice «Unirse».
+   - Cada quien manda su video a cada uno de los demás: con más gente, cada copia va más ligera (bitrate()) para que
+     alcance el internet y la computadora; en el celular, de 4 en adelante se ven en dos columnas.
+   - La llamada va directo entre los equipos (WebRTC, cifrada); las señales para conectarse van por el canal privado
+     «chat:llamada:<id>» (solo los de la conversación) y, si no conectan directo, por el enlace de Cloudflare (sigue
+     cifrada; las credenciales las da la función «chat-push» solo a quien está en la llamada). Nadie la graba.
+   - La ventana de la llamada vive en la página de arriba: se puede minimizar y seguir trabajando en el portal.
+   - Quien recibe: ventana con su foto, timbre y «Contestar» / «Rechazar»; con el portal cerrado, el aviso del
+     celular (si activó los avisos) abre el portal en la llamada (?llamada=<id>).
+   - La base lleva quién llamó, a quién y cuánto duró (portal/sql/63_chat_llamadas.sql); cada 20 s cada quien avisa
+     que sigue (si deja de avisar, sale solo). Mientras hay llamada, el portal no se recarga solo por una versión nueva
+     (espera a que termine) y la llamada cuenta como uso para el cierre por inactividad.
+   Reuniones con gente de fuera (31-oct-2026, pedido de Daniel: «tener una videollamada con clientes o gente fuera de
+   nuestro equipo… En vez de usar Zoom usar nuestra plataforma»; portal/sql/109_agenda_reuniones.sql):
+   - La reunión nace en la agenda (Calendario, una cita con «Videollamada» prendida). Aquí se entra (window.__llamada.sala)
+     y se ve la sala de espera: nadie de fuera entra hasta que alguien de PROFASE de esa reunión pica «Admitir».
+   - Las señales van por «chat:sala:<canal>» (el canal es un secreto que cambia al sacar a alguien) y cada equipo solo se
+     conecta con quien la base dice que es de PROFASE en esa reunión o ya está admitido (valido()); los nombres que se
+     ven son los que da la base, no los que manda cada quien.
+   - El mismo motor (este archivo) va escrito dentro de la página del invitado (sala.html, con __SALA_INVITADO): ahí solo
+     se usa PROFASE_LLAMADA.entra() con lo que da la base al invitado. Una sola versión de la llamada. */
+(function(){
+  const INVITADO=!document.querySelector('.vsw')&&window.__SALA_INVITADO===true;
+  if(!document.querySelector('.vsw')&&!INVITADO)return;
+  const PUEDE=!!(window.RTCPeerConnection&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+  const PANTALLA=!!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia)&&!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const MOVIL=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const e=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const dormir=ms=>new Promise(ok=>setTimeout(ok,ms));
+  let P=null,YO='',NOMBRE='',UID=null;
+
+  const st=document.createElement('style');
+  st.textContent=''
+    +'.ll-capa,.ll-capa *,.ll-pill,.ll-pill *,.ll-entra,.ll-entra *,.ll-esc,.ll-esc *,.ll-aviso{box-sizing:border-box}'
+    +'.ll-capa{position:fixed;inset:0;z-index:90;background:#0B1528;color:#fff;display:flex;flex-direction:column;font-family:inherit}'
+    +'.ll-capa[hidden],.ll-pill[hidden]{display:none!important}'
+    +'.ll-cab{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top))}'
+    +'.ll-cab .t{flex:1;min-width:0}.ll-cab b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.ll-cab small{display:block;opacity:.8;font-size:13px;font-variant-numeric:tabular-nums}'
+    +'.ll-cab .seg{display:inline-flex;align-items:center;gap:5px}.ll-cab .seg svg{width:13px;height:13px}'
+    +'.ll-ib{width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none;padding:0}'
+    +'.ll-ib:hover{background:rgba(255,255,255,.2)}.ll-ib svg{width:20px;height:20px}'
+    +'.ll-grid{flex:1;min-height:0;position:relative;display:grid;gap:8px;padding:0 10px 4px;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));grid-auto-rows:minmax(140px,1fr);overflow:auto}'
+    +'.ll-t{position:relative;background:#16264A;border-radius:14px;overflow:hidden;display:grid;place-items:center;min-height:0}'
+    +'.ll-t video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}'
+    +'.ll-t video[hidden]{display:none}.ll-t.pant video{object-fit:contain}.ll-t.yo.cam video{transform:scaleX(-1)}'
+    +'.ll-t [data-av]{position:absolute;inset:0;display:grid;place-items:center}.ll-t [data-av][hidden]{display:none}'
+    +'.ll-av{width:clamp(48px,34%,110px);height:auto;aspect-ratio:1;border-radius:50%;object-fit:cover;display:grid;place-items:center;font-weight:700;font-size:clamp(16px,4vw,30px);color:#fff;background:#2B4C86;border:3px solid rgba(255,255,255,.15);box-sizing:border-box}'
+    +'.ll-nm{position:absolute;left:8px;bottom:8px;max-width:calc(100% - 16px);background:rgba(5,10,20,.6);padding:4px 9px;border-radius:9px;font-size:13px;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.ll-nm svg{width:14px;height:14px;flex:none;color:#FF8A80}'
+    +'.ll-t .est{position:absolute;top:8px;left:8px;font-size:12px;background:rgba(5,10,20,.6);padding:3px 8px;border-radius:8px}'
+    +'.ll-grid.uno .ll-t.yo{position:absolute;right:16px;bottom:12px;width:min(28vw,150px);height:min(38vw,200px);z-index:2;box-shadow:0 6px 20px rgba(0,0,0,.45);border:2px solid rgba(255,255,255,.18)}'
+    +'.ll-grid.uno .ll-t.yo .ll-av{width:56px;font-size:18px}.ll-grid.uno .ll-t:not(.yo) .ll-av{width:clamp(80px,30%,140px)}.ll-grid.uno .ll-t.yo .ll-nm{font-size:11px;left:5px;bottom:5px}'
+    +'.ll-grid.uno{grid-template-columns:1fr}'
+    +'.ll-grid .ll-t.grande{grid-column:1/-1;grid-row:span 2}'
+    +'.ll-pie{flex:none;display:flex;justify-content:center;flex-wrap:wrap;gap:12px;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom))}'
+    +'.ll-b{width:56px;height:56px;border-radius:50%;border:0;background:#22345A;color:#fff;display:grid;place-items:center;cursor:pointer;padding:0;position:relative}'
+    +'.ll-b svg{width:24px;height:24px}.ll-b:hover{filter:brightness(1.12)}.ll-b:focus-visible,.ll-ib:focus-visible{outline:3px solid #F07A1E;outline-offset:2px}'
+    +'.ll-b.off{background:#fff;color:#0B1528}.ll-b.act{background:#F07A1E}.ll-b.rojo{background:#D92D20}.ll-b.verde{background:#1D9A5B}'
+    +'.ll-b[disabled]{opacity:.45;cursor:default}'
+    +'.ll-pill{position:fixed;left:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:90;background:#0B1528;color:#fff;border-radius:999px;padding:7px 8px 7px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:14px;max-width:calc(100vw - 24px)}'
+    +'.ll-pill .pt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}.ll-pill b{font-variant-numeric:tabular-nums}'
+    +'.ll-pill .dot{width:9px;height:9px;border-radius:50%;background:#3DD68C;flex:none;animation:ll-lat 1.6s infinite}'
+    +'.ll-pill button{border:0;border-radius:999px;height:34px;padding:0 12px;font:inherit;font-weight:700;cursor:pointer;flex:none}'
+    +'.ll-pill .ver{background:rgba(255,255,255,.14);color:#fff}.ll-pill .col{background:#D92D20;color:#fff;width:34px;padding:0;display:grid;place-items:center}.ll-pill .col svg{width:18px;height:18px}'
+    +'@keyframes ll-lat{0%,100%{opacity:1}50%{opacity:.35}}'
+    // quien recibe
+    +'.ll-entra{position:fixed;inset:0;z-index:95;background:rgba(5,10,20,.72);display:grid;place-items:center;padding:16px}'
+    +'.ll-card{background:#0B1528;color:#fff;border-radius:22px;padding:26px 22px 22px;width:min(360px,100%);text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5);animation:ll-entra .2s ease-out}'
+    +'@keyframes ll-entra{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}'
+    +'.ll-card .ll-av{width:96px;font-size:30px;margin:4px auto 14px;box-shadow:0 0 0 0 rgba(240,122,30,.6);animation:ll-anillo 1.6s infinite}'
+    +'@keyframes ll-anillo{0%{box-shadow:0 0 0 0 rgba(240,122,30,.55)}70%{box-shadow:0 0 0 18px rgba(240,122,30,0)}100%{box-shadow:0 0 0 0 rgba(240,122,30,0)}}'
+    +'.ll-card b{display:block;font-size:19px;margin-bottom:4px;overflow-wrap:anywhere}.ll-card p{margin:0 0 20px;opacity:.85;font-size:14.5px}'
+    +'.ll-card .acc{display:flex;justify-content:center;gap:22px}.ll-card .acc div{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;opacity:.95}'
+    // escoger a quién (grupos grandes)
+    +'.ll-esc{position:fixed;inset:0;z-index:95;background:rgba(5,10,20,.6);display:grid;place-items:center;padding:16px}'
+    +'.ll-esc .dlg{background:var(--surface,#fff);color:var(--ink,#132036);border-radius:16px;width:min(420px,100%);max-height:min(640px,90vh);display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.35)}'
+    +'.ll-esc h2{margin:0;padding:16px 18px 4px;font-size:17px}.ll-esc .nota{padding:0 18px 10px;font-size:13px;color:var(--muted,#5A6577)}'
+    +'.ll-esc .ls{flex:1;min-height:0;overflow:auto;padding:0 10px}'
+    +'.ll-esc label{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;cursor:pointer;font-size:14.5px}'
+    +'.ll-esc label:hover{background:var(--surface-2,#EEF2F7)}.ll-esc input{width:18px;height:18px;accent-color:#F07A1E;flex:none}'
+    +'.ll-esc .ll-av{width:34px;font-size:12px;border:0}'
+    +'.ll-esc .pie{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line,#DCE2EB)}'
+    +'.ll-esc .pie button{height:38px;border-radius:10px;padding:0 14px;font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
+    +'.ll-esc .pie .pri{background:#F07A1E;border-color:#F07A1E;color:#fff}.ll-esc .pie .pri[disabled]{opacity:.5}'
+    +':root[data-theme="dark"] .ll-esc .dlg{background:#141C2B;color:#E5EAF2}'
+    +'.ll-aviso{position:fixed;left:50%;transform:translateX(-50%);bottom:max(18px,env(safe-area-inset-bottom));z-index:96;background:#0B1528;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}'
+    // la sala de espera de una reunión con gente de fuera (solo los de PROFASE)
+    +'.ll-sala{flex:none;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 12px 10px}'
+    +'.ll-sala .esp{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 280px;min-width:0}'
+    +'.ll-sala .vac{font-size:13px;opacity:.75}'
+    +'.ll-sala .pe{display:flex;align-items:center;gap:8px;background:#F07A1E;color:#fff;border-radius:12px;padding:6px 6px 6px 12px;font-size:14px;max-width:100%;animation:ll-entra .2s ease-out}'
+    +'.ll-sala .pe b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}'
+    +'.ll-sala .pe button{border:0;border-radius:9px;height:32px;padding:0 10px;font:inherit;font-weight:700;cursor:pointer;flex:none}'
+    +'.ll-sala .pe .si{background:#fff;color:#0B1528}.ll-sala .pe .no{background:rgba(0,0,0,.18);color:#fff}'
+    +'.ll-sala .acc{display:flex;flex-wrap:wrap;gap:8px}'
+    +'.ll-sala .acc button,.ll-mas button{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:10px;height:36px;padding:0 12px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}'
+    +'.ll-sala .acc button:hover{background:rgba(255,255,255,.16)}.ll-sala .acc .rojo{border-color:#D92D20;color:#FFB4AE}'
+    +'.ll-saca{position:absolute;top:8px;right:8px;border:0;border-radius:8px;background:rgba(5,10,20,.65);color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:4px 9px;cursor:pointer;z-index:3}'
+    +'.ll-saca:hover{background:#D92D20}'
+    // aviso con botones (alguien de fuera espera)
+    +'.ll-toast{position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:96;background:#0B1528;color:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px rgba(0,0,0,.4);width:min(360px,calc(100vw - 24px));font-size:14px;border-left:4px solid #F07A1E;animation:ll-entra .2s ease-out}'
+    +'.ll-toast b{display:block;font-size:15px;margin-bottom:2px;overflow-wrap:anywhere}.ll-toast p{margin:0 0 10px;opacity:.85;overflow-wrap:anywhere}'
+    +'.ll-toast .bt{display:flex;gap:8px;flex-wrap:wrap}.ll-toast button{border:0;border-radius:10px;height:36px;padding:0 12px;font:inherit;font-weight:700;cursor:pointer}'
+    +'.ll-toast .si{background:#F07A1E;color:#fff}.ll-toast .no{background:rgba(255,255,255,.12);color:#fff}'
+    // la lista de reuniones (Chat › Reuniones con clientes)
+    +'.ll-esc .reu{display:grid;gap:8px;padding:0 12px 12px}'
+    +'.ll-esc .re{border:1px solid var(--line,#DCE2EB);border-radius:12px;padding:10px 12px;display:grid;gap:6px}'
+    +'.ll-esc .re b{font-size:15px;overflow-wrap:anywhere}.ll-esc .re small{color:var(--muted,#5A6577);font-size:13px}'
+    +'.ll-esc .re .es{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;background:#FDEEDF;color:#A24B08;margin-right:6px}'
+    +'.ll-esc .re .es.vivo{background:#E2F1E8;color:#1D7A4F}'
+    +'.ll-esc .re .bt{display:flex;flex-wrap:wrap;gap:6px}'
+    +'.ll-esc .re button,.ll-esc .nueva{height:34px;border-radius:9px;padding:0 12px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
+    +'.ll-esc .re .pri,.ll-esc .nueva{background:#F07A1E;border-color:#F07A1E;color:#fff}'
+    +'.ll-esc .vacio{padding:6px 18px 14px;color:var(--muted,#5A6577);font-size:14px}'
+    +':root[data-theme="dark"] .ll-esc .re{border-color:#2A3542}:root[data-theme="dark"] .ll-esc .re button:not(.pri){background:#1C2530;border-color:#37455A}'
+    +'@media (max-width:600px){.ll-b{width:52px;height:52px}.ll-pie{gap:10px}.ll-grid{grid-template-columns:1fr}.ll-grid.muchos{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(110px,1fr)}.ll-grid.muchos .ll-nm{font-size:12px}}'
+    +'@media (prefers-reduced-motion: reduce){.ll-card,.ll-card .ll-av,.ll-pill .dot{animation:none}}'
+    +'@media print{.ll-capa,.ll-pill,.ll-entra{display:none}}';
+  document.head.appendChild(st);
+
+  const IC={
+    mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+    micNo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 5 2.2M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.7 3M12 18v3M3 3l18 18"/></svg>',
+    cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg>',
+    camNo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 13.5v2A2.5 2.5 0 0 1 13 18H5a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 5 6h1M10 6h3a2.5 2.5 0 0 1 2.5 2.5v1l6-3.5v10M3 3l18 18"/></svg>',
+    pant:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 14V8M9 11l3-3 3 3"/></svg>',
+    voltea:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-3l-2-3H9L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/><path d="M15 12.5a3 3 0 0 0-5.2-2M9 13.5a3 3 0 0 0 5.2 2M15 9.5v2h-2M9 16.5v-2h2"/></svg>',
+    colgar:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.1.9-8.3 2.4-.7.5-.9 1.4-.5 2.1l1.3 2.1c.4.7 1.3.9 2 .6l2.4-1.1c.6-.3 1-.9 1-1.6v-1.3c1.3-.3 2.8-.3 4.2 0v1.3c0 .7.4 1.3 1 1.6l2.4 1.1c.7.3 1.6.1 2-.6l1.3-2.1c.4-.7.2-1.6-.5-2.1C18.1 9.9 15.2 9 12 9Z"/></svg>',
+    tel:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1Z"/></svg>',
+    min:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
+    candado:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    cerrar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+  };
+  const ini=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+  const FOTO={};
+  async function foto(uid){
+    if(!uid)return null;
+    if(!(uid in FOTO)){try{const f=await P.fotosDe([uid]);FOTO[uid]=f[uid]||null}catch(err){FOTO[uid]=null}}
+    return FOTO[uid];
+  }
+  async function avatar(uid,nombre){
+    const f=await foto(uid);
+    return f?'<img class="ll-av" alt="" src="'+e(f)+'">':'<span class="ll-av" aria-hidden="true">'+e(ini(nombre))+'</span>';
+  }
+  function aviso(t,ms){
+    const a=document.createElement('div');a.className='ll-aviso';a.setAttribute('role','status');a.textContent=t;
+    document.body.appendChild(a);setTimeout(()=>a.remove(),ms||3500);
+  }
+  function errTxt(err){
+    const m=String((err&&(err.message||err.error_description))||err||'');
+    if(/NotAllowed|Permission|denied/i.test(err&&err.name||m))return 'El navegador no dio permiso para el micrófono o la cámara. Dale permiso al portal en los ajustes del navegador.';
+    if(/NotFound|DevicesNotFound/i.test(err&&err.name||m))return 'No encontré micrófono o cámara en este equipo.';
+    if(/NotReadable|TrackStart/i.test(err&&err.name||m))return 'El micrófono o la cámara los está usando otra aplicación.';
+    return m||'No se pudo';
+  }
+  const rpc=async(n,a)=>{const r=await P.sb.rpc(n,a||{});if(r.error)throw new Error(r.error.message||'No se pudo');return r.data};
+
+  /* --- sonidos (sin archivos): timbre de quien recibe y «tu… tu…» de quien llama --- */
+  let AC=null,sonTic=null;
+  function ac(){try{if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();return AC}catch(err){return null}}
+  function tono(frecs,dur,vol){
+    const c=ac();if(!c)return;
+    const t=c.currentTime,g=c.createGain();g.connect(c.destination);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.03);g.gain.setValueAtTime(vol,t+dur-.05);g.gain.linearRampToValueAtTime(0,t+dur);
+    frecs.forEach(f=>{const o=c.createOscillator();o.type='sine';o.frequency.value=f;o.connect(g);o.start(t);o.stop(t+dur)});
+  }
+  function suena(que){
+    callaSonido();
+    const uno=que==='timbre'?()=>{tono([660,880],.35,.16);setTimeout(()=>tono([660,880],.35,.16),450)}:()=>tono([425],1,.08);
+    uno();sonTic=setInterval(uno,que==='timbre'?2600:3500);
+    if(que==='timbre'&&navigator.vibrate){try{navigator.vibrate([400,250,400])}catch(err){}}
+  }
+  function callaSonido(){clearInterval(sonTic);sonTic=null;try{navigator.vibrate&&navigator.vibrate(0)}catch(err){}}
+
+  /* --- el enlace (STUN y TURN de Cloudflare) --- */
+  async function enlace(pide){
+    try{
+      const f=await P.sb.functions.invoke('chat-push',{body:Object.assign({ice:true},pide)});
+      if(!f.error&&f.data&&Array.isArray(f.data.iceServers)&&f.data.iceServers.length)return f.data.iceServers;
+    }catch(err){}
+    return [{urls:['stun:stun.cloudflare.com:3478']}];
+  }
+
+  /* --- micrófono, cámara y pantalla --- */
+  async function pideMicro(){
+    return (await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})).getAudioTracks()[0];
+  }
+  async function pideCamara(frente){
+    return (await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:frente===false?'environment':'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:24,max:30}}})).getVideoTracks()[0];
+  }
+
+  /* --- la llamada en curso --- */
+  let L=null;
+  P_enLlamada();
+  function P_enLlamada(){
+    // el portal no se recarga solo por una versión nueva mientras hay llamada (js/portal.js lo pregunta)
+    const fija=()=>{if(window.PORTAL)window.PORTAL.enLlamada=()=>!!L;else setTimeout(fija,300)};fija();
+  }
+  const videoActual=()=>L&&(L.pantTrack||(L.cam&&L.camTrack)||null);
+  function manda(o){try{L&&L.ch&&L.ch.send({type:'broadcast',event:'s',payload:Object.assign({de:L.sid},o)})}catch(err){}}
+  function publicaEstado(){try{L&&L.ch&&L.ch.track(Object.assign({},L.cfg.yo(),{mic:!!L.mic,cam:!!(L.cam&&L.camTrack),pant:!!L.pantTrack}))}catch(err){}}
+  // ¿con este equipo sí me conecto? (en las reuniones con gente de fuera, solo con quien la base dice)
+  function valido(sid,meta){
+    if(!L||!L.cfg.valido)return true;
+    if(!L.cfg.valido(meta||{}))return false;
+    // la misma persona en dos lugares: solo la primera
+    const id=L.cfg.quien&&L.cfg.quien(meta||{});
+    if(!id)return true;
+    for(const [k,p] of L.peers)if(k!==sid&&L.cfg.quien(p.meta||{})===id)return false;
+    return true;
+  }
+  function bitrate(p){
+    try{
+      const s=p.tv&&p.tv.sender;if(!s||!s.getParameters)return;
+      const pr=s.getParameters();if(!pr.encodings||!pr.encodings.length)pr.encodings=[{}];
+      // cada quien manda su video a cada uno de los demás: con más gente (caben 10), cada copia va más ligera
+      const n=L.peers.size,pant=!!L.pantTrack;
+      const br=pant?(n>4?600000:1200000):(n>5?200000:(n>2?350000:650000));
+      pr.encodings[0].maxBitrate=br;
+      if(!pant&&n>5)pr.encodings[0].scaleResolutionDownBy=1.5;else if(pr.encodings[0].scaleResolutionDownBy)pr.encodings[0].scaleResolutionDownBy=1;
+      s.setParameters(pr).catch(()=>{
+        // si el navegador no acepta bajar la resolución, al menos el tope de velocidad
+        try{const q=s.getParameters();if(!q.encodings||!q.encodings.length)q.encodings=[{}];q.encodings[0].maxBitrate=br;delete q.encodings[0].scaleResolutionDownBy;s.setParameters(q).catch(()=>{})}catch(err){}
+      });
+    }catch(err){}
+  }
+  function cambiaVideo(){
+    const t=videoActual();
+    L.peers.forEach(p=>{if(p.tv){p.tv.sender.replaceTrack(t||null).catch(()=>{});bitrate(p)}});
+    pintaYo();publicaEstado();
+  }
+
+  async function creaPeer(sid,meta,ofrece){
+    const pc=new RTCPeerConnection({iceServers:L.ice});
+    const p={sid,meta:meta||{},pc,ofrece,cola:(L.pend[sid]||[]).splice(0),stream:new MediaStream(),ta:null,tv:null,quita:null,reinicios:0};
+    delete L.pend[sid];
+    L.peers.set(sid,p);
+    pc.onicecandidate=ev=>{if(ev.candidate)manda({t:'ice',para:sid,c:ev.candidate.toJSON()})};
+    pc.ontrack=ev=>{
+      const tr=ev.track;
+      p.stream.getTracks().filter(x=>x.kind===tr.kind).forEach(x=>p.stream.removeTrack(x));
+      p.stream.addTrack(tr);
+      pintaPeer(p);
+      tr.onunmute=()=>pintaPeer(p);
+    };
+    pc.onconnectionstatechange=()=>{
+      const s=pc.connectionState;
+      if(s==='connected'){p.reinicios=0;L.nCal=L.peers.size;L.peers.forEach(bitrate);estado()}
+      if(s==='failed'||s==='disconnected'){
+        clearTimeout(p.quita);
+        p.quita=setTimeout(()=>{if(!L||!L.peers.has(sid)||pc.connectionState==='connected')return;
+          if(p.reinicios++<3){if(p.ofrece)ofrecer(p,true);else manda({t:'reinicia',para:sid})}},s==='failed'?300:4000);
+      }
+      pintaPeer(p);
+    };
+    if(ofrece){
+      p.ta=pc.addTransceiver('audio',{direction:'sendrecv'});
+      p.tv=pc.addTransceiver('video',{direction:'sendrecv'});
+      try{await p.ta.sender.replaceTrack(L.micTrack||null)}catch(err){}
+      try{await p.tv.sender.replaceTrack(videoActual())}catch(err){}
+      await ofrecer(p,false);
+    }
+    pintaTodo();
+    return p;
+  }
+  async function ofrecer(p,reinicio){
+    try{
+      const of=await p.pc.createOffer(reinicio?{iceRestart:true}:undefined);
+      await p.pc.setLocalDescription(of);
+      manda({t:'oferta',para:p.sid,d:p.pc.localDescription&&p.pc.localDescription.toJSON?p.pc.localDescription.toJSON():p.pc.localDescription});
+    }catch(err){}
+  }
+  async function vaciaCola(p){
+    const c=p.cola.splice(0);for(const x of c){try{await p.pc.addIceCandidate(x)}catch(err){}}
+  }
+  async function senal(d){
+    if(!L||!d||!d.de)return;
+    // alguien colgó: se quita su cuadro de una vez (en un 1 a 1 se termina)
+    if(d.t==='adios'){
+      const q=L.peers.get(d.de);
+      if(q){try{q.pc.close()}catch(err){}L.peers['delete'](d.de);pintaTodo();estado()}
+      if(L.cfg.directo)termina('La llamada terminó');
+      return;
+    }
+    // reuniones: sacaron a alguien de fuera (a él se le acaba la llamada; los demás le cierran)
+    if(d.t==='fuera'&&d.g){
+      if(L.cfg.yoG&&L.cfg.yoG()===d.g){termina('Te sacaron de la reunión',false);return}
+      L.peers.forEach((q,k)=>{if(q.meta&&q.meta.g===d.g){try{q.pc.close()}catch(err){}L.peers['delete'](k)}});
+      pintaTodo();estado();return;
+    }
+    if(d.para!==L.sid)return;
+    let p=L.peers.get(d.de);
+    if(d.t==='oferta'){
+      if(!p){const m=metaDe(d.de);if(!valido(d.de,m))return;p=await creaPeer(d.de,m,false)}
+      try{
+        await p.pc.setRemoteDescription(d.d);
+        if(!p.ta||!p.tv){
+          p.pc.getTransceivers().forEach(t=>{
+            const k=t.receiver&&t.receiver.track&&t.receiver.track.kind;
+            if(k==='audio'&&!p.ta){p.ta=t;t.direction='sendrecv'}
+            if(k==='video'&&!p.tv){p.tv=t;t.direction='sendrecv'}
+          });
+          try{if(p.ta)await p.ta.sender.replaceTrack(L.micTrack||null)}catch(err){}
+          try{if(p.tv)await p.tv.sender.replaceTrack(videoActual())}catch(err){}
+        }
+        const r=await p.pc.createAnswer();await p.pc.setLocalDescription(r);
+        manda({t:'respuesta',para:d.de,d:p.pc.localDescription.toJSON?p.pc.localDescription.toJSON():p.pc.localDescription});
+        await vaciaCola(p);
+      }catch(err){}
+    }else if(d.t==='respuesta'&&p){
+      try{await p.pc.setRemoteDescription(d.d);await vaciaCola(p)}catch(err){}
+    }else if(d.t==='ice'){
+      if(!p){(L.pend[d.de]=L.pend[d.de]||[]).push(d.c);return}
+      if(p.pc.remoteDescription)try{await p.pc.addIceCandidate(d.c)}catch(err){} else p.cola.push(d.c);
+    }else if(d.t==='reinicia'&&p&&p.ofrece){
+      ofrecer(p,true);
+    }
+  }
+  function metaDe(sid){
+    try{const s=L.ch.presenceState()[sid];return (s&&s[0])||{}}catch(err){return {}}
+  }
+  function sincroniza(){
+    if(!L||!L.ch)return;
+    let s={};try{s=L.ch.presenceState()||{}}catch(err){}
+    const otros=Object.keys(s).filter(k=>k!==L.sid&&valido(k,(s[k]&&s[k][0])||{}));
+    // quien ya no es válido (lo sacaron) se cierra de una vez
+    L.peers.forEach((p,sid)=>{if(otros.indexOf(sid)<0&&s[sid]){try{p.pc.close()}catch(err){}L.peers['delete'](sid)}});
+    otros.forEach(sid=>{
+      const meta=(s[sid]&&s[sid][0])||{};
+      const p=L.peers.get(sid);
+      if(p){p.meta=meta;clearTimeout(p.sale);p.sale=null;pintaPeer(p);return}
+      // de cada pareja, ofrece la del número menor; la otra espera la oferta
+      if(L.sid<sid)creaPeer(sid,meta,true);
+    });
+    L.peers.forEach((p,sid)=>{
+      if(otros.indexOf(sid)<0&&!p.sale)p.sale=setTimeout(()=>{if(!L)return;const q=L.peers.get(sid);if(q){try{q.pc.close()}catch(err){}L.peers['delete'](sid);pintaTodo();estado()}},L.cfg.salida||10000);
+    });
+    if(otros.length&&!L.alguien){L.alguien=true;callaSonido();if(!L.inicio)L.inicio=Date.now()}
+    pintaTodo();estado();
+  }
+
+  /* --- la pantalla --- */
+  function arma(){
+    const c=document.createElement('div');c.className='ll-capa';c.setAttribute('role','dialog');c.setAttribute('aria-modal','true');c.setAttribute('aria-label','Llamada');
+    c.innerHTML='<div class="ll-cab">'+(INVITADO?'':'<button type="button" class="ll-ib" data-min aria-label="Minimizar la llamada" title="Minimizar (sigues en la llamada)">'+IC.min+'</button>')
+      +'<div class="t"><b data-titulo></b><small><span class="seg">'+IC.candado+'<span data-estado>Conectando…</span></span></small></div></div>'
+      +'<div data-extra></div>'
+      +'<div class="ll-grid" data-grid></div>'
+      +'<div class="ll-pie">'
+      +'<button type="button" class="ll-b" data-mic aria-label="Silenciar mi micrófono" aria-pressed="false">'+IC.mic+'</button>'
+      +'<button type="button" class="ll-b" data-cam aria-label="Prender mi cámara" aria-pressed="false">'+IC.camNo+'</button>'
+      +(PANTALLA?'<button type="button" class="ll-b" data-pant aria-label="Compartir mi pantalla" aria-pressed="false">'+IC.pant+'</button>':'')
+      +(MOVIL?'<button type="button" class="ll-b" data-voltea aria-label="Cambiar de cámara" hidden>'+IC.voltea+'</button>':'')
+      +'<button type="button" class="ll-b rojo" data-colgar aria-label="Colgar">'+IC.colgar+'</button></div>';
+    document.body.appendChild(c);
+    const pill=document.createElement('div');pill.className='ll-pill';pill.hidden=true;pill.setAttribute('role','status');
+    pill.innerHTML='<span class="dot"></span><span class="pt" data-ver tabindex="0" role="button" aria-label="Regresar a la llamada"><span data-pilltxt>En llamada</span> · <b data-tiempo>0:00</b></span><button type="button" class="ver" data-ver>Regresar</button><button type="button" class="col" data-colgar aria-label="Colgar">'+IC.colgar+'</button>';
+    document.body.appendChild(pill);
+    c.addEventListener('click',ev=>{
+      const b=ev.target.closest('button');if(!b)return;
+      if(b.hasAttribute('data-min'))minimiza(true);
+      else if(b.hasAttribute('data-mic'))alternaMic();
+      else if(b.hasAttribute('data-cam'))alternaCam();
+      else if(b.hasAttribute('data-pant'))alternaPantalla();
+      else if(b.hasAttribute('data-voltea'))volteaCam();
+      else if(b.hasAttribute('data-colgar'))termina(L&&L.cfg.colgarTxt||'Colgaste');
+      else if(L&&L.cfg.boton)L.cfg.boton(b,ev);
+    });
+    pill.addEventListener('click',ev=>{
+      const b=ev.target.closest('[data-ver],[data-colgar]');if(!b)return;
+      if(b.hasAttribute('data-colgar'))termina('Colgaste');else minimiza(false);
+    });
+    pill.addEventListener('keydown',ev=>{if((ev.key==='Enter'||ev.key===' ')&&ev.target.hasAttribute('data-ver')){ev.preventDefault();minimiza(false)}});
+    return {capa:c,pill,grid:c.querySelector('[data-grid]'),extra:c.querySelector('[data-extra]')};
+  }
+  function minimiza(si){
+    if(!L)return;L.min=si;L.ui.capa.hidden=si;L.ui.pill.hidden=!si;
+    if(!si)try{L.ui.capa.querySelector('[data-colgar]').focus({preventScroll:true})}catch(err){}
+  }
+  function tiempo(){
+    if(!L||!L.inicio)return '0:00';
+    const s=Math.max(0,Math.floor((Date.now()-L.inicio)/1000)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+    return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0');
+  }
+  function estado(){
+    if(!L)return;
+    const t=L.ui.capa.querySelector('[data-estado]');
+    const n=L.peers.size,conectados=[...L.peers.values()].filter(p=>p.pc.connectionState==='connected').length;
+    let txt;
+    if(!L.alguien)txt=L.cfg.esperaTxt?L.cfg.esperaTxt():(L.saliente?'Llamando…':'Conectando…');
+    else if(n&&!conectados)txt='Conectando…';
+    else if(!n)txt='Solo tú en la llamada · '+tiempo();
+    else txt=tiempo()+' · cifrada';
+    t.textContent=txt;
+    L.ui.pill.querySelector('[data-tiempo]').textContent=L.alguien?tiempo():'llamando…';
+  }
+  function tile(id){
+    let t=L.ui.grid.querySelector('[data-t="'+id+'"]');
+    if(!t){t=document.createElement('div');t.className='ll-t';t.setAttribute('data-t',id);
+      t.innerHTML='<video playsinline autoplay muted hidden></video><span data-av></span><span class="ll-nm"></span>';
+      L.ui.grid.appendChild(t)}
+    return t;
+  }
+  async function pintaYo(){
+    if(!L)return;
+    const t=tile('yo');t.classList.add('yo');
+    const v=t.querySelector('video'),vt=videoActual();
+    t.classList.toggle('cam',!!vt&&!L.pantTrack);t.classList.toggle('pant',!!L.pantTrack);
+    if(vt){const ms=new MediaStream([vt]);if(!v.srcObject||v.srcObject.getVideoTracks()[0]!==vt)v.srcObject=ms;v.hidden=false;try{await v.play()}catch(err){}}
+    else{v.hidden=true;v.srcObject=null}
+    const av=t.querySelector('[data-av]');if(!av.dataset.listo){av.dataset.listo='1';av.innerHTML=await L.cfg.avatarYo()}
+    if(!L)return;
+    av.hidden=!!vt;
+    t.querySelector('.ll-nm').innerHTML=(L.mic?'':IC.micNo)+'Tú'+(L.pantTrack?' · tu pantalla':'');
+    const ui=L.ui.capa;
+    const bm=ui.querySelector('[data-mic]');bm.classList.toggle('off',!L.mic);bm.innerHTML=L.mic?IC.mic:IC.micNo;bm.setAttribute('aria-pressed',L.mic?'false':'true');bm.setAttribute('aria-label',L.mic?'Silenciar mi micrófono':'Prender mi micrófono');bm.title=L.mic?'Silenciar':'Prender micrófono';
+    bm.disabled=!L.micTrack;if(!L.micTrack)bm.title='Sin micrófono'
+    const bc=ui.querySelector('[data-cam]');const camOn=!!(L.cam&&L.camTrack);bc.classList.toggle('act',camOn);bc.innerHTML=camOn?IC.cam:IC.camNo;bc.setAttribute('aria-pressed',camOn?'true':'false');bc.setAttribute('aria-label',camOn?'Apagar mi cámara':'Prender mi cámara');bc.title=camOn?'Apagar cámara':'Prender cámara';
+    const bp=ui.querySelector('[data-pant]');if(bp){bp.classList.toggle('act',!!L.pantTrack);bp.setAttribute('aria-pressed',L.pantTrack?'true':'false');bp.setAttribute('aria-label',L.pantTrack?'Dejar de compartir mi pantalla':'Compartir mi pantalla');bp.title=L.pantTrack?'Dejar de compartir':'Compartir pantalla'}
+    const bv=ui.querySelector('[data-voltea]');if(bv)bv.hidden=!camOn;
+  }
+  async function pintaPeer(p){
+    if(!L||!L.peers.has(p.sid))return;
+    const t=tile(p.sid),m=p.meta||{};
+    const v=t.querySelector('video');
+    const vt=p.stream.getVideoTracks()[0],at=p.stream.getAudioTracks()[0];
+    const conVideo=!!vt&&(m.cam||m.pant);
+    t.classList.toggle('pant',!!m.pant);t.classList.toggle('grande',!!m.pant&&L.peers.size>1);
+    if(conVideo){if(!v.srcObject||v.srcObject.getVideoTracks()[0]!==vt)v.srcObject=new MediaStream([vt]);v.hidden=false;try{await v.play()}catch(err){}}
+    else{v.hidden=true}
+    if(!L)return;
+    // el audio va en su propio elemento (también cuando no hay video)
+    if(at){
+      if(!p.audio){p.audio=document.createElement('audio');p.audio.autoplay=true;p.audio.setAttribute('playsinline','');t.appendChild(p.audio)}
+      if(!p.audio.srcObject||p.audio.srcObject.getAudioTracks()[0]!==at){p.audio.srcObject=new MediaStream([at]);try{await p.audio.play()}catch(err){}}
+    }
+    const av=t.querySelector('[data-av]'),cual=L.cfg.cualAvatar(m);
+    if(av.dataset.uid!==cual){av.dataset.uid=cual;av.innerHTML=await L.cfg.avatar(m)}
+    if(!L)return;
+    av.hidden=conVideo;
+    const cs=p.pc.connectionState;
+    t.querySelector('.ll-nm').innerHTML=(m.mic===false?IC.micNo:'')+e(L.cfg.nombre(m))+(m.pant?' · pantalla':'');
+    // reuniones: los de PROFASE pueden sacar a alguien de fuera
+    let sb=t.querySelector('.ll-saca');
+    if(L.cfg.sacar&&m.g){if(!sb){sb=document.createElement('button');sb.type='button';sb.className='ll-saca';sb.textContent='Sacar';sb.onclick=()=>L&&L.cfg.sacar(p.meta||{});t.appendChild(sb)}}
+    else if(sb)sb.remove();
+    let est=t.querySelector('.est');
+    const txt=cs==='connected'?'':cs==='failed'?'Sin conexión':'Conectando…';
+    if(txt){if(!est){est=document.createElement('span');est.className='est';t.appendChild(est)}est.textContent=txt}else if(est)est.remove();
+  }
+  function pintaTodo(){
+    if(!L)return;
+    const ids=new Set(['yo',...L.peers.keys()]);
+    L.ui.grid.querySelectorAll('.ll-t').forEach(t=>{if(!ids.has(t.getAttribute('data-t')))t.remove()});
+    L.ui.grid.classList.toggle('uno',L.peers.size===1);
+    L.ui.grid.classList.toggle('muchos',L.peers.size>=3);
+    // si entró o salió alguien, la calidad del video se reparte otra vez entre todos
+    if(L.nCal!==L.peers.size){L.nCal=L.peers.size;L.peers.forEach(bitrate)}
+    // si nadie más ha entrado, se ven los invitados (con su foto) mientras suena
+    pintaYo();L.peers.forEach(pintaPeer);
+    if(!L.peers.size&&L.info&&Array.isArray(L.info.part)){
+      const otros=(L.info.part||[]).filter(x=>x.usuario!==YO).slice(0,9);
+      L.ui.grid.classList.toggle('uno',otros.length===1);L.ui.grid.classList.toggle('muchos',otros.length>=3);
+      otros.forEach(async x=>{const t=tile('inv-'+x.usuario);const av=t.querySelector('[data-av]');if(!av.dataset.listo){av.dataset.listo='1';av.innerHTML=await avatar(x.uid,x.nombre)}t.querySelector('.ll-nm').textContent=x.nombre;if(!L||L.peers.size)t.remove()});
+    }else L.ui.grid.querySelectorAll('[data-t^="inv-"]').forEach(t=>t.remove());
+  }
+
+  /* --- botones --- */
+  function alternaMic(){if(!L||!L.micTrack)return;L.mic=!L.mic;L.micTrack.enabled=L.mic;pintaYo();publicaEstado()}
+  async function alternaCam(){
+    if(!L)return;
+    if(L.cam&&L.camTrack){L.cam=false;try{L.camTrack.stop()}catch(err){}L.camTrack=null;cambiaVideo();return}
+    try{L.camTrack=await pideCamara(L.frente);L.cam=true;cambiaVideo()}catch(err){aviso(errTxt(err),5000)}
+  }
+  async function volteaCam(){
+    if(!L||!L.camTrack)return;
+    L.frente=L.frente===false;
+    try{const n=await pideCamara(L.frente);try{L.camTrack.stop()}catch(err){}L.camTrack=n;cambiaVideo()}catch(err){aviso(errTxt(err))}
+  }
+  async function alternaPantalla(){
+    if(!L)return;
+    if(L.pantTrack){try{L.pantTrack.stop()}catch(err){}L.pantTrack=null;cambiaVideo();return}
+    try{
+      const s=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:10,max:15}},audio:false});
+      L.pantTrack=s.getVideoTracks()[0];
+      try{L.pantTrack.contentHint='detail'}catch(err){}
+      L.pantTrack.onended=()=>{if(L&&L.pantTrack){L.pantTrack=null;cambiaVideo()}};
+      cambiaVideo();
+    }catch(err){if(!/NotAllowed|Abort/i.test(err&&err.name||''))aviso('No se pudo compartir la pantalla.')}
+  }
+
+  /* --- entrar y salir --- */
+  /* El motor: cfg dice de dónde salen las señales (canal), el enlace, cómo se avisa que sigue, quién es válido y cómo se
+     llama y se ve cada quien. Lo usan las llamadas del chat, las reuniones con gente de fuera y la página del invitado. */
+  async function arranca(cfg){
+    const sid=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+    L={cfg,id:cfg.id,conv:cfg.conv||null,info:cfg.info||null,tipo:cfg.tipo,saliente:!!cfg.saliente,sid,peers:new Map(),pend:{},mic:true,cam:false,frente:true,
+       micTrack:null,camTrack:null,pantTrack:null,ui:arma(),inicio:null,alguien:false,ice:[{urls:['stun:stun.cloudflare.com:3478']}]};
+    window.__llamadaActiva=true;
+    L.ui.capa.querySelector('[data-titulo]').textContent=cfg.titulo||'Llamada';
+    if(cfg.pillTxt)L.ui.pill.querySelector('[data-pilltxt]').textContent=cfg.pillTxt;
+    if(cfg.extra)try{cfg.extra(L)}catch(err){}
+    pintaTodo();
+    if(L.saliente)suena('tono');
+    const pide=cfg.ice();
+    try{L.micTrack=await pideMicro()}catch(err){aviso(errTxt(err)+' Entras sin micrófono.',6000);L.mic=false}
+    if(!L)return;
+    if(cfg.tipo==='video'){try{L.camTrack=await pideCamara(true);L.cam=true}catch(err){aviso(errTxt(err),5000)}}
+    if(!L)return;
+    L.ice=await pide;
+    if(!L)return;
+    pintaYo();
+    conecta(cfg.topic);
+    L.late=setInterval(late,cfg.lateCada||20000);
+    L.reloj=setInterval(()=>{estado();try{P&&P.marcaActividad&&P.marcaActividad()}catch(err){}},1000);
+    if(L.saliente)L.espera=setTimeout(()=>{if(L&&!L.alguien)termina('No contestaron')},45000);
+    try{if(navigator.wakeLock)L.wake=await navigator.wakeLock.request('screen')}catch(err){}
+    document.addEventListener('visibilitychange',reWake);
+    if(cfg.alEntrar)try{cfg.alEntrar(L)}catch(err){}
+  }
+  function conecta(topic){
+    if(!L)return;
+    const ch=L.cfg.sb.channel(topic,{config:{private:true,broadcast:{self:false,ack:false},presence:{key:L.sid}}});
+    L.ch=ch;L.topic=topic;
+    ch.on('broadcast',{event:'s'},m=>senal(m&&m.payload));
+    ch.on('presence',{event:'sync'},sincroniza);
+    ch.subscribe(async s=>{if(s==='SUBSCRIBED'){publicaEstado()}});
+  }
+  // reuniones: el canal cambió (sacaron a alguien); las conexiones directas siguen, solo se mudan las señales
+  function cambiaCanal(topic){
+    if(!L||!topic||topic===L.topic)return;
+    const viejo=L.ch;
+    try{viejo&&viejo.untrack()}catch(err){}
+    setTimeout(()=>{try{L&&L.cfg.sb.removeChannel(viejo)}catch(err){}},500);
+    conecta(topic);
+  }
+  async function reWake(){try{if(L&&!document.hidden&&navigator.wakeLock&&(!L.wake||L.wake.released))L.wake=await navigator.wakeLock.request('screen')}catch(err){}}
+  async function late(){
+    if(!L)return;
+    try{const r=await L.cfg.late(L);if(L&&r&&r.fin)termina(r.fin,false);else if(L){sincroniza()}}catch(err){}
+  }
+  async function termina(motivo,salir){
+    if(!L)return;
+    const l=L;L=null;window.__llamadaActiva=false;
+    callaSonido();
+    clearInterval(l.late);clearInterval(l.reloj);clearTimeout(l.espera);
+    document.removeEventListener('visibilitychange',reWake);
+    [l.micTrack,l.camTrack,l.pantTrack].forEach(t=>{try{t&&t.stop()}catch(err){}});
+    l.peers.forEach(p=>{try{p.pc.close()}catch(err){}clearTimeout(p.quita);clearTimeout(p.sale)});
+    try{if(l.ch){l.ch.send({type:'broadcast',event:'s',payload:{de:l.sid,t:'adios'}});await l.ch.untrack();setTimeout(()=>{try{l.cfg.sb.removeChannel(l.ch)}catch(err){}},800)}}catch(err){}
+    try{l.wake&&l.wake.release()}catch(err){}
+    const dur=l.inicio?Math.round((Date.now()-l.inicio)/1000):0;
+    l.ui.capa.remove();l.ui.pill.remove();
+    if(salir!==false){try{await l.cfg.sale()}catch(err){}}
+    if(!l.cfg.sinAviso)aviso((motivo||'Llamada terminada')+(dur>=1?' · '+Math.floor(dur/60)+':'+String(dur%60).padStart(2,'0'):''));
+    try{l.cfg.alTerminar&&l.cfg.alTerminar(motivo,dur)}catch(err){}
+  }
+  // si se cierra la página a media llamada, se avisa a la base (sin esperar respuesta)
+  addEventListener('pagehide',()=>{if(L&&L.cfg.saleRapido)try{L.cfg.saleRapido(L)}catch(err){}});
+
+  // La página del invitado (sala.html) solo usa el motor: lo demás es del portal
+  if(INVITADO){
+    window.PROFASE_LLAMADA={entra:arranca,termina:(m,s)=>termina(m,s),cambiaCanal,activa:()=>!!L,aviso,
+      manda:o=>manda(o),avatarDe:(n,f)=>f&&/^https:\/\//.test(f)?'<img class="ll-av" alt="" src="'+e(f)+'">':'<span class="ll-av" aria-hidden="true">'+e(ini(n))+'</span>',
+      revalida:()=>{if(L)sincroniza()}};
+    return;
+  }
+
+  /* --- llamadas del chat --- */
+  function cfgLlamada(info,tipo,saliente){
+    return {id:info.id,conv:info.conv,info,tipo,saliente,titulo:info.conv_nombre||'Llamada',topic:'chat:llamada:'+info.id,sb:P.sb,
+      directo:info.conv_tipo==='directo',
+      yo:()=>({u:YO,n:NOMBRE,uid:UID}),
+      ice:()=>enlace({llamada:info.id}),
+      late:async l=>{const i=await rpc('chat_llamada_late',{p_id:l.id});if(!L)return null;
+        if(i){L.info=i;if(i.estado!=='sonando'&&i.estado!=='activa')return {fin:L.alguien?'La llamada terminó':'No contestaron'}}return null},
+      lateCada:20000,
+      sale:()=>rpc('chat_llamada_sale',{p_id:info.id}),
+      saleRapido:l=>{if(!l.token)return;fetch(P.sb.supabaseUrl+'/rest/v1/rpc/chat_llamada_sale',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:P.sb.supabaseKey,Authorization:'Bearer '+l.token},body:JSON.stringify({p_id:l.id})})},
+      nombre:m=>m.n||m.u||'',
+      cualAvatar:m=>String(m.uid||''),
+      avatar:m=>avatar(m.uid,m.n),
+      avatarYo:()=>avatar(UID,NOMBRE),
+      alEntrar:()=>refrescaChat(),
+      alTerminar:()=>{refrescaChat();revisa()}};
+  }
+  async function entra(info,tipo,saliente){await arranca(cfgLlamada(info,tipo,saliente))}
+  async function token(){try{const s=(await P.sb.auth.getSession()).data.session;if(L&&s)L.token=s.access_token}catch(err){}}
+
+  /* --- llamar, contestar, rechazar --- */
+  async function inicia(conv,tipo,invitados){
+    if(!PUEDE){aviso('Este navegador no hace llamadas. Usa Chrome, Safari o Edge actualizados.',5000);return}
+    if(L){if(L.conv===conv){minimiza(false);return}aviso('Ya estás en una llamada.');return}
+    let info;
+    try{info=await rpc('chat_llamada_inicia',{p_conv:conv,p_tipo:tipo==='video'?'video':'voz',p_invitados:invitados||null})}
+    catch(err){
+      if(/Escoge/.test(err.message)){return escoge(conv,tipo)}
+      aviso(err.message,5000);return;
+    }
+    if(info&&info.ya){return une(info.id,tipo)}
+    await entra(info,tipo,true);token();
+  }
+  async function une(id,tipo){
+    if(!PUEDE){aviso('Este navegador no hace llamadas. Usa Chrome, Safari o Edge actualizados.',5000);return}
+    if(L){if(L.id===id){minimiza(false);return}aviso('Ya estás en una llamada.');return}
+    cierraEntrante();
+    let info;
+    try{info=await rpc('chat_llamada_une',{p_id:id})}catch(err){aviso(err.message,5000);revisa();return}
+    await entra(info,tipo||info.tipo,false);token();
+  }
+  async function rechaza(id){
+    cierraEntrante();RECHAZADAS.add(id);
+    try{await rpc('chat_llamada_rechaza',{p_id:id})}catch(err){}
+    refrescaChat();
+  }
+
+  /* --- escoger a quién llamar en un grupo grande (hasta 9; caben 10) --- */
+  async function escoge(conv,tipo){
+    let inf;try{inf=await rpc('chat_conv_info',{p_conv:conv})}catch(err){aviso(err.message);return}
+    const ms=((inf&&inf.miembros)||[]).filter(m=>m.usuario!==YO&&m.registrado!==false);
+    const v=document.createElement('div');v.className='ll-esc';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','¿A quién llamas?');
+    v.innerHTML='<div class="dlg"><h2>¿A quién llamas?</h2><div class="nota">En una llamada caben 10: escoge hasta 9 personas de «'+e(inf&&inf.nombre||'')+'».</div><div class="ls" data-ls></div>'
+      +'<div class="pie"><button type="button" data-no>Cancelar</button><button type="button" class="pri" data-si disabled>Llamar</button></div></div>';
+    document.body.appendChild(v);
+    const ls=v.querySelector('[data-ls]');
+    for(const m of ms){
+      const l=document.createElement('label');
+      l.innerHTML='<input type="checkbox" value="'+e(m.usuario)+'">'+(await avatar(m.uid,m.nombre))+'<span>'+e(m.nombre||m.usuario)+'</span>';
+      ls.appendChild(l);
+    }
+    const si=v.querySelector('[data-si]');
+    const marcados=()=>[...ls.querySelectorAll('input:checked')].map(x=>x.value);
+    ls.addEventListener('change',()=>{const n=marcados().length;si.disabled=!n;ls.querySelectorAll('input:not(:checked)').forEach(x=>x.disabled=n>=9);si.textContent=n?'Llamar a '+n:'Llamar'});
+    const cierra=()=>{v.remove();document.removeEventListener('keydown',tecla)};
+    const tecla=ev=>{if(ev.key==='Escape')cierra()};document.addEventListener('keydown',tecla);
+    v.addEventListener('click',ev=>{if(ev.target===v||ev.target.closest('[data-no]'))cierra()});
+    si.onclick=()=>{const m=marcados();cierra();inicia(conv,tipo,m)};
+  }
+
+  /* --- quien recibe --- */
+  let ENTRA=null;
+  const RECHAZADAS=new Set();
+  async function muestraEntrante(info){
+    if(L||ENTRA||RECHAZADAS.has(info.id))return;
+    const quien=info.conv_tipo==='directo'?info.inicia_nombre:info.conv_nombre;
+    const v=document.createElement('div');v.className='ll-entra';v.setAttribute('role','alertdialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Llamada de '+quien);
+    v.innerHTML='<div class="ll-card">'+(await avatar(info.inicia_uid,info.inicia_nombre))+'<b>'+e(quien)+'</b>'
+      +'<p>'+(info.conv_tipo==='directo'?(info.tipo==='video'?'Te está llamando por video':'Te está llamando'):e(info.inicia_nombre)+(info.tipo==='video'?' te invita a una videollamada':' te invita a una llamada'))+'</p>'
+      +'<div class="acc"><div><button type="button" class="ll-b rojo" data-rech aria-label="Rechazar">'+IC.colgar+'</button>Rechazar</div>'
+      +'<div><button type="button" class="ll-b verde" data-voz aria-label="Contestar">'+IC.tel+'</button>Contestar</div>'
+      +(info.tipo==='video'?'<div><button type="button" class="ll-b verde" data-video aria-label="Contestar con video">'+IC.cam+'</button>Con video</div>':'')
+      +'</div></div>';
+    if(L||ENTRA)return;
+    document.body.appendChild(v);
+    ENTRA={id:info.id,el:v,fin:setTimeout(()=>{if(ENTRA&&ENTRA.id===info.id)cierraEntrante()},60000)};
+    suena('timbre');
+    v.addEventListener('click',ev=>{
+      const b=ev.target.closest('button');if(!b)return;
+      if(b.hasAttribute('data-rech'))rechaza(info.id);
+      else if(b.hasAttribute('data-voz'))une(info.id,'voz');
+      else if(b.hasAttribute('data-video'))une(info.id,'video');
+    });
+    try{v.querySelector('[data-voz]').focus({preventScroll:true})}catch(err){}
+    // aviso del navegador si el portal está en otra ventana y no hay avisos al celular (que ya lo enseñan)
+    try{
+      if(document.hidden&&'Notification' in window&&Notification.permission==='granted'&&localStorage.getItem('profase-chat-push')!=='1'){
+        const n=new Notification(quien,{body:info.tipo==='video'?'Te está llamando por video':'Te está llamando',tag:'llamada-'+info.id,icon:'/img/icono-192.png',requireInteraction:true});
+        n.onclick=()=>{try{window.focus()}catch(err){}n.close()};
+        ENTRA.n=n;
+      }
+    }catch(err){}
+  }
+  function cierraEntrante(){
+    if(!ENTRA)return;
+    clearTimeout(ENTRA.fin);try{ENTRA.n&&ENTRA.n.close()}catch(err){}
+    ENTRA.el.remove();ENTRA=null;callaSonido();
+  }
+
+  /* --- las llamadas vivas de mis conversaciones (para sonar y para «Unirse») --- */
+  const VIVAS=new Map();
+  let revisando=false;
+  async function revisa(){
+    if(revisando||!P)return;revisando=true;
+    try{
+      const ls=(await rpc('chat_llamadas_mias'))||[];
+      VIVAS.clear();ls.forEach(x=>VIVAS.set(x.conv,x));
+      // mi llamada ya no está viva (la cerraron o se cerró sola)
+      if(L&&!ls.some(x=>x.id===L.id))termina(L.alguien?'La llamada terminó':'No contestaron',false);
+      if(ENTRA&&!ls.some(x=>x.id===ENTRA.id&&x.estado==='sonando'&&x.mi_estado==='invitado'))cierraEntrante();
+      const mia=ls.find(x=>x.estado==='sonando'&&x.mi_estado==='invitado'&&x.inicia!==YO&&!RECHAZADAS.has(x.id));
+      if(mia&&!L&&!ENTRA)muestraEntrante(mia);
+      refrescaChat();
+    }catch(err){}
+    revisando=false;
+  }
+  function refrescaChat(){try{const w=document.getElementById('chat-frame');w&&w.contentWindow&&w.contentWindow.__chatLlamadas&&w.contentWindow.__chatLlamadas()}catch(err){}}
+  function escucha(){
+    try{
+      P.sb.channel('chat-llamadas-'+YO)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_llamada_part',filter:'usuario=eq.'+YO},()=>revisa())
+        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'chat_llamadas'},()=>revisa())
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_llamadas'},()=>revisa())
+        .subscribe();
+    }catch(err){}
+  }
+
+  /* --- reuniones con gente de fuera (109_agenda_reuniones.sql): los de PROFASE de la reunión --- */
+  const fotoSala=m=>m&&typeof m.f==='string'&&P&&m.f.indexOf(P.sb.supabaseUrl+'/storage/v1/object/sign/fotos/')===0?m.f:'';
+  let MI_FOTO='';
+  function infoSala(j){if(L&&L.sala&&j&&L.sala.id===j.id){L.sala=j;pintaSala();if(j.canal)cambiaCanal('chat:sala:'+j.canal)}}
+  function cfgSala(j){
+    // de PROFASE, solo quien la base dice que está en la llamada en este momento (nadie entra con la clave de otro)
+    const claves=()=>new Set(((L&&L.sala)||j).equipo.filter(x=>x.en||x.usuario===YO).map(x=>x.clave));
+    const admit=()=>new Map(((L&&L.sala)||j).invitados.filter(x=>x.estado==='admitido').map(x=>[x.id,x.nombre]));
+    const nomEq=k=>{const x=((L&&L.sala)||j).equipo.find(y=>y.clave===k);return x?x.nombre:''};
+    return {id:j.id,tipo:'video',titulo:j.titulo,topic:'chat:sala:'+j.canal,sb:P.sb,pillTxt:'En reunión',colgarTxt:'Saliste de la reunión',
+      salida:20000,
+      yo:()=>({u:YO,e:j.clave,f:MI_FOTO}),
+      ice:()=>enlace({sala:j.id}),
+      late:async l=>{const r=await rpc('chat_sala_late',{p_id:l.id});if(!L)return null;
+        if(!r||r.estado!=='abierta')return {fin:'La reunión terminó'};infoSala(r);return null},
+      lateCada:5000,
+      sale:()=>rpc('chat_sala_sale',{p_id:j.id}),
+      saleRapido:l=>{if(!l.token)return;fetch(P.sb.supabaseUrl+'/rest/v1/rpc/chat_sala_sale',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:P.sb.supabaseKey,Authorization:'Bearer '+l.token},body:JSON.stringify({p_id:l.id})})},
+      valido:m=>(m.e&&claves().has(m.e))||(m.g&&admit().has(m.g)),
+      quien:m=>m.e?'e:'+m.e:m.g?'g:'+m.g:'',
+      nombre:m=>m.e?nomEq(m.e):(admit().get(m.g)||'Invitado'),
+      cualAvatar:m=>(m.e||m.g||'')+'|'+(fotoSala(m)?'f':''),
+      avatar:async m=>{const f=m.e?fotoSala(m):'',n=m.e?nomEq(m.e):(admit().get(m.g)||'');return f?'<img class="ll-av" alt="" src="'+e(f)+'">':'<span class="ll-av" aria-hidden="true">'+e(ini(n))+'</span>'},
+      avatarYo:()=>avatar(UID,NOMBRE),
+      esperaTxt:()=>'Esperando a que entren',
+      sacar:m=>sacaDeSala(m),
+      extra:l=>{l.sala=j;pintaSala()},
+      boton:b=>{
+        if(b.hasAttribute('data-sala-si'))admite(b.getAttribute('data-sala-si'),true);
+        else if(b.hasAttribute('data-sala-no'))admite(b.getAttribute('data-sala-no'),false);
+        else if(b.hasAttribute('data-sala-inv'))copia(L&&L.sala&&L.sala.invitacion,'Copié la invitación: pégala en un correo o en WhatsApp');
+        else if(b.hasAttribute('data-sala-cierra'))cierraSala();
+        else if(b.hasAttribute('data-sala-fin'))terminaSala();
+      },
+      alEntrar:()=>{refrescaChat();revisaSalas()},
+      alTerminar:()=>{refrescaChat();revisaSalas()}};
+  }
+  // la franja de arriba de la llamada: quién espera para entrar y lo que pueden hacer los de PROFASE
+  let ESPERA_VISTA=new Set();
+  function pintaSala(){
+    if(!L||!L.sala||!L.ui.extra)return;
+    const j=L.sala,esp=j.invitados.filter(x=>x.estado==='esperando');
+    if(esp.some(x=>!ESPERA_VISTA.has(x.id))){tono([880,1320],.25,.12);esp.forEach(x=>ESPERA_VISTA.add(x.id))}
+    L.ui.extra.innerHTML='<div class="ll-sala" role="region" aria-label="Sala de espera"><div class="esp" aria-live="polite">'
+      +(esp.length?esp.map(x=>'<span class="pe"><b>'+e(x.nombre)+'</b> quiere entrar<button type="button" class="si" data-sala-si="'+e(x.id)+'">Admitir</button><button type="button" class="no" data-sala-no="'+e(x.id)+'" aria-label="No admitir a '+e(x.nombre)+'">'+IC.cerrar+'</button></span>').join('')
+        :'<span class="vac">'+(j.cerrada?'La sala ya no recibe a nadie más.':'Nadie esperando. Cuando alguien abra la liga, te sale aquí para admitirlo.')+'</span>')
+      +'</div><div class="acc"><button type="button" data-sala-inv>Copiar invitación</button>'
+      +'<button type="button" data-sala-cierra>'+(j.cerrada?'Abrir la sala':'Cerrar la sala')+'</button>'
+      +'<button type="button" class="rojo" data-sala-fin>Terminar para todos</button></div></div>';
+    L.ui.extra.querySelectorAll('.pe .no svg').forEach(x=>{x.style.width='16px';x.style.height='16px'});
+  }
+  async function admite(inv,si){
+    if(!L||!L.sala)return;
+    try{const j=await rpc('chat_sala_admite',{p_id:L.sala.id,p_invitado:inv,p_si:!!si});infoSala(j);if(si)setTimeout(()=>{if(L)sincroniza()},2500)}
+    catch(err){aviso(err.message,4000);try{infoSala(await rpc('chat_sala_info',{p_id:L.sala.id}))}catch(x){}}
+  }
+  async function sacaDeSala(m){
+    if(!L||!L.sala||!m.g)return;
+    const n=L.cfg.nombre(m);
+    if(!(await pregunta('¿Sacar a '+n+'?','Sale de la reunión y ya no puede volver a entrar con esta liga.','Sacar')))return;
+    if(!L||!L.sala)return;
+    try{manda({t:'fuera',g:m.g});const j=await rpc('chat_sala_saca',{p_id:L.sala.id,p_invitado:m.g});
+      L.peers.forEach((q,k)=>{if(q.meta&&q.meta.g===m.g){try{q.pc.close()}catch(err){}L.peers['delete'](k)}});pintaTodo();infoSala(j);aviso(n+' ya no está en la reunión')}
+    catch(err){aviso(err.message,4000)}
+  }
+  async function cierraSala(){
+    if(!L||!L.sala)return;
+    try{infoSala(await rpc('chat_sala_cierra',{p_id:L.sala.id,p_cerrada:!L.sala.cerrada}));aviso(L&&L.sala.cerrada?'La sala ya no recibe a nadie más':'La sala vuelve a recibir peticiones')}catch(err){aviso(err.message,4000)}
+  }
+  async function terminaSala(){
+    if(!L||!L.sala)return;
+    if(!(await pregunta('¿Terminar la reunión para todos?','Se cuelga para todos y la liga deja de servir.','Terminar')))return;
+    if(!L||!L.sala)return;
+    const id=L.sala.id;
+    try{manda({t:'adios'});await rpc('chat_sala_termina',{p_id:id});termina('Terminaste la reunión',false)}catch(err){aviso(err.message,4000)}
+  }
+  async function copia(t,ok){
+    if(!t){aviso('La reunión ya no tiene liga');return}
+    try{await navigator.clipboard.writeText(t);aviso(ok||'Copiado')}
+    catch(err){
+      // sin permiso para copiar: se enseña para copiarla a mano
+      const v=document.createElement('div');v.className='ll-esc';v.style.zIndex='97';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Invitación');
+      v.innerHTML='<div class="dlg"><h2>Invitación</h2><div class="nota">Cópiala y pégala en un correo o en WhatsApp.</div><div class="ls" style="padding:0 16px"><textarea readonly rows="9" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;border-radius:10px;padding:10px;border:1px solid var(--line,#DCE2EB);background:var(--surface,#fff);color:inherit"></textarea></div><div class="pie"><button type="button" class="pri" data-no>Listo</button></div></div>';
+      v.querySelector('textarea').value=t;document.body.appendChild(v);
+      v.addEventListener('click',ev=>{if(ev.target===v||ev.target.closest('[data-no]'))v.remove()});
+      try{const x=v.querySelector('textarea');x.focus();x.select()}catch(y){}
+    }
+  }
+  // una pregunta con «Sí» / «Cancelar» (encima de la llamada)
+  function pregunta(titulo,texto,siTxt){
+    return new Promise(ok=>{
+      const v=document.createElement('div');v.className='ll-esc';v.style.zIndex='97';v.setAttribute('role','alertdialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label',titulo);
+      v.innerHTML='<div class="dlg"><h2>'+e(titulo)+'</h2><div class="nota">'+e(texto)+'</div><div class="pie"><button type="button" data-no>Cancelar</button><button type="button" class="pri" data-si>'+e(siTxt)+'</button></div></div>';
+      document.body.appendChild(v);
+      const fin=r=>{v.remove();document.removeEventListener('keydown',t);ok(r)};
+      const t=ev=>{if(ev.key==='Escape')fin(false)};document.addEventListener('keydown',t);
+      v.addEventListener('click',ev=>{if(ev.target===v||ev.target.closest('[data-no]'))fin(false);else if(ev.target.closest('[data-si]'))fin(true)});
+      try{v.querySelector('[data-si]').focus({preventScroll:true})}catch(err){}
+    });
+  }
+  async function entraSala(id,admitir){
+    if(!PUEDE){aviso('Este navegador no hace llamadas. Usa Chrome, Safari o Edge actualizados.',5000);return}
+    if(L){if(L.sala&&L.sala.id===id){minimiza(false);if(admitir)admite(admitir,true);return}aviso('Ya estás en una llamada.');return}
+    cierraReuniones();quitaToast(id);
+    let j;try{j=await rpc('chat_sala_entra',{p_id:id})}catch(err){aviso(err.message,5000);return}
+    if(!MI_FOTO)try{const f=await P.fotosDe([UID]);MI_FOTO=(UID&&f[UID])||''}catch(err){}
+    await arranca(cfgSala(j));token();
+    if(admitir)admite(admitir,true);
+  }
+
+  /* --- mis reuniones: quién espera (aviso) y la lista del Chat --- */
+  let SALAS=[],HAY_HOY=false,REU=null;
+  const TOASTS=new Map();
+  function quitaToast(sala){const t=TOASTS.get(sala);if(t){t.remove();TOASTS['delete'](sala)}}
+  function avisaEspera(s){
+    // ya está en esa reunión: lo ve en la franja de arriba
+    if(L&&L.sala&&L.sala.id===s.id)return;
+    const nuevos=s.esperando.filter(x=>!ESPERA_VISTA.has(x.id));
+    if(!nuevos.length)return;
+    nuevos.forEach(x=>ESPERA_VISTA.add(x.id));
+    quitaToast(s.id);
+    const x=nuevos[nuevos.length-1];
+    const t=document.createElement('div');t.className='ll-toast';t.setAttribute('role','alertdialog');t.setAttribute('aria-label','Alguien espera para entrar');
+    t.innerHTML='<b>'+e(x.nombre)+' está esperando</b><p>Para entrar a «'+e(s.titulo)+'»'+(s.esperando.length>1?' (y '+(s.esperando.length-1)+' más)':'')+'.</p>'
+      +'<div class="bt"><button type="button" class="si">Entrar y admitir</button><button type="button" class="no">Después</button></div>';
+    document.body.appendChild(t);TOASTS.set(s.id,t);
+    tono([880,1320],.25,.14);setTimeout(()=>tono([880,1320],.25,.14),700);
+    t.querySelector('.si').onclick=()=>entraSala(s.id,x.id);
+    t.querySelector('.no').onclick=()=>quitaToast(s.id);
+    try{if(document.hidden&&'Notification' in window&&Notification.permission==='granted'&&localStorage.getItem('profase-chat-push')!=='1'){
+      const n=new Notification(x.nombre+' está esperando',{body:'Reunión: '+s.titulo,tag:'sala-'+s.id,icon:'/img/icono-192.png',requireInteraction:true});
+      n.onclick=()=>{try{window.focus()}catch(err){}n.close()}}}catch(err){}
+  }
+  let revisandoS=false;
+  async function revisaSalas(){
+    if(revisandoS||!P)return;revisandoS=true;
+    try{
+      const ls=(await rpc('chat_salas_mias'))||[];
+      SALAS=ls;HAY_HOY=ls.some(x=>x.hoy);
+      ls.forEach(x=>{if(x.esperando&&x.esperando.length)avisaEspera(x);else quitaToast(x.id)});
+      if(REU)pintaReuniones();
+      refrescaChat();
+    }catch(err){}
+    revisandoS=false;
+  }
+  function cierraReuniones(){if(REU){REU.remove();REU=null}}
+  function fechaTxt(x){
+    const d=new Date(x.dia+'T12:00:00'),hoy=x.hoy;
+    return (hoy?'Hoy':d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}))+(x.inicio||x.hora?', '+(x.inicio||x.hora)+(x.fin?'–'+x.fin:''):'');
+  }
+  function pintaReuniones(){
+    if(!REU)return;
+    const ls=REU.querySelector('[data-reu]');
+    ls.innerHTML=SALAS.length?SALAS.map(x=>'<div class="re"><b>'+e(x.titulo)+'</b><small>'+e(fechaTxt(x))+(x.cliente?' · '+e(x.cliente):'')+(x.anfitrion_nombre?' · con '+e(x.anfitrion_nombre):'')+'</small>'
+      +((x.en_llamada||x.esperando.length)?'<div>'+(x.en_llamada?'<span class="es vivo">En curso · '+x.en_llamada+'</span>':'')+(x.esperando.length?'<span class="es">'+x.esperando.length+(x.esperando.length===1?' espera':' esperan')+' para entrar</span>':'')+'</div>':'')
+      +'<div class="bt">'+(x.hoy?'<button type="button" class="pri" data-entra="'+e(x.id)+'">Entrar</button>':'')
+      +'<button type="button" data-copia="'+e(x.id)+'">Copiar invitación</button>'+(x.cita?'<button type="button" data-cita="'+e(x.cita)+'">Ver en el Calendario</button>':'')+'</div></div>').join('')
+      :'<div class="vacio">No tienes reuniones con gente de fuera. Créalas en el Calendario: una cita con «Videollamada» prendida.</div>';
+  }
+  async function reuniones(){
+    cierraReuniones();
+    const puedo=await PUEDO_SALA;
+    const v=document.createElement('div');v.className='ll-esc';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Reuniones con clientes');
+    v.innerHTML='<div class="dlg"><h2>Reuniones con clientes</h2><div class="nota">Videollamadas con gente de fuera del despacho: cada quien entra con su liga y espera a que lo admitas. Nadie de fuera ve nada del portal.</div>'
+      +'<div class="ls"><div class="reu" data-reu></div></div>'
+      +'<div class="pie">'+(puedo?'<button type="button" class="nueva" data-nueva>Nueva reunión</button>':'')+'<button type="button" data-no>Cerrar</button></div></div>';
+    document.body.appendChild(v);REU=v;
+    pintaReuniones();revisaSalas();
+    const tecla=ev=>{if(ev.key==='Escape')cierra()};
+    const cierra=()=>{cierraReuniones();document.removeEventListener('keydown',tecla)};
+    document.addEventListener('keydown',tecla);
+    v.addEventListener('click',ev=>{
+      if(ev.target===v||ev.target.closest('[data-no]'))return cierra();
+      const b=ev.target.closest('button');if(!b)return;
+      if(b.hasAttribute('data-entra'))entraSala(b.getAttribute('data-entra'));
+      else if(b.hasAttribute('data-copia')){const x=SALAS.find(y=>y.id===b.getAttribute('data-copia'));copia(x&&x.invitacion,'Copié la invitación: pégala en un correo o en WhatsApp')}
+      else if(b.hasAttribute('data-cita')){cierra();abreCalendario({cita:b.getAttribute('data-cita')})}
+      else if(b.hasAttribute('data-nueva')){cierra();abreCalendario({nueva:'video'})}
+    });
+  }
+  // el Calendario (cal_tab.js) abre la cita o la forma de una cita nueva
+  function abreCalendario(q){try{if(window.__calAbre)window.__calAbre(q)}catch(err){}}
+  let PUEDO_SALA=Promise.resolve(false);
+
+  // lo que usa la página del chat
+  window.__llamada={
+    puede:()=>PUEDE,
+    inicia:(conv,tipo)=>inicia(conv,tipo),
+    une:(id,tipo)=>une(id,tipo),
+    // la llamada viva de una conversación: {id, tipo, estado, yo: si estoy en ella}
+    enConv:conv=>{const x=VIVAS.get(conv);if(L&&L.conv===conv)return {id:L.id,tipo:L.tipo,estado:'activa',yo:true};return x?{id:x.id,tipo:x.tipo,estado:x.estado,yo:false}:null},
+    activa:()=>!!L,
+    regresa:()=>minimiza(false),
+    // reuniones con gente de fuera: entrar (desde el Calendario o el Chat) y la lista del Chat
+    sala:(id,admitir)=>entraSala(id,admitir),
+    reuniones:()=>reuniones(),
+    puedoReuniones:()=>PUEDO_SALA,
+    salas:()=>SALAS.slice(),
+    revisaSalas:()=>revisaSalas()
+  };
+
+  (async function(){
+    try{
+      P=window.PORTAL;if(!P)return;
+      const p=await P.listo;if(!p)return;
+      YO=p.usuario||'';
+      let yo=null;try{yo=await rpc('chat_yo')}catch(err){return}
+      if(!yo)return;   // sin chat en la base: nada
+      NOMBRE=yo.nombre||YO;UID=yo.uid||null;
+      escucha();
+      await revisa();
+      // reuniones con gente de fuera: quién espera (cada 15 s si hay alguna hoy; si no, cada 2 min; y al instante con el
+      // aviso del celular o la computadora). Tener reuniones a la vista lo decide la base (dirección y gerentes).
+      PUEDO_SALA=rpc('chat_sala_puedo').then(x=>x===true,()=>false);
+      await revisaSalas();
+      let vs=0;
+      setInterval(()=>{vs++;if((!document.hidden&&(HAY_HOY||vs%8===0))||(L&&L.sala))revisaSalas()},15000);
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)revisaSalas()});
+      try{if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',ev=>{const d=ev.data||{};
+        if(d.tipo==='sala-espera'||d.tipo==='sala-abre')revisaSalas().then(()=>{if(d.tipo==='sala-abre')reuniones()});
+        else if(d.tipo==='cita-abre'&&d.cita)abreCalendario({cita:d.cita})})}catch(err){}
+      // cada 15 s a la vista; escondida y sin llamada, cada minuto (el timbre llega además por tiempo real y por el aviso
+      // del celular o la computadora; revisión de eficiencia del 31-oct-2026)
+      let vueltas=0;
+      setInterval(()=>{vueltas++;if(!document.hidden||(!L&&vueltas%4===0)||L)revisa()},15000);
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)revisa()});
+      // ?llamada=<id>: viene de picar el aviso «te está llamando» del celular o la computadora
+      try{
+        const u=new URL(location.href),id=u.searchParams.get('llamada');
+        if(id&&/^[0-9a-f-]{36}$/i.test(id)){
+          u.searchParams['delete']('llamada');history.replaceState(history.state,'',u.pathname+u.search+u.hash);
+          const i=await rpc('chat_llamada_info',{p_id:id});
+          if(i&&i.estado==='sonando'&&i.inicia!==YO)muestraEntrante(i);
+          else if(i&&i.estado==='activa')aviso('La llamada sigue: entra desde el chat con «Unirse».',5000);
+          else if(i)aviso('Esa llamada ya terminó.',4000);
+        }
+        // ?sala=<id>: viene de picar el aviso «… está esperando»
+        const sa=u.searchParams.get('sala');
+        if(sa&&/^[0-9a-f-]{36}$/i.test(sa)){
+          u.searchParams['delete']('sala');history.replaceState(history.state,'',u.pathname+u.search+u.hash);
+          reuniones();
+        }
+      }catch(err){}
+    }catch(err){}
+  })();
+})();
+
+</script>
+<script>
+(function(){
+  'use strict';
+  var $=function(id){ return document.getElementById(id); };
+  var esc=function(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  var IC={
+    mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+    micNo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 5 2.2M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.7 3M12 18v3M3 3l18 18"/></svg>',
+    cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg>',
+    camNo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 13.5v2A2.5 2.5 0 0 1 13 18H5a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 5 6h1M10 6h3a2.5 2.5 0 0 1 2.5 2.5v1l6-3.5v10M3 3l18 18"/></svg>'
+  };
+  var LIGA=String(location.hash||'').replace(/^#/,'');
+  var PL=window.PROFASE_LLAMADA, P=window.PORTAL;
+  var SB=null, INFO=null, YO=null, DATA=null, micOn=true, camOn=true, prev=null, tic=null, saliendo=false;
+  var CLAVE='profase-sala:'+LIGA;
+
+  function seccion(id){ ['s-carga','s-msg','s-pide','s-espera'].forEach(function(s){ $(s).hidden=s!==id; }); document.querySelector('.caja').hidden=false; }
+  function mensaje(t, p, botones){
+    $('m-t').textContent=t; $('m-p').textContent=p||'';
+    var bt=$('m-bt'); bt.innerHTML='';
+    (botones||[]).forEach(function(b){ var x=document.createElement('button'); x.type='button'; x.className=b.pri?'pri':'sec'; x.textContent=b.t; x.onclick=b.f; if(b.pri) x.style.width='auto'; bt.appendChild(x); });
+    seccion('s-msg');
+  }
+  function dia(d){
+    // «lunes 2 de noviembre» (el día de la reunión, en Monterrey)
+    try{ return new Date(d+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',timeZone:'America/Monterrey'}); }catch(e){ return d; }
+  }
+  function hoy(){ try{ return window.PROFASE_HORA.dia(new Date()); }catch(e){ return ''; } }
+  function guarda(o){ try{ if(o) sessionStorage.setItem(CLAVE, JSON.stringify(o)); else sessionStorage.removeItem(CLAVE); }catch(e){} }
+  function leeGuardado(){ try{ var o=JSON.parse(sessionStorage.getItem(CLAVE)||'null'); return o&&/^[0-9a-f-]{36}$/i.test(o.invitado||'')&&/^[0-9a-f]{48}$/.test(o.secreto||'')?o:null; }catch(e){ return null; } }
+  async function rpc(n, a){ var r=await SB.rpc(n, a||{}); if(r.error) throw new Error(r.error.message||'No se pudo'); return r.data; }
+  function yo(){ return rpc('chat_sala_yo',{p_liga:LIGA,p_invitado:YO.invitado,p_secreto:YO.secreto}); }
+
+  /* --- la vista previa (opcional) y los botones de micrófono y cámara --- */
+  function pintaToggles(){
+    $('p-mic').innerHTML=micOn?IC.mic:IC.micNo; $('p-mic').classList.toggle('off',!micOn); $('p-mic').setAttribute('aria-pressed',String(micOn));
+    $('p-mic').setAttribute('aria-label',micOn?'Entrar con el micrófono prendido':'Entrar con el micrófono apagado');
+    $('p-cam').innerHTML=camOn?IC.cam:IC.camNo; $('p-cam').classList.toggle('off',!camOn); $('p-cam').setAttribute('aria-pressed',String(camOn));
+    $('p-cam').setAttribute('aria-label',camOn?'Entrar con la cámara prendida':'Entrar con la cámara apagada');
+    $('p-ver').hidden=!camOn||!!prev;
+  }
+  async function verCamara(){
+    try{
+      prev=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:400}},audio:false});
+      var v=$('p-vid'); v.srcObject=prev; v.hidden=false; try{ await v.play(); }catch(e){}
+    }catch(e){ $('p-err').textContent='El navegador no dio permiso para la cámara. Puedes entrar con la cámara apagada o darle permiso en los ajustes del navegador.'; }
+    pintaToggles();
+  }
+  function paraPrevia(){ if(prev){ prev.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} }); prev=null; } var v=$('p-vid'); v.hidden=true; v.srcObject=null; }
+  $('p-mic').onclick=function(){ micOn=!micOn; pintaToggles(); };
+  $('p-cam').onclick=function(){ camOn=!camOn; if(!camOn) paraPrevia(); pintaToggles(); };
+  $('p-ver').onclick=verCamara;
+  $('p-nom').addEventListener('input',function(){ var n=this.value.trim(); $('p-ini').textContent=n?n.split(/\s+/).slice(0,2).map(function(x){ return x[0]; }).join('').toUpperCase():'?'; });
+
+  /* --- pedir entrar y esperar --- */
+  $('p-form').onsubmit=async function(ev){
+    ev.preventDefault();
+    var n=$('p-nom').value.trim().replace(/\s+/g,' '), b=$('p-entra'), er=$('p-err');
+    if(n.length<2){ er.textContent='Escribe tu nombre para que sepan quién eres.'; $('p-nom').focus(); return; }
+    if(!PL||!window.RTCPeerConnection||!navigator.mediaDevices){ er.textContent='Este navegador no hace videollamadas. Ábrela en Chrome, Safari o Edge actualizados.'; return; }
+    b.disabled=true; er.textContent='';
+    try{
+      var r=await rpc('chat_sala_pide',{p_liga:LIGA,p_nombre:n});
+      YO={invitado:r.invitado,secreto:r.secreto,nombre:r.nombre,mic:micOn,cam:camOn};
+      guarda(YO);
+      try{ localStorage.setItem('profase-sala-nombre', n); }catch(e){}
+      paraPrevia(); espera();
+    }catch(e){ er.textContent=e.message||'No se pudo; intenta otra vez.'; b.disabled=false; }
+  };
+  function espera(){
+    seccion('s-espera');
+    $('e-p').textContent='En cuanto te admitan, entras a la reunión. No cierres esta página.';
+    clearInterval(tic); revisa(); tic=setInterval(function(){ if(!document.hidden||Date.now()%5===0) revisa(); },2000);
+  }
+  $('e-sale').onclick=async function(){
+    clearInterval(tic); saliendo=true;
+    try{ await rpc('chat_sala_salgo',{p_liga:LIGA,p_invitado:YO.invitado,p_secreto:YO.secreto}); }catch(e){}
+    guarda(null); YO=null; muestraPide();
+  };
+  var revisando=false;
+  async function revisa(){
+    if(revisando||!YO) return; revisando=true;
+    try{
+      var r=await yo(); DATA=r;
+      if(r.estado==='admitido'){ clearInterval(tic); entra(r); }
+      else if(r.estado!=='esperando'){ clearInterval(tic); fin(r.estado); }
+    }catch(e){ if(/no es válida/i.test(e.message||'')){ clearInterval(tic); guarda(null); YO=null; muestraPide(); } }
+    revisando=false;
+  }
+  function fin(estado){
+    guarda(null);
+    var otra=[{t:'Volver a pedir entrar',pri:true,f:function(){ YO=null; muestraPide(); }}];
+    if(estado==='rechazado') mensaje('No te admitieron en esta reunión','Si crees que es un error, avísale a quien te invitó.',otra);
+    else if(estado==='fuera') mensaje('Te sacaron de la reunión','Ya no puedes volver a entrar con esta liga.');
+    else if(estado==='terminada') mensaje('La reunión terminó','Gracias por reunirte con PROFASE.');
+    else if(estado==='salio') mensaje('Saliste de la reunión','Gracias por reunirte con PROFASE.',otra);
+    else mensaje('La reunión terminó','Gracias por reunirte con PROFASE.');
+  }
+
+  /* --- ya admitido: la llamada (el mismo motor de las llamadas del portal) --- */
+  var NOMBRES=function(){ return DATA||{equipo:[],admitidos:[]}; };
+  function nombreDe(m){
+    var d=NOMBRES();
+    if(m.e){ var x=(d.equipo||[]).filter(function(y){ return y.e===m.e; })[0]; return x?x.nombre:'PROFASE'; }
+    var z=(d.admitidos||[]).filter(function(y){ return y.g===m.g; })[0]; return z?z.nombre:'Invitado';
+  }
+  function fotoDe(m){ return m.e&&typeof m.f==='string'&&m.f.indexOf(SB.supabaseUrl+'/storage/v1/object/sign/fotos/')===0?m.f:''; }
+  async function enlace(){
+    try{
+      var f=await SB.functions.invoke('chat-push',{body:{sala_ice:true,liga:LIGA,invitado:YO.invitado,secreto:YO.secreto}});
+      if(!f.error&&f.data&&Array.isArray(f.data.iceServers)&&f.data.iceServers.length) return f.data.iceServers;
+    }catch(e){}
+    return [{urls:['stun:stun.cloudflare.com:3478']}];
+  }
+  function entra(r){
+    document.querySelector('.caja').hidden=true;
+    PL.entra({id:YO.invitado,tipo:YO.cam===false?'voz':'video',titulo:r.titulo||'Reunión con PROFASE',topic:'chat:sala:'+r.canal,sb:SB,
+      pillTxt:'En reunión',colgarTxt:'Saliste de la reunión',salida:20000,sinAviso:true,
+      yo:function(){ return {u:'inv',g:YO.invitado}; },
+      yoG:function(){ return YO&&YO.invitado; },
+      ice:enlace,
+      late:async function(){
+        var x=await yo(); DATA=x;
+        if(x.estado!=='admitido') return {fin:x.estado};
+        if(x.canal) PL.cambiaCanal('chat:sala:'+x.canal);
+        return null;
+      },
+      lateCada:4000,
+      sale:function(){ return rpc('chat_sala_salgo',{p_liga:LIGA,p_invitado:YO.invitado,p_secreto:YO.secreto}); },
+      saleRapido:function(){ try{ fetch(SB.supabaseUrl+'/rest/v1/rpc/chat_sala_salgo',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:SB.supabaseKey},body:JSON.stringify({p_liga:LIGA,p_invitado:YO.invitado,p_secreto:YO.secreto})}); }catch(e){} },
+      // solo con los de PROFASE que están en la llamada y con los invitados que la base dice que ya admitieron
+      valido:function(m){ var d=NOMBRES(); return (m.e&&(d.equipo||[]).some(function(y){ return y.e===m.e&&y.en; }))||(m.g&&m.g!==YO.invitado&&(d.admitidos||[]).some(function(y){ return y.g===m.g; })); },
+      quien:function(m){ return m.e?'e:'+m.e:m.g?'g:'+m.g:''; },
+      nombre:nombreDe,
+      cualAvatar:function(m){ return (m.e||m.g||'')+'|'+(fotoDe(m)?'f':''); },
+      avatar:async function(m){ return PL.avatarDe(nombreDe(m), fotoDe(m)); },
+      avatarYo:async function(){ return PL.avatarDe(YO.nombre,''); },
+      esperaTxt:function(){ return 'Conectando con PROFASE…'; },
+      alEntrar:function(L){ if(YO.mic===false){ var b=L.ui.capa.querySelector('[data-mic]'); if(b) b.click(); } },
+      alTerminar:function(motivo){
+        if(motivo==='fuera'||motivo==='terminada'||motivo==='rechazado') return fin(motivo);
+        if(/Te sacaron/.test(motivo||'')) return fin('fuera');
+        guarda(null); fin(saliendo?'salio':(motivo==='salio'?'salio':'salio'));
+      }});
+  }
+
+  /* --- arranque --- */
+  function muestraPide(){
+    $('p-tema').textContent=INFO.titulo;
+    $('p-de').innerHTML='Te invita <b>'+esc(INFO.anfitrion)+'</b> de PROFASE';
+    var h=(INFO.dia===hoy()?'Hoy':INFO.dia?dia(INFO.dia):'')+(INFO.hora?', '+INFO.hora:'');
+    $('p-cuando').querySelector('span').textContent=h; $('p-cuando').hidden=!h;
+    try{ var n=localStorage.getItem('profase-sala-nombre'); if(n&&!$('p-nom').value) $('p-nom').value=n; }catch(e){}
+    $('p-nom').dispatchEvent(new Event('input'));
+    $('p-entra').disabled=false; $('p-err').textContent='';
+    pintaToggles(); seccion('s-pide');
+  }
+  async function arranca(){
+    if(!/^[A-Za-z0-9_-]{32,64}$/.test(LIGA)){ mensaje('Esta liga no está completa','Revisa que la copiaste completa o pide una nueva a quien te invitó.'); return; }
+    try{ history.replaceState(null,'',location.pathname+location.hash); }catch(e){}
+    if(!window.supabase||!P||!P.sb){ mensaje('No pudimos abrir la reunión','Revisa tu internet y vuelve a abrir la liga.',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
+    // su propio cliente, siempre sin sesión (aunque en este navegador alguien tenga el portal abierto)
+    SB=window.supabase.createClient(P.sb.supabaseUrl, P.sb.supabaseKey, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'profase-sala-invitado'}});
+    try{ INFO=await rpc('chat_sala_publica',{p_liga:LIGA}); }
+    catch(e){ mensaje('No pudimos abrir la reunión','Revisa tu internet y vuelve a abrir la liga.',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
+    var e=INFO&&INFO.estado;
+    if(e==='no'){ mensaje('Esta liga no es válida','Pide una nueva a quien te invitó.'); return; }
+    if(e==='terminada'){ mensaje('Esta reunión ya terminó','Si necesitas otra, pídele una liga nueva a quien te invitó.'); return; }
+    if(e==='vencida'){ mensaje('Esta liga ya venció','Las ligas sirven solo el día de la reunión. Pide una nueva a quien te invitó.'); return; }
+    if(e==='pronto'){ mensaje(INFO.titulo,'Tu reunión es el '+dia(INFO.dia)+(INFO.hora?' a las '+INFO.hora:'')+'. Abre esta misma liga ese día; antes todavía no se puede entrar.'); return; }
+    if(e==='cerrada'){ mensaje('La reunión ya no recibe a más personas','Si necesitas entrar, avísale a quien te invitó.'); return; }
+    // si se recargó la página mientras esperaba, sigue esperando
+    YO=leeGuardado();
+    if(YO){ espera(); return; }
+    muestraPide();
+  }
+  window.addEventListener('hashchange',function(){ location.reload(); });
+  arranca();
+})();
+</script>
+</body>
+</html>
