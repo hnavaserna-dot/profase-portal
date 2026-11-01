@@ -48,8 +48,18 @@
     + '<path d="M8.9 3.4V11.2H3.6Q5.8 7 8.9 3.4z" fill="#7FB2EA"/>'
     + '<path d="M1.6 11.6H18.4L16.2 15.2Q10 16.6 3.8 15.2z" fill="#F07A1E"/>'
     + '<path d="' + MARINA_ONDA(1, 16, 6, 3, 1.6) + 'V18H1z" fill="#4FA3E8"/>' };
+  // lo que cae al fondo de la entrada: anclitas y salvavidas que bajan, y burbujas que suben
+  var MARINA_LLUEVE = { n: 22, z: [12, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="none" stroke="#DDE4EE" stroke-linecap="round"><circle cx="10" cy="3.2" r="1.9" stroke-width="1.5"/>'
+      + '<path d="M10 5.2V17.6" stroke-width="2"/><path d="M6.2 7.4H13.8" stroke-width="1.8"/><path d="M3.6 12Q4 18.2 10 18.2Q16 18.2 16.4 12" stroke-width="1.9"/></g>'
+      + '<path d="M3.6 10.2 1.6 13.8H5.6zM16.4 10.2 14.4 13.8H18.4z" fill="#DDE4EE"/><path d="M10.9 6.4V16.4" stroke="#AEBBCD" stroke-width=".7" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="6.8" fill="none" stroke="#fff" stroke-width="4.4"/>'
+      + '<circle cx="10" cy="10" r="6.8" fill="none" stroke="#F07A1E" stroke-width="4.4" stroke-dasharray="5.34 5.34" transform="rotate(-20 10 10)"/>'
+      + '<g fill="none" stroke="#C9D1DE" stroke-width=".6"><circle cx="10" cy="10" r="9"/><circle cx="10" cy="10" r="4.6"/></g>' },
+    { modo: 'sube', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8" fill="#9FD0F7" fill-opacity=".14" stroke="#CFE8FB" stroke-width="1.2"/>'
+      + '<path d="M5.4 9A4.8 4.8 0 0 1 9 5.2" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="13.6" cy="13.4" r=".9" fill="#fff" opacity=".7"/>' }] };
   alta('marina',
-    { m: MARINA_M, m2: MARINA_M2, j: MARINA_J, c2: MARINA_C2, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: 'burbujas', w2: 84,
+    { m: MARINA_M, m2: MARINA_M2, j: MARINA_J, c2: MARINA_C2, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: MARINA_LLUEVE, w2: 84,
       dice: ['¡A toda vela!', '¡Mar adentro!', '¡Leven anclas!', '¡Gracias, marinos!'] });
   CSS_FECHAS += '.pt-marina-barco{transform-box:fill-box;transform-origin:50% 90%;animation:pt-marina-barco 2.6s ease-in-out infinite alternate}'
     + '@keyframes pt-marina-barco{from{transform:rotate(-5deg)}to{transform:rotate(5deg) translateY(-3%)}}'
@@ -109,8 +119,25 @@
     + '<ellipse cx="8.9" cy="10.5" rx="2.6" ry="1.2" fill="#5A2E17"/>'
     + '<path d="M5.5 10A6 1.8 0 0 0 17.5 10L16.7 15.8Q16.4 17.4 14.8 17.4H8.2Q6.6 17.4 6.3 15.8z" fill="#fff" stroke="#C9D1DE" stroke-width=".6"/>'
     + '<path d="M5.9 12.8Q11.5 14.2 17.1 12.8L16.95 14.3Q11.5 15.7 6.05 14.3z" fill="#1F3864"/>' };
+  // una gota que cae (caja 0 0 14 20): color, su brillo y, si se da, una orilla clara para que se vea sobre el azul marino;
+  // también la usan el verano, el chocolate, el helado y el aguacate
+  function CHURRO_GOTA(c, b, o) {
+    return '<path d="M7 1C5 6 2 9 2 13a5 5 0 0 0 10 0c0-4-3-7-5-12z" fill="' + c + '"' + (o ? ' stroke="' + o + '" stroke-width=".9"' : '') + '/>'
+      + '<path d="M4.8 12.4a2.4 2.4 0 0 0 1.7 2.8" stroke="' + b + '" stroke-width="1.25" fill="none" stroke-linecap="round"/>';
+  }
+  // lo que cae al fondo de la entrada: azúcar con canela, rajitas de canela y gotas de chocolate
+  var CHURRO_LLUEVE = { n: 24, z: [11, 22], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#fff"><rect x="2.6" y="4.4" width="6.4" height="6.4" rx="1.2" transform="rotate(18 5.8 7.6)"/>'
+      + '<rect x="11.2" y="2.6" width="5.4" height="5.4" rx="1" transform="rotate(-14 13.9 5.3)"/><rect x="8.4" y="11.2" width="6.8" height="6.8" rx="1.3" transform="rotate(8 11.8 14.6)"/></g>'
+      + '<g fill="#DDE4EE"><rect x="9.2" y="15.6" width="5.6" height="1.6" rx=".8" transform="rotate(8 11.8 14.6)"/><rect x="3.4" y="8.8" width="4.8" height="1.4" rx=".7" transform="rotate(18 5.8 7.6)"/></g>'
+      + '<g fill="#D9893F"><circle cx="4.4" cy="15.4" r="1.3"/><circle cx="16.4" cy="11.4" r="1.2"/><circle cx="11.4" cy="9.4" r=".9"/><circle cx="2.6" cy="2.8" r="1"/><circle cx="17.6" cy="16.8" r=".9"/></g>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g transform="rotate(-35 10 10)"><rect x="1.6" y="7" width="15.6" height="6" rx="1.6" fill="#B5652C"/>'
+      + '<path d="M3.2 8.4H15.4" stroke="#E6A066" stroke-width="1.2" stroke-linecap="round"/><path d="M3.2 11.2H15.4" stroke="#83431B" stroke-width=".8" stroke-linecap="round"/>'
+      + '<ellipse cx="17.2" cy="10" rx="2" ry="3" fill="#E6A066"/><path d="M17.2 10.3a.7.9 0 1 1 .7-.9 1.4 1.9 0 1 1-2.1 1.5" stroke="#83431B" stroke-width=".75" fill="none" stroke-linecap="round"/>'
+      + '<g fill="#fff"><circle cx="5.6" cy="9.8" r=".6"/><circle cx="9" cy="8.9" r=".6"/><circle cx="12.4" cy="10.2" r=".6"/><circle cx="7.6" cy="11.9" r=".5"/></g></g>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#7A4524', '#D9A57A', '#C08A5A') }] };
   alta('churro',
-    { m: CHURRO_M, m2: CHURRO_M2, j: CHURRO_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'nieve', w2: 86,
+    { m: CHURRO_M, m2: CHURRO_M2, j: CHURRO_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: CHURRO_LLUEVE, w2: 86,
       dice: ['¡A remojar!', '¡Con chocolate!', '¡Con azúcar!', '¡Calientitos!'] });
   CSS_FECHAS += '.pt-churro-moja{transform-box:fill-box;animation:pt-churro-moja 2.2s ease-in-out infinite}'
     + '@keyframes pt-churro-moja{0%,30%,100%{transform:translate(0,0)}55%,70%{transform:translate(8%,10%)}}'
@@ -154,8 +181,22 @@
     + '<path d="M5 7.5C7 2.5 14 2 18 6C19 7 19 8 18 9C14 13 7 12.5 5 7.5z" fill="#2BB3C0"/>'
     + '<path d="M10.2 4.2Q9.2 7.5 10.2 10.9" stroke="#F07A1E" stroke-width="1.7" fill="none" stroke-linecap="round"/>'
     + '<circle cx="15" cy="6.4" r="1.6" fill="#fff"/><circle cx="15.3" cy="6.5" r=".9" fill="#1A2333"/>' };
+  // lo que sube al fondo de la entrada: burbujas con brillo y pececitos (turquesa y naranja) que nadan hacia arriba
+  function OCEANOS_PEZ(c, f) {
+    return '<g transform="rotate(-28 10 10)"><path d="M6 10 1.4 6.4Q2.6 10 1.4 13.6z" fill="' + f + '"/>'
+      + '<path d="M4.6 10C6.4 5.2 13.4 4.6 17.4 8.8C18.2 9.6 18.2 10.4 17.4 11.2C13.4 15.4 6.4 14.8 4.6 10z" fill="' + c + '"/>'
+      + '<path d="M10.2 6.4Q9 10 10.2 13.6" stroke="' + f + '" stroke-width="1.6" fill="none" stroke-linecap="round"/>'
+      + '<circle cx="14.6" cy="9.2" r="1.5" fill="#fff"/><circle cx="14.9" cy="9.3" r=".8" fill="#1A2333"/></g>';
+  }
+  var OCEANOS_LLUEVE = { n: 22, z: [12, 24], formas: [
+    { modo: 'sube', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8" fill="#9BE7EF" fill-opacity=".14" stroke="#BFF1F5" stroke-width="1.2"/>'
+      + '<path d="M5.4 9A4.8 4.8 0 0 1 9 5.2" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="13.6" cy="13.4" r=".9" fill="#fff" opacity=".7"/>' },
+    { modo: 'sube', vb: '0 0 20 20', g: OCEANOS_PEZ('#2BB3C0', '#F2C066') },
+    { modo: 'sube', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="5" fill="#9BE7EF" fill-opacity=".14" stroke="#BFF1F5" stroke-width="1"/><circle cx="8.6" cy="8.4" r="1" fill="#fff"/>'
+      + '<circle cx="15.6" cy="4.4" r="2.6" fill="none" stroke="#BFF1F5" stroke-width=".9"/><circle cx="4.6" cy="16.2" r="2" fill="none" stroke="#BFF1F5" stroke-width=".9"/>' },
+    { modo: 'sube', vb: '0 0 20 20', g: OCEANOS_PEZ('#F07A1E', '#FFC48C') }] };
   alta('oceanos',
-    { m: OCEANOS_M, m2: OCEANOS_M2, j: OCEANOS_J, mov: 'vuela', mov2: 'brinca', jmov: 'vuela', lluvia: 'burbujas', w2: 98,
+    { m: OCEANOS_M, m2: OCEANOS_M2, j: OCEANOS_J, mov: 'vuela', mov2: 'brinca', jmov: 'vuela', lluvia: OCEANOS_LLUEVE, w2: 98,
       dice: ['¡Glu, glu!', '¡A nadar!', '¡Cuidemos el mar!', '¡Hola, amiguitos!'] });
   CSS_FECHAS += '.pt-oceanos-cola{transform-box:fill-box;transform-origin:100% 50%;animation:pt-oceanos-cola .45s ease-in-out infinite alternate}'
     + '@keyframes pt-oceanos-cola{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}'
@@ -197,8 +238,25 @@
   var SUSHI_J = { vb: '0 0 18 18', g: '<circle cx="9" cy="9" r="8.3" fill="#3D6B47" stroke="#7FB07F" stroke-width=".7"/><circle cx="9" cy="9" r="6.1" fill="#fff"/>'
     + '<ellipse cx="9" cy="7.4" rx="2.5" ry="1.9" fill="#FF8A65"/>'
     + '<ellipse cx="7.3" cy="10.6" rx="1.9" ry="1.6" fill="#8CC152"/><rect x="9.2" y="9.2" width="2.8" height="2.8" rx=".7" fill="#FFD45A"/>' };
+  // lo que cae al fondo de la entrada: granos de arroz, florecitas y pétalos de cerezo, y palillos
+  function SUSHI_SAKURA() {
+    var h = '<g fill="#F7B8D2" stroke="#E87AA8" stroke-width=".5" stroke-linejoin="round">', i;
+    for (i = 0; i < 5; i++) h += '<path transform="rotate(' + (i * 72) + ' 10 10)" d="M10 10C6.9 8.4 6.6 4.4 8.4 2.4L10 3.9L11.6 2.4C13.4 4.4 13.1 8.4 10 10z"/>';
+    h += '</g><g fill="#FFE07A">';
+    for (i = 0; i < 5; i++) h += '<circle cx="' + (10 + Math.cos((i * 72 - 54) * Math.PI / 180) * 2.9).toFixed(2) + '" cy="' + (10 + Math.sin((i * 72 - 54) * Math.PI / 180) * 2.9).toFixed(2) + '" r=".65"/>';
+    return h + '</g><circle cx="10" cy="10" r="1.7" fill="#E8418C"/>';
+  }
+  var SUSHI_LLUEVE = { n: 24, z: [12, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#fff"><ellipse cx="6" cy="6.6" rx="3.8" ry="2.1" transform="rotate(-30 6 6.6)"/>'
+      + '<ellipse cx="14" cy="8.4" rx="3.8" ry="2.1" transform="rotate(40 14 8.4)"/><ellipse cx="9.4" cy="14.6" rx="3.8" ry="2.1" transform="rotate(-6 9.4 14.6)"/></g>'
+      + '<g stroke="#C9D5E4" stroke-width=".8" fill="none" stroke-linecap="round"><path d="M4.4 8.4Q6.4 8 8.4 6.6" /><path d="M12.6 10.6Q14.6 11 16.2 9.6"/><path d="M7.2 16.2Q9.4 16.8 11.8 16"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: SUSHI_SAKURA() },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g stroke-linecap="round"><path d="M2.4 16.4 16.6 2.2M4.6 18.6 18.8 4.4" stroke="#E3B26A" stroke-width="1.9"/>'
+      + '<path d="M14.2 4.6 16.6 2.2M16.4 6.8 18.8 4.4" stroke="#F07A1E" stroke-width="2.3"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10 18.4C4.4 14.8 3.8 6.6 7.2 2.6L10 5.2L12.8 2.6C16.2 6.6 15.6 14.8 10 18.4z" fill="#F9C6DA" stroke="#E87AA8" stroke-width=".6" stroke-linejoin="round"/>'
+      + '<path d="M10 16.4V8.6" stroke="#EE8FB5" stroke-width=".9" stroke-linecap="round"/><path d="M7.4 6.6Q8 5.6 8.8 5.4" stroke="#fff" stroke-width=".9" fill="none" stroke-linecap="round" opacity=".8"/>' }] };
   alta('sushi',
-    { m: SUSHI_M, m2: SUSHI_M2, j: SUSHI_J, mov: 'gira', mov2: 'brinca', jmov: 'gira', lluvia: 'petalos', w: 96,
+    { m: SUSHI_M, m2: SUSHI_M2, j: SUSHI_J, mov: 'gira', mov2: 'brinca', jmov: 'gira', lluvia: SUSHI_LLUEVE, w: 96,
       dice: ['¡A rodar!', '¡Qué rico!', '¡Con palillos!', '¡Provecho!'] });
   CSS_FECHAS += '.pt-sushi-palillos{transform-box:fill-box;transform-origin:100% 0;animation:pt-sushi-palillos 1.4s ease-in-out infinite alternate}'
     + '@keyframes pt-sushi-palillos{from{transform:rotate(-4deg)}to{transform:rotate(3deg)}}';
@@ -235,8 +293,23 @@
     + '<g class="pt-padre-corbata"><path d="M7.7 7.6H10.3L12.8 15.8L9 19.4L5.2 15.8z" fill="#F07A1E"/>' + PADRE_RAYAS(9, 7.6, 15.8, 1.3, 3.8, [11, 14], .9, .55, '#1F3864') + '</g>'
     + '<path d="M7 5.4H11L10.3 8H7.7z" fill="#D9650C"/>'
     + '<path d="M9 5.6 3 3.2 4.4 8.6z M9 5.6 15 3.2 13.6 8.6z" fill="#fff" stroke="#C9D1DE" stroke-width=".6" stroke-linejoin="round"/>' };
+  // estrella de cinco picos (centro, radio de las puntas y de adentro); también la usa el Día del Abogado
+  function PADRE_ESTRELLA(cx, cy, R, r) {
+    var d = '', i, a;
+    for (i = 0; i < 10; i++) { a = (-90 + i * 36) * Math.PI / 180; d += (i ? 'L' : 'M') + (cx + Math.cos(a) * (i % 2 ? r : R)).toFixed(2) + ' ' + (cy + Math.sin(a) * (i % 2 ? r : R)).toFixed(2); }
+    return d + 'z';
+  }
+  // lo que cae al fondo de la entrada: corbatitas, bigotes y estrellas doradas con «#1»
+  var PADRE_LLUEVE = { n: 22, z: [14, 28], formas: [
+    { modo: 'cae', vb: '0 0 16 24', g: '<path d="M6 6.2H10L12.6 18L8 23.2L3.4 18z" fill="#F07A1E"/>' + PADRE_RAYAS(8, 6.2, 18, 2, 4.6, [10, 14.6], 1.8, .95, '#1F3864')
+      + '<path d="M5 1.4H11L10 6.4H6z" fill="#D9650C"/><path d="M6.4 2.6H9.4" stroke="#FFA65C" stroke-width=".8" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 -5 24 22', g: '<path d="M12 4.4C10 1.8 6.4 2.2 5 4.8C4 6.6 2.6 7.2 .8 6.2C1.4 9.2 4.6 10.8 7.6 9.8C9.6 9.2 11 8 12 7C13 8 14.4 9.2 16.4 9.8C19.4 10.8 22.6 9.2 23.2 6.2C21.4 7.2 20 6.6 19 4.8C17.6 2.2 14 1.8 12 4.4z" fill="#C4844A" stroke="#F2C08C" stroke-width=".8" stroke-linejoin="round"/>'
+      + '<path d="M7 5.6Q9 4.6 10.6 6M17 5.6Q15 4.6 13.4 6" stroke="#F2C08C" stroke-width=".9" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 24 24', g: '<path d="' + PADRE_ESTRELLA(12, 12.8, 11.4, 5.8) + '" fill="#FFCB47" stroke="#FFCB47" stroke-width="1.6" stroke-linejoin="round"/>'
+      + '<path d="M12 4.4 13.9 9.6" stroke="#FFE6A8" stroke-width="1.1" stroke-linecap="round"/>'
+      + '<text x="12" y="16" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="7.6" fill="#1F3864">#1</text>' }] };
   alta('padre',
-    { m: PADRE_M, m2: PADRE_M2, j: PADRE_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: 'confeti', w: 86, w2: 84,
+    { m: PADRE_M, m2: PADRE_M2, j: PADRE_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: PADRE_LLUEVE, w: 86, w2: 84,
       dice: ['¡Gracias, papá!', '¡Te queremos!', '¡Papá número 1!', '¡El mejor papá!'] });
   CSS_FECHAS += '.pt-padre-corbata{transform-box:fill-box;transform-origin:50% 0;animation:pt-padre-corbata 2s ease-in-out infinite alternate}'
     + '@keyframes pt-padre-corbata{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}'
@@ -279,8 +352,16 @@
     + '<circle cx="10" cy="10" r="6.2" fill="#FFC83D" stroke="#E8A317" stroke-width=".5"/>'
     + '<path d="M5.2 8.4H9.4L9 10.4Q8.6 11.4 7.3 11.4Q6 11.4 5.6 10.4zM10.6 8.4H14.8L14.4 10.4Q14 11.4 12.7 11.4Q11.4 11.4 11 10.4z" fill="#1F3864"/>'
     + '<path d="M9.4 8.7H10.6" stroke="#1F3864" stroke-width=".7"/><path d="M7.8 13.3Q10 14.8 12.2 13.3" stroke="#B5521B" stroke-width=".9" fill="none" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: solecitos, conchitas y gotas de agua
+  var VERANO_LLUEVE = { n: 24, z: [11, 22], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: VERANO_RAYOS(10, 10, 12, 6.8, 9.4, 8.6, 1.7, 1.4, '#F07A1E', '#FFC83D')
+      + '<circle cx="10" cy="10" r="5.6" fill="#FFC83D"/><path d="M7 8.2A3.4 3.4 0 0 1 9.4 6.6" stroke="#FFF1B0" stroke-width="1.1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M7.6 16.6H12.4L13 18.8H7z" fill="#F29B6B"/>'
+      + '<path d="M10 17 2.6 8.8C2.2 4.8 5.8 1.8 10 1.8C14.2 1.8 17.8 4.8 17.4 8.8z" fill="#FFD3B0" stroke="#F29B6B" stroke-width=".7" stroke-linejoin="round"/>'
+      + '<path d="M10 16.2 4.2 6.4M10 16.2 7 3M10 16.2V2.4M10 16.2 13 3M10 16.2 15.8 6.4" stroke="#F29B6B" stroke-width=".8" stroke-linecap="round"/>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#6EC6F5', '#fff') }] };
   alta('verano',
-    { m: VERANO_M, m2: VERANO_M2, j: VERANO_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: 'confeti', w: 100, w2: 100,
+    { m: VERANO_M, m2: VERANO_M2, j: VERANO_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: VERANO_LLUEVE, w: 100, w2: 100,
       dice: ['¡Qué calor!', '¡Ponte bloqueador!', '¡A la playa!', '¡Vacaciones!'] });
   CSS_FECHAS += '.pt-verano-rayos{transform-box:fill-box;transform-origin:50% 50%;animation:pt-verano-rayos 10s linear infinite}'
     + '@keyframes pt-verano-rayos{to{transform:rotate(360deg)}}';
@@ -301,8 +382,19 @@
     + '<g class="pt-redes-sube2"><path transform="translate(46 70) scale(.7)" d="' + REDES_CORA + '" fill="#F07A1E"/></g>' };
   var REDES_J = { vb: '0 0 20 18', g: '<path d="M4 1.5H16Q18.5 1.5 18.5 4V10.5Q18.5 13 16 13H8.4L4.4 16.6L5.2 13H4Q1.5 13 1.5 10.5V4Q1.5 1.5 4 1.5z" fill="#F07A1E"/>'
     + '<g class="pt-redes-cora"><path transform="translate(5.6 2.4) scale(.55)" d="' + REDES_CORA + '" fill="#fff"/></g>' };
+  // lo que cae al fondo de la entrada: corazones (rosa y naranja) y globitos de mensaje con sus tres puntitos
+  function REDES_CORAZON(c) {
+    return '<path d="' + REDES_CORA + '" fill="' + c + '"/><path d="M3.6 5.6A2.2 2.2 0 0 1 5.6 3.9" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round" opacity=".75"/>';
+  }
+  var REDES_LLUEVE = { n: 22, z: [12, 24], formas: [
+    { modo: 'flota', vb: '0 1.6 16 14', g: REDES_CORAZON('#E8418C') },
+    { modo: 'cae', vb: '0 0 20 18', g: '<path d="M4 1.5H16Q18.5 1.5 18.5 4V10.5Q18.5 13 16 13H8.4L4.4 16.6L5.2 13H4Q1.5 13 1.5 10.5V4Q1.5 1.5 4 1.5z" fill="#fff"/>'
+      + '<g fill="#F07A1E"><circle cx="6.2" cy="7.3" r="1.35"/><circle cx="10" cy="7.3" r="1.35"/><circle cx="13.8" cy="7.3" r="1.35"/></g>' },
+    { modo: 'flota', vb: '0 1.6 16 14', g: REDES_CORAZON('#F07A1E') },
+    { modo: 'cae', vb: '0 0 20 18', g: '<path d="M4 1.5H16Q18.5 1.5 18.5 4V10.5Q18.5 13 16 13H11.6L15.6 16.6L14.8 13H4Q1.5 13 1.5 10.5V4Q1.5 1.5 4 1.5z" fill="#7FB2EA"/>'
+      + '<path d="M5 5.6H15M5 9H11.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>' }] };
   alta('redes',
-    { m: REDES_M, m2: REDES_M2, j: REDES_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: 'corazones', w2: 72,
+    { m: REDES_M, m2: REDES_M2, j: REDES_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: REDES_LLUEVE, w2: 72,
       dice: ['¡Me encanta!', '¡Nuevo mensaje!', '¡Comparte!', '¡Dale me gusta!'] });
   CSS_FECHAS += '.pt-redes-cora{transform-box:fill-box;transform-origin:50% 55%;animation:pt-redes-cora 1.4s ease-in-out infinite}'
     + '@keyframes pt-redes-cora{0%,100%{transform:scale(1)}15%{transform:scale(1.2)}30%{transform:scale(.95)}45%{transform:scale(1.12)}60%{transform:scale(1)}}'
@@ -348,8 +440,18 @@
   // junto al signo, en diagonal para que los engranes salgan más grandes (un diente del naranja entra entre dos del azul)
   var INGENIERO_J = { vb: '0 -.3 19 21.3', g: INGENIERO_ENGRANE(7.2, 13.9, 8, 5.6, 1.25, -10, 0, '#F07A1E', '', 'pt-ingeniero-j1')
     + INGENIERO_ENGRANE(13.05, 5.55, 6, 4.2, 1.25, 35, 0, '#4F7CC4', '', 'pt-ingeniero-j2') };
+  // lo que cae al fondo de la entrada: tuercas plateadas, tornillos y cabezas de tornillo doradas (de cruz)
+  var INGENIERO_LLUEVE = { n: 24, z: [12, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M19 10 14.5 17.8H5.5L1 10 5.5 2.2H14.5zM14.2 10A4.2 4.2 0 1 0 5.8 10A4.2 4.2 0 1 0 14.2 10z" fill="#C9D1DE" fill-rule="evenodd" stroke="#8A98B0" stroke-width=".8" stroke-linejoin="round"/>'
+      + '<circle cx="10" cy="10" r="6.6" fill="none" stroke="#E6ECF4" stroke-width=".9"/><circle cx="10" cy="10" r="4.6" fill="none" stroke="#8A98B0" stroke-width="1"/>'
+      + '<path d="M2.4 9.4 5.9 3.2H13.6" stroke="#fff" stroke-width=".8" fill="none" stroke-linecap="round" opacity=".7"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g transform="rotate(-40 10 10)"><rect x="8.2" y="6" width="3.6" height="12.6" rx=".6" fill="#C9D1DE"/>'
+      + '<path d="M8.2 8.4 11.8 7.4M8.2 10.4 11.8 9.4M8.2 12.4 11.8 11.4M8.2 14.4 11.8 13.4M8.2 16.4 11.8 15.4" stroke="#8A98B0" stroke-width=".8"/>'
+      + '<rect x="5.6" y="1.4" width="8.8" height="4.8" rx=".9" fill="#A9B6C9" stroke="#8A98B0" stroke-width=".6"/><path d="M8.6 1.6V6M11.4 1.6V6" stroke="#E6ECF4" stroke-width=".7"/></g>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8" fill="#F2C066" stroke="#C99A3A" stroke-width=".9"/><circle cx="10" cy="10" r="6.2" fill="none" stroke="#FFE6A8" stroke-width=".8"/>'
+      + '<path d="M10 5.6V14.4M5.6 10H14.4" stroke="#A87A26" stroke-width="2.1" stroke-linecap="round"/>' }] };
   alta('ingeniero',
-    { m: INGENIERO_M, m2: INGENIERO_M2, j: INGENIERO_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: 'numeros',
+    { m: INGENIERO_M, m2: INGENIERO_M2, j: INGENIERO_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: INGENIERO_LLUEVE,
       dice: ['¡Todo bien calculado!', '¡A construir!', '¡Medido y trazado!', '¡Feliz día, ingenieros!'] });
   CSS_FECHAS += '.pt-ingeniero-g1,.pt-ingeniero-g2,.pt-ingeniero-j1,.pt-ingeniero-j2{transform-box:fill-box;transform-origin:50% 50%;animation:pt-ingeniero-der 9s linear infinite}'
     + '.pt-ingeniero-g2{animation-name:pt-ingeniero-izq;animation-duration:6s}.pt-ingeniero-j1{animation-duration:6s}.pt-ingeniero-j2{animation-name:pt-ingeniero-izq;animation-duration:4.5s}'
@@ -437,8 +539,18 @@
     + '<rect x="12.2" y="2.4" width="6.6" height="12.4" rx="1" fill="#F07A1E"/><rect x="14.4" y="2.4" width="2.2" height="12.4" fill="#1F3864"/>'
     + '<g class="pt-chocolate-gota"><path d="M3.6 13.6v2.4a1.1 1.1 0 0 0 2.2 0v-2.4z" fill="#7A4524"/></g>'
     + '<g class="pt-chocolate-gota pt-chocolate-tarde"><path d="M8 13.6v1.4a1 1 0 0 0 2 0v-1.4z" fill="#7A4524"/></g>' };
+  // lo que cae al fondo de la entrada: cuadritos de chocolate (oscuro y de leche) y gotas que gotean
+  var CHOCOLATE_LLUEVE = { n: 24, z: [12, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<rect x="2" y="2" width="16" height="16" rx="2.4" fill="#6B3A1E" stroke="#B57A4A" stroke-width="1"/>'
+      + '<rect x="5" y="5" width="10" height="10" rx="1.4" fill="#8E5530"/><path d="M5.6 14.2V5.6H14.2" stroke="#C99066" stroke-width="1.1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#7A4524', '#D9A57A', '#C08A5A') },
+    { modo: 'cae', vb: '0 0 20 20', g: '<rect x="1" y="5.4" width="18" height="9.2" rx="1.8" fill="#9A5B32" stroke="#D49A68" stroke-width=".9"/>'
+      + '<g fill="#B57A4A"><rect x="2.8" y="7.2" width="6.2" height="5.6" rx="1"/><rect x="11" y="7.2" width="6.2" height="5.6" rx="1"/></g>'
+      + '<path d="M3.3 12.3V7.7H8.5M11.5 12.3V7.7H16.7" stroke="#E6B88E" stroke-width=".9" fill="none" stroke-linecap="round"/>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: '<path d="M7 .6C6.4 5 6 8.4 4.4 11.4a3.6 3.6 0 1 0 5.2 0C8 8.4 7.6 5 7 .6z" fill="#7A4524" stroke="#C08A5A" stroke-width=".9"/>'
+      + '<path d="M5.4 13.6a1.8 1.8 0 0 0 1.2 2" stroke="#D9A57A" stroke-width="1.1" fill="none" stroke-linecap="round"/>' }] };
   alta('chocolate',
-    { m: CHOCOLATE_M, m2: CHOCOLATE_M2, j: CHOCOLATE_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: 'confeti', w: 90, w2: 90,
+    { m: CHOCOLATE_M, m2: CHOCOLATE_M2, j: CHOCOLATE_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: CHOCOLATE_LLUEVE, w: 90, w2: 90,
       dice: ['¡Qué rico!', '¡Un cuadrito más!', '¡Bien calientito!', '¡Con bombones!'] });
   CSS_FECHAS += '.pt-chocolate-gota{transform-box:fill-box;transform-origin:50% 0;animation:pt-chocolate-gota 2.4s ease-in-out infinite alternate}'
     + '.pt-chocolate-tarde{animation-delay:-1.2s}@keyframes pt-chocolate-gota{from{transform:scaleY(.55)}to{transform:scaleY(1.25)}}'
@@ -484,8 +596,19 @@
     + '<g class="pt-abogado-brazo"><path d="M2.5 5H17.5" stroke="#CF9A2E" stroke-width="1.3" stroke-linecap="round"/><circle cx="10" cy="5" r="1.4" fill="#CF9A2E"/></g>'
     + '<g class="pt-abogado-jpi"><path d="M2.5 5.4.8 10.5M2.5 5.4 4.2 10.5" stroke="#CF9A2E" stroke-width=".55"/><path d="M.3 10.4H4.7Q4.3 12.8 2.5 12.8Q.7 12.8.3 10.4z" fill="#CF9A2E"/></g>'
     + '<g class="pt-abogado-jpd"><path d="M17.5 5.4 15.8 10.5M17.5 5.4 19.2 10.5" stroke="#CF9A2E" stroke-width=".55"/><path d="M15.3 10.4H19.7Q19.3 12.8 17.5 12.8Q15.7 12.8 15.3 10.4z" fill="#CF9A2E"/></g>' };
+  // lo que cae al fondo de la entrada: hojas de papel que flotan (con su sello dorado), estrellitas doradas y balancitas
+  var ABOGADO_LLUEVE = { n: 22, z: [13, 26], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M4 1.4H12.6L16.2 5V18.6H4z" fill="#F4F7FB" stroke="#C9D1DE" stroke-width=".5" stroke-linejoin="round"/><path d="M12.6 1.4V5H16.2z" fill="#C9D1DE"/>'
+      + '<path d="M6.4 5H10.6M6.4 7.8H13.8M6.4 10.4H13.8M6.4 13H11" stroke="#9FB0C8" stroke-width=".9" stroke-linecap="round"/>'
+      + '<circle cx="13.2" cy="15.4" r="1.9" fill="#F2C066"/><path d="M12.4 16.8 12 18.8 13.2 18.2 14.4 18.8 14 16.8" fill="#D9A23C"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="' + PADRE_ESTRELLA(10, 10.6, 9, 4.2) + '" fill="#F9CB5C" stroke="#F9CB5C" stroke-width="1.2" stroke-linejoin="round"/>'
+      + '<path d="M10 3.6 11.4 8" stroke="#FFE6A8" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff">' + ABOGADO_CHISPA(16.6, 3.2, 2.2) + '</g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<rect x="6" y="17.2" width="8" height="2" rx=".8" fill="#D9A23C"/><rect x="9.2" y="4.2" width="1.6" height="13.4" fill="#F2C066"/>'
+      + '<circle cx="10" cy="3.2" r="1.5" fill="#F2C066"/><path d="M2.6 5.4H17.4" stroke="#F2C066" stroke-width="1.5" stroke-linecap="round"/>'
+      + '<path d="M3.4 5.8 1.4 11.2M3.4 5.8 5.4 11.2M16.6 5.8 14.6 11.2M16.6 5.8 18.6 11.2" stroke="#F7D98B" stroke-width=".6"/>'
+      + '<path d="M.8 11H6Q5.6 13.8 3.4 13.8Q1.2 13.8.8 11zM14 11H19.2Q18.8 13.8 16.6 13.8Q14.4 13.8 14 11z" fill="#F2C066"/>' }] };
   alta('abogado',
-    { m: ABOGADO_M, m2: ABOGADO_M2, j: ABOGADO_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: 'estrellas',
+    { m: ABOGADO_M, m2: ABOGADO_M2, j: ABOGADO_J, mov: 'flota', mov2: 'brinca', jmov: 'flota', lluvia: ABOGADO_LLUEVE,
       dice: ['¡Justicia para todos!', '¡A derecho!', '¡Orden en la sala!', '¡Feliz día, colegas!'],
       extra: [['pt-p pt-a-flota pt-a-tarde pt-m-no', svg(ABOGADO_LIBROS), 'left:9%;top:11%;width:58px', '¡Conoce tus derechos!', 'pt-brinca']] });
   CSS_FECHAS += '.pt-abogado-brazo{transform-box:fill-box;transform-origin:50% 50%;animation:pt-abogado-brazo 3s ease-in-out infinite alternate}'
@@ -528,8 +651,19 @@
     + '<g class="pt-papas-p2"><rect x="7.4" y="1.4" width="2.1" height="8.6" rx=".6" transform="rotate(-4 8.4 10)" fill="#FFC83D" stroke="#D99A12" stroke-width=".45"/>'
     + '<rect x="13.2" y="2.8" width="2.1" height="7.2" rx=".6" transform="rotate(13 14.2 10)" fill="#FFC83D" stroke="#D99A12" stroke-width=".45"/></g>'
     + '<path d="M2.6 7.6H17.4L11 18.3Q10 19 9 18.3z" fill="#D7263D"/><path d="M2.6 7.6H17.4L16.5 9.3H3.5z" fill="#fff" stroke="#E7C3C8" stroke-width=".35"/>' };
+  // lo que cae al fondo de la entrada: papitas que caen girando (una y en pareja) y granitos de sal
+  function PAPAS_TIRA(x, y, w, h, r) {
+    return '<g transform="rotate(' + r + ' ' + (x + w / 2) + ' ' + (y + h / 2) + ')"><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="1.1" fill="#FFC83D" stroke="#E2A013" stroke-width=".9"/>'
+      + '<path d="M' + (x + w * .32) + ' ' + (y + 1.6) + 'V' + (y + h - 1.6) + '" stroke="#FFE68F" stroke-width=".9" stroke-linecap="round"/></g>';
+  }
+  var PAPAS_LLUEVE = { n: 24, z: [12, 26], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: PAPAS_TIRA(8, 1, 4.2, 18, 35) },
+    { modo: 'gotea', vb: '0 0 20 20', g: '<g fill="#fff"><rect x="3.4" y="2.4" width="4.4" height="4.4" rx=".6" transform="rotate(20 5.6 4.6)"/>'
+      + '<rect x="11.4" y="5.4" width="4" height="4" rx=".6" transform="rotate(-15 13.4 7.4)"/><rect x="6.4" y="10.4" width="4.6" height="4.6" rx=".6" transform="rotate(35 8.7 12.7)"/>'
+      + '<rect x="13" y="14" width="3.6" height="3.6" rx=".6" transform="rotate(10 14.7 15.7)"/></g>' },
+    { modo: 'cae', vb: '0 0 20 20', g: PAPAS_TIRA(4.6, 2.6, 4, 15, 34) + PAPAS_TIRA(10.2, 1.4, 4, 17, 44) }] };
   alta('papas',
-    { m: PAPAS_M, m2: PAPAS_M2, j: PAPAS_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: 'confeti', w: 90, w2: 70,
+    { m: PAPAS_M, m2: PAPAS_M2, j: PAPAS_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: PAPAS_LLUEVE, w: 90, w2: 70,
       dice: ['¡Crujientes!', '¡Calientitas!', '¡Una pizca de sal!', '¡Con salsita!'] });
   CSS_FECHAS += '.pt-papas-p1,.pt-papas-p2,.pt-papas-p3{transform-box:fill-box;animation:pt-papas-brinca 1.2s ease-in-out infinite}'
     + '.pt-papas-p2{animation-delay:-.4s}.pt-papas-p3{animation-delay:-.8s}'
@@ -562,8 +696,21 @@
     + '<g class="pt-emoji-arco"><path d="M11.3 8.7Q13.2 6.9 15.1 8.7" stroke="#5B3A1E" stroke-width="1.1" fill="none" stroke-linecap="round"/></g>'
     + '<path d="M11.2 13.9Q12.2 16.8 14 15.6Q14.6 14.6 13.8 13.2z" fill="#E8418C"/>'
     + '<path d="M5.4 12.4Q10 16.4 14.8 12" stroke="#5B3A1E" stroke-width="1.1" fill="none" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: caritas chiquitas propias (sonriente, que guiña, que se ríe y enamorada)
+  var EMOJI_CHICA = '<circle cx="10" cy="10" r="9" fill="#FFCB45" stroke="#E0A317" stroke-width=".6"/>';
+  var EMOJI_CHAPAS = '<g fill="#F07A1E" opacity=".4"><circle cx="4.6" cy="12" r="1.6"/><circle cx="15.4" cy="12" r="1.6"/></g>';
+  var EMOJI_LLUEVE = { n: 22, z: [14, 26], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: EMOJI_CHICA + EMOJI_CHAPAS + '<g fill="#5B3A1E"><ellipse cx="7" cy="8" rx="1.1" ry="1.6"/><ellipse cx="13" cy="8" rx="1.1" ry="1.6"/></g>'
+      + '<path d="M6 11.6Q10 15.6 14 11.6" stroke="#5B3A1E" stroke-width="1.3" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: EMOJI_CHICA + EMOJI_CHAPAS + '<ellipse cx="7" cy="8" rx="1.1" ry="1.6" fill="#5B3A1E"/>'
+      + '<path d="M11.6 8.6Q13 7 14.4 8.6M6 11.8Q10 15.6 14 11.4" stroke="#5B3A1E" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M11 13.4Q11.8 16.2 13.4 15.2Q13.9 14.2 13 12.6z" fill="#E8418C"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: EMOJI_CHICA + EMOJI_CHAPAS + '<path d="M5.6 8.6Q7 6.6 8.4 8.6M11.6 8.6Q13 6.6 14.4 8.6" stroke="#5B3A1E" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+      + '<path d="M5.6 10.8H14.4Q13.8 16 10 16Q6.2 16 5.6 10.8z" fill="#7A3B1E"/><path d="M6.2 11.4H13.8L13.5 12.6H6.5z" fill="#fff"/><path d="M8 14.8Q10 13.4 12 14.8Q11.2 15.6 10 15.6Q8.8 15.6 8 14.8z" fill="#E8418C"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: EMOJI_CHICA + EMOJI_CHAPAS
+      + '<g fill="#E8304F"><path transform="translate(4.3 4.9) scale(.34)" d="' + REDES_CORA + '"/><path transform="translate(10.3 4.9) scale(.34)" d="' + REDES_CORA + '"/></g>'
+      + '<path d="M6.2 11.8Q10 15.8 13.8 11.8" stroke="#5B3A1E" stroke-width="1.3" fill="none" stroke-linecap="round"/>' }] };
   alta('emoji',
-    { m: EMOJI_M, m2: EMOJI_M2, j: EMOJI_J, mov: 'saluda', mov2: 'late', jmov: 'brinca', lluvia: 'confeti', w: 96, w2: 96,
+    { m: EMOJI_M, m2: EMOJI_M2, j: EMOJI_J, mov: 'saluda', mov2: 'late', jmov: 'brinca', lluvia: EMOJI_LLUEVE, w: 96, w2: 96,
       dice: ['¡Guiño, guiño!', '¡Sonríe!', '¡Me encanta!', '¡Qué bonito!'] });
   CSS_FECHAS += '.pt-emoji-ojo{transform-box:fill-box;transform-origin:50% 60%;opacity:0;animation:pt-emoji-ojo 3.2s ease-in-out infinite}'
     + '@keyframes pt-emoji-ojo{0%,38%{opacity:1;transform:scaleY(1)}46%{opacity:1;transform:scaleY(.12)}48%,84%{opacity:0;transform:scaleY(.12)}86%{opacity:1;transform:scaleY(.12)}94%,100%{opacity:1;transform:scaleY(1)}}'
@@ -607,8 +754,18 @@
     + '<path d="M3 9C1.8 4.2 5 1 8.5 1C12 1 15.2 4.2 14 9Q12.8 10.4 11.6 9Q10.2 10.6 8.8 9.2Q7.4 10.6 6 9.2Q4.6 10.4 3 9z" fill="#F29BC4"/>'
     + '<g class="pt-helado-gota"><path d="M10.4 9.6v2.2a.9.9 0 0 0 1.8 0V9.6z" fill="#F29BC4"/></g>'
     + '<g stroke-width=".8" stroke-linecap="round"><path d="M6 4.4l1.2.6" stroke="#F07A1E"/><path d="M10.4 3.6l-.9.8" stroke="#3E7FCF"/><path d="M11.4 6.6l1.2.2" stroke="#2E9A5A"/></g>' };
+  // lo que cae al fondo de la entrada: chispitas de colores y gotitas derretidas (fresa y vainilla)
+  function HELADO_CHISPAS(c) {
+    return '<g stroke-width="2.8" stroke-linecap="round"><path d="M3 6.6 7.8 4.4" stroke="' + c[0] + '"/><path d="M11.4 8.6 16.2 11.2" stroke="' + c[1] + '"/>'
+      + '<path d="M4.6 14.6 9.6 15.6" stroke="' + c[2] + '"/><path d="M13.6 2.6 15.4 4.6" stroke="' + c[0] + '"/></g>';
+  }
+  var HELADO_LLUEVE = { n: 26, z: [11, 22], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: HELADO_CHISPAS(['#E8418C', '#7FB2EA', '#FFC83D']) },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#F29BC4', '#FFE0EE') },
+    { modo: 'cae', vb: '0 0 20 20', g: HELADO_CHISPAS(['#5BD69A', '#F07A1E', '#fff']) },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#FFF1D6', '#fff') }] };
   alta('helado',
-    { m: HELADO_M, m2: HELADO_M2, j: HELADO_J, mov: 'mece', mov2: 'brinca', jmov: 'mece', lluvia: 'confeti', w: 76, w2: 58,
+    { m: HELADO_M, m2: HELADO_M2, j: HELADO_J, mov: 'mece', mov2: 'brinca', jmov: 'mece', lluvia: HELADO_LLUEVE, w: 76, w2: 58,
       dice: ['¡Se derrite!', '¡Uno de fresa!', '¡Paleta de mango!', '¡Refrescante!'] });
   CSS_FECHAS += '.pt-helado-gota{transform-box:fill-box;transform-origin:50% 0;animation:pt-helado-gota 2.6s ease-in-out infinite alternate}'
     + '.pt-helado-tarde{animation-delay:-1.3s}@keyframes pt-helado-gota{from{transform:scaleY(.6)}to{transform:scaleY(1.3)}}';
@@ -639,8 +796,25 @@
     + '<path d="M8.5 1C11.6 1 12.6 4.4 13 7C13.4 9.4 15.8 10.8 15.8 13.6C15.8 16.8 12.6 18.6 8.5 18.6C4.4 18.6 1.2 16.8 1.2 13.6C1.2 10.8 3.6 9.4 4 7C4.4 4.4 5.4 1 8.5 1z" transform="translate(8.5 11) scale(.8) translate(-8.5 -11)" fill="#C8E68A"/>'
     + '<circle cx="8.5" cy="13.6" r="3.1" fill="#8A5A2B"/><circle cx="7.6" cy="12.7" r=".8" fill="#A9744A"/>'
     + '<circle cx="7" cy="7.4" r=".8" fill="#2B3A1A"/><circle cx="10" cy="7.4" r=".8" fill="#2B3A1A"/><path d="M7.4 8.9Q8.5 9.9 9.6 8.9" stroke="#2B3A1A" stroke-width=".6" fill="none" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: hojitas de aguacate, ramitas de cilantro, rodajas y gotitas de limón
+  function AGUACATE_LIMON() {
+    var h = '<circle cx="10" cy="10" r="9" fill="#4CAF3A"/><circle cx="10" cy="10" r="7.6" fill="#EEF8C6"/><circle cx="10" cy="10" r="6.6" fill="#B5DE5E"/><g stroke="#EEF8C6" stroke-width=".9" stroke-linecap="round">', i, a;
+    for (i = 0; i < 8; i++) { a = (i * 45 + 22.5) * Math.PI / 180; h += '<path d="M10 10L' + (10 + Math.cos(a) * 6.4).toFixed(2) + ' ' + (10 + Math.sin(a) * 6.4).toFixed(2) + '"/>'; }
+    return h + '</g><circle cx="10" cy="10" r="1.1" fill="#EEF8C6"/>';
+  }
+  var AGUACATE_LLUEVE = { n: 24, z: [12, 24], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M3.4 16.6 1.4 18.6" stroke="#3F8A3A" stroke-width="1.3" stroke-linecap="round"/>'
+      + '<path d="M3.2 16.8C2.6 9.2 9 2.8 17.6 2.4C17.2 11 10.8 17.4 3.2 16.8z" fill="#4FA34A"/>'
+      + '<path d="M3.6 16.4 16.4 3.6M6.6 13.4 6.4 10M6.6 13.4 10 13.6M9.6 10.4 9.4 7M9.6 10.4 13 10.6M12.6 7.4 12.6 4.8M12.6 7.4 15.2 7.4" stroke="#A5D88A" stroke-width=".7" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10 19.4C10.4 15.4 9.6 12 10 6.6M10 14.2 5.8 11.4M10 12 14.4 9.2" stroke="#4FA34A" stroke-width="1.1" fill="none" stroke-linecap="round"/>'
+      + '<g fill="#7ED957"><circle cx="8.4" cy="5.2" r="2.3"/><circle cx="11.6" cy="5.2" r="2.3"/><circle cx="10" cy="2.9" r="2.1"/>'
+      + '<circle cx="4.2" cy="12" r="2"/><circle cx="4.4" cy="9.2" r="1.9"/><circle cx="2.4" cy="10.4" r="1.6"/>'
+      + '<circle cx="15.8" cy="9.6" r="2"/><circle cx="15.4" cy="6.8" r="1.9"/><circle cx="17.8" cy="7.8" r="1.6"/></g>'
+      + '<path d="M10 7.6V3.8M10 5.6 8.4 4.6M10 5.6 11.6 4.6M5.8 11.4 3.4 10M14.4 9.2 16.6 7.6" stroke="#3E9A2E" stroke-width=".55" fill="none" stroke-linecap="round"/>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: CHURRO_GOTA('#C8E68A', '#F4FBDD') },
+    { modo: 'cae', vb: '0 0 20 20', g: AGUACATE_LIMON() }] };
   alta('aguacate',
-    { m: AGUACATE_M, m2: AGUACATE_M2, j: AGUACATE_J, mov: 'brinca', mov2: 'mece', jmov: 'saluda', lluvia: 'confeti', w: 84,
+    { m: AGUACATE_M, m2: AGUACATE_M2, j: AGUACATE_J, mov: 'brinca', mov2: 'mece', jmov: 'saluda', lluvia: AGUACATE_LLUEVE, w: 84,
       dice: ['¡Hola, hola!', '¡Qué tal!', '¡A hacer guacamole!', '¡Con totopos!'] });
   CSS_FECHAS += '.pt-aguacate-brazo{transform-box:fill-box;transform-origin:0 100%;animation:pt-aguacate-brazo .6s ease-in-out infinite alternate}'
     + '@keyframes pt-aguacate-brazo{from{transform:rotate(-14deg)}to{transform:rotate(18deg)}}'

@@ -53,8 +53,34 @@
     }
     return '<g class="pt-anio-chispa">' + h + '</g><circle cx="10" cy="10" r="2.2" fill="#E0A100"/>';
   })() };
+  // una serpentina enroscada (rizos a lo largo de una diagonal)
+  function ANIO_SERPENTINA(c) {
+    var h = '', i, s, t;
+    for (i = 0; i <= 72; i++) {
+      s = i / 72; t = s * 6 * Math.PI - Math.PI / 4;
+      h += (i ? 'L' : 'M') + (3.4 + 13.2 * s + Math.cos(t) * 2.7).toFixed(2) + ' ' + (3.4 + 13.2 * s + Math.sin(t) * 2.7).toFixed(2);
+    }
+    return '<path d="' + h + '" stroke="' + c + '" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  // lo que cae al fondo de la entrada: confeti de colores, racimitos de uvas y serpentinas
+  var ANIO_LLUEVE = { n: 28, z: [12, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<rect x="2.4" y="2.6" width="3.6" height="6.6" rx="1" fill="#F07A1E" transform="rotate(-22 4.2 5.9)"/>'
+      + '<rect x="12.6" y="1.8" width="3.6" height="6.6" rx="1" fill="#F2C066" transform="rotate(34 14.4 5.1)"/>'
+      + '<rect x="3.6" y="12.4" width="3.6" height="6.6" rx="1" fill="#7FB2EA" transform="rotate(16 5.4 15.7)"/>'
+      + '<rect x="12.4" y="11.6" width="3.6" height="6.6" rx="1" fill="#E8418C" transform="rotate(-40 14.2 14.9)"/>' },
+    { modo: 'cae', vb: '0 0 20 22', g: (function () {
+      var h = '<path d="M10 7V2" stroke="#9C6A3E" stroke-width="1.5" stroke-linecap="round"/><path d="M10 3.6c2.2-2.6 6.2-2.8 8.4-.8-2.6 2.4-5.8 2.8-8.4.8z" fill="#4E9A3A"/>', i;
+      var u = [[6.2, 9], [10, 8.4], [13.8, 9], [8.1, 12.6], [11.9, 12.6], [10, 16.2]];
+      for (i = 0; i < u.length; i++) {
+        h += '<circle cx="' + u[i][0] + '" cy="' + u[i][1] + '" r="2.7" fill="#8CCB4A" stroke="#5E9E2E" stroke-width=".7"/>'
+          + '<circle cx="' + (u[i][0] - .9).toFixed(1) + '" cy="' + (u[i][1] - .9).toFixed(1) + '" r=".75" fill="#fff" opacity=".6"/>';
+      }
+      return h;
+    })() },
+    { modo: 'flota', vb: '0 0 20 20', g: ANIO_SERPENTINA('#E8418C') },
+    { modo: 'flota', vb: '0 0 20 20', g: ANIO_SERPENTINA('#F2C066') }] };
   alta('anio',
-    { m: ANIO_M, m2: ANIO_M2, j: ANIO_J, mov: 'brinca', mov2: 'mece', jmov: 'late', lluvia: 'confeti', w2: 84,
+    { m: ANIO_M, m2: ANIO_M2, j: ANIO_J, mov: 'brinca', mov2: 'mece', jmov: 'late', lluvia: ANIO_LLUEVE, w2: 84,
       dice: ['¡Ya son las 12!', '¡Tic, tac!', '¡Mis 12 uvas!', '¡Pide tus deseos!'],
       extra: [['pt-cuete', COHETE('#F2C066'), 'left:10%;top:12%;width:66px'], ['pt-cuete pt-tarde', COHETE('#E8418C'), 'right:12%;top:16%;width:56px']] });
   CSS_FECHAS += '.pt-anio-timbre{transform-box:fill-box;transform-origin:50% 100%;animation:pt-anio-timbre 1.8s ease-in-out infinite}'
@@ -106,8 +132,28 @@
     + '<circle cx="17.6" cy="6" r="1.2" fill="#F2B630" stroke="#B9800F" stroke-width=".5"/><circle cx="10" cy="15" r="1.1" fill="#C8102E"/>'
     + '<path d="M10 8.4l1.5 2-1.5 2-1.5-2z" fill="#C8102E"/>'
     + '<g class="pt-reyes-brillo">' + ANIO_DESTELLO(16.6, 1.8, 1.9, '#F07A1E') + '</g>' };
+  // estrella de cinco picos con centro en (cx, cy)
+  function REYES_ESTRELLA(cx, cy, r1, r2) {
+    var h = '', i, a, r;
+    for (i = 0; i < 10; i++) {
+      a = (i * 36 - 90) * Math.PI / 180; r = i % 2 ? r2 : r1;
+      h += (i ? 'L' : 'M') + (cx + Math.cos(a) * r).toFixed(2) + ' ' + (cy + Math.sin(a) * r).toFixed(2);
+    }
+    return h + 'z';
+  }
+  // lo que cae al fondo de la entrada: estrellitas doradas y fruta cristalizada (tiras de ate e higos)
+  var REYES_LLUEVE = { n: 26, z: [12, 23], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="' + REYES_ESTRELLA(10, 10.6, 9, 3.9) + '" fill="#F2C066" stroke="#E0A100" stroke-width=".9" stroke-linejoin="round"/>'
+      + '<path d="' + REYES_ESTRELLA(10, 10.6, 4.4, 1.9) + '" fill="#FFE9A6"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: ANIO_DESTELLO(10, 10, 8.6, '#FFF3C4') + ANIO_DESTELLO(10, 10, 3.6, '#FFE27A') },
+    { modo: 'cae', vb: '0 0 20 12', g: '<rect x="1.5" y="2" width="17" height="8" rx="3" fill="#D42A3A"/><rect x="3.4" y="3" width="11" height="2.2" rx="1.1" fill="#F27A86"/>'
+      + '<g fill="#fff" opacity=".85"><circle cx="5" cy="7.6" r=".55"/><circle cx="8.6" cy="8" r=".55"/><circle cx="12.4" cy="7.4" r=".55"/><circle cx="16" cy="5" r=".55"/></g>' },
+    { modo: 'cae', vb: '0 0 16 20', g: '<path d="M8 3.6V1" stroke="#9C6A3E" stroke-width="1.4" stroke-linecap="round"/>'
+      + '<path d="M8 3c-1.2 3-5.6 5.8-5.6 10.2a5.6 5.6 0 0 0 11.2 0C13.6 8.8 9.2 6 8 3z" fill="#5BAE3E"/>'
+      + '<path d="M5.4 12.4c.2-2 1.2-3.8 2.4-5" stroke="#B4E68A" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+      + '<g fill="#fff" opacity=".85"><circle cx="9.6" cy="11" r=".55"/><circle cx="7.4" cy="15.6" r=".55"/><circle cx="10.8" cy="15" r=".55"/></g>' }] };
   alta('reyes',
-    { m: REYES_M, m2: REYES_M2, j: REYES_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: 'estrellas', w: 112, w2: 92,
+    { m: REYES_M, m2: REYES_M2, j: REYES_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: REYES_LLUEVE, w: 112, w2: 92,
       dice: ['¡Rosca de Reyes!', '¡A partir la rosca!', '¡Corona de rey!', '¡Hoy eres rey!'] });
   CSS_FECHAS += '.pt-reyes-brillo{transform-box:fill-box;transform-origin:50% 50%;animation:pt-reyes-brillo 1.5s ease-in-out infinite}.pt-reyes-b2{animation-delay:-.75s}'
     + '@keyframes pt-reyes-brillo{0%,100%{opacity:.25;transform:scale(.5)}50%{opacity:1;transform:scale(1.1)}}';
@@ -148,8 +194,20 @@
   var PIZZA_J = { vb: '0 0 18 20', g: '<path d="M1.8 4.2Q9 1 16.2 4.2L9.9 18.4Q9 19.8 8.1 18.4z" fill="#FFC93C" stroke="#D9921E" stroke-width=".7" stroke-linejoin="round"/>'
     + '<circle cx="6.8" cy="7.8" r="1.7" fill="#C8102E"/><circle cx="11.4" cy="8.4" r="1.5" fill="#C8102E"/><circle cx="9.1" cy="12.6" r="1.2" fill="#C8102E"/>'
     + '<path d="M1 3.8Q9 .2 17 3.8Q17.6 6 15.8 6Q9 3.4 2.2 6Q.4 6 1 3.8z" fill="#D98A3A"/>' };
+  // lo que cae al fondo de la entrada: rebanaditas de pepperoni, hojitas de albahaca y champiñones rebanados
+  var PIZZA_LLUEVE = { n: 24, z: [13, 23], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8.6" fill="#B81E24"/><circle cx="10" cy="10" r="7.4" fill="#E0402F"/>'
+      + '<g fill="#A81C22"><circle cx="7" cy="7.6" r="1.4"/><circle cx="13" cy="8.4" r="1.1"/><circle cx="8.6" cy="13.2" r="1.2"/><circle cx="13.4" cy="12.8" r=".9"/></g>'
+      + '<g fill="#F6A28E"><circle cx="10.4" cy="5.6" r=".8"/><circle cx="5.4" cy="11" r=".7"/><circle cx="11.4" cy="10.6" r=".6"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10 1.5C15.4 5 16.6 11.4 12.8 15.6 11.6 17 10 18.4 10 18.4S8.4 17 7.2 15.6C3.4 11.4 4.6 5 10 1.5z" fill="#3E9A3A"/>'
+      + '<path d="M10 1.5C4.6 5 3.4 11.4 7.2 15.6 8.4 17 10 18.4 10 18.4z" fill="#56B84A"/>'
+      + '<path d="M10 4.4v14" stroke="#B5E69A" stroke-width="1" stroke-linecap="round"/>'
+      + '<path d="M10 8 7.4 6.4M10 8l2.6-1.6M10 11.6 6.8 10M10 11.6l3.2-1.6" stroke="#B5E69A" stroke-width=".7" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 19', g: '<path d="M2 10C2 5.4 5.6 2 10 2s8 3.4 8 8c0 1-.8 1.6-1.8 1.6H13v4.4c0 1.4-1.2 2-3 2s-3-.6-3-2v-4.4H3.8C2.8 11.6 2 11 2 10z" fill="#F1E2C4" stroke="#9C6B3C" stroke-width="1"/>'
+      + '<path d="M3 9.4C3.2 5.8 6.2 3 10 3s6.8 2.8 7 6.4" stroke="#B9875A" stroke-width="1.6" fill="none" stroke-linecap="round"/>'
+      + '<path d="M4.6 10.4h10.8" stroke="#C9A276" stroke-width="1" stroke-linecap="round"/>' }] };
   alta('pizza',
-    { m: PIZZA_M, m2: PIZZA_M2, j: PIZZA_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: 'confeti', w: 90,
+    { m: PIZZA_M, m2: PIZZA_M2, j: PIZZA_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: PIZZA_LLUEVE, w: 90,
       dice: ['¡Mucho queso!', '¡Otra rebanada!', '¡Pizza para todos!', '¡Recién salida!'] });
   CSS_FECHAS += '.pt-pizza-queso{transform-box:fill-box;transform-origin:50% 0;animation:pt-pizza-queso 1.8s ease-in-out infinite alternate}'
     + '@keyframes pt-pizza-queso{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}';
@@ -194,8 +252,19 @@
       + '<g fill="#FFF6DC" stroke="#B9A066" stroke-width=".55"><circle cx="4.6" cy="7.2" r="2.3"/><circle cx="13.4" cy="7.2" r="2.3"/><circle cx="7.4" cy="5.6" r="2.4"/><circle cx="10.8" cy="5.8" r="2.4"/></g>'
       + h + '<path d="M2.4 8.6h13.2L13.4 19H4.6z" fill="none" stroke="#9E1A28" stroke-width=".6" stroke-linejoin="round"/>';
   })() };
+  // lo que cae al fondo de la entrada: palomitas de tres formas que caen girando (una con su cascarita)
+  var PALOMITAS_LLUEVE = { n: 26, z: [12, 22], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#FFF6DC" stroke="#E2C98A" stroke-width=".8"><circle cx="6.4" cy="11.6" r="4.2"/><circle cx="13.8" cy="11" r="4.4"/>'
+      + '<circle cx="10.2" cy="5.8" r="4.2"/><circle cx="10" cy="12.6" r="4.2"/></g><circle cx="11.6" cy="12.6" r="1.8" fill="#FFE08A"/>'
+      + '<path d="M8 4.6q1.6-1.2 3.4-.6" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M7 15.4c1-2.6 5-2.8 6.2-.4.6 1.6-.8 3.2-3.2 3.2s-3.6-1.2-3-2.8z" fill="#F2B544" stroke="#C98A12" stroke-width=".7"/>'
+      + '<g fill="#FFF6DC" stroke="#E2C98A" stroke-width=".8"><circle cx="6.6" cy="8.4" r="4.6"/><circle cx="13.4" cy="8" r="4.4"/><circle cx="10" cy="12.2" r="4.4"/></g>'
+      + '<circle cx="8.4" cy="11" r="1.5" fill="#FFE08A"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#FFF6DC" stroke="#E2C98A" stroke-width=".8"><circle cx="5.6" cy="9.6" r="3.6"/><circle cx="10.4" cy="6" r="4"/>'
+      + '<circle cx="14.4" cy="10.4" r="3.8"/><circle cx="9.8" cy="12.8" r="3.8"/><circle cx="14" cy="14.8" r="2.6"/></g>'
+      + '<g fill="#FFE08A"><circle cx="9" cy="10.4" r="1.5"/><circle cx="13.4" cy="13.6" r="1"/></g>' }] };
   alta('palomitas',
-    { m: PALOMITAS_M, m2: PALOMITAS_M2, j: PALOMITAS_J, mov: 'brinca', mov2: 'saluda', jmov: 'mece', lluvia: 'estrellas', w: 92, w2: 80,
+    { m: PALOMITAS_M, m2: PALOMITAS_M2, j: PALOMITAS_J, mov: 'brinca', mov2: 'saluda', jmov: 'mece', lluvia: PALOMITAS_LLUEVE, w: 92, w2: 80,
       dice: ['¡Pop, pop, pop!', '¡Con mantequilla!', '¡Hola, soy palomita!', '¡A ver una peli!'] });
   CSS_FECHAS += '.pt-palomitas-pop{transform-box:fill-box;transform-origin:50% 100%;animation:pt-palomitas-pop 1.3s ease-out infinite}.pt-palomitas-p2{animation-delay:-.65s}'
     + '@keyframes pt-palomitas-pop{0%,100%{transform:translateY(80%) scale(.6);opacity:0}15%{opacity:1}50%{transform:translateY(-55%) rotate(25deg) scale(1)}85%{transform:translateY(30%) rotate(50deg);opacity:1}}'
@@ -228,8 +297,13 @@
     + ABRAZO_C(7.8, 10.2, .84, 12, '#E8418C') + ABRAZO_C(14.2, 10.2, .84, -12, '#F07A1E')
     + '<path d="M10.4 11.6q4 2.6 8.2-.4" stroke="#C02670" stroke-width="2" fill="none" stroke-linecap="round"/>'
     + '<path d="M10.4 11.6q4 2.6 8.2-.4" stroke="#E8418C" stroke-width="1.3" fill="none" stroke-linecap="round"/>' };
+  // lo que sube al fondo de la entrada: corazones (dibujados, iguales en todo aparato) y parejitas de corazones abrazados
+  function ABRAZO_LL(c) {
+    return { modo: 'sube', vb: '0 0 16 16', g: '<path d="' + ABRAZO_D + '" fill="' + c + '"/><path d="M3.6 5.4q.4-1.8 2.2-1.9" stroke="#fff" stroke-width="1.1" fill="none" stroke-linecap="round" opacity=".6"/>' };
+  }
+  var ABRAZO_LLUEVE = { n: 22, z: [12, 24], formas: [ABRAZO_LL('#E8418C'), ABRAZO_LL('#F07A1E'), ABRAZO_LL('#F29BC4'), { modo: 'sube', vb: ABRAZO_J.vb, g: ABRAZO_J.g }] };
   alta('abrazo',
-    { m: ABRAZO_M, m2: ABRAZO_M2, j: ABRAZO_J, mov: 'late', mov2: 'brinca', jmov: 'late', lluvia: 'corazones', w: 112, w2: 92,
+    { m: ABRAZO_M, m2: ABRAZO_M2, j: ABRAZO_J, mov: 'late', mov2: 'brinca', jmov: 'late', lluvia: ABRAZO_LLUEVE, w: 112, w2: 92,
       dice: ['¡Un abrazo!', '¡Abrazo de oso!', '¡Ven, abrázame!', '¡Abrazos para todos!'] });
   CSS_FECHAS += '.pt-abrazo-sube{transform-box:fill-box;transform-origin:50% 50%;animation:pt-abrazo-sube 2.4s ease-out infinite}.pt-abrazo-s2{animation-delay:-1.2s}'
     + '@keyframes pt-abrazo-sube{0%{transform:translateY(120%) scale(.4);opacity:0}25%{opacity:1}100%{transform:translateY(-90%) scale(1);opacity:0}}'
@@ -261,8 +335,17 @@
     + '<ellipse cx="45" cy="38" rx="31" ry="7" fill="#FFF8EC"/><ellipse cx="45" cy="39" rx="27" ry="5" fill="#6B3E1E"/><ellipse cx="40" cy="38.2" rx="10" ry="1.6" fill="#A0663A"/>' };
   var CROISSANT_J = { vb: '0 0 20 14', g: '<g transform="translate(-1.98 -1.52) scale(.2065)">' + CROISSANT_FORMA(3, false) + '</g>'
     + '<path d="M8.6 2.4q1.5-.8 3 0" stroke="#F8CF86" stroke-width=".9" fill="none" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: migajas doradas (hojaldre y boronitas) y granos de café
+  var CROISSANT_LLUEVE = { n: 24, z: [12, 22], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M2.4 9.6 7.6 3.4l8.2 1.2 2 6.4-5.6 5.8-8-1.6z" fill="#E8A24A" stroke="#B66A22" stroke-width=".9" stroke-linejoin="round"/>'
+      + '<path d="M5.2 8.4 11 6.4l3.8 4M5.4 12l6-1.6 2.4 3" stroke="#C47A2C" stroke-width="1" fill="none" stroke-linecap="round"/>'
+      + '<path d="M8.4 5 13 5.6" stroke="#F8CF86" stroke-width="1.4" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M2 5l3-2.6 3.4 1.4-.6 3.6-3.6.6z" fill="#E8A24A"/><path d="M11 3.6l4.6.4 1.2 3.6-3.4 2.2-3-2z" fill="#F2BC66"/>'
+      + '<path d="M5.4 12.4l4.4-1.4 3 3.2-2 4.2-4.4-.8z" fill="#D98C38"/><path d="M14.6 13.6l2.8.6.4 2.6-2.6 1-1.6-2.2z" fill="#F8CF86"/>' },
+    { modo: 'cae', vb: '0 0 16 20', g: '<ellipse cx="8" cy="10" rx="6.2" ry="8.6" fill="#8A5228"/><path d="M4 6.6c.8-2.4 2.4-3.6 4-4" stroke="#C08A52" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
+      + '<path d="M8.4 1.8c-2.8 3-2.8 5.4-.4 8.2s2.4 5.2-.4 8.2" stroke="#3B1F0E" stroke-width="1.5" fill="none" stroke-linecap="round"/>' }] };
   alta('croissant',
-    { m: CROISSANT_M, m2: CROISSANT_M2, j: CROISSANT_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'estrellas', w: 112, w2: 84,
+    { m: CROISSANT_M, m2: CROISSANT_M2, j: CROISSANT_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: CROISSANT_LLUEVE, w: 112, w2: 84,
       dice: ['¡Recién horneado!', '¡Crujientito!', '¡Con un cafecito!', '¡Buenos días!'] });
   CSS_FECHAS += '.pt-croissant-vapor{transform-box:fill-box;transform-origin:50% 100%;animation:pt-croissant-vapor 2.2s ease-in-out infinite}.pt-croissant-v2{animation-delay:-1.1s}'
     + '@keyframes pt-croissant-vapor{0%{opacity:0;transform:translateY(18%) scaleY(.8)}40%{opacity:1}100%{opacity:0;transform:translateY(-22%) scaleY(1.05)}}';
@@ -300,8 +383,19 @@
     + '<ellipse cx="8.6" cy="7.2" rx="6.4" ry="1.6" fill="#C96A3A" stroke="#8E3E1F" stroke-width=".4"/><ellipse cx="8.6" cy="7.4" rx="5" ry="1" fill="#D9B48A"/>'
     + '<path d="M3.4 11.8c1 .7 1.8-.7 2.8 0s1.8-.7 2.8 0 1.8-.7 2.8 0 1.6-.6 2.2-.2" stroke="#F2C066" stroke-width=".75" fill="none"/>'
     + '<g fill="#F4ECD8"><circle cx="5.6" cy="15" r=".7"/><circle cx="8.6" cy="15.8" r=".7"/><circle cx="11.6" cy="15" r=".7"/></g>' };
+  // lo que cae al fondo de la entrada: tamalitos envueltos, tamalitos abiertos con su salsa y hojas de maíz
+  var CANDELARIA_LLUEVE = { n: 22, z: [14, 26], formas: [
+    { modo: 'cae', vb: '0 0 24 12', g: '<path d="M1 6C2.4 2.6 7 1.4 13 1.6l7 .4c1.4 2 1.4 6 0 8l-7 .4C7 10.6 2.4 9.4 1 6z" fill="#E6D292" stroke="#B49A52" stroke-width=".8"/>'
+      + '<ellipse cx="20" cy="6" rx="1.8" ry="4" fill="#F6DC8C" stroke="#D9B85A" stroke-width=".6"/>'
+      + '<path d="M4 5.4c4-2 9-2.4 14-2.2M4 6.6c4 1.6 9 2 14 1.8" stroke="#C4AC62" stroke-width=".8" fill="none"/>'
+      + '<path d="M13.4 1.8v8.4" stroke="#B49A52" stroke-width="2"/>' },
+    { modo: 'cae', vb: '0 0 24 14', g: '<path d="M1 10C4 4.6 12 2.6 23 3.4 21.6 9 16 12.6 8.4 12.4 4.6 12.4 2 11.4 1 10z" fill="#EADDA8" stroke="#BFA65E" stroke-width=".8"/>'
+      + '<rect x="6" y="4.6" width="14" height="6" rx="3" fill="#F6DC8C" transform="rotate(-8 13 7.6)"/>'
+      + '<path d="M8.6 8.2 17.6 6.8" stroke="#D42A2A" stroke-width="1.8" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 12 24', g: '<path d="M7 1C2 5 1 14 2.6 23h6C10 15 10.4 7 7 1z" fill="#EADCA4" stroke="#C2A85E" stroke-width=".8"/>'
+      + '<path d="M6.8 4C6 10 5.6 16 5.8 22M4.6 9c-.6 4-.6 9-.2 13M8.6 9c.2 4 0 9-.6 13" stroke="#CDB572" stroke-width=".7" fill="none" stroke-linecap="round"/>' }] };
   alta('candelaria',
-    { m: CANDELARIA_M, m2: CANDELARIA_M2, j: CANDELARIA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', w: 112, w2: 80,
+    { m: CANDELARIA_M, m2: CANDELARIA_M2, j: CANDELARIA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: CANDELARIA_LLUEVE, w: 112, w2: 80,
       dice: ['¡Tamales para todos!', '¡De rajas, por favor!', '¡Atole calientito!', '¡Con champurrado!'],
       extra: [['pt-picado', PICADO(['#F07A1E', '#F2C066', '#5BD69A', '#E8418C', '#7FB2EA']), 'left:0;right:0;top:0;height:56px']] });
   CSS_FECHAS += '.pt-candelaria-vapor{transform-box:fill-box;transform-origin:50% 100%;animation:pt-candelaria-vapor 2.2s ease-in-out infinite}.pt-candelaria-v2{animation-delay:-1.1s}'
@@ -336,8 +430,21 @@
     + '<path d="M7.6 4.4v7.8" stroke="#006847" stroke-width="1.4"/><path d="M9 4.4v7.8" stroke="#fff" stroke-width="1.4"/><path d="M10.4 4.4v7.8" stroke="#CE1126" stroke-width="1.4"/>'
     + '<path d="M8.2 12 6.6 15.4M9.8 12l1.6 3.4" stroke="#CE1126" stroke-width="1.2" stroke-linecap="round"/><path d="M8.2 12 6.6 15.4" stroke="#006847" stroke-width="1.2" stroke-linecap="round"/>'
     + '<path d="M7 4.6h4M7 12h4" stroke="#B9C2D0" stroke-width=".4"/>' };
+  // un listón tricolor que ondea (lo usa también el Día de la Bandera); verde y rojo un poco más vivos para que se vean en el azul
+  var CONSTITUCION_LISTON = { modo: 'flota', vb: '0 0 20 20', g: (function () {
+    var h = '', i, c = ['#15995C', '#fff', '#E0283A'];
+    for (i = 0; i < 3; i++) h += '<path d="M' + (6.4 + i * 2.4).toFixed(1) + ' 1q4 3 0 6t0 6 0 6" stroke="' + c[i] + '" stroke-width="2.5" fill="none"/>';
+    return h;
+  })() };
+  // lo que cae al fondo de la entrada: hojitas de papel escritas, listones tricolor y rollitos con su listón
+  var CONSTITUCION_LLUEVE = { n: 24, z: [13, 24], formas: [
+    { modo: 'flota', vb: '0 0 16 20', g: '<path d="M2 1.5h9l3.5 3.5v13.5H2z" fill="#F7ECCF" stroke="#C9B48A" stroke-width=".7" stroke-linejoin="round"/><path d="M11 1.5V5h3.5z" fill="#D9C79C"/>'
+      + '<path d="M4.4 5h4.4" stroke="#1F3864" stroke-width="1.3" stroke-linecap="round"/><path d="M4.4 8.4h7.4M4.4 11h7.4M4.4 13.6h5.4" stroke="#C9B48A" stroke-width="1" stroke-linecap="round"/>'
+      + '<path d="M9 16.2c.8-1 1.4.6 2.2-.2s1 .6 1.8-.2" stroke="#1F3864" stroke-width=".7" fill="none" stroke-linecap="round"/>' },
+    CONSTITUCION_LISTON,
+    { modo: 'cae', vb: CONSTITUCION_J.vb, g: CONSTITUCION_J.g }] };
   alta('constitucion',
-    { m: CONSTITUCION_M, m2: CONSTITUCION_M2, j: CONSTITUCION_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: 'confeti', w: 84, w2: 80,
+    { m: CONSTITUCION_M, m2: CONSTITUCION_M2, j: CONSTITUCION_J, mov: 'flota', mov2: 'mece', jmov: 'flota', lluvia: CONSTITUCION_LLUEVE, w: 84, w2: 80,
       dice: ['¡Viva la Constitución!', '¡Desde 1917!', '¡A firmar!', '¡Feliz 5 de febrero!'] });
   CSS_FECHAS += '.pt-constitucion-hoja{transform-box:fill-box;transform-origin:50% 0;animation:pt-constitucion-hoja 4.6s ease-in-out infinite}'
     + '@keyframes pt-constitucion-hoja{0%,8%{transform:scaleY(.5)}38%,84%{transform:scaleY(1)}100%{transform:scaleY(.5)}}'
@@ -372,8 +479,25 @@
   // la banderita quieta de junto a la campanita es la del motor (BANDERITA), con su orilla para el encabezado blanco
   var BANDERA_C1 = { vb: '0 0 40 34', g: BANDERITA.replace(/^<svg[^>]*>|<\/svg>$/g, '') + '<path d="M5 4h33v18H5z" fill="none" stroke="#C9D1DE" stroke-width=".8"/>' };
   // junto al signo va la banderita que ondea de las fiestas patrias (JUNTO.bandera, abajo)
+  // una franja de la banderita que ondea, de x0 a x1 (sin escudo)
+  function BANDERA_TELA(x0, x1, c) {
+    var t = '', b = '', i, x, y;
+    for (i = 0; i <= 8; i++) {
+      x = x0 + (x1 - x0) * i / 8; y = 3.4 + Math.sin((x - 3) / 15 * 2 * Math.PI) * 1.4;
+      t += (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2); b = 'L' + x.toFixed(2) + ' ' + (y + 9.4).toFixed(2) + b;
+    }
+    return '<path d="' + t + b + 'z" fill="' + c + '"/>';
+  }
+  // lo que cae al fondo de la entrada: banderitas tricolor (sin escudo), listones y moñitos tricolor
+  var BANDERA_LLUEVE = { n: 24, z: [13, 25], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M2.4 1.6v17" stroke="#C9D1DE" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.4" cy="1.6" r="1.4" fill="#F2C066"/>'
+      + BANDERA_TELA(3, 8.4, '#15995C') + BANDERA_TELA(8.2, 13.2, '#fff') + BANDERA_TELA(13, 18.4, '#E0283A')
+      + '<circle cx="10.7" cy="' + (8.1 + Math.sin(7.7 / 15 * 2 * Math.PI) * 1.4).toFixed(2) + '" r="1.9" fill="#8C6A3D"/>' },
+    CONSTITUCION_LISTON,
+    { modo: 'cae', vb: '0 0 20 22', g: '<path d="M8 12 4.6 21l2.4-1.2 1.4 1.8L11 13z" fill="#15995C"/><path d="M12 12l3.4 9-2.4-1.2-1.4 1.8L9 13z" fill="#E0283A"/>'
+      + '<circle cx="10" cy="9" r="8" fill="#15995C"/><circle cx="10" cy="9" r="5.6" fill="#fff"/><circle cx="10" cy="9" r="3.2" fill="#E0283A"/><circle cx="10" cy="9" r="1.1" fill="#F2C066"/>' }] };
   alta('bandera',
-    { m: BANDERA_M, m2: BANDERA_M2, c1: BANDERA_C1, c2: BANDERA_M2, mov: 'flota', mov2: 'mece', lluvia: 'confeti', w: 116, w2: 76,
+    { m: BANDERA_M, m2: BANDERA_M2, c1: BANDERA_C1, c2: BANDERA_M2, mov: 'flota', mov2: 'mece', lluvia: BANDERA_LLUEVE, w: 116, w2: 76,
       dice: ['¡Viva mi bandera!', '¡Verde, blanco y rojo!', '¡Con orgullo!', '¡Honores a la bandera!'] });
   JUNTO.bandera = 'banderita';
   CSS_FECHAS += '.pt-bandera-ola{transform-box:fill-box;animation:pt-bandera-o1 1.4s ease-in-out infinite}'
@@ -408,8 +532,16 @@
       + '<circle cx="105" cy="73" r="7" fill="#C8102E"/><circle cx="114" cy="75" r="7" fill="#D6233C"/><circle cx="103" cy="70.6" r="1.8" fill="#fff" opacity=".6"/><circle cx="112" cy="72.6" r="1.8" fill="#fff" opacity=".6"/>';
   })() };
   var PI_J = { vb: '0 0 20 18', g: '<path d="M2.2 6.6Q2.6 3.8 5.4 3.8L17.8 3.4M7.6 4Q7.6 11 5.6 15.6M12.8 3.8Q12.4 11 13.2 13.8Q13.8 15.8 16 15.2" stroke="#F07A1E" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' };
+  // lo que cae al fondo de la entrada: el signo π (naranja y blanco), rebanaditas de pay y el «3.14»
+  var PI_LLUEVE = { n: 24, z: [14, 26], formas: [
+    { modo: 'cae', vb: PI_J.vb, g: PI_J.g },
+    { modo: 'cae', vb: PI_J.vb, g: PI_J.g.replace('#F07A1E', '#EEF1F6') },
+    { modo: 'cae', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="7.6" fill="#C8102E"/>'
+      + '<path d="M3.8 7.6h12.4M3.8 12.4h12.4M7.6 3.8v12.4M12.4 3.8v12.4" stroke="#EBB062" stroke-width="1.8"/>'
+      + '<circle cx="10" cy="10" r="7.8" fill="none" stroke="#E9A552" stroke-width="2.6"/><path d="M4.4 6.4a7 7 0 0 1 4-3.6" stroke="#F8CF86" stroke-width="1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 28 14', g: '<text x="14" y="11.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" fill="#F2C066">3.14</text>' }] };
   alta('pi',
-    { m: PI_M, m2: PI_M2, j: PI_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: 'numeros', w: 92, w2: 112,
+    { m: PI_M, m2: PI_M2, j: PI_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: PI_LLUEVE, w: 92, w2: 112,
       dice: ['¡3.14159…!', '¡Soy irracional!', '¿Pi o pay? ¡Los dos!', '¡Rebanada de pay!'] });
   CSS_FECHAS += '.pt-pi-brillo{transform-box:fill-box;transform-origin:50% 50%;animation:pt-pi-brillo 1.5s ease-in-out infinite}.pt-pi-b2{animation-delay:-.75s}'
     + '@keyframes pt-pi-brillo{0%,100%{opacity:.25;transform:scale(.5) rotate(0)}50%{opacity:1;transform:scale(1.1) rotate(45deg)}}'
@@ -445,8 +577,26 @@
     + '<path d="M7 11q1.3-1.8 2.6 0M12.4 11q1.3-1.8 2.6 0" stroke="#6B4410" stroke-width="1.1" fill="none" stroke-linecap="round"/>'
     + '<path d="M7.8 13.4q3.2 4.6 6.4 0z" fill="#9C3420" stroke="#9C3420" stroke-width=".5" stroke-linejoin="round"/>'
     + '<circle cx="5.6" cy="13.6" r="1.1" fill="#F28A5A" opacity=".7"/><circle cx="16.4" cy="13.6" r="1.1" fill="#F28A5A" opacity=".7"/>' };
+  // lo que cae al fondo de la entrada: caritas felices (dos gestos, propias) y soles chiquitos
+  var FELICIDAD_CACHETES = '<circle cx="4.8" cy="12" r="1.4" fill="#F28A5A" opacity=".7"/><circle cx="15.2" cy="12" r="1.4" fill="#F28A5A" opacity=".7"/>';
+  var FELICIDAD_LLUEVE = { n: 24, z: [13, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8.6" fill="#FFD23F" stroke="#F2B01E" stroke-width="1"/>'
+      + '<path d="M5.6 8.8q1.4-1.9 2.8 0M11.6 8.8q1.4-1.9 2.8 0" stroke="#5A3A10" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+      + '<path d="M6.2 11.4q3.8 5.2 7.6 0z" fill="#8C2F1E" stroke="#8C2F1E" stroke-width=".8" stroke-linejoin="round"/>' + FELICIDAD_CACHETES },
+    { modo: 'cae', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="8.6" fill="#FFC23F" stroke="#F09A1E" stroke-width="1"/>'
+      + '<ellipse cx="7.2" cy="8.2" rx="1.1" ry="1.5" fill="#5A3A10"/><ellipse cx="12.8" cy="8.2" rx="1.1" ry="1.5" fill="#5A3A10"/>'
+      + '<path d="M6.4 11.6q3.6 3.8 7.2 0" stroke="#5A3A10" stroke-width="1.3" fill="none" stroke-linecap="round"/>' + FELICIDAD_CACHETES },
+    { modo: 'cae', vb: '0 0 20 20', g: (function () {
+      var h = '', i, a, b = .32;
+      for (i = 0; i < 8; i++) {
+        a = i * Math.PI / 4;
+        h += '<path d="M' + (10 + Math.cos(a - b) * 5.6).toFixed(2) + ' ' + (10 + Math.sin(a - b) * 5.6).toFixed(2) + 'L' + (10 + Math.cos(a) * 9.6).toFixed(2) + ' ' + (10 + Math.sin(a) * 9.6).toFixed(2)
+          + 'L' + (10 + Math.cos(a + b) * 5.6).toFixed(2) + ' ' + (10 + Math.sin(a + b) * 5.6).toFixed(2) + 'z" fill="' + (i % 2 ? '#F9A51E' : '#F07A1E') + '"/>';
+      }
+      return h + '<circle cx="10" cy="10" r="5.8" fill="#FFC23F"/><circle cx="10" cy="10" r="4.6" fill="#FFD23F"/><path d="M7.6 8.6q1-1.4 2.4-1.6" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round" opacity=".7"/>';
+    })() }] };
   alta('felicidad',
-    { m: FELICIDAD_M, m2: FELICIDAD_M2, j: FELICIDAD_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: 'confeti', w: 104, w2: 100,
+    { m: FELICIDAD_M, m2: FELICIDAD_M2, j: FELICIDAD_J, mov: 'brinca', mov2: 'flota', jmov: 'brinca', lluvia: FELICIDAD_LLUEVE, w: 104, w2: 100,
       dice: ['¡Sonríe!', '¡Qué buen día!', '¡Brilla como el sol!', '¡Feliz, feliz!'] });
   CSS_FECHAS += '.pt-felicidad-rayos{transform-box:fill-box;transform-origin:50% 50%;animation:pt-felicidad-rayos 14s linear infinite}@keyframes pt-felicidad-rayos{to{transform:rotate(360deg)}}'
     + '.pt-felicidad-cachete{animation:pt-felicidad-cachete 1.7s ease-in-out infinite}@keyframes pt-felicidad-cachete{50%{opacity:.55}}'
@@ -479,8 +629,18 @@
   var PRIMAVERA_J = { vb: '0 0 20 16', g: '<g class="pt-primavera-ala"><path d="M9.4 7.6C7.6 2.4 2.4.8 1.2 3.2-.1 5.6 3 8.4 9.4 8z" fill="#F07A1E"/><path d="M9.4 8.6C5.8 9 3 11 3.8 13.4c.8 2 4.2 1.2 5.6-4.8z" fill="#2E86DE"/></g>'
     + '<g class="pt-primavera-ala pt-primavera-ad"><path d="M10.6 7.6C12.4 2.4 17.6.8 18.8 3.2c1.3 2.4-1.8 5.2-8.2 4.8z" fill="#F07A1E"/><path d="M10.6 8.6c3.6.4 6.4 2.4 5.6 4.8-.8 2-4.2 1.2-5.6-4.8z" fill="#2E86DE"/></g>'
     + '<ellipse cx="10" cy="9" rx="1.1" ry="4.6" fill="#4A3F7A"/><path d="M9.6 4.4 8 1.6M10.4 4.4 12 1.6" stroke="#4A3F7A" stroke-width=".7" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: florecitas rosas, margaritas, pétalos y hojitas
+  var PRIMAVERA_LLUEVE = { n: 26, z: [12, 23], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: (function () {
+      var h = '<g fill="#F29BC4" stroke="#E8418C" stroke-width=".6">', i;
+      for (i = 0; i < 5; i++) h += '<ellipse cx="10" cy="5.2" rx="3.6" ry="4.6" transform="rotate(' + (i * 72) + ' 10 10)"/>';
+      return h + '</g><circle cx="10" cy="10" r="2.8" fill="#FFD23F"/><circle cx="9.2" cy="9.2" r=".8" fill="#fff" opacity=".7"/>';
+    })() },
+    { modo: 'cae', vb: '0 0 20 20', g: PRIMAVERA_MARGARITA(10, 10, 9.2, '#FFF8EC', '#FFC23F') },
+    { modo: 'flota', vb: '0 0 14 20', g: '<path d="M7 1C2 6 2 13 7 19c5-6 5-13 0-18z" fill="#F7A8C8"/><path d="M7 4.6v11" stroke="#FCD6E6" stroke-width="1" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M3 17C2 9 8 3 17 3c1 9-5 15-14 14z" fill="#5BBF3A"/><path d="M3.6 16.4 14 6" stroke="#B5E69A" stroke-width="1.1" stroke-linecap="round"/>' }] };
   alta('primavera',
-    { m: PRIMAVERA_M, m2: PRIMAVERA_M2, j: PRIMAVERA_J, mov: 'mece', mov2: 'vuela', jmov: 'vuela', lluvia: 'petalos', w: 100, w2: 96,
+    { m: PRIMAVERA_M, m2: PRIMAVERA_M2, j: PRIMAVERA_J, mov: 'mece', mov2: 'vuela', jmov: 'vuela', lluvia: PRIMAVERA_LLUEVE, w: 100, w2: 96,
       dice: ['¡Llegó la primavera!', '¡Huele a flores!', '¡A volar!', '¡Qué colores!'] });
   CSS_FECHAS += '.pt-primavera-ala{transform-box:fill-box;transform-origin:100% 50%;animation:pt-primavera-ala .42s ease-in-out infinite alternate}.pt-primavera-ad{transform-origin:0 50%}'
     + '@keyframes pt-primavera-ala{from{transform:scaleX(1)}to{transform:scaleX(.35)}}'
@@ -509,8 +669,17 @@
     + '<path d="M4.2 11.6c.2-2 1.2-3.8 2.4-5.2" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".7"/>'
     + '<circle cx="6.2" cy="12.4" r="1" fill="#14325E"/><circle cx="9.8" cy="12.4" r="1" fill="#14325E"/>'
     + '<path d="M6.4 14.6q1.6 1.5 3.2 0" stroke="#14325E" stroke-width=".9" fill="none" stroke-linecap="round"/>' };
+  // lo que gotea al fondo de la entrada: gotas de agua de tres tonos y tamaños, con su brillo
+  function AGUA_GOTA(c, s) {
+    return { modo: 'gotea', vb: '0 0 14 20', g: '<path d="M7 1C5 6 2 9 2 13a5 5 0 0 0 10 0c0-4-3-7-5-12z" fill="' + c + '"/>'
+      + '<path d="M12 13a5 5 0 0 1-5 5c3-1.4 4-4 3.6-7.6.8.8 1.4 1.6 1.4 2.6z" fill="' + s + '" opacity=".6"/>'
+      + '<path d="M4.6 12.6c0-1.8.8-3.4 1.8-4.8" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".8"/>' };
+  }
+  var AGUA_LLUEVE = { n: 26, z: [10, 22], formas: [AGUA_GOTA('#4FB3F0', '#2E8FD6'), AGUA_GOTA('#8FD3F8', '#4FB3F0'),
+    { modo: 'gotea', vb: '0 0 10 20', g: '<path d="M5 1C4.2 7 2 10 2 14a3 3 0 0 0 6 0c0-4-2.2-7-3-13z" fill="#6CC4F4"/>'
+      + '<path d="M3.6 13.6c0-1.2.4-2.4 1-3.4" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round" opacity=".8"/>' }] };
   alta('agua',
-    { m: AGUA_M, m2: AGUA_M2, j: AGUA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'burbujas', w: 84, w2: 72,
+    { m: AGUA_M, m2: AGUA_M2, j: AGUA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: AGUA_LLUEVE, w: 84, w2: 72,
       dice: ['¡Toma agüita!', '¡Plic, ploc!', '¡Bien fresquita!', '¡Cuida el agua!'] });
   CSS_FECHAS += '.pt-agua-ojos{transform-box:fill-box;transform-origin:50% 50%;animation:pt-agua-ojos 3.4s ease-in-out infinite}'
     + '@keyframes pt-agua-ojos{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}'
@@ -545,8 +714,13 @@
     + '<path d="M7.2 2v12.2M12.8 2v12.2M2 6h16M2 10.2h16" stroke="#B9701F" stroke-width="1"/>'
     + '<path d="M8.6 1.8h6.6c1.4 0 2.6 1 2.6 2.4v6.6a1.2 1.2 0 0 1-2.4 0V6.2c-2.6.4-5 0-6.8-1.6-.8-.8-.8-2.8 0-2.8z" fill="#F29A07" stroke="#B9700F" stroke-width=".4"/>'
     + '<g class="pt-waffle-gota"><circle cx="16.6" cy="13.6" r="1.05" fill="#F29A07" stroke="#B9700F" stroke-width=".3"/></g>' };
+  // lo que cae al fondo de la entrada: cuadritos de mantequilla, gotas de miel y fresas
+  var WAFFLE_LLUEVE = { n: 24, z: [13, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 14', g: '<rect x="2" y="3" width="16" height="9" rx="2.2" fill="#FFE07A"/><rect x="2" y="3" width="16" height="3.4" rx="1.7" fill="#FFF1B0"/><path d="M4 11.4h12" stroke="#E9B949" stroke-width="1"/>' },
+    { modo: 'gotea', vb: '0 0 14 20', g: '<path d="M7 1C5 6 2 9 2 13a5 5 0 0 0 10 0c0-4-3-7-5-12z" fill="#F2A31B"/><path d="M5 12.5a2.2 2.2 0 0 0 1.6 2.6" stroke="#FFD27A" stroke-width="1.2" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10 5c-5 0-8 3-7 7 1 4 5 7 7 7s6-3 7-7c1-4-2-7-7-7z" fill="#E8334A"/><path d="M6 4l4 2 4-2-2 3h-4z" fill="#3E9A3A"/><g fill="#FFE07A"><circle cx="7" cy="10" r=".7"/><circle cx="12" cy="9.5" r=".7"/><circle cx="9.5" cy="13" r=".7"/><circle cx="13" cy="13.5" r=".7"/><circle cx="6.5" cy="14" r=".7"/></g>' }] };
   alta('waffle',
-    { m: WAFFLE_M, m2: WAFFLE_M2, j: WAFFLE_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'confeti', w: 104, w2: 80,
+    { m: WAFFLE_M, m2: WAFFLE_M2, j: WAFFLE_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: WAFFLE_LLUEVE, w: 104, w2: 80,
       dice: ['¡Con miel, por favor!', '¡Calientito!', '¡Pura miel!', '¡A desayunar!'] });
   CSS_FECHAS += '.pt-waffle-gota{transform-box:fill-box;transform-origin:50% 0;animation:pt-waffle-gota 2s ease-in infinite}.pt-waffle-g2{animation-delay:-1s}'
     + '@keyframes pt-waffle-gota{0%{transform:scale(.3);opacity:0}25%{transform:scale(1);opacity:1}55%{transform:translateY(0) scale(1,1.15)}90%{transform:translateY(200%);opacity:1}100%{transform:translateY(230%);opacity:0}}';
@@ -584,8 +758,25 @@
     + '<circle cx="7" cy="6.4" r="1.1" fill="#E03A2A"/><circle cx="12.8" cy="6" r="1.1" fill="#E03A2A"/><circle cx="10" cy="6.8" r="1" fill="#8B4A26"/>'
     + '<path d="M1.2 7.6A8.8 8 0 0 0 18.8 7.6z" fill="#F2C066" stroke="#C98A12" stroke-width=".7" stroke-linejoin="round"/>'
     + '<circle cx="7.6" cy="10.4" r=".75" fill="#6B4410"/><circle cx="12.4" cy="10.4" r=".75" fill="#6B4410"/><path d="M8.8 12.2q1.2 1 2.4 0" stroke="#6B4410" stroke-width=".7" fill="none" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: rodajas de limón, cebollita picada, hojitas de cilantro y chiles
+  // una hojita de cilantro de tres lóbulos que nace en (x, y), girada a grados y de tamaño s
+  function TACO_CILANTRO(x, y, a, s) {
+    return '<g transform="translate(' + x + ' ' + y + ') rotate(' + a + ') scale(' + s + ')"><path d="M0 0C-2.8-.6-5-2.8-4.8-5.2-4.6-7-3-7.4-2.2-7-2-8.6-.8-9.2 0-9.2S2-8.6 2.2-7c.8-.4 2.4 0 2.6 1.8C5-2.8 2.8-.6 0 0z" fill="#4CB04A"/>'
+      + '<path d="M0-.6V-6.6M0-2.6-2.6-5M0-2.6 2.6-5" stroke="#A6DD7E" stroke-width=".6" fill="none" stroke-linecap="round"/></g>';
+  }
+  var TACO_LLUEVE = { n: 26, z: [13, 24], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: TACO_LIMON(10, 10, 8.6) },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#FBF7FF" stroke="#C9B8E2" stroke-width=".8" stroke-linejoin="round">'
+      + '<rect x="2.4" y="3" width="6" height="5.6" rx="1.2" transform="rotate(-14 5.4 5.8)"/><rect x="11.4" y="2.4" width="5.6" height="5.6" rx="1.2" transform="rotate(18 14.2 5.2)"/>'
+      + '<rect x="4" y="11.6" width="5.6" height="5.4" rx="1.2" transform="rotate(10 6.8 14.3)"/><rect x="12" y="11.2" width="5" height="5" rx="1.2" transform="rotate(-24 14.5 13.7)"/></g>'
+      + '<g stroke="#fff" stroke-width=".9" stroke-linecap="round"><path d="M3.6 4.6l2.6-.6M12.6 3.8l2.4.8M5.2 12.8l2.4.4M13 12.6l2-.8"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10.4 19.4Q10 14 10 9.6M10.1 13.6Q8 12 5.8 11.6M10.1 13Q12.4 11.2 14.6 10.8" stroke="#3E8A2E" stroke-width="1.1" fill="none" stroke-linecap="round"/>'
+      + TACO_CILANTRO(10, 10, 0, 1) + TACO_CILANTRO(5.8, 11.8, -58, .82) + TACO_CILANTRO(14.6, 11, 56, .82) },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M5.4 5.6c3.2-.4 5.4 1.4 7 4.2s3.4 5.8 6 7.6c-5 1.2-10-.8-12.6-4.8-1.4-2.2-1.8-4.6-.4-7z" fill="#E0352A"/>'
+      + '<path d="M7 8c1.6.2 3 1.4 4 3" stroke="#FF9A8A" stroke-width="1" fill="none" stroke-linecap="round"/>'
+      + '<path d="M4 5.8c.6-1.2 2-1.6 3.2-1.1L6.6 7z" fill="#3E9A3A"/><path d="M5 5.2c-.4-1.6.2-3 1.8-3.6" stroke="#3E9A3A" stroke-width="1.4" fill="none" stroke-linecap="round"/>' }] };
   alta('taco',
-    { m: TACO_M, m2: TACO_M2, j: TACO_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'confeti', w: 108, w2: 112,
+    { m: TACO_M, m2: TACO_M2, j: TACO_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: TACO_LLUEVE, w: 108, w2: 112,
       dice: ['¡Uno de pastor!', '¡Con todo!', '¡Salsa, por favor!', '¡Con limoncito!'] });
   CSS_FECHAS += '.pt-taco-ojos{transform-box:fill-box;transform-origin:50% 50%;animation:pt-taco-ojos 3s ease-in-out infinite}'
     + '@keyframes pt-taco-ojos{0%,88%,100%{transform:scaleY(1)}93%{transform:scaleY(.1)}}';

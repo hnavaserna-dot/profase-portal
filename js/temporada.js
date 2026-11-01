@@ -327,12 +327,20 @@
      m (principal) y m2 (de compañía), mov y mov2 (cómo se mueven en la entrada: brinca, mece, flota, gira, late, vuela,
      saluda), lluvia (nieve, petalos, confeti, burbujas, estrellas, notas, corazones, numeros), dice (lo que dice cada
      dibujo al picarlo), j y jmov (el adorno de junto al signo; si no, m), c1 y c2 (los dos quietos; si no, m y m2) y
-     extra (más piezas de la escena). Cada archivo regresa su CSS propio, con clases pt-<clave>-… */
+     extra (más piezas de la escena). lluvia también puede ser propia de la fecha: { formas: [{vb, g, modo}], modo, n, z }, con
+     dibujos chiquitos que caen girando (cae), gotean derecho (gotea), flotan meciéndose (flota) o suben (sube); z = [mínimo,
+     máximo] en px. Cada archivo regresa su CSS propio, con clases pt-<clave>-… */
   function busca(k) { return TEMPORADAS.filter(function (x) { return x.k === k; })[0]; }
   function alta(k, c) {
     var x = busca(k); if (!x) return;
     k = x.k; var mv = c.mov || 'brinca', mv2 = c.mov2 || mv, d = c.dice || [], w = c.w || 104, w2 = c.w2 || 104, m2 = c.m2 || c.m;
-    ESCENAS[k] = (c.lluvia ? [['pt-lluvia ll-' + c.lluvia, '', 'inset:0']] : []).concat([
+    // lluvia propia de la fecha (Daniel, 31-oct-2026, 22:35: «que no siempre sea confeti… que caiga mantequilla con miel»)
+    var ll = c.lluvia;
+    if (ll && typeof ll === 'object') {
+      LLUVIA['fecha_' + k] = { formas: ll.formas.map(function (f) { return { s: svg(f), modo: f.modo || ll.modo || 'cae' }; }), n: ll.n || 22, z: ll.z || [14, 26] };
+      ll = 'fecha_' + k;
+    }
+    ESCENAS[k] = (ll ? [['pt-lluvia ll-' + ll, '', 'inset:0']] : []).concat([
       ['pt-p pt-a-' + mv, svg(c.m), 'left:7%;bottom:22px;width:' + w + 'px', d[0] || x.n, 'pt-brinca'],
       ['pt-p pt-a-' + mv + ' pt-a-tarde pt-m-no', svg(c.m), 'left:29%;bottom:16px;width:' + Math.round(w * .55) + 'px', d[1] || d[0] || x.n, 'pt-brinca'],
       ['pt-p pt-a-' + mv2, svg(m2), 'right:7%;bottom:16px;width:' + w2 + 'px', d[2] || d[0] || x.n, 'pt-brinca'],
@@ -404,6 +412,18 @@
     + '.pt-ll-confeti{top:-12px;border-radius:1px;animation:pt-confeti linear infinite}@keyframes pt-confeti{to{transform:translate(-30px,110vh) rotate3d(1,.6,.2,900deg)}}'
     + '.pt-ll-burbujas{bottom:-24px;border:1.5px solid rgba(255,255,255,.55);border-radius:50%;animation:pt-burbuja ease-in infinite}@keyframes pt-burbuja{to{transform:translate(24px,-110vh)}}'
     + '.pt-ll-estrellas{border-radius:50%;background:#fff;animation:pt-brilla ease-in-out infinite alternate}'
+    + '.pt-ll-forma svg{display:block;width:100%;height:100%;overflow:visible}'
+    + '.pt-ll-cae0,.pt-ll-cae1,.pt-ll-cae2,.pt-ll-gotea0,.pt-ll-gotea1,.pt-ll-gotea2,.pt-ll-flota0,.pt-ll-flota1,.pt-ll-flota2{top:-44px;animation:pt-fc0 linear infinite}'
+    + '.pt-ll-cae1{animation-name:pt-fc1}.pt-ll-cae2{animation-name:pt-fc2}'
+    + '@keyframes pt-fc0{to{transform:translate(34px,110vh) rotate(260deg)}}@keyframes pt-fc1{to{transform:translate(-38px,110vh) rotate(-220deg)}}'
+    + '@keyframes pt-fc2{to{transform:translate(12px,110vh) rotate(150deg)}}'
+    + '.pt-ll-gotea0,.pt-ll-gotea1,.pt-ll-gotea2{animation-name:pt-fg;animation-timing-function:ease-in}@keyframes pt-fg{to{transform:translateY(110vh)}}'
+    + '.pt-ll-flota0,.pt-ll-flota1,.pt-ll-flota2{animation-name:pt-ff}.pt-ll-flota1{animation-name:pt-ff1}'
+    + '@keyframes pt-ff{0%{transform:translate(0,0) rotate(-12deg)}25%{transform:translate(26px,28vh) rotate(14deg)}50%{transform:translate(-6px,55vh) rotate(-10deg)}75%{transform:translate(24px,82vh) rotate(12deg)}100%{transform:translate(0,110vh) rotate(-8deg)}}'
+    + '@keyframes pt-ff1{0%{transform:translate(0,0) rotate(10deg)}25%{transform:translate(-24px,28vh) rotate(-14deg)}50%{transform:translate(8px,55vh) rotate(12deg)}75%{transform:translate(-22px,82vh) rotate(-10deg)}100%{transform:translate(0,110vh) rotate(6deg)}}'
+    + '.pt-ll-sube0,.pt-ll-sube1,.pt-ll-sube2{bottom:-44px;animation:pt-fs0 linear infinite}.pt-ll-sube1{animation-name:pt-fs1}.pt-ll-sube2{animation-name:pt-fs2}'
+    + '@keyframes pt-fs0{0%{transform:translate(0,0)}50%{transform:translate(18px,-55vh)}100%{transform:translate(0,-110vh)}}'
+    + '@keyframes pt-fs1{0%{transform:translate(0,0)}50%{transform:translate(-18px,-55vh)}100%{transform:translate(0,-110vh)}}@keyframes pt-fs2{to{transform:translate(10px,-110vh) rotate(20deg)}}'
     + '.pt-ll-notas,.pt-ll-corazones,.pt-ll-numeros{bottom:-24px;font-weight:700;animation:pt-subell linear infinite}@keyframes pt-subell{0%{transform:translate(0,0);opacity:0}10%{opacity:.9}100%{transform:translate(30px,-80vh) rotate(20deg);opacity:0}}'
     // movimientos de la entrada para los dibujos de cada fecha (el que se pica reacciona encima, con !important)
     + '.pt-a-brinca{transform-origin:50% 100%;animation:pt-a-brinca 1.7s ease-in-out infinite}'
@@ -552,6 +572,18 @@
   };
   function lluvia(caja, tipo) {
     var c = LLUVIA[tipo]; if (!c) return;
+    if (c.formas) {   // dibujos chiquitos de la fecha: caen girando, gotean derecho, flotan meciéndose o suben
+      for (var q = 0; q < c.n; q++) {
+        var f = document.createElement('i'), zz = c.z[0] + Math.random() * (c.z[1] - c.z[0]);
+        var fo = c.formas[q % c.formas.length];
+        f.className = 'pt-ll-forma pt-ll-' + fo.modo + (q % 3);
+        f.innerHTML = fo.s;
+        f.style.cssText = 'left:' + (Math.random() * 96).toFixed(1) + '%;width:' + zz.toFixed(1) + 'px;height:' + zz.toFixed(1) + 'px;opacity:' + (.7 + Math.random() * .3).toFixed(2)
+          + ';animation-duration:' + (6 + Math.random() * 7).toFixed(1) + 's;animation-delay:' + (-Math.random() * 12).toFixed(1) + 's';
+        caja.appendChild(f);
+      }
+      return;
+    }
     for (var n = 0; n < c.n; n++) {
       var s = document.createElement('i'), z = c.z[0] + Math.random() * (c.z[1] - c.z[0]), col = c.col ? c.col[n % c.col.length] : '';
       s.className = 'pt-ll-' + tipo;

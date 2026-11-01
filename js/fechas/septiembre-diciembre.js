@@ -61,8 +61,25 @@
     + '<path d="M13.4 13.8a1.6 1.6 0 1 1 1.7-1.9" stroke="#E8573A" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
     + '<circle cx="11.4" cy="9.6" r=".95" fill="#3E9A3A"/><circle cx="9.8" cy="14" r=".9" fill="#3E9A3A"/><path d="M13.8 9.4l1.9.6M4.4 12.6l.8 1.3" stroke="#D7263D" stroke-width=".95" stroke-linecap="round"/>'
     + '<path d="M9.6 11.9a1.3 1.3 0 0 0 2.6 0z" fill="#FFE97A" stroke="#E0B400" stroke-width=".4"/>' };
+  // lo que cae al fondo de la entrada: camarones, chícharos, rodajas de limón y granos de arroz con azafrán
+  var PAELLA_LLUEVE = { n: 26, z: [14, 25], formas: [
+    // el camarón en «C» abierta (que no parezca una rosca): cabeza arriba a la derecha, colita abajo
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M11 15.2l4.6-1.6-1.2 2.6 1.8 2.4-5-.8z" fill="#E8613E"/>'
+      + '<path d="M14.7 6.5A5.5 5.5 0 1 0 11.5 15.4" stroke="#F47C5A" stroke-width="4.6" fill="none" stroke-linecap="round"/>'
+      + '<path d="M8.8 7.1 6.7 3.4M7.1 10H2.9M8.8 12.9l-2.1 3.7" stroke="#FFD2BF" stroke-width="1" stroke-linecap="round"/>'
+      + '<circle cx="15" cy="6.2" r="3" fill="#F47C5A"/><path d="M16.6 4.2c1.4-1.2 2.2-2.4 2.4-3.6M17.4 5.4c1.2-.4 2-1 2.4-1.8" stroke="#E8613E" stroke-width=".8" fill="none" stroke-linecap="round"/>'
+      + '<circle cx="15.8" cy="5.6" r=".9" fill="#3A2A20"/>' },
+    // una vaina abierta con sus chícharos
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M1.6 13.4C5 7 13 3.6 18.6 5.2 16.6 11 8.4 15.6 1.6 13.4z" fill="#3E8E3E"/>'
+      + '<path d="M3.4 12.6C7 8.6 12.6 6.2 17 6.4" stroke="#2C6E2C" stroke-width="1" fill="none" stroke-linecap="round"/>'
+      + '<g fill="#7ED957"><circle cx="6" cy="11" r="2.1"/><circle cx="9.6" cy="9.2" r="2.2"/><circle cx="13.2" cy="7.8" r="2.1"/></g>'
+      + '<g fill="#C9F0A8"><circle cx="5.4" cy="10.4" r=".6"/><circle cx="9" cy="8.6" r=".6"/><circle cx="12.6" cy="7.2" r=".6"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: '<circle cx="10" cy="10" r="9" fill="#F5C400"/><circle cx="10" cy="10" r="7.7" fill="#FFF6C8"/><circle cx="10" cy="10" r="6.7" fill="#FFE15A"/>'
+      + '<path d="M10 3.3v13.4M4.2 6.6l11.6 6.8M4.2 13.4l11.6-6.8" stroke="#FFF6C8" stroke-width="1.2" stroke-linecap="round"/><circle cx="10" cy="10" r="1.3" fill="#FFF6C8"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<g fill="#FFD873"><ellipse cx="6" cy="7" rx="4" ry="1.7" transform="rotate(-30 6 7)"/><ellipse cx="14" cy="9" rx="4" ry="1.7" transform="rotate(25 14 9)"/></g>'
+      + '<ellipse cx="9" cy="14.6" rx="4" ry="1.7" fill="#FFF3D0" transform="rotate(8 9 14.6)"/>' }] };
   alta('paella',
-    { m: PAELLA_M, m2: PAELLA_M2, j: PAELLA_J, mov: 'brinca', mov2: 'gira', jmov: 'brinca', lluvia: 'confeti', w: 116, w2: 80,
+    { m: PAELLA_M, m2: PAELLA_M2, j: PAELLA_J, mov: 'brinca', mov2: 'gira', jmov: 'brinca', lluvia: PAELLA_LLUEVE, w: 116, w2: 80,
       dice: ['¡A la paella!', '¡Con mariscos!', '¡Un toque de limón!', '¡Bien fresquito!'] });
   CSS_FECHAS += '.pt-paella-humo{transform-box:fill-box;transform-origin:50% 100%;animation:pt-paella-humo 2.4s ease-in-out infinite}'
     + '@keyframes pt-paella-humo{0%{opacity:0;transform:translateY(18%) scaleY(.75)}40%{opacity:1}100%{opacity:0;transform:translateY(-22%) scaleY(1.1)}}';
@@ -103,8 +120,23 @@
     + '<path d="M1.9 13.4A8.1 8.1 0 0 1 18.1 13.4Z" fill="#F5D38B" stroke="#C98E3E" stroke-width=".7" stroke-linejoin="round"/>'
     + '<g fill="#D9963E" opacity=".8"><ellipse cx="6.4" cy="10.4" rx="1.3" ry=".75"/><ellipse cx="11.6" cy="8.2" rx="1" ry=".6"/><ellipse cx="13.8" cy="11.6" rx="1.1" ry=".6"/><ellipse cx="9" cy="12.3" rx=".7" ry=".45"/></g>'
     + '<path d="M1.6 13.5h16.8" stroke="#C98E3E" stroke-width=".8" stroke-linecap="round"/>' };
+  // lo que cae al fondo de la entrada: hilos de queso derretido, cuadritos de queso y chiles rojos y verdes
+  function QUESADILLA_CHILE(c, luz) {
+    return '<path d="M11 5.5C9 9.5 6.5 14 2.6 17.6 8.4 16.8 14 13.2 16.6 7.6 15 4.6 13 4.4 11 5.5z" fill="' + c + '"/>'
+      + '<path d="M10.8 8.2c-1 2.4-2.6 5-4.6 7.2" stroke="' + luz + '" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+      + '<path d="M10.6 5.8q3-2 6.2 1.6M13.8 5.4c.2-2 1.4-3.4 3.2-4" stroke="#3E7A2E" stroke-width="2" fill="none" stroke-linecap="round"/>';
+  }
+  var QUESADILLA_LLUEVE = { n: 24, z: [13, 25], formas: [
+    // hilos de queso deshebrado: tres hebras onduladas que bajan meciéndose
+    { modo: 'flota', vb: '0 0 20 20', g: '<g fill="none" stroke-linecap="round"><path d="M3 4.4c3-1.4 4 2.4 7 1s4 2.4 7 1" stroke="#FFF0C2" stroke-width="2"/>'
+      + '<path d="M2.6 9.6c3-1.6 4.2 2.6 7.4 1s4.2 2.4 7.4.8" stroke="#FFD54A" stroke-width="2.2"/>'
+      + '<path d="M3.6 15c3-1.4 4 2.2 6.8.8s4 2.2 6.6.8" stroke="#FFF0C2" stroke-width="1.8"/></g>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M10 2.4 17.6 6.4 10 10.4 2.4 6.4z" fill="#FFF0B0"/><path d="M2.4 6.4 10 10.4v7.4l-7.6-4z" fill="#FFD54A"/>'
+      + '<path d="M10 10.4l7.6-4v7.4l-7.6 4z" fill="#E9B23A"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: QUESADILLA_CHILE('#E03A2E', '#FF8A7A') },
+    { modo: 'cae', vb: '0 0 20 20', g: QUESADILLA_CHILE('#4E9A3A', '#9BD16B') }] };
   alta('quesadilla',
-    { m: QUESADILLA_M, m2: QUESADILLA_M2, j: QUESADILLA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'confeti', w: 112, w2: 92,
+    { m: QUESADILLA_M, m2: QUESADILLA_M2, j: QUESADILLA_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: QUESADILLA_LLUEVE, w: 112, w2: 92,
       dice: ['¡Con queso, claro!', '¡Bien derretidita!', '¡Pásame la salsa!', '¡Que pique poquito!'] });
   CSS_FECHAS += '.pt-quesadilla-pieza{transform-box:fill-box;animation:pt-quesadilla-pieza 2.2s ease-in-out infinite alternate}'
     + '@keyframes pt-quesadilla-pieza{from{transform:translateX(-13%)}to{transform:translateX(12%)}}'
@@ -140,8 +172,15 @@
     + '<path d="M14.6 10.2c3.2 0 3.4 4.8 0 5" stroke="#F07A1E" stroke-width="1.6" fill="none" stroke-linecap="round"/>'
     + '<path d="M3.6 8.4h11.2v5.6c0 2-1.6 3.5-3.6 3.5H7.2c-2 0-3.6-1.5-3.6-3.5z" fill="#F07A1E"/>'
     + '<path d="M3.6 11.2h11.2v1.5H3.6z" fill="#1F3864"/><ellipse cx="9.2" cy="8.5" rx="5.6" ry="1.3" fill="#7A4A2C" stroke="#F07A1E" stroke-width=".6"/>' };
+  // lo que cae al fondo de la entrada: granos de café que caen girando y hilos de vapor que suben
+  var CAFE_LLUEVE = { n: 24, z: [13, 26], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: CAFE_GRANO(10, 10, -30, .66) },
+    { modo: 'sube', vb: '0 0 20 20', g: '<path d="M10 19c-4-3 4-5.4 0-9s4-5.4 0-9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".75"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: CAFE_GRANO(10, 10, 40, .6) },
+    { modo: 'sube', vb: '0 0 20 20', g: '<g stroke="#E4DCCC" stroke-width="2" fill="none" stroke-linecap="round" opacity=".7"><path d="M6.6 19c-3.4-2.6 3.4-4.6 0-7.6s3.4-4.6 0-7.6"/>'
+      + '<path d="M13.4 17c-3.4-2.6 3.4-4.6 0-7.6s3.4-4.6 0-7.6"/></g>' }] };
   alta('cafe',
-    { m: CAFE_M, m2: CAFE_M2, j: CAFE_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: 'burbujas', w: 100, w2: 92,
+    { m: CAFE_M, m2: CAFE_M2, j: CAFE_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: CAFE_LLUEVE, w: 100, w2: 92,
       dice: ['¡Un cafecito!', '¡Recién hecho!', '¡Granos de altura!', '¡Huele delicioso!'] });
   CSS_FECHAS += '.pt-cafe-humo{transform-box:fill-box;transform-origin:50% 100%;animation:pt-cafe-humo 2.4s ease-in-out infinite}'
     + '@keyframes pt-cafe-humo{0%{opacity:0;transform:translateY(18%) scaleY(.75)}40%{opacity:1}100%{opacity:0;transform:translateY(-22%) scaleY(1.1)}}';
@@ -181,12 +220,27 @@
     for (i = 0; i <= n; i++) { a = i / n * 2 * Math.PI; r = 27 + 4 * Math.sin(a * 8); d += (i ? 'L' : 'M') + (50 + Math.cos(a) * r).toFixed(2) + ' ' + (49 + Math.sin(a) * r).toFixed(2); }
     return '<path d="' + d + '" stroke="#FFF3E0" stroke-width="2.2" fill="none" stroke-linejoin="round"/>';
   })()) };
-  var DONA_J = { vb: '0 0 20 20', g: '<path d="' + DONA_ARO(10, 10.5, 9.2, 0, 1, 2.7, 0) + '" fill="#B9773A" fill-rule="evenodd"/>'
-    + '<path d="' + DONA_ARO(10, 10, 9.2, 0, 1, 2.7, 0) + '" fill="#DE9A50" fill-rule="evenodd"/>'
-    + '<path d="' + DONA_ARO(10, 9.8, 7.4, .55, 7, 3.5, .2) + '" fill="#F27BAA" fill-rule="evenodd"/>'
-    + DONA_CHISPAS(10, 9.8, 8, 4.8, 6.6, 2.4, .95, ['#FFE066', '#1F3864', '#fff', '#5BD69A']) };
+  // la dona chiquita (junto al signo y en la lluvia): masa, glaseado ondulado y chispitas
+  function DONA_CHICA(glas, cols) {
+    return '<path d="' + DONA_ARO(10, 10.5, 9.2, 0, 1, 2.7, 0) + '" fill="#B9773A" fill-rule="evenodd"/>'
+      + '<path d="' + DONA_ARO(10, 10, 9.2, 0, 1, 2.7, 0) + '" fill="#DE9A50" fill-rule="evenodd"/>'
+      + '<path d="' + DONA_ARO(10, 9.8, 7.4, .55, 7, 3.5, .2) + '" fill="' + glas + '" fill-rule="evenodd"/>'
+      + DONA_CHISPAS(10, 9.8, 8, 4.8, 6.6, 2.4, .95, cols);
+  }
+  var DONA_J = { vb: '0 0 20 20', g: DONA_CHICA('#F27BAA', ['#FFE066', '#1F3864', '#fff', '#5BD69A']) };
+  // lo que cae al fondo de la entrada: puñitos de chispitas de colores y donitas rosas y de chocolate
+  // (las chispitas también caen el Día del Pastel)
+  function DONA_PUNITO(lista) {
+    return lista.map(function (c) { return '<rect x="-4.6" y="-1.6" width="9.2" height="3.2" rx="1.6" fill="' + c[3] + '" transform="translate(' + c[0] + ' ' + c[1] + ') rotate(' + c[2] + ')"/>'; }).join('');
+  }
+  var DONA_CHISPITAS = [
+    { modo: 'cae', vb: '0 0 20 20', g: DONA_PUNITO([[6, 6, 35, '#FFE066'], [14.5, 7.5, -55, '#5BD69A'], [7.6, 15, -10, '#7FB2EA'], [16.2, 15.8, 70, '#fff']]) },
+    { modo: 'cae', vb: '0 0 20 20', g: DONA_PUNITO([[5.2, 8.6, -62, '#F28DB2'], [11.8, 4.2, 12, '#F07A1E'], [15, 11.8, 52, '#fff'], [7.6, 16, 18, '#FFE066']]) }];
+  var DONA_LLUEVE = { n: 26, z: [15, 27], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: DONA_J.g }, DONA_CHISPITAS[0],
+    { modo: 'cae', vb: '0 0 20 20', g: DONA_CHICA('#6B3E26', ['#FFE066', '#F28DB2', '#fff', '#7FB2EA']) }, DONA_CHISPITAS[1]] };
   alta('dona',
-    { m: DONA_M, m2: DONA_M2, j: DONA_J, mov: 'gira', mov2: 'brinca', jmov: 'gira', lluvia: 'confeti', w: 96, w2: 92,
+    { m: DONA_M, m2: DONA_M2, j: DONA_J, mov: 'gira', mov2: 'brinca', jmov: 'gira', lluvia: DONA_LLUEVE, w: 96, w2: 92,
       dice: ['¡Con chispitas!', '¡Una más, porfa!', '¡De chocolate!', '¡Dulce día!'] });
 
   // Día de los Nachos (6 de noviembre): el totopo se moja en el queso; el plato de nachos al lado
@@ -221,8 +275,14 @@
     + '<path d="M10 1.6 14.6 9.7c-.9.4-1.6-.2-2.3.5-.5.6-.5 1.4-1.2 1.4s-.7-1-1.3-1.5c-.6-.5-1.3.4-2-.1-.6-.4-.3-1-1.2-.9-.5 0-.8.4-1.2.3z" fill="#FFA41B" stroke="#E08A00" stroke-width=".4" stroke-linejoin="round"/>'
     + '<g class="pt-nachos-gota"><path d="M11.2 11.4c-.6 1.2-.6 2.2 0 2.6.6-.4.6-1.4 0-2.6z" fill="#FFA41B"/></g>'
     + '<g fill="#E2AE52"><circle cx="6.4" cy="14" r=".6"/><circle cx="13.4" cy="14.2" r=".55"/></g>' };
+  // lo que cae al fondo de la entrada: totopos que caen girando (unos con queso) y rodajas de jalapeño
+  var NACHOS_LLUEVE = { n: 24, z: [14, 26], formas: [
+    { modo: 'cae', vb: '0 0 20 20', g: NACHOS_TRI(10, 11.4, 8.6, 0, '#F6D488') },
+    { modo: 'flota', vb: '0 0 20 20', g: NACHOS_JALAPENO(10, 10, 8.4) },
+    { modo: 'cae', vb: '0 0 20 20', g: NACHOS_TRI(10, 11.4, 8.6, 0, '#F2C770')
+      + '<path d="M10 2.6 13.9 9.4c-.7.6-1.4.2-2 .4v2.2c0 .8-.4 1.2-.8 1.2s-.8-.4-.8-1.2v-1.8c-.6-.3-1.1.6-1.8.3-.6-.3-.8-1-1.6-.8-.4.1-.6.2-.9.1z" fill="#FFB627" stroke="#F09A12" stroke-width=".5" stroke-linejoin="round"/>' }] };
   alta('nachos',
-    { m: NACHOS_M, m2: NACHOS_M2, j: NACHOS_J, mov: 'late', mov2: 'brinca', jmov: 'brinca', lluvia: 'confeti', w: 100, w2: 110,
+    { m: NACHOS_M, m2: NACHOS_M2, j: NACHOS_J, mov: 'late', mov2: 'brinca', jmov: 'brinca', lluvia: NACHOS_LLUEVE, w: 100, w2: 110,
       dice: ['¡Con mucho queso!', '¡A remojar!', '¡Con jalapeño!', '¡A compartir!'] });
   CSS_FECHAS += '.pt-nachos-totopo{transform-box:fill-box;transform-origin:50% 100%;animation:pt-nachos-moja 2.2s ease-in-out infinite}'
     + '@keyframes pt-nachos-moja{0%,100%{transform:translateY(-10%) rotate(-6deg)}45%,62%{transform:translateY(22%) rotate(3deg)}}'
@@ -254,8 +314,24 @@
     + '<rect x="5.4" y="3.4" width="13.8" height="10" rx="1.2" fill="#fff" stroke="#AEB8CA" stroke-width=".8"/>'
     + '<path d="M5.9 3.9 12.3 8.6 18.7 3.9" stroke="#8A94A6" stroke-width=".8" fill="none" stroke-linejoin="round"/>'
     + '<circle cx="12.3" cy="8.6" r="1.7" fill="#F07A1E"/>' };
+  // lo que cae al fondo de la entrada: sobres (uno de correo aéreo) que flotan y estampillas que giran
+  // la estampilla: orilla dentada (puntitos blancos sobre la orilla) y su dibujo adentro
+  function CARTERO_ESTAMPA(c, dibujo) {
+    return '<rect x="3.5" y="3" width="13" height="14" fill="#fff" stroke="#fff" stroke-width="2.4" stroke-dasharray="0 2.7" stroke-linecap="round"/>'
+      + '<rect x="5.6" y="5.1" width="8.8" height="9.8" fill="' + c + '"/>' + dibujo;
+  }
+  var CARTERO_LLUEVE = { n: 22, z: [15, 27], formas: [
+    { modo: 'flota', vb: '0 0 22 16', g: '<rect x="1" y="1.5" width="20" height="13" rx="1.6" fill="#fff"/>'
+      + '<path d="M1.8 13.8l6.6-5.6M20.2 13.8l-6.6-5.6" stroke="#D3DBE7" stroke-width="1" stroke-linecap="round"/>'
+      + '<path d="M1.8 2.4 11 9.4l9.2-7" stroke="#AEB8CA" stroke-width="1.2" fill="none" stroke-linejoin="round"/><circle cx="11" cy="9.2" r="2.2" fill="#F07A1E"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: CARTERO_ESTAMPA('#7FB2EA', '<circle cx="11.8" cy="8.2" r="1.9" fill="#FFE066"/><path d="M5.6 14.9v-2.6c1.6-1.8 3.2-1.8 4.4-.2 1.2-1.2 2.8-1.4 4.4 0v2.8z" fill="#fff"/>') },
+    { modo: 'flota', vb: '0 0 22 16', g: '<rect x="1.8" y="2.3" width="18.4" height="11.4" rx="1" fill="#fff"/>'
+      + '<rect x="1.8" y="2.3" width="18.4" height="11.4" rx="1" fill="none" stroke="#E03A2E" stroke-width="1.6" stroke-dasharray="2.2 2.2"/>'
+      + '<rect x="1.8" y="2.3" width="18.4" height="11.4" rx="1" fill="none" stroke="#3B6FC4" stroke-width="1.6" stroke-dasharray="2.2 2.2" stroke-dashoffset="2.2"/>'
+      + '<path d="M3.4 4 11 9.2 18.6 4" stroke="#AEB8CA" stroke-width="1.1" fill="none" stroke-linejoin="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: CARTERO_ESTAMPA('#F07A1E', '<path d="M10 6.6l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.7-1.6 2.3-.3z" fill="#fff"/>') }] };
   alta('cartero',
-    { m: CARTERO_M, m2: CARTERO_M2, j: CARTERO_J, mov: 'vuela', mov2: 'brinca', jmov: 'vuela', lluvia: 'corazones', w: 108, w2: 92,
+    { m: CARTERO_M, m2: CARTERO_M2, j: CARTERO_J, mov: 'vuela', mov2: 'brinca', jmov: 'vuela', lluvia: CARTERO_LLUEVE, w: 108, w2: 92,
       dice: ['¡Carta para ti!', '¡Con cariño!', '¡Llegó correo!', '¡Gracias, cartero!'] });
   CSS_FECHAS += '.pt-cartero-ala{transform-box:fill-box;transform-origin:100% 65%;animation:pt-cartero-ala .45s ease-in-out infinite alternate}'
     + '@keyframes pt-cartero-ala{from{transform:rotate(16deg)}to{transform:rotate(-24deg)}}'
@@ -287,8 +363,18 @@
   var REVOLUCION_BANDERITA = { vb: '0 0 30 28', g: '<rect x="2" y="1" width="2.4" height="27" rx="1" fill="#A9B3C4"/>'
     + '<path d="M4.4 3h8.4v15H4.4z" fill="#006847"/><path d="M12.8 3h8.4v15h-8.4z" fill="#fff"/><path d="M21.2 3h8.4v15h-8.4z" fill="#CE1126"/>'
     + '<path d="M12.8 3.4h8.4M12.8 17.6h8.4" stroke="#C9D1DE" stroke-width=".8"/><circle cx="17" cy="10.5" r="2.4" fill="#8C6A3D"/>' };
+  // lo que cae al fondo de la entrada: listones tricolor y sombreritos de ala ancha que bajan meciéndose y moñitos tricolor que giran (sin escudo)
+  // el verde, un poco más claro que el de la bandera para que se lea chiquito sobre el azul marino
+  var REVOLUCION_LLUEVE = { n: 24, z: [15, 27], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: '<g fill="none" stroke-width="2.5"><path d="M1.6 7.5c3-3.4 5.4-3.4 8.4 0s5.4 3.4 8.4 0" stroke="#16A05A"/>'
+      + '<path d="M1.6 10c3-3.4 5.4-3.4 8.4 0s5.4 3.4 8.4 0" stroke="#fff"/><path d="M1.6 12.5c3-3.4 5.4-3.4 8.4 0s5.4 3.4 8.4 0" stroke="#E0283A"/></g>' },
+    { modo: 'flota', vb: '0 0 24 16', g: '<ellipse cx="12" cy="11.8" rx="11" ry="3.6" fill="#B08544"/><ellipse cx="12" cy="11" rx="11" ry="3.6" fill="#DDB874"/>'
+      + '<path d="M7.4 11.2C7.2 6 9 2 12 2s4.8 4 4.6 9.2c-1.4.7-3 .9-4.6.9s-3.2-.2-4.6-.9z" fill="#C9A050"/>'
+      + '<path d="M7.4 8.6c1.4.7 3 1 4.6 1s3.2-.3 4.6-1v1.9c-1.4.7-3 1-4.6 1s-3.2-.3-4.6-1z" fill="#16A05A"/><path d="M10 3.6c-.8 1.6-1.2 3.4-1.3 5" stroke="#E2C27E" stroke-width="1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M8.2 11.6 5 19.2l2.4-.9 1.4 1.6 1.2-7.6zM11.8 11.6l3.2 7.6-2.4-.9-1.4 1.6-1.2-7.6z" fill="#E0283A"/>'
+      + '<circle cx="10" cy="8.4" r="6.8" fill="#16A05A"/><circle cx="10" cy="8.4" r="4.7" fill="#fff"/><circle cx="10" cy="8.4" r="2.5" fill="#E0283A"/>' }] };
   alta('revolucion',
-    { m: REVOLUCION_M, m2: REVOLUCION_SOMBRERO, c1: REVOLUCION_BANDERITA, c2: REVOLUCION_SOMBRERO, mov: 'saluda', mov2: 'brinca', jmov: 'saluda', lluvia: 'confeti', w: 110, w2: 120,
+    { m: REVOLUCION_M, m2: REVOLUCION_SOMBRERO, c1: REVOLUCION_BANDERITA, c2: REVOLUCION_SOMBRERO, mov: 'saluda', mov2: 'brinca', jmov: 'saluda', lluvia: REVOLUCION_LLUEVE, w: 110, w2: 120,
       dice: ['¡Viva México!', '¡Viva la Revolución!', '¡Ajúa!', '¡Arriba México!'],
       extra: [['pt-picado', PICADO(), 'left:0;right:0;top:0;height:56px']] });
   JUNTO.revolucion = 'banderita';
@@ -322,8 +408,20 @@
     + '<circle cx="10" cy="14.2" r="4.3" fill="#E39B4A"/><circle cx="10" cy="9.8" r="3.2" fill="#E39B4A"/><circle cx="10" cy="11.4" r="1.25" fill="#3A2A20"/>'
     + '<rect x="9.2" y="1.6" width="1.6" height="8.4" rx=".4" fill="#8B5A36"/><rect x="8.5" y="0" width="3" height="2.8" rx=".7" fill="#7A4B2A"/>'
     + '<rect x="8.4" y="15.6" width="3.2" height="1" rx=".4" fill="#6B3E26"/></g>' };
+  // lo que cae al fondo de la entrada: notas dibujadas (corchea, dos corcheas unidas y negra) que bajan meciéndose,
+  // en vez de las letras ♪ ♫, que cada aparato dibuja distinto
+  function MUSICO_CORCHEA(c) {
+    return '<g fill="' + c + '"><ellipse cx="7.4" cy="15" rx="3.8" ry="2.7" transform="rotate(-22 7.4 15)"/><rect x="9.6" y="2.6" width="1.7" height="12.4" rx=".6"/>'
+      + '<path d="M11.3 2.6c.6 3.4 5 4.4 4.4 9.6-.6-2.8-2.8-4.2-4.4-4.6z"/></g>';
+  }
+  var MUSICO_LLUEVE = { n: 24, z: [15, 27], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: MUSICO_CORCHEA('#fff') },
+    { modo: 'flota', vb: '0 0 20 20', g: '<g fill="#F2C066"><ellipse cx="4.6" cy="16.2" rx="3.3" ry="2.4" transform="rotate(-22 4.6 16.2)"/><ellipse cx="14.4" cy="14.2" rx="3.3" ry="2.4" transform="rotate(-22 14.4 14.2)"/>'
+      + '<rect x="6.5" y="4.4" width="1.5" height="11.8" rx=".5"/><rect x="16.3" y="2.4" width="1.5" height="11.8" rx=".5"/><path d="M6.5 3.6 17.8 1.4v2.8L6.5 6.4z"/></g>' },
+    { modo: 'flota', vb: '0 0 20 20', g: MUSICO_CORCHEA('#7FB2EA') },
+    { modo: 'flota', vb: '0 0 20 20', g: '<g fill="#F07A1E"><ellipse cx="8" cy="15" rx="3.8" ry="2.7" transform="rotate(-22 8 15)"/><rect x="10.2" y="2.4" width="1.7" height="12.6" rx=".6"/></g>' }] };
   alta('musico',
-    { m: MUSICO_M, m2: MUSICO_M2, j: MUSICO_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: 'notas', w: 86, w2: 86,
+    { m: MUSICO_M, m2: MUSICO_M2, j: MUSICO_J, mov: 'mece', mov2: 'flota', jmov: 'mece', lluvia: MUSICO_LLUEVE, w: 86, w2: 86,
       dice: ['¡Que suene la música!', '¡Una canción!', '¡Do, re, mi!', '¡A cantar!'] });
 
   // Día del Pastel (26 de noviembre): las velitas titilan; la rebanada brinca
@@ -370,8 +468,25 @@
     + '<rect x="9.1" y="5.2" width="1.8" height="5.2" rx=".4" fill="#7FB2EA"/><path d="M9.1 7.4l1.8-1M9.1 9.4l1.8-1" stroke="#fff" stroke-width=".6"/>'
     + '<g class="pt-pastel-flama"><path d="M10 .5C8.7 2.4 8.3 3.2 8.3 4a1.7 1.7 0 0 0 3.4 0c0-.8-.4-1.6-1.7-3.5z" fill="#F7A21B"/><path d="M10 2.4c-.5.8-.7 1.2-.7 1.6a.7.7 0 0 0 1.4 0c0-.4-.2-.8-.7-1.6z" fill="#FFE27A"/></g>'
     + '<g fill="#D7263D"><circle cx="5.4" cy="15.6" r=".8"/><circle cx="14.6" cy="15.6" r=".8"/></g>' };
+  // lo que cae al fondo de la entrada: chispitas (las mismas de la dona), velitas encendidas y fresitas
+  function PASTEL_VELITA(c) {
+    return '<rect x="7.8" y="8" width="4.4" height="11.2" rx="1" fill="' + c + '"/>'
+      + '<path d="M7.8 11.6l4.4-2.2M7.8 14.8l4.4-2.2M7.8 18l4.4-2.2" stroke="#fff" stroke-width="1.3"/>'
+      + '<rect x="9.55" y="5.6" width=".9" height="2.6" fill="#E8DCC4"/>'
+      + '<path d="M10 .6C8.4 2.8 7.8 4 7.8 5a2.2 2.2 0 0 0 4.4 0c0-1-.6-2.2-2.2-4.4z" fill="#F7A21B"/><path d="M10 2.8c-.7 1-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.3-1.2-1-2.2z" fill="#FFE27A"/>';
+  }
+  var PASTEL_LLUEVE = { n: 24, z: [14, 26], formas: [
+    DONA_CHISPITAS[0],
+    { modo: 'cae', vb: '0 0 20 20', g: PASTEL_VELITA('#7FB2EA') },
+    // la fresita: hombros redondos y punta abajo (que no parezca corazón), su coronita y semillas
+    { modo: 'cae', vb: '0 0 20 20', g: '<path d="M10 19C6.2 17.4 3.2 13 3.4 8.8 3.6 6.2 6.2 5 10 5s6.4 1.2 6.6 3.8c.2 4.2-2.8 8.6-6.6 10.2z" fill="#E03A2E"/>'
+      + '<g fill="#FFE066"><circle cx="7" cy="9.6" r=".75"/><circle cx="10.4" cy="9" r=".75"/><circle cx="13.6" cy="9.8" r=".75"/><circle cx="8.6" cy="12.8" r=".75"/>'
+      + '<circle cx="12" cy="12.8" r=".75"/><circle cx="10.2" cy="15.8" r=".75"/><circle cx="6" cy="12.4" r=".65"/><circle cx="14.2" cy="12.6" r=".65"/></g>'
+      + '<path d="M4.8 6.2c1.6-.6 2.8-.2 3.6.6-.2-1.6.4-2.8 1.6-3.6 1.2.8 1.8 2 1.6 3.6.8-.8 2-1.2 3.6-.6-.8 1.6-2.4 2.6-5.2 2.6s-4.4-1-5.2-2.6z" fill="#5BAE3E"/>'
+      + '<path d="M10 3.4V1.2" stroke="#5BAE3E" stroke-width="1.3" stroke-linecap="round"/>' },
+    { modo: 'cae', vb: '0 0 20 20', g: PASTEL_VELITA('#F28DB2') }] };
   alta('pastel',
-    { m: PASTEL_M, m2: PASTEL_M2, j: PASTEL_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: 'confeti', w: 96, w2: 96,
+    { m: PASTEL_M, m2: PASTEL_M2, j: PASTEL_J, mov: 'brinca', mov2: 'mece', jmov: 'brinca', lluvia: PASTEL_LLUEVE, w: 96, w2: 96,
       dice: ['¡Pide un deseo!', '¡A soplar!', '¡Una rebanada!', '¡Con fresa encima!'] });
   CSS_FECHAS += '.pt-pastel-flama{transform-box:fill-box;transform-origin:50% 100%;animation:pt-pastel-flama .7s ease-in-out infinite alternate}'
     + '@keyframes pt-pastel-flama{0%{transform:scale(1,1) rotate(-5deg)}50%{transform:scale(.88,1.1) rotate(2deg)}100%{transform:scale(1.05,.92) rotate(5deg)}}'
@@ -405,8 +520,18 @@
     + '<ellipse cx="9" cy="10.6" rx="5.9" ry="4.5" fill="#fff"/><circle cx="13.6" cy="7" r="3.2" fill="#fff"/>'
     + '<path d="M16.6 5.9l2.8.9-2.8 1.2z" fill="#F07A1E"/><circle cx="14.4" cy="6.1" r=".85" fill="#2B3445"/><circle cx="13.9" cy="8.5" r=".8" fill="#F7A8C4"/>'
     + '<g class="pt-inocentes-ala"><path d="M10.4 9C9 6 5.8 4.6 3 5.6c1.2.8 1.6 1.6 1.6 2.4-.8 0-1.2.4-1.2.8 1.2.4 2 .4 2.4.8-.4.4-.4.8 0 1.2 2 .4 4-.4 4.6-1.8z" fill="#9DC3EE" stroke="#6F93C0" stroke-width=".5" stroke-linejoin="round"/></g>' };
+  // lo que cae al fondo de la entrada: plumitas blancas de la palomita y signos de interrogación que bajan meciéndose (girando no se leen)
+  var INOCENTES_LLUEVE = { n: 24, z: [14, 26], formas: [
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M4.4 16.6C4.6 10 9.4 4.2 17.4 2.2 16.6 9.6 11.6 14.8 4.4 16.6z" fill="#fff"/>'
+      + '<path d="M8.2 12.4 6 10.6M10.8 9.4 9 7.4M13.4 6.6l-1.2-2M9.6 12.6l2.6.4M12 9.8l2.8.2" stroke="#DCE5F2" stroke-width=".8" stroke-linecap="round"/>'
+      + '<path d="M2.6 18.4C7 12.4 11 8 15.6 4" stroke="#AEB8CA" stroke-width="1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: INOCENTES_PREGUNTA(10, 10.6, 1, '#FFE066') },
+    { modo: 'flota', vb: '0 0 20 20', g: '<path d="M10 1.6c3.6 3 4.4 8.4 2 13.6-3.2-.4-5.4-3-5.2-7 .2-3 1.4-5 3.2-6.6z" fill="#EEF3FA"/>'
+      + '<path d="M8.6 6.6 7 5.6M8.4 10 6.8 9.4M11.6 7.6l1.6-.8M11.8 11l1.4-.4" stroke="#C9D1DE" stroke-width=".8" stroke-linecap="round"/>'
+      + '<path d="M10 3.4c1 4 1 8.6-.6 15" stroke="#AEB8CA" stroke-width="1" fill="none" stroke-linecap="round"/>' },
+    { modo: 'flota', vb: '0 0 20 20', g: INOCENTES_PREGUNTA(10, 10.6, 1, '#F07A1E') }] };
   alta('inocentes',
-    { m: INOCENTES_M, m2: INOCENTES_M2, j: INOCENTES_J, mov: 'vuela', mov2: 'mece', jmov: 'vuela', lluvia: 'confeti', w: 100, w2: 88,
+    { m: INOCENTES_M, m2: INOCENTES_M2, j: INOCENTES_J, mov: 'vuela', mov2: 'mece', jmov: 'vuela', lluvia: INOCENTES_LLUEVE, w: 100, w2: 88,
       dice: ['¡Inocente palomita!', '¡Caíste!', '¡Sorpresa!', '¡Era broma!'] });
   CSS_FECHAS += '.pt-inocentes-ala{transform-box:fill-box;transform-origin:92% 60%;animation:pt-inocentes-ala .5s ease-in-out infinite alternate}'
     + '@keyframes pt-inocentes-ala{from{transform:rotate(14deg)}to{transform:rotate(-26deg)}}'
