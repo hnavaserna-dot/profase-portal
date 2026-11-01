@@ -437,10 +437,20 @@
      herramientas/pruebas/pantallas/revisa_pantallas.py (en profase-datos), que avisa de todo lo que se salga.
      - En el celular, los campos de texto van a 16 px para que el iPhone no se acerque solo al escribir.
      - Las tiras de pestañas que no caben se deslizan de lado: se desvanecen en la orilla donde hay más pestañas,
-       para que se note, y la pestaña escogida se queda a la vista. ---- */
+       para que se note, y la pestaña escogida se queda a la vista.
+     - Campos de fecha en el iPhone y el iPad (Daniel, 31-oct-2026, 21:55, con una captura de RH › «Cargar préstamo de
+       antes»: «se ve sobre encimado monto y la fecha»). En el iPhone y el iPad (todo navegador ahí usa el motor de
+       Apple) el campo de fecha trae su propio ancho mínimo, no obedece a su recuadro y se encima con el campo de al
+       lado o se sale de la tarjeta; vacío, además sale más alto, y la fecha centrada. Aquí se le quita el aspecto de
+       fábrica solo en esos equipos (@supports -webkit-touch-callout, que solo existe ahí), para que mida lo que le da
+       su recuadro, quede del mismo alto que los demás campos y con la fecha a la izquierda. Así queda para todas las
+       pantallas, las de hoy y las nuevas; construir.py (exige_fechas_ios) no publica si se quita. ---- */
   (function pantallas() {
+    var FECHAS = 'input[type=date],input[type=month],input[type=week]';
     var css = 'html{-webkit-text-size-adjust:100%;text-size-adjust:100%}'
       + '@media (pointer:coarse) and (max-width:900px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}}'
+      + '@supports (-webkit-touch-callout:none){' + FECHAS + '{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;text-align:left}'
+      + FECHAS.split(',').map(function (s) { return s + '::-webkit-date-and-time-value'; }).join(',') + '{text-align:left;min-height:1.2em;margin:0}}'
       + '.pt-desliza{scroll-behavior:smooth;overscroll-behavior-x:contain}'
       + '.pt-desliza.pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
       + '.pt-desliza.pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
