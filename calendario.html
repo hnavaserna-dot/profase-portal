@@ -281,6 +281,35 @@ td.nw{white-space:nowrap}
 .rtabs button+button{border-left:1px solid var(--line-2)}
 .rtabs button[aria-pressed="true"]{background:var(--brand);color:var(--on-primary)}
 .modal.ancho{width:min(760px,100%)}
+/* Agenda › Eventos PROFASE (1-nov-2026): Lista, Calendario y Reporte */
+.evsel{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin-bottom:4px}
+.evsel .f{flex:1 1 260px}
+.rep-h{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-start;justify-content:space-between;margin:12px 0 4px}
+.rep-h h3{font-size:18px;font-weight:600;overflow-wrap:anywhere}
+.rep-h .sub{font-size:13px;color:var(--ink-2);margin-top:2px}
+.rep-h .btns{display:flex;flex-wrap:wrap;gap:8px}
+.rep-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:12px;margin-top:12px}
+.rep-c td.nom{min-width:170px}
+.rep-c{border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.rep-c h4{font-size:15px;font-weight:600;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.rep-l{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;font-size:13.5px;align-items:baseline}
+.rep-l .r{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rep-l .t{color:var(--ink-2);min-width:0}
+.rep-l .tot{font-weight:600;border-top:1px solid var(--line);padding-top:5px}
+.rep-c .note{margin-top:8px}
+.rep-c .tablebox{margin-top:8px}
+.rep-c table{font-size:13px}
+.rep-c td,.rep-c th{padding:6px 8px}
+.mas{color:var(--danger)}.menos{color:var(--ok)}
+tr[data-ev]{cursor:pointer}
+tr[data-ev]:hover td{background:var(--surface-2)}
+tr.rsel td{background:var(--brand-soft)}
+.pase-ck{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;white-space:nowrap}
+.pase-ck input{width:18px;height:18px}
+td select.pac{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:4px 6px;font-size:13.5px}
+.rep-modo{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px}
+.rep-modo label{display:inline-flex;gap:6px;align-items:center}
+@media (max-width:620px){td select.pac{font-size:16px}}
 @media (max-width:620px){.rk{grid-template-columns:1fr 1fr}}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
 
@@ -509,6 +538,12 @@ button.kpi:focus-visible{outline-offset:-3px}
           <button type="button" data-t="ev" aria-pressed="false">Eventos de la empresa</button>
           <button type="button" data-t="cli" aria-pressed="false" hidden>Clientes</button>
         </nav>
+        <!-- Agenda › Eventos PROFASE (1-nov-2026): esta misma página con ?vista=eventos -->
+        <nav class="subtabs" id="evTabs" aria-label="Eventos PROFASE" hidden>
+          <button type="button" data-e="lista" aria-pressed="true">Lista</button>
+          <button type="button" data-e="cal" aria-pressed="false">Calendario</button>
+          <button type="button" data-e="rep" aria-pressed="false" hidden>Reporte</button>
+        </nav>
 
         <!-- Calendario -->
         <section class="panel" id="p-cal">
@@ -576,6 +611,18 @@ button.kpi:focus-visible{outline-offset:-3px}
             <div class="btns"><button type="button" class="btn primary solo-captura" data-acc="nuevo-ev">Agregar evento</button></div>
           </div>
           <div id="evList"></div>
+        </section>
+
+        <!-- Reporte de eventos (solo a quien ev_estado() deja: RH, la dirección y quienes decidió la dirección) -->
+        <section class="panel" id="p-rep" hidden>
+          <div class="bar">
+            <h2>Reporte de eventos</h2>
+            <div class="btns"><button type="button" class="btn" data-excel data-acc="excel-rep">Descargar Excel</button></div>
+          </div>
+          <div id="repLista"><div class="empty">Cargando…</div></div>
+          <div id="repDet"></div>
+          <details class="rep-c" id="repTodosBox" style="margin-top:14px" hidden><summary><b>Todos los eventos</b> <span class="note">(pica uno para verlo)</span></summary><div id="repTodos"></div></details>
+          <p class="note" style="margin-top:12px">Este reporte solo lo ven RH, la dirección y quienes decidió la dirección. Lo gastado sale de los gastos internos de la Caja chica ligados al evento.</p>
         </section>
 
         <!-- Cumpleaños de clientes -->
@@ -666,11 +713,21 @@ button.kpi:focus-visible{outline-offset:-3px}
      eventos de PROFASE también se dan de alta desde RH (?rh=eventos), con las mismas reglas de siempre (cal_captura).
      Las vacaciones y ausencias solo las ven los gerentes y la dirección (rh_ausencias_cal(); a los demás la base no les
      da nada), sin notas ni faltas. */
-  var RHMODO=(new URLSearchParams(location.search).get('rh')||''); if(['colab','eventos'].indexOf(RHMODO)<0) RHMODO='';
+  var QS=new URLSearchParams(location.search);
+  var RHMODO=QS.get('rh')==='colab'?'colab':'';
+  /* Agenda › «Eventos PROFASE» (1-nov-2026, decisiones de Daniel, 08:48 a 09:04: sale del menú RH y va en Agenda; «que
+     a la dirección y a Alex nos sirva de reporte»): esta misma página con ?vista=eventos (la liga vieja ?rh=eventos
+     lleva aquí). Lista y Calendario (solo los eventos) para todos; el Reporte (asistencia, por área, presupuesto, lo
+     gastado en la Caja chica, pase de lista y comparación con los anteriores del mismo tipo) solo a quien la base deja
+     (ev_estado(): Alex Luna, la dirección, Fernando Cadengo y Eva Rangel; presupuesto y pase de lista, Alex y Daniel).
+     Todo por las funciones ev_* (portal/sql/114_eventos_reporte.sql); la página no lee tablas del Reporte. */
+  var EVMODO=QS.get('vista')==='eventos'||QS.get('rh')==='eventos';
+  var EV={est:null, sub:'lista', lista:null, hora:0, sel:'', det:null, vez:0, cargando:false};
+  try{ var s0=localStorage.getItem('portal.ev.sub'); if(['lista','cal','rep'].indexOf(s0)>=0) EV.sub=s0; }catch(e){}
   var colabCap=false, colabVe=false, ausencias=[], veAus=false;
   var AUS_TXT={vacaciones:'De vacaciones', permiso:'Con permiso', incapacidad:'De incapacidad'};
   function capCol(){ return RHMODO==='colab'&&colabCap; }
-  Object.keys(TIPOS).forEach(function(k){ filtros[k]=true; });
+  Object.keys(TIPOS).forEach(function(k){ filtros[k]=!EVMODO||k==='evento'; });   // en Eventos PROFASE, solo los eventos
   /* ================= Agenda (31-oct-2026): citas, fechas de entrega y límite, tareas y renovaciones =================
      Daniel (22:10 a 23:20): «poder manejar nuestra agenda dentro del CRM… Eva siempre nos agenda a HNR y a mí»; «en
      esa ventana de poder agendar… no me des por default una liga para la videollamada; que sea opcional»; «que también
@@ -1427,7 +1484,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   window.__agenda={ abre:function(q){ if(AG.ok) abreDesde(q); else AG.pendiente=q; }, recarga:function(){ if(AG.ok) cargaAgenda(true); } };
 
   async function arrancaAgenda(){
-    if(RHMODO) return;
+    if(RHMODO||EVMODO) return;
     try{ var r=await P.sb.rpc('agenda_estado'); if(r.error||!r.data) return; AG.est=r.data; AG.ok=true; }catch(e){ return; }
     renderVer(); render();
     await cargaAgenda(true);
@@ -1603,6 +1660,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     return null;
   }
   function renderKpis(){
+    if(EVMODO){ renderKpisEv(); return; }
     var y=vista.y, m=vista.m, dias=new Date(y,m+1,0).getDate(), cu=0, cl=0, an=0, ev=0, fe=0;
     for(var d=1;d<=dias;d++) delDia(y,m,d).forEach(function(x){
       if(x.tipo==='cumple') cu++; else if(x.tipo==='cli') cl++; else if(x.tipo==='aniv') an++; else if(x.tipo==='evento') ev++;
@@ -1804,7 +1862,7 @@ button.kpi:focus-visible{outline-offset:-3px}
               +'<td class="nw" style="color:var(--ink-3);font-size:12.5px">'+fh(x.en)+(x.por?'<br>contestó '+esc(pila(x.por)):'')+'</td></tr>';
           }).join(''):'<tr><td colspan="4" class="empty">Nadie en esta lista.</td></tr>')
         +'</tbody></table></div>'
-        +'<p class="note" style="margin-top:8px">Solo lo ven quien organizó este evento y la dirección.</p>'
+        +'<p class="note" style="margin-top:8px">Solo lo ven quien organizó este evento, la dirección y quienes ven el Reporte de eventos.</p>'
         +'<div class="mact">'+(d.puede_recordar&&!m.pasado&&c.pe?'<button type="button" class="btn" data-rec>Recordar a los que faltan ('+c.pe+')</button>':'')
         +'<button type="button" class="btn" data-excel data-xls>Descargar lista (Excel)</button><button type="button" class="btn primary" data-x>Cerrar</button></div>';
     }
@@ -1833,7 +1891,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     });
     $('side').innerHTML='<div class="panel">'+detalleDia(sel,true)
       +(captura()?'<button type="button" class="btn" style="margin-top:10px;width:100%" id="evDia">Agregar evento este día</button>':'')+'</div>'
-      +'<details class="panel mesl"'+(window.innerWidth>860?' open':'')+'><summary><h3>Cumpleaños y aniversarios de '+MESES[m]+'</h3><span class="n">'+r.length+'</span></summary><div style="margin-top:6px">'+(r.length?r.join(''):'<div class="empty">Nadie cumple años ni aniversario este mes.</div>')+'</div></details>';
+      +(EVMODO?'':'<details class="panel mesl"'+(window.innerWidth>860?' open':'')+'><summary><h3>Cumpleaños y aniversarios de '+MESES[m]+'</h3><span class="n">'+r.length+'</span></summary><div style="margin-top:6px">'+(r.length?r.join(''):'<div class="empty">Nadie cumple años ni aniversario este mes.</div>')+'</div></details>');
     if(captura()) $('evDia').onclick=function(){ abrirEvento(null,sel); };
     enlaza($('side'));
   }
@@ -1965,6 +2023,240 @@ button.kpi:focus-visible{outline-offset:-3px}
     renderLegend(); render();
   }
 
+  /* ---------- Agenda › Eventos PROFASE: Lista, Calendario y Reporte (1-nov-2026) ---------- */
+  function renderEvTabs(){
+    var ve=!!(EV.est&&EV.est.ve), sb=EV.sub==='rep'&&!ve?'lista':EV.sub, nav=$('evTabs');
+    nav.hidden=false; nav.querySelector('[data-e="rep"]').hidden=!ve;
+    nav.querySelectorAll('button').forEach(function(x){ x.setAttribute('aria-pressed', String(x.dataset.e===sb)); });
+    var pn={lista:'ev',cal:'cal',rep:'rep'}[sb];
+    ['cal','prox','col','ev','cli','rep'].forEach(function(t){ $('p-'+t).hidden=t!==pn; });
+    if(sb==='rep') cargaRep(false);
+  }
+  function evMuestra(sb){
+    EV.sub=['lista','cal','rep'].indexOf(sb)>=0?sb:'lista'; try{ localStorage.setItem('portal.ev.sub',EV.sub); }catch(x){}
+    renderEvTabs(); if(EV.sub==='cal') renderCal();
+  }
+  // para los recorridos guiados (ev_rec_tab.js): cambiar de pestaña desde afuera
+  window.__eventos={muestra:evMuestra, ve:function(){ return !!(EV.est&&EV.est.ve); }};
+  function renderKpisEv(){
+    var hk=hoyK(), y=parse(hk).getFullYear();
+    var prox=eventos.filter(function(e){ return e.fecha>=hk; }).sort(function(a,b){ return (a.fecha+(a.hora||'')).localeCompare(b.fecha+(b.hora||'')); });
+    var anio=eventos.filter(function(e){ return parse(e.fecha).getFullYear()===y; }).length, pend=0;
+    Object.keys(mis).forEach(function(id){ var m=mis[id]; if(!m||m.cerrado) return; if((m.para||[]).some(function(q){ return !q.respuesta; })) pend++; });
+    var nx=prox[0];
+    $('kpis').innerHTML=kpi('Próximos',prox.length,prox.length===1?'evento del despacho':'eventos del despacho')
+      +kpi('Por contestar',misOk?pend:'—',pend===1?'evento te falta confirmar':'eventos te falta confirmar',pend>0)
+      +'<div class="kpi"><div class="k">Siguiente evento</div><div class="v txt">'+(nx?esc(nx.titulo):'—')+'</div><div class="s">'+(nx?esc(fLarga(parse(nx.fecha))+(nx.hora?' · '+nx.hora:'')):'Sin eventos próximos')+'</div></div>'
+      +kpi('En '+y,anio,anio===1?'evento':'eventos');
+  }
+  function pesos(n){ return n==null||isNaN(n)?'—':'$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fCortaA(k){ var d=parse(k); return d.getDate()+' '+MES3[d.getMonth()]+' '+d.getFullYear(); }
+  function clase(c){ return (CLASES[c]||CLASES.otro)[0]; }
+  function presTxt(p){ return !p?'Sin presupuesto':p.modo==='persona'?pesos(p.monto)+' por persona':pesos(p.monto)+' en total'; }
+  async function cargaRep(forzar){
+    if(!P||!(EV.est&&EV.est.ve)||EV.cargando) return;
+    if(EV.lista&&!forzar&&Date.now()-EV.hora<60000){ renderRep(); return; }
+    EV.cargando=true;
+    try{ var r=await P.sb.rpc('ev_reporte_lista'); if(r.error) throw r.error; EV.lista=Array.isArray(r.data)?r.data:[]; EV.hora=Date.now(); }
+    catch(x){ EV.cargando=false; $('repLista').innerHTML='<div class="empty">No se pudo leer el reporte: '+esc(falla(x))+'</div>'; return; }
+    EV.cargando=false;
+    if(!EV.sel||!EV.lista.some(function(x){ return x.id===EV.sel; })){
+      var hk=hoyK(), f=EV.lista.filter(function(x){ return x.fecha>=hk; }).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+      EV.sel=f.length?f[0].id:(EV.lista[0]?EV.lista[0].id:'');
+    }
+    renderRep(); if(EV.sel) cargaDet(EV.sel, !!EV.det&&EV.det.id===EV.sel);
+  }
+  function renderRep(){
+    var L=EV.lista||[];
+    if(!L.length){ $('repLista').innerHTML='<div class="empty">Todavía no hay eventos.'+(captura()?' Agrega el primero en «Lista».':'')+'</div>'; $('repDet').innerHTML=''; $('repTodosBox').hidden=true; return; }
+    $('repLista').innerHTML='<div class="evsel"><div class="f"><label for="repSel">Evento</label><select id="repSel">'
+      +L.map(function(x){ return '<option value="'+esc(x.id)+'"'+(x.id===EV.sel?' selected':'')+'>'+esc(fCortaA(x.fecha)+' · '+x.titulo)+'</option>'; }).join('')+'</select></div></div>';
+    $('repSel').onchange=function(){ EV.sel=this.value; renderTodos(); cargaDet(EV.sel); };
+    renderTodos();
+  }
+  function renderTodos(){
+    var L=EV.lista||[], box=$('repTodosBox');
+    box.hidden=L.length<2; if(L.length<2) return;
+    if(window.innerWidth>860&&!box.dataset.vez){ box.open=true; box.dataset.vez='1'; }
+    $('repTodos').innerHTML='<div class="tablebox" style="margin-top:8px"><table><thead><tr><th>Fecha</th><th>Evento</th><th>Tipo</th><th>Confirmados</th><th>Llegaron</th><th>Presupuesto</th><th>Gastado</th><th>Por persona</th></tr></thead><tbody>'
+      +L.map(function(x){
+        return '<tr data-ev="'+esc(x.id)+'"'+(x.id===EV.sel?' class="rsel"':'')+'><td class="nw">'+esc(fCortaA(x.fecha))+'</td><td>'+esc(x.titulo)+(x.privado?' '+ico('lock','ico'):'')+'</td><td class="nw">'+esc(clase(x.clase))+'</td>'
+          +'<td class="nw num">'+x.personas+(x.cupo?' / '+x.cupo:'')+'</td><td class="nw num">'+(x.pase?x.personas_llegaron:'—')+'</td>'
+          +'<td class="nw num">'+(x.estimado!=null?pesos(x.estimado):'—')+'</td><td class="nw num">'+(x.n_gastos?pesos(x.gasto):'—')+'</td><td class="nw num">'+(x.por_persona!=null?pesos(x.por_persona):'—')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+    $('repTodos').querySelectorAll('tr[data-ev]').forEach(function(tr){ tr.onclick=function(){
+      EV.sel=tr.dataset.ev; $('repSel').value=EV.sel; renderTodos(); cargaDet(EV.sel);
+      try{ $('repLista').scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){}
+    }; });
+  }
+  async function cargaDet(id, quieto){
+    if(!id) return; var v=++EV.vez;
+    if(!quieto) $('repDet').innerHTML='<div class="empty">Cargando…</div>';
+    try{ var r=await P.sb.rpc('ev_reporte',{p_evento:id}); if(r.error) throw r.error; if(v!==EV.vez) return; EV.det=r.data; renderDet(); }
+    catch(x){ if(v===EV.vez) $('repDet').innerHTML='<div class="empty">No se pudo leer el evento: '+esc(falla(x))+'</div>'; }
+  }
+  function capRep(){ return !!(EV.det&&EV.det.captura)&&!(P&&P.consulta); }
+  function renderDet(){
+    var d=EV.det; if(!d){ $('repDet').innerHTML=''; return; }
+    var c=d.cuentas||{}, cap=capRep(), pr=c.presupuesto;
+    var h='<div class="rep-h"><div><h3>'+esc(d.titulo)+'</h3><div class="sub">'+esc(fLarga(parse(d.fecha))+' de '+parse(d.fecha).getFullYear()+(d.hora?' · '+d.hora:'')+(d.lugar?' · '+d.lugar:''))
+      +' · '+esc(clase(d.clase))+(d.organiza?' · organiza '+esc(d.organiza):'')+'</div></div>'
+      +'<div class="btns"><button type="button" class="btn sm" data-rresp>Ver respuestas</button></div></div>';
+    // asistencia
+    h+='<div class="rk"><div><div class="k">Confirmados</div><div class="v" style="color:var(--ok)">'+c.van+'</div><div class="s">'+plural(c.personas,'persona','personas')+' con acompañantes'+(c.cupo?' · cupo '+c.cupo:'')+'</div></div>'
+      +'<div><div class="k">No van</div><div class="v" style="color:var(--danger)">'+c.no_van+'</div><div class="s">con su motivo</div></div>'
+      +'<div><div class="k">Sin contestar</div><div class="v" style="color:var(--accent-ink)">'+c.sin_contestar+'</div><div class="s">de '+plural(c.invitados,'invitado','invitados')+'</div></div>'
+      +'<div><div class="k">Llegaron</div><div class="v">'+(c.pase?c.personas_llegaron:'—')+'</div><div class="s">'+(c.pase?plural(c.llegaron,'invitado','invitados')+' con acompañantes':d.pase_abierto?'falta pasar lista':'pase de lista el día del evento')+'</div></div></div>';
+    h+='<div class="rep-g">';
+    // presupuesto y lo gastado
+    var dif=c.diferencia;
+    h+='<div class="rep-c"><h4>Presupuesto y lo gastado'+(cap?'<button type="button" class="btn sm" data-rpres>'+(pr?'Cambiar presupuesto':'Poner presupuesto')+'</button>':'')+'</h4>'
+      +'<div class="rep-l"><span class="t">Presupuesto</span><span class="r">'+esc(presTxt(pr))+'</span>'
+      +'<span class="t">Lo que debería costar'+(pr&&pr.modo==='persona'?' ('+plural(c.personas,'persona confirmada','personas confirmadas')+')':'')+'</span><span class="r">'+(c.estimado!=null?pesos(c.estimado):'—')+'</span>'
+      +'<span class="t">Lo que se gastó (Caja chica)</span><span class="r">'+(c.n_gastos?pesos(c.gasto):'—')+'</span>'
+      +(c.gasto_por_autorizar>0?'<span class="t">de ello, por autorizar</span><span class="r">'+pesos(c.gasto_por_autorizar)+'</span>':'')
+      +'<span class="t tot">Diferencia</span><span class="r tot '+(dif>0?'mas':dif<0?'menos':'')+'">'+(dif==null?'—':(dif>0?'+':dif<0?'−':'')+pesos(Math.abs(dif)))+'</span>'
+      +'<span class="t">Salió por persona ('+(c.por_persona_base==='llegaron'?'con los que llegaron':'con los confirmados')+')</span><span class="r">'+(c.por_persona!=null?pesos(c.por_persona):'—')+'</span></div>'
+      +(pr&&pr.nota?'<p class="note">'+esc(pr.nota)+'</p>':'')
+      +(pr?'<p class="note">Lo puso '+esc(pr.cambiado_por||'')+(pr.cambiado?' el '+esc(window.PROFASE_HORA.fechaHora(pr.cambiado,false)):'')+'.</p>':'')
+      +((d.gastos||[]).length?'<div class="tablebox"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Importe</th><th>Estatus</th></tr></thead><tbody>'
+        +d.gastos.map(function(g){ return '<tr><td class="nw">'+esc(fCortaA(g.fecha))+'</td><td>'+esc(g.descripcion||g.categoria)+(g.persona?'<br><small style="color:var(--ink-3)">'+esc(g.persona)+'</small>':'')+'</td><td class="nw num">'+pesos(g.importe)+'</td><td class="nw">'+esc(g.estatus==='registrado'?'Por autorizar':g.estatus==='autorizado'?'Autorizado':g.estatus==='reembolsado'?'Reembolsado':g.estatus)+'</td></tr>'; }).join('')
+        +'</tbody></table></div>':'<p class="note">Todavía no hay gastos ligados. En Caja chica, al capturar un gasto interno, escoge este evento en «Evento PROFASE».</p>')
+      +'</div>';
+    // por área
+    h+='<div class="rep-c"><h4>Por área</h4><div class="tablebox"><table><thead><tr><th>Área</th><th>Van</th><th>Personas</th><th>No van</th><th>Sin contestar</th>'+(c.pase?'<th>Llegaron</th>':'')+'</tr></thead><tbody>'
+      +(d.areas||[]).map(function(a){ return '<tr><td>'+esc(a.area)+'</td><td class="num">'+a.van+'</td><td class="num">'+a.personas+'</td><td class="num">'+a.no_van+'</td><td class="num">'+a.sin_contestar+'</td>'+(c.pase?'<td class="num">'+a.llegaron+'</td>':'')+'</tr>'; }).join('')
+      +'</tbody></table></div></div>';
+    // pase de lista
+    var L=(d.personas||[]);
+    h+='<div class="rep-c"><h4>Pase de lista'+(c.pase?'<span class="note">'+plural(c.llegaron,'llegó','llegaron')+' de '+c.van+' confirmados</span>':'')+'</h4>';
+    if(!d.pase_abierto) h+='<p class="note">Se abre el día del evento ('+esc(fLarga(parse(d.fecha)))+'). Ese día '+(cap?'marcas':'RH marca')+' quién llegó y con cuántos acompañantes, para compararlo con los que confirmaron.</p>';
+    else {
+      var mx=Math.max(d.max_acomp||0,1);
+      h+='<div class="tablebox"><table><thead><tr><th>Nombre</th><th>Confirmó</th><th>Llegó</th><th>Acompañantes</th></tr></thead><tbody>'
+        +L.map(function(x){
+          var conf=x.respuesta==='si'?'Va'+(x.acompanantes?' + '+x.acompanantes:''):x.respuesta==='no'?'No va':'Sin contestar';
+          var tope=Math.max(mx, x.acompanantes||0), op='';
+          for(var i=0;i<=Math.min(tope,3);i++) op+='<option value="'+i+'"'+((x.acomp_llegaron||0)===i?' selected':'')+'>'+i+'</option>';
+          return '<tr><td class="nom">'+esc(x.nombre)+(x.area?'<br><small style="color:var(--ink-3)">'+esc(x.area)+'</small>':'')+'</td><td class="nw"><span class="asis '+(x.respuesta||'pend')+'">'+esc(conf)+'</span></td>'
+            +(cap?'<td class="nw"><label class="pase-ck"><input type="checkbox" data-pase="'+esc(x.usuario)+'"'+(x.llego?' checked':'')+' aria-label="Llegó '+esc(x.nombre)+'">Llegó</label></td>'
+                 +'<td class="nw"><select class="pac" data-pac="'+esc(x.usuario)+'"'+(x.llego?'':' disabled')+' aria-label="Acompañantes de '+esc(x.nombre)+'">'+op+'</select></td>'
+                :'<td class="nw">'+(x.llego?'Sí':x.llego===false?'No':'—')+'</td><td class="nw num">'+(x.llego?(x.acomp_llegaron||0):'—')+'</td>')
+            +'</tr>';
+        }).join('')+'</tbody></table></div>';
+    }
+    h+='</div>';
+    // comparar con los anteriores del mismo tipo
+    var A=d.antes||[];
+    h+='<div class="rep-c"><h4>Comparado con los anteriores</h4>'
+      +(A.length?'<div class="tablebox"><table><thead><tr><th>Evento</th><th>Confirmados</th><th>Llegaron</th><th>Gastado</th><th>Por persona</th></tr></thead><tbody>'
+        +[{titulo:d.titulo+' (este)',fecha:d.fecha,personas:c.personas,pase:c.pase,personas_llegaron:c.personas_llegaron,gasto:c.gasto,n_gastos:c.n_gastos,por_persona:c.por_persona}].concat(A).map(function(x){
+          return '<tr><td>'+esc(x.titulo)+'<br><small style="color:var(--ink-3)">'+esc(fCortaA(x.fecha))+'</small></td><td class="num">'+x.personas+'</td><td class="num">'+(x.pase?x.personas_llegaron:'—')+'</td>'
+            +'<td class="nw num">'+(x.n_gastos?pesos(x.gasto):'—')+'</td><td class="nw num">'+(x.por_persona!=null?pesos(x.por_persona):'—')+'</td></tr>'; }).join('')
+        +'</tbody></table></div>':'<p class="note">Cuando haya eventos anteriores del mismo tipo («'+esc(clase(d.clase))+'»), aquí se comparan: personas, lo gastado y cuánto salió por persona.</p>')
+      +'</div>';
+    h+='</div>';
+    $('repDet').innerHTML=h;
+    var rr=$('repDet').querySelector('[data-rresp]'); if(rr) rr.onclick=function(){ abrirRespuestas(d.id); };
+    var rp=$('repDet').querySelector('[data-rpres]'); if(rp) rp.onclick=editaPresupuesto;
+    $('repDet').querySelectorAll('[data-pase]').forEach(function(ck){ ck.onchange=function(){
+      var u=ck.dataset.pase, sl=$('repDet').querySelector('[data-pac="'+u+'"]');
+      if(sl){ sl.disabled=!ck.checked; if(!ck.checked) sl.value='0'; }
+      marcaPase(u, ck.checked, sl?+sl.value:0, ck);
+    }; });
+    $('repDet').querySelectorAll('[data-pac]').forEach(function(sl){ sl.onchange=function(){
+      var ck=$('repDet').querySelector('[data-pase="'+sl.dataset.pac+'"]'); marcaPase(sl.dataset.pac, !!(ck&&ck.checked), +sl.value, sl);
+    }; });
+  }
+  async function marcaPase(u, llego, ac, el){
+    if(!capRep()) return;
+    el.disabled=true;
+    try{ var r=await P.sb.rpc('ev_pase_marca',{p_evento:EV.det.id,p_usuario:u,p_llego:llego,p_acompanantes:ac}); if(r.error) throw r.error; EV.hora=0; await cargaDet(EV.det.id, true); }
+    catch(x){ toast('No se pudo guardar: '+falla(x)); el.disabled=false; }
+  }
+  function editaPresupuesto(){
+    var d=EV.det; if(!d||!capRep()) return; var pr=(d.cuentas||{}).presupuesto;
+    ventana('<h3>Presupuesto · '+esc(d.titulo)+'</h3><p class="sub">'+esc(fLarga(parse(d.fecha)))+'. Lo que debería costar se calcula solo; lo gastado sale de la Caja chica.</p>'
+      +'<div class="f"><span class="lbl">¿Cómo es el costo?</span><div class="rep-modo"><label><input type="radio" name="rmodo" value="persona"'+(!pr||pr.modo==='persona'?' checked':'')+'>Por persona</label><label><input type="radio" name="rmodo" value="total"'+(pr&&pr.modo==='total'?' checked':'')+'>Total del evento</label></div></div>'
+      +'<div class="f" style="margin-top:10px"><label for="rmonto">Monto</label><input type="number" id="rmonto" min="0" step="0.01" inputmode="decimal" value="'+(pr?pr.monto:'')+'" placeholder="0.00"></div>'
+      +'<div class="f" style="margin-top:10px"><label for="rnota">Nota (opcional)</label><textarea id="rnota" rows="2" maxlength="500" placeholder="Ej. Cena, bebidas y salón">'+esc(pr?pr.nota:'')+'</textarea></div>'
+      +'<div class="err" role="alert" style="color:var(--danger);font-size:13px;margin-top:8px"></div>'
+      +'<div class="mact">'+(pr?'<button type="button" class="btn" data-quita>Quitar presupuesto</button>':'')+'<button type="button" class="btn" data-x>Cancelar</button><button type="button" class="btn primary" data-ok>Guardar</button></div>',
+    function(ov,cerrar){
+      var er=ov.querySelector('.err');
+      async function manda(modo, monto, nota){
+        try{ var r=await P.sb.rpc('ev_presupuesto_guarda',{p_evento:d.id,p_modo:modo,p_monto:monto,p_nota:nota}); if(r.error) throw r.error;
+          cerrar(); toast(monto==null?'Presupuesto quitado':'Presupuesto guardado'); EV.hora=0; cargaRep(true); }
+        catch(x){ er.textContent='No se pudo guardar: '+falla(x); }
+      }
+      ov.querySelector('[data-x]').onclick=cerrar;
+      ov.querySelector('[data-ok]').onclick=function(){
+        var m=(ov.querySelector('input[name=rmodo]:checked')||{}).value, v=ov.querySelector('#rmonto').value;
+        if(v===''||isNaN(+v)||+v<0){ er.textContent='Escribe el monto.'; return; }
+        manda(m, Math.round(+v*100)/100, ov.querySelector('#rnota').value.trim());
+      };
+      var q=ov.querySelector('[data-quita]'); if(q) q.onclick=function(){ manda(null, null, ''); };
+    });
+  }
+  async function excelRep(btn){
+    if(!EV.lista){ toast('Espera a que cargue el reporte.'); return; }
+    await conBoton(btn, async function(){
+      var MK=window.PROFASE_MARCA, EX=await MK.excelJS(), d=EV.det, tit='Reporte de eventos';
+      var wb=MK.libro(EX, tit);
+      // 1. todos los eventos
+      var ws=wb.addWorksheet('Eventos'), head=['Fecha','Evento','Tipo','Invitados','Van','Personas','No van','Sin contestar','Cupo','Llegaron (personas)','Presupuesto','Debería costar','Gastado','Diferencia','Por persona'];
+      ws.columns=[{width:13},{width:34},{width:18},{width:10},{width:8},{width:10},{width:9},{width:12},{width:8},{width:12},{width:24},{width:14},{width:14},{width:14},{width:13}];
+      var g=MK.encabezado(wb, ws, head.length, {titulo:tit, lineas:[plural(EV.lista.length,'evento','eventos'), 'Exportado el '+cuandoTxt()]});
+      head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
+      MK.cabecera(ws, g, 1, head.length, {derecha:[4,5,6,7,8,9,10,12,13,14,15]});
+      EV.lista.forEach(function(x,k){
+        var r=ws.getRow(g+1+k);
+        r.values=[fechaXls(x.fecha), x.titulo, clase(x.clase), x.invitados, x.van, x.personas, x.no_van, x.sin_contestar, x.cupo||'', x.pase?x.personas_llegaron:'',
+                  presTxt(x.presupuesto), x.estimado!=null?+x.estimado:'', x.n_gastos?+x.gasto:'', x.diferencia!=null?+x.diferencia:'', x.por_persona!=null?+x.por_persona:''];
+        r.getCell(1).numFmt='dd-mmm-yyyy'; [12,13,14,15].forEach(function(cn){ r.getCell(cn).numFmt='$#,##0.00'; });
+      });
+      if(EV.lista.length) MK.cuerpo(ws, g+1, g+EV.lista.length, 1, head.length);
+      ws.views=[{state:'frozen',ySplit:g,showGridLines:false}]; MK.impresion(ws, {repetir:g});
+      // 2. el evento escogido: asistencia y pase de lista
+      if(d){
+        var c=d.cuentas||{}, w2=wb.addWorksheet('Asistencia'), h2=['Nombre','Área','Respuesta','Acompañantes','Motivo','Llegó','Acompañantes que llegaron'];
+        w2.columns=[{width:32},{width:16},{width:14},{width:13},{width:36},{width:9},{width:14}];
+        var g2=MK.encabezado(wb, w2, h2.length, {titulo:d.titulo, lineas:[fLarga(parse(d.fecha))+' de '+parse(d.fecha).getFullYear()+(d.hora?' · '+d.hora:'')+(d.lugar?' · '+d.lugar:''),
+          c.van+' van ('+c.personas+' personas) · '+c.no_van+' no van · '+c.sin_contestar+' sin contestar'+(c.cupo?' · cupo '+c.cupo:'')+(c.pase?' · llegaron '+c.personas_llegaron+' personas':''),
+          'Presupuesto: '+presTxt(c.presupuesto)+(c.estimado!=null?' · debería costar '+pesos(c.estimado):'')+(c.n_gastos?' · gastado '+pesos(c.gasto):'')+(c.por_persona!=null?' · por persona '+pesos(c.por_persona):'')]});
+        h2.forEach(function(t,i){ w2.getCell(g2,i+1).value=t; });
+        MK.cabecera(w2, g2, 1, h2.length, {derecha:[4,7]});
+        (d.personas||[]).forEach(function(x,k){
+          w2.getRow(g2+1+k).values=[x.nombre, x.area||'', x.respuesta==='si'?'Va':x.respuesta==='no'?'No va':'Sin contestar', x.respuesta==='si'?(x.acompanantes||0):'', x.motivo||'',
+                                     x.llego?'Sí':x.llego===false?'No':'', x.llego?(x.acomp_llegaron||0):''];
+        });
+        if((d.personas||[]).length) MK.cuerpo(w2, g2+1, g2+d.personas.length, 1, h2.length);
+        w2.views=[{state:'frozen',ySplit:g2,showGridLines:false}]; MK.impresion(w2, {repetir:g2});
+        // 3. por área
+        var w3=wb.addWorksheet('Por área'), h3=['Área','Invitados','Van','Personas','No van','Sin contestar','Llegaron'];
+        w3.columns=[{width:22},{width:11},{width:8},{width:10},{width:9},{width:13},{width:10}];
+        var g3=MK.encabezado(wb, w3, h3.length, {titulo:d.titulo+' · por área', lineas:['Exportado el '+cuandoTxt()]});
+        h3.forEach(function(t,i){ w3.getCell(g3,i+1).value=t; });
+        MK.cabecera(w3, g3, 1, h3.length, {derecha:[2,3,4,5,6,7]});
+        (d.areas||[]).forEach(function(a,k){ w3.getRow(g3+1+k).values=[a.area, a.invitados, a.van, a.personas, a.no_van, a.sin_contestar, c.pase?a.llegaron:'']; });
+        if((d.areas||[]).length) MK.cuerpo(w3, g3+1, g3+d.areas.length, 1, h3.length);
+        MK.impresion(w3, {repetir:g3});
+        // 4. lo gastado
+        var w4=wb.addWorksheet('Gastos'), h4=['Fecha','Concepto','Quién','Importe','Estatus'];
+        w4.columns=[{width:13},{width:36},{width:26},{width:14},{width:14}];
+        var g4=MK.encabezado(wb, w4, h4.length, {titulo:d.titulo+' · lo gastado (Caja chica)', lineas:[(c.n_gastos?'Total '+pesos(c.gasto):'Sin gastos ligados'), 'Exportado el '+cuandoTxt()]});
+        h4.forEach(function(t,i){ w4.getCell(g4,i+1).value=t; });
+        MK.cabecera(w4, g4, 1, h4.length, {derecha:[4]});
+        (d.gastos||[]).forEach(function(x,k){ var r=w4.getRow(g4+1+k); r.values=[fechaXls(x.fecha), x.descripcion||x.categoria, x.persona||'', +x.importe, x.estatus==='registrado'?'Por autorizar':mayus(x.estatus)]; r.getCell(1).numFmt='dd-mmm-yyyy'; r.getCell(4).numFmt='$#,##0.00'; });
+        if((d.gastos||[]).length) MK.cuerpo(w4, g4+1, g4+d.gastos.length, 1, h4.length);
+        MK.impresion(w4, {repetir:g4});
+      }
+      await guardaLibro(wb, 'Reporte de eventos'+(d?' · '+String(d.titulo||'').replace(/[\\/:*?"<>|]+/g,' ').slice(0,50):'')+'.xlsx');
+    });
+  }
+  document.addEventListener('visibilitychange', function(){ if(EVMODO&&!document.hidden&&!$('p-rep').hidden&&Date.now()-EV.hora>60000) cargaRep(true); });
+  $('evTabs').addEventListener('click', function(e){ var b=e.target.closest('[data-e]'); if(b) evMuestra(b.dataset.e); });
+
   /* ---------- eventos ---------- */
   function renderEv(){
     var hk=sel0();
@@ -2008,6 +2300,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       : '<div class="t">Los cumpleaños todavía no están capturados. Mientras, ya ves los días festivos e inhábiles.</div>';
   }
   function renderTabs(){
+    if(EVMODO){ renderEvTabs(); return; }
     var ve=(tab==='cli'&&!veCli)?'cal':tab;
     if(ve==='prox') cargaAgenda();   // «Clientes» se recuerda, pero sale hasta que llega su lista
     document.querySelectorAll('#tabs button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.t===ve)); });
@@ -2449,6 +2742,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     else if(a==='excel-mes') excelMes(b);
     else if(a==='excel-col') excelColab(b);
     else if(a==='excel-cli') excelCli(b);
+    else if(a==='excel-rep') excelRep(b);
     else if(a==='plantilla') excelPlantilla(b);
     else if(a==='subir'){ $('xlsIn').value=''; $('xlsIn').click(); }
   });
@@ -2458,7 +2752,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     catch(err){ toast('No se pudo leer el Excel: '+falla(err)); }
   });
   $('tabs').addEventListener('click', function(e){
-    var b=e.target.closest('button'); if(!b||RHMODO) return;
+    var b=e.target.closest('button'); if(!b||RHMODO||EVMODO) return;
     tab=b.dataset.t; try{ localStorage.setItem('portal.cal.tab',tab); }catch(x){}
     renderTabs();
   });
@@ -2495,8 +2789,10 @@ button.kpi:focus-visible{outline-offset:-3px}
   MESES.forEach(function(m,i){ var o=document.createElement('option'); o.value=i+1; o.textContent=m; $('fMesCli').appendChild(o); });
   ['qCli','fMesCli'].forEach(function(id){ $(id).addEventListener('input', renderCli); });
   try{ var t0=localStorage.getItem('portal.cal.tab'); if(['cal','prox','col','ev','cli'].indexOf(t0)>=0) tab=t0; }catch(e){}
-  if(RHMODO){ tab=RHMODO==='colab'?'col':'ev'; $('tabs').hidden=true; document.querySelector('header h1').textContent=RHMODO==='colab'?'Colaboradores':'Eventos PROFASE';
-    document.title='Portal PROFASE · RH · '+(RHMODO==='colab'?'Colaboradores':'Eventos PROFASE'); }
+  if(RHMODO){ tab='col'; $('tabs').hidden=true; document.querySelector('header h1').textContent='Colaboradores';
+    document.title='Portal PROFASE · RH · Colaboradores'; }
+  if(EVMODO){ tab='ev'; $('tabs').hidden=true; $('evTabs').hidden=false; document.querySelector('header h1').textContent='Eventos PROFASE';
+    document.title='Portal PROFASE · Agenda · Eventos PROFASE'; VISTA='mes'; $('vistas').hidden=true; $('legend').hidden=true; }
   if(window.top===window.self) $('logo').hidden=false;
 
   /* ---------- arranque ---------- */
@@ -2520,14 +2816,15 @@ button.kpi:focus-visible{outline-offset:-3px}
     }catch(e){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
     try{ dl=await window.claude.use('downloads'); }catch(e){ dl=null; }
     try{ var rc=await P.sb.rpc('rh_colab_puedo'); if(!rc.error&&rc.data){ colabCap=rc.data.captura===true; colabVe=rc.data.ve===true; } }catch(e){}
-    try{ var ra=await P.sb.rpc('rh_ausencias_cal',{p_desde:null,p_hasta:null}); if(!ra.error&&Array.isArray(ra.data)){ veAus=true; ausencias=ra.data; } }catch(e){}
+    if(!EVMODO) try{ var ra=await P.sb.rpc('rh_ausencias_cal',{p_desde:null,p_hasta:null}); if(!ra.error&&Array.isArray(ra.data)){ veAus=true; ausencias=ra.data; } }catch(e){}
+    if(EVMODO) try{ var re=await P.sb.rpc('ev_estado'); if(!re.error&&re.data) EV.est=re.data; }catch(e){}
 
     $('whoami').textContent='';
     var b=document.createElement('b'); b.textContent=(yo&&yo.nombre)||''; $('whoami').appendChild(b);
     $('whoami').appendChild(document.createTextNode(capCol()?' · captura colaboradores':captura()?' · captura eventos':' · consulta'));
     $('kpis').hidden=false; $('contenido').hidden=false;
     sel=hoyK();
-    renderLegend(); render(); cargaCli();
+    renderLegend(); render(); if(!EVMODO) cargaCli();
     arrancaAgenda().then(function(){ renderLegend(); });
 
     db.collection('cal_colab').onSnapshot(function(snap){
@@ -2539,6 +2836,7 @@ button.kpi:focus-visible{outline-offset:-3px}
           clase:CLASES[o.clase]?o.clase:'otro', privado:o.privado===true, cliente:o.cliente&&typeof o.cliente==='object'&&o.cliente.g?{id:String(o.cliente.id||''),g:String(o.cliente.g)}:null}; })
         .filter(function(e){ return e.titulo&&/^\d{4}-\d{2}-\d{2}$/.test(e.fecha); });
       cargaEv=true; render(); misPend=false; cargaMis();
+      if(EVMODO&&EV.lista){ EV.hora=0; if(!$('p-rep').hidden) cargaRep(true); }
     }, function(){ cargaEv=true; render(); });
   }
   arranca();

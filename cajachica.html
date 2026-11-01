@@ -336,6 +336,12 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
               <input type="text" id="evento" list="eventosList" maxlength="120" placeholder="Ej. Cumpleaños de noviembre, Fiesta de fin de año, Papelería del mes">
               <datalist id="eventosList"></datalist>
             </div>
+            <!-- Agenda › Eventos PROFASE (1-nov-2026): ligar el gasto a un evento del despacho para su reporte de costos
+                 (ev_para_caja() y el campo «eventoId»; portal/sql/114_eventos_reporte.sql). Opcional. -->
+            <div class="f c12" id="rowEventoId" hidden><label for="eventoId">Evento PROFASE (opcional)</label>
+              <select id="eventoId"><option value="">Ninguno</option></select>
+              <span class="hint">Si es de un evento del despacho (la posada, un festejo), escógelo: entra a lo gastado en su reporte de Agenda › Eventos PROFASE.</span>
+            </div>
 
             <div class="f c12"><label for="descripcion" id="descLbl">Para qué fue</label><input type="text" id="descripcion" required placeholder="Ej. Pago de derechos ante el Registro Público"></div>
 
@@ -673,6 +679,23 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
       : c.rfc ? c.rfc + (c.grupo ? ' · '+c.grupo : '') + (c.estatus && c.estatus!=='Activo' ? ' · '+c.estatus : '')
       : 'Fuera del padrón: se guarda como texto libre';
   });
+  // los eventos del despacho para ligar un gasto interno (ev_para_caja(); solo título y fecha)
+  var EVS=[];
+  async function cargaEventos(){
+    try{
+      var r=await P.sb.rpc('ev_para_caja'); if(r.error||!Array.isArray(r.data)) return;
+      EVS=r.data;
+      var s=$('eventoId'), v=s.value; s.textContent='';
+      var o0=document.createElement('option'); o0.value=''; o0.textContent='Ninguno'; s.appendChild(o0);
+      EVS.forEach(function(e){ var o=document.createElement('option'); o.value=e.id; o.textContent=e.fecha.split('-').reverse().join('/')+' · '+e.titulo; s.appendChild(o); });
+      s.value=v;
+      $('rowEventoId').hidden = formTipo!=='interno' || !EVS.length;
+    }catch(e){}
+  }
+  $('eventoId').addEventListener('change', function(){
+    var e=EVS.filter(function(x){ return x.id===$('eventoId').value; })[0];
+    if(e && !$('evento').value.trim()) $('evento').value=e.titulo;
+  });
   function syncEventos(){
     var vistos={}, box=$('eventosList'); box.textContent='';
     state.movs.forEach(function(m){ if(tipoOf(m)==='interno' && m.evento) vistos[m.evento]=1; });
@@ -690,6 +713,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
     sel.value = ok ? catActual : lista[0].id;
     $('rowCliente').hidden = formTipo==='interno';
     $('rowEvento').hidden = formTipo!=='interno';
+    $('rowEventoId').hidden = formTipo!=='interno' || !EVS.length;
     $('descLbl').textContent = formTipo==='interno' ? 'Concepto' : 'Para qué fue';
     $('descripcion').placeholder = formTipo==='interno' ? 'Ej. Pastel y refrescos' : 'Ej. Pago de derechos ante el Registro Público';
     $('persona').placeholder = formTipo==='interno' ? 'Nombre de quien hizo la compra' : 'Nombre de quien pagó o hizo la vuelta';
@@ -737,6 +761,8 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
     $('persona').value     = mov ? (mov.persona||mov.porNombre||'') : ((yo&&yo.nombre)||'');
     $('cliente').value     = mov ? (mov.cliente||'') : '';
     $('evento').value      = mov ? (mov.evento||'') : '';
+    if(mov && mov.eventoId && !EVS.some(function(x){ return x.id===mov.eventoId; })){ var oe=document.createElement('option'); oe.value=mov.eventoId; oe.textContent=mov.evento||'Evento ligado'; $('eventoId').appendChild(oe); }
+    $('eventoId').value    = mov ? (mov.eventoId||'') : '';
     $('descripcion').value = mov ? (mov.descripcion||'') : '';
     $('importe').value     = mov ? (mov.importe!=null?mov.importe:'') : '';
     $('pago').value        = mov ? (mov.pago||'efectivo') : 'efectivo';
@@ -780,7 +806,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
     var ruta = !interno && !!cat.ruta;
     var campos = {
       tipo: formTipo, fecha: fecha, periodo: ym(fecha), persona: persona,
-      categoria: cat.id, cliente: cli.nombre, clienteRfc: cli.rfc, clienteGrupo: cli.grupo, evento: interno ? evento : '',
+      categoria: cat.id, cliente: cli.nombre, clienteRfc: cli.rfc, clienteGrupo: cli.grupo, evento: interno ? evento : '', eventoId: interno ? $('eventoId').value : '',
       descripcion: $('descripcion').value.trim(), importe: importe, pago: $('pago').value,
       origen: ruta ? $('origen').value.trim() : '', destino: ruta ? $('destino').value.trim() : '',
       km: ruta ? (Number($('km').value)||0) : 0, vehiculo: ruta ? $('vehiculo').value.trim() : '',
@@ -1495,6 +1521,7 @@ td.ck input,th.ck input{width:17px;height:17px;margin:2px 0 0;accent-color:var(-
     if(captura()){
       try{ dl = await window.claude.use('downloads'); }catch(e){ dl=null; }
       db.doc('datos/caja_padron').onSnapshot(function(s){ if(s.exists) cargaPadron(s.data()); }, function(){});
+      if(esRH||esAut()) cargaEventos();
       try{
         var r = await P.sb.from('perfiles').select('nombre').order('nombre');
         var dlp=$('personasList'); dlp.textContent='';
