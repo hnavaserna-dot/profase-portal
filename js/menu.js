@@ -256,12 +256,18 @@
     + '.pm-pie .pm-pmini{display:none}'
     + '}'
     // en el celular la sección se ve COMPLETA (Daniel, 30-oct-2026, con una captura: salía «Altas …»): nunca se corta con
-    // «…» ni se parte a media palabra; si no cabe en un renglón, pasa entera al segundo (y los íconos bajan, pantallas.css)
-    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit{flex:1 1 auto}.pm-tit h1{font-size:17px;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;word-break:normal;-webkit-hyphens:manual;hyphens:manual}}'
-    // la franja de abajo del encabezado en el celular («Datos al…», Notas, «Privado · …»; acomodaInfo(), abajo)
+    // «…» ni se parte a media palabra; si no cabe en un renglón, pasa entera al segundo dentro de su lugar, y el
+    // encabezado sigue en un solo renglón (Daniel, 31-oct-2026, 17:22; pantallas.css y cabeSeccion(), abajo)
+    + '@media (max-width:600px){header.band .tag{display:none}.pm-tit{flex:1 1 auto}.pm-tit h1{font-size:15px;line-height:1.15;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;word-break:normal;-webkit-hyphens:manual;hyphens:manual}}'
+    // la franja de abajo del encabezado («Datos al…», Notas, «Privado · …»): en el celular siempre; en lo demás, solo si
+    // no caben en el renglón del encabezado (acomodaInfo(), abajo)
     // (.meta.pm-info: le gana a «.meta» de la página, que viene después en el código)
     + '.meta.pm-info{display:none}'
-    + '@media (max-width:600px){.meta.pm-info{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;column-gap:14px;row-gap:0;font-size:12.5px;color:var(--muted,#5A6577)}.pm-info>*{margin:6px 0}}'
+    + '.meta.pm-info.pm-con{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;column-gap:14px;row-gap:0;font-size:12.5px;color:var(--muted,#5A6577)}.pm-info>*{margin:6px 0}'
+    // para que el encabezado quepa en un renglón (acomodaInfo(), abajo): primero lo estático, al último el texto del signo
+    + 'header.band.pm-sin-chicos .pt-chicos,header.band.pm-sin-lema .brandtxt,header.band.pm-sin-modulo .pm-crumb{display:none!important}'
+    + 'header.band.pm-apretado .wrap{flex-wrap:nowrap}header.band.pm-apretado .pm-tit{flex:1 1 auto;min-width:0}'
+    + 'header.band.pm-apretado .pm-tit h1{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;word-break:normal;line-height:1.15}'
     + '@media (min-width:901px){body.pm.pm-arriba{padding-left:0!important}body.pm.pm-arriba header.band{margin-left:0}}'
     + '@media (max-width:420px){.pm-tira,.pm-lado{gap:2px}.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
     + '@media (max-width:370px){.pm-tb{width:44px;height:44px}.pm-tb.pm-home{margin:0 3px}}'   // 360 px: la tira de íconos cabía 3 px de más
@@ -500,28 +506,85 @@
      siempre: ☰, el signo, la sección completa, el chat, la campanita, la foto y el claro/oscuro. Lo demás que traía
      («Datos al…», Notas, «Privado · …») baja a una franja justo abajo del encabezado, que se va al deslizar la página.
      Son los mismos botones (con sus funciones); al agrandarse la pantalla regresan al encabezado, en su orden.
-     «Equipo DECOMSA · …» se queda: js/portal.js pone en su lugar la foto y los botones. */
+     «Equipo DECOMSA · …» se queda: js/portal.js pone en su lugar la foto y los botones. Desde el 31-oct-2026 todo va
+     en un solo renglón, en cualquier pantalla (abajo). */
   var info = null, celInfo = window.matchMedia ? matchMedia('(max-width:600px)') : null;
+  /* El encabezado va SIEMPRE en un solo renglón, en cualquier pantalla (Daniel, 31-oct-2026, 17:22 a 17:32, con una
+     captura de su iPhone: «no me gustó que se bajara una línea todo lo demás… lo quiero ver siempre en una sola línea»;
+     «y siempre en una línea en cualquier pantalla»; «dale siempre preferencia a lo animado que a lo estático»). Si no
+     cabe todo, se prueba en este orden y se queda el primero que cabe:
+       1. todo en el encabezado;
+       2. «Datos al…», Notas, «Privado · …» bajan a la franja de abajo (no se pierden; son los mismos botones);
+       3. además se quitan los dos adornos quietos de junto a la campanita (lo estático; js/temporada.js);
+       4. además se quita el texto «PROFASE · Asesoría Contable, Legal y Fiscal» junto al signo;
+       5. y el nombre de la sección, completo, pasa a dos renglones dentro de su lugar (pm-apretado).
+     El módulo chiquito de arriba de la sección, si no cabe completo, no sale (pm-sin-modulo).
+     El signo oficial y su adorno animado nunca se quitan. En el celular (600 px o menos) siempre es el paso 5 (los adornos
+     quietos ni salen; pantallas.css). En el último paso, si aun así no cabe, cabeSeccion() le baja la letra a la sección
+     poco a poco (nunca «…» ni a media palabra). */
+  var cabObs = [], acomodando = false, altoCab = -1, anchoCab = -1, pidioCab = 0;
+  function cabeSeccion(minimo) {
+    if (!titulo) return;
+    titulo.style.fontSize = '';
+    if (!titulo.getClientRects().length) return;
+    var base = parseFloat(getComputedStyle(titulo).fontSize) || 15;
+    for (var px = base; px >= minimo; px -= 0.5) {
+      if (px !== base) titulo.style.fontSize = px + 'px';
+      var lh = parseFloat(getComputedStyle(titulo).lineHeight) || px * 1.15;
+      if (titulo.scrollWidth <= titulo.clientWidth + 1 && titulo.getBoundingClientRect().height <= lh * 2 + 1 && enUnRenglon()) return;
+    }
+  }
+  function enUnRenglon() {
+    var w = hdr.querySelector('.wrap') || hdr, b = hdr.querySelector('.brand');
+    if (!b) return true;
+    var bb = b.getBoundingClientRect(), ok = true;
+    Array.prototype.forEach.call(w.querySelectorAll(':scope > *, :scope > .meta > *'), function (e) {
+      if (!ok || e === b || e.classList.contains('meta') || e.classList.contains('pm-oculto') || !e.getClientRects().length) return;
+      var r = e.getBoundingClientRect();
+      if (r.width && (r.top >= bb.bottom - 2 || r.bottom <= bb.top + 2)) ok = false;
+    });
+    return ok && w.scrollWidth <= w.clientWidth + 1 && (!titulo || titulo.scrollWidth <= titulo.clientWidth + 1);
+  }
+  function extrasAbajo(meta, abajo) {
+    if (abajo) Array.prototype.slice.call(meta.children).forEach(function (el) {
+      if (el === sw || el.classList.contains('pu-par') || el.classList.contains('equipo')) return;
+      info.appendChild(el);
+    });
+    else if (info.firstChild) {
+      var pu = meta.querySelector(':scope > .pu-par, :scope > .equipo');
+      while (info.firstChild) meta.insertBefore(info.firstChild, pu);
+    }
+    info.classList.toggle('pm-con', !!info.firstChild);
+  }
   function acomodaInfo() {
-    if (!hdr || !celInfo) return;
+    if (!hdr || !celInfo || acomodando) return;
     var meta = hdr.querySelector('.meta');
     if (!meta) return;
+    acomodando = true;
     if (!info) {
       info = document.createElement('div');
       info.className = 'wrap meta pm-info';
       info.setAttribute('role', 'group'); info.setAttribute('aria-label', 'Datos de la sección');
     }
     if (hdr.nextElementSibling !== info) hdr.parentNode.insertBefore(info, hdr.nextSibling);   // siempre pegada al encabezado
-    if (celInfo.matches) {
-      Array.prototype.slice.call(meta.children).forEach(function (el) {
-        if (el === sw || el.classList.contains('pu-par') || el.classList.contains('equipo')) return;
-        info.appendChild(el);
-      });
-    } else if (info.firstChild) {
-      var pu = meta.querySelector(':scope > .pu-par, :scope > .equipo');
-      while (info.firstChild) meta.insertBefore(info.firstChild, pu);
+    var cel = celInfo.matches, pasos = cel ? [[1, 1, 1, 1]] : [[0, 0, 0, 0], [1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]];
+    for (var i = 0; i < pasos.length; i++) {
+      extrasAbajo(meta, pasos[i][0]);
+      hdr.classList.toggle('pm-sin-chicos', !!pasos[i][1]);
+      hdr.classList.toggle('pm-sin-lema', !!pasos[i][2]);
+      hdr.classList.toggle('pm-apretado', !!pasos[i][3] && !cel);
+      if (i === pasos.length - 1) cabeSeccion(cel ? 11 : 12);
+      else titulo.style.fontSize = '';
+      if (enUnRenglon()) break;
     }
+    // el módulo chiquito de arriba de la sección («PROFASE», «WORKFLOW»…): si no cabe completo, no sale (nunca «PROFA…»)
+    hdr.classList.remove('pm-sin-modulo');
+    if (crumb && crumb.getClientRects().length && crumb.scrollWidth > crumb.clientWidth + 1) hdr.classList.add('pm-sin-modulo');
+    var r = hdr.getBoundingClientRect(); altoCab = Math.round(r.height); anchoCab = Math.round(r.width);
+    cabObs.forEach(function (o) { o.takeRecords(); });   // lo que movimos aquí no vuelve a llamar
+    acomodando = false;
   }
+  function pideAcomodo() { if (!pidioCab) pidioCab = requestAnimationFrame(function () { pidioCab = 0; acomodaInfo(); }); }
 
   function arranca() {
     sw = document.querySelector('header .vsw');
@@ -640,12 +703,22 @@
     arriba();
     // la franja de abajo del encabezado en el celular: lo que llegue después al encabezado (la foto la pone js/portal.js)
     // y lo que otra pestaña ponga junto a él (el aviso del Calendario) no la separan del encabezado
+    // y que todo vaya en un solo renglón: al cambiar el ancho, la letra o lo que trae el encabezado (los adornos de la
+    // temporada, la foto, «Datos al…») se vuelve a acomodar; lo que se mueve aquí mismo no vuelve a llamar
     acomodaInfo();
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      var r = hdr.getBoundingClientRect();
+      if (Math.round(r.width) !== anchoCab || Math.round(r.height) !== altoCab) pideAcomodo();
+    }).observe(hdr);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(pideAcomodo);
     if (celInfo) {
       if (celInfo.addEventListener) celInfo.addEventListener('change', acomodaInfo); else if (celInfo.addListener) celInfo.addListener(acomodaInfo);
-      var metaH = hdr.querySelector('.meta');
-      if (metaH) new MutationObserver(acomodaInfo).observe(metaH, { childList: true });
-      new MutationObserver(acomodaInfo).observe(document.body, { childList: true });
+      var metaH = hdr.querySelector('.meta'), mo;
+      if (metaH) { mo = new MutationObserver(pideAcomodo); mo.observe(metaH, { childList: true }); cabObs.push(mo); }
+      mo = new MutationObserver(pideAcomodo); mo.observe(document.body, { childList: true }); cabObs.push(mo);
+      // la sección o su módulo cambian (los pone esta página o la pestaña): se vuelve a acomodar
+      mo = new MutationObserver(pideAcomodo); mo.observe(titulo, { childList: true, characterData: true, subtree: true }); cabObs.push(mo);
+      mo = new MutationObserver(pideAcomodo); mo.observe(crumb, { childList: true, characterData: true, subtree: true }); cabObs.push(mo);
     }
     alto();
     addEventListener('resize', function () { alto(); if (!movil()) abre(false); recoloca(); popArriba(); });

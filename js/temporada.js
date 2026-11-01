@@ -16,9 +16,14 @@
        menús (la propuesta #9 la había quitado de junto al signo). Pedido de Daniel (31-oct-2026, 16:31): que el Santa
        y la banderita también se muevan: el Santa se ríe meciéndose (con la borla y la boca) y la banderita ondea.
      · Dos adornos chicos arriba a la derecha, junto a la campanita (propuesta #9); quietos, solo brincan si se pican.
+       Solo en iPad, laptop y pantallas más grandes, y solo si caben: el encabezado va siempre en un solo renglón y lo
+       animado gana a lo estático (Daniel, 31-oct-2026, 17:22 a 17:32, con una captura de su iPhone: «no me gustó que se
+       bajara una línea todo lo demás… sacrifica la calabacita»; «prefiero ver la animación a lado de profase que esos 2
+       estáticos»; «solo de la vista del celular; dale siempre preferencia a lo animado que a lo estático»; «y siempre en
+       una línea en cualquier pantalla»). En el celular no salen; en lo demás, js/menu.js (unRenglon()) los quita si no caben.
      · En celular, iPad y computadora por igual, en cualquier navegador (Daniel, 31-oct-2026, desde su iPhone: «Hay forma
-       de ver desde aquí la arañita? Y las demás animaciones que pondrás?»; «y también en la ipad y laptop»): en el
-       celular salen los dos adornos chicos (antes solo uno) y cada dibujo lleva tamaño fijo (fija()). En el iPhone la
+       de ver desde aquí la arañita? Y las demás animaciones que pondrás?»; «y también en la ipad y laptop»): cada
+       dibujo lleva tamaño fijo (fija()); los dos adornos chicos, ver arriba. En el iPhone la
        arañita salía en el ☰ pero no en el encabezado (pegado arriba): Safari no la pintaba dentro de un recuadro con
        «overflow:hidden» que se mueve con «transform». Ahora el hilo es su propia raya que crece y se encoge y la arañita
        se mueve con «bottom»; sin recortes.
@@ -224,7 +229,10 @@
     + '.pt-chicos{display:inline-flex;align-items:flex-end;gap:4px;flex:none;margin-right:2px}'
     + '.pt-chicos button{width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer;display:block;border-radius:6px}'
     + '.pt-chicos button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}.pt-chicos svg{display:block;width:100%;height:100%;overflow:visible}'
-    + '@media (max-width:600px){.pt-chicos{gap:2px}.pt-chicos button{width:24px;height:24px}}'
+    // en el celular no salen (Daniel, 31-oct-2026, 17:22 a 17:32: «solo de la vista del celular; dale siempre preferencia a
+    // lo animado que a lo estático»): el encabezado va en un solo renglón y gana el adorno animado junto al signo. En iPad,
+    // laptop y pantallas más grandes sí salen, salvo que no quepan en el renglón (js/menu.js, unRenglon(), los quita primero)
+    + '@media (max-width:600px){.pt-chicos{display:none}}'
     // junto al signo de cada menú: el adorno a un lado (aparta su lugar para no encimarse en «PROFASE»)
     + '.ptc-caja.ptc-caja{position:relative;display:block;flex:none;padding-right:15px}'   // doble: le gana a «.pm-cab span» del menú ☰
     + '.ptc-adorno{position:absolute;left:32px;pointer-events:none}.ptc-adorno svg{display:block;flex:none;overflow:visible}'
