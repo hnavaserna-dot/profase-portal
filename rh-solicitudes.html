@@ -40,7 +40,11 @@
    con monto y pagos, nunca el sueldo) y ?s=rh (RH: Alex decide con el expediente a la vista y platica con la persona
    después de un «no»; HNR, solo consulta; Daniel). Quién ve qué lo decide la base (portal/sql/115_rh_solicitudes.sql) y
    todo pasa por sus funciones rh_sol_*: los días hábiles, los descuentos y los avisos los calcula la base. Los
-   préstamos no llevan interés. */
+   préstamos no llevan interés.
+   ?s=cob (1-nov-2026, Parte 165; portal/sql/117_cobertura_ausencias.sql): «Coberturas», el plan de cobertura de cada
+   ausencia: lo arma su gerente (Daniel, si se va un gerente); lo del SAT se cubre o se deja terminado antes (la fecha del
+   SAT nunca se mueve y la Profase no se recorre); quien cubre solo ve lo que cubre y solo mientras dura; la dirección
+   nunca entra. Todo por las funciones cob_*. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -199,6 +203,18 @@ tr.click:hover td{background:var(--navy-soft)}
 .decide .btn{flex:1 1 160px}
 .plan{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px}
 .k-chico .v{font-size:20px}
+/* Coberturas (117_cobertura_ausencias.sql) */
+.it.sat{border-left:4px solid var(--red)}
+.cob-it{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px;min-width:0}
+.cob-it.ob{border-left:4px solid var(--accent)}
+.cob-it.no-vig{opacity:.6}
+.cob-it .t{font-weight:600;overflow-wrap:anywhere}
+.cob-it .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cob-it .ctl select,.cob-it .ctl input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13.5px;max-width:100%;min-width:0}
+.cob-it .ctl select{flex:1 1 220px}
+.cob-grid{display:grid;gap:8px}
+.cob-ok{font-size:12px;color:var(--ok)}
+@media (max-width:700px){.cob-it .ctl select,.cob-it .ctl input{font-size:16px;width:100%}}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -282,6 +298,28 @@ tr.click:hover td{background:var(--navy-soft)}
     </div>
     <p class="ayuda">Quien pidió solo ve «En revisión», «Autorizada», «No autorizada» (cuando ya platicaste con él o ella) o «Cancelada»; nunca quién dijo que no ni por qué. Lo autorizado entra solo a Vacaciones y permisos y al Calendario de los gerentes y la dirección. Los préstamos que aceptas se piden a la dirección como siempre (RH › Préstamos).</p>
   </section>
+
+  <!-- Coberturas (gerentes, RH, la dirección; quien se va y quien cubre, lo suyo) -->
+  <section id="s-cob" hidden>
+    <section class="kpis" id="c-kpis" aria-label="Resumen">
+      <div class="kpi"><div class="l">Por armar</div><div class="v" id="c-k1">0</div><div class="s">planes con algo por decidir</div></div>
+      <div class="kpi"><div class="l">Lo del SAT sin cubrir</div><div class="v" id="c-k2">0</div><div class="s">actividades con fecha del SAT</div></div>
+      <div class="kpi"><div class="l">Fuera hoy</div><div class="v" id="c-k3">0</div><div class="s">personas de vacaciones o con permiso</div></div>
+      <div class="kpi"><div class="l">Lo que cubres hoy</div><div class="v" id="c-k4">0</div><div class="s">actividades del WorkFlow</div></div>
+    </section>
+    <nav class="tabs" id="c-tabs" role="tablist" aria-label="Qué ver">
+      <button type="button" role="tab" data-t="act" aria-selected="true">Próximas y en curso <span class="cta" id="c-n1">0</span></button>
+      <button type="button" role="tab" data-t="ant" aria-selected="false">Anteriores</button>
+    </nav>
+    <div class="card">
+      <div class="filtros">
+        <input type="search" id="c-q" placeholder="Buscar nombre" aria-label="Buscar nombre">
+        <button class="btn" type="button" id="c-xls" data-excel>Excel</button>
+      </div>
+      <div class="lista" id="c-lista"></div>
+    </div>
+    <p class="ayuda">El plan sale solo cuando RH registra unas vacaciones, un permiso o una incapacidad, con lo de esa persona que vence esos días y hasta el día que regresa. La fecha del SAT nunca se mueve y la Profase no se recorre por una ausencia. Quien cubre ve y trabaja solo lo que le tocó, solo mientras la persona no está, y el responsable y quien autoriza no cambian. A la dirección nunca se le pausa ni se le pasa nada.</p>
+  </section>
 </div>
 
 <div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
@@ -298,9 +336,9 @@ tr.click:hover td{background:var(--navy-soft)}
   var PER_1 = { semanal: 'semanal', quincenal: 'quincenal', mensual: 'mensual' };
   var EST_CHIP = { 'En revisión': 'ojo', 'Autorizada': 'ok', 'Registrada': 'ok', 'No autorizada': 'mal', 'Cancelada': '' };
   var SEC = new URLSearchParams(location.search).get('s') || 'mis';
-  if (['mis', 'aut', 'rh'].indexOf(SEC) < 0) SEC = 'mis';
+  if (['mis', 'aut', 'rh', 'cob'].indexOf(SEC) < 0) SEC = 'mis';
   var ABRE_ID = new URLSearchParams(location.search).get('id') || '';
-  var CONSULTA = false, MIAS = null, AUT = null, BJ = null, AT = 'pend', RT = 'dec';
+  var CONSULTA = false, MIAS = null, AUT = null, BJ = null, AT = 'pend', RT = 'dec', COB = null, COBE = null, CT = 'act', YO = '';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
@@ -500,7 +538,8 @@ tr.click:hover td{background:var(--navy-soft)}
     var V = AT === 'pend' ? pend : AT === 'pre' ? pre : hist;
     if (!V.length) { $('a-lista').innerHTML = '<div class="vacio">' + (AT === 'pend' ? 'No tienes nada por decidir.' : AT === 'pre' ? 'No hay préstamos de tu equipo.' : 'Todavía no has decidido ninguna.') + '</div>'; return; }
     $('a-lista').innerHTML = V.map(function (x) {
-      var i = L.indexOf(x), h = '<div class="it' + (x.pendiente ? ' pend' : '') + '" data-id="' + x.id + '"><div class="cab"><b>' + esc(x.nombre) + '</b><span class="mut">La pidió el ' + esc(dia(x.creado)) + '</span></div>';
+      var i = L.indexOf(x), h = '<div class="it' + (x.pendiente ? ' pend' : '') + '" data-id="' + x.id + '"><div class="cab"><b>' + esc(x.nombre) + '</b><span class="mut">La pidió el ' + esc(dia(x.creado)) + '</span></div>'
+        + (x.cubre_a ? '<div class="det">' + chip('Cubres a ' + x.cubre_a, 'na') + ' <span class="mut">mientras no está; tu decisión cuenta por él o ella.</span></div>' : '');
       if (x.paso === 'enterado') {
         h += '<div class="det"><b>' + esc('Préstamo de ' + dinero(x.monto) + ' en ' + pagos(x)) + '</b>, desde la nómina del ' + esc(fecha(x.primer_pago)) + '.' + (x.nota ? '<br><span class="mut">Para qué: ' + esc(x.nota) + '</span>' : '') + '</div>'
           + '<div class="det">' + chip(x.final || 'Con RH', /Autorizada/.test(x.final) ? 'ok' : /No autorizada/.test(x.final) ? 'mal' : 'ojo') + (x.comentario ? ' <span class="mut">Tu comentario: «' + esc(x.comentario) + '»</span>' : '') + '</div>'
@@ -692,6 +731,186 @@ tr.click:hover td{background:var(--navy-soft)}
   $('r-q').addEventListener('input', pintaRh);
   $('r-tipo').addEventListener('change', pintaRh);
 
+
+  /* ---------- Coberturas (117_cobertura_ausencias.sql) ---------- */
+  var DEC_TXT = { termina: 'La deja terminada antes', titular: 'Se queda con él (al regresar)', avisado: 'Se le avisó a quien la agendó' };
+  var CLASE_TXT = { wf: 'WorkFlow', pend: 'Pendiente', cita: 'Cita' };
+  async function cargaCob() {
+    var r = await Promise.all([rpc('cob_lista', { p_viejos: CT === 'ant' }), rpc('cob_estado')]);
+    COB = r[0]; COBE = r[1]; pintaCob();
+  }
+  function cobActual(p) { var hoy = (COB && COB.hoy) || hoyISO(); return p.estado === 'abierto' && p.hasta >= hoy; }
+  function cobPlanes() {
+    var q = norm($('c-q').value);
+    return ((COB && COB.planes) || []).filter(function (p) { return (CT === 'act' ? cobActual(p) : !cobActual(p)) && (!q || norm(p.nombre).indexOf(q) >= 0); });
+  }
+  function cobCuenta(p, c) { return (p.items || []).filter(function (it) { return it.clase === c && it.vig; }).length; }
+  function cobChips(p) {
+    var c = [];
+    if (p.estado === 'terminado') c.push(chip('Ya regresó'));
+    else if (p.faltan) c.push(chip(p.faltan + (p.faltan === 1 ? ' con fecha del SAT sin cubrir' : ' con fecha del SAT sin cubrir'), 'mal'));
+    else if (p.sin_decidir) c.push(chip(p.sin_decidir + ' por decidir', 'ojo'));
+    else c.push(chip('Listo', 'ok'));
+    if (p.estado === 'abierto' && p.empezo) c.push(chip('Fuera hoy', 'az'));
+    if (p.tipo === 'incapacidad') c.push(chip('Incapacidad: no se planea con anticipación'));
+    return c.join(' ');
+  }
+  function pintaCob() {
+    var todos = (COB && COB.planes) || [], act = todos.filter(cobActual);
+    $('c-k1').textContent = act.filter(function (p) { return p.edita && p.sin_decidir; }).length;
+    $('c-k2').textContent = act.reduce(function (n, p) { return n + (p.edita || p.titular ? (p.faltan || 0) : 0); }, 0);
+    $('c-k3').textContent = act.filter(function (p) { return p.empezo; }).length;
+    $('c-k4').textContent = (COBE && COBE.cubro) || 0;
+    $('c-n1').textContent = act.length;
+    document.querySelectorAll('#c-tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.t === CT)); });
+    var V = cobPlanes();
+    if (!V.length) { $('c-lista').innerHTML = '<div class="vacio">' + (CT === 'act' ? 'Nadie de tu equipo tiene una ausencia próxima. Cuando RH registre unas vacaciones, un permiso o una incapacidad, su plan sale aquí solo.' : 'No hay planes anteriores (últimos 90 días).') + '</div>'; return; }
+    $('c-lista').innerHTML = V.map(function (p) {
+      var i = todos.indexOf(p), soloMio = !p.edita && p.titular !== YO && (p.items || []).length > 0 && (p.items || []).every(function (it) { return it.cubre === YO; });
+      return '<div class="it' + (p.faltan && p.edita ? ' sat' : p.sin_decidir && p.edita ? ' pend' : '') + '" data-id="' + p.id + '">'
+        + '<div class="cab"><b>' + esc(p.nombre) + '</b><span class="mut">' + esc(p.tipo_txt) + ', ' + esc(rango(p.desde, p.hasta)) + ' · regresa el ' + esc(fechaL(p.regresa)) + '</span></div>'
+        + '<div class="det">' + cobChips(p) + '</div>'
+        + '<div class="ctx">'
+        + (soloMio ? '<div><b>Lo que cubres</b>' + esc(cobCuenta(p, 'wf')) + ' del WorkFlow</div>'
+                   : '<div><b>Vence esos días</b>' + esc(cobCuenta(p, 'wf')) + ' del WorkFlow · ' + esc(cobCuenta(p, 'pend')) + ' pendientes · ' + esc(cobCuenta(p, 'cita')) + ' citas'
+                     + (p.rcd ? ' · ' + esc(p.rcd) + ' recordatorios pausados' : '') + '</div>'
+                     + '<div><b>Lo arma</b>' + esc((p.arma || []).join(', ')) + '</div>'
+                     + '<div><b>Sus avisos también le llegan a</b>' + esc(p.suplente_n || 'Nadie todavía') + '</div>'
+                     + (p.es_gerente ? '<div><b>Sus autorizaciones de RH las cubre</b>' + esc(p.aut_cubre_n || '') + '</div>' : ''))
+        + '</div>'
+        + '<div class="acc"><button class="btn ' + (p.edita && p.sin_decidir ? 'acento' : '') + '" type="button" data-cp="' + i + '">' + (p.edita && p.estado === 'abierto' ? 'Armar el plan' : 'Ver el plan') + '</button></div></div>';
+    }).join('');
+    $('c-lista').querySelectorAll('[data-cp]').forEach(function (b) { b.onclick = function () { fichaCob(todos[+b.dataset.cp]); }; });
+  }
+  function cobOpciones(p, it) {
+    var o = '<option value="">' + (it.clase === 'pend' ? 'Escoge a quién pasa o cambia la fecha…' : 'Escoge quién lo cubre…') + '</option>';
+    (p.candidatos || []).forEach(function (c) { o += '<option value="c:' + esc(c.u) + '"' + (it.dec === 'cubre' && it.cubre === c.u ? ' selected' : '') + '>' + (it.clase === 'pend' ? 'Pasa a ' : 'Lo cubre ') + esc(c.n) + '</option>'; });
+    if (it.clase === 'wf') {
+      o += '<option value="termina"' + (it.dec === 'termina' ? ' selected' : '') + '>La deja terminada antes</option>';
+      if (!it.ob) o += '<option value="titular"' + (it.dec === 'titular' ? ' selected' : '') + '>Se queda con él (al regresar)</option>';
+    } else o += '<option value="fecha">Cambiar la fecha…</option>';
+    return o;
+  }
+  function cobDecision(it) {
+    if (!it.dec) return '<span class="mut">' + (it.clase === 'cita' ? 'Se avisa sola a quien la agendó.' : 'Sin decidir.') + '</span>';
+    var t = it.dec === 'cubre' ? (it.clase === 'pend' ? 'Pasó a ' : 'Lo cubre ') + (it.cubre_n || '') : it.dec === 'fecha' ? 'Nueva fecha: ' + fechaL(it.nf) : (DEC_TXT[it.dec] || it.dec);
+    return chip(t, it.dec === 'cubre' || it.dec === 'termina' || it.dec === 'fecha' ? 'ok' : it.dec === 'avisado' ? 'az' : '') + (it.decidio ? ' <span class="mut">· ' + esc(it.decidio) + '</span>' : '');
+  }
+  function cobItem(p, it) {
+    var h = '<div class="cob-it' + (it.ob && !it.dec && it.vig ? ' ob' : '') + (it.vig ? '' : ' no-vig') + '" data-it="' + it.id + '">'
+      + '<div class="t">' + esc(it.t) + '</div>'
+      + '<div class="mut">' + (it.s ? esc(it.s) + ' · ' : '') + (it.clase === 'cita' ? esc(fechaL(it.f)) : (it.f ? 'vence ' + esc(fecha(it.f)) : ''))
+      + (it.sat ? ' · SAT ' + esc(fecha(it.sat)) : '') + (it.rol === 'aut' ? ' · ahí autoriza' : it.rol === 'ambos' ? ' · responsable y autoriza' : it.rol === 'invitado' ? ' · invitado' : '') + '</div>'
+      + (it.ob && it.vig ? '<div>' + chip('Fecha del SAT esos días: no se mueve', 'mal') + '</div>' : '');
+    if (!it.vig) return h + '<div class="mut">Ya no aplica: se terminó, cambió de fecha o de persona.</div></div>';
+    if (it.puede && !CONSULTA) {
+      h += '<div class="ctl"><select id="ci-' + it.id + '" aria-label="Qué pasa con «' + esc(it.t) + '»">' + cobOpciones(p, it) + '</select>'
+        + (it.clase === 'pend' ? '<span id="cf-' + it.id + '" hidden><input type="date" id="cd-' + it.id + '" min="' + esc(p.regresa) + '" value="' + esc(p.regresa) + '" aria-label="Nueva fecha"> <button class="btn chico acento" type="button" id="cg-' + it.id + '">Guardar</button></span>' : '')
+        + '<span class="cob-ok" id="ck-' + it.id + '" role="status"></span></div>';
+    } else h += '<div>' + cobDecision(it) + '</div>';
+    return h + '</div>';
+  }
+  function cobSecc(p, clase, titulo, nota) {
+    var L = (p.items || []).filter(function (it) { return it.clase === clase; });
+    if (!L.length) return '';
+    return '<div class="sec"><h3>' + esc(titulo) + '</h3><div class="in cob-grid">' + (nota ? '<div class="mut">' + nota + '</div>' : '') + L.map(function (it) { return cobItem(p, it); }).join('') + '</div></div>';
+  }
+  function cobGerentes(p) {
+    var o = '<option value="">Héctor Daniel Nava (si no escoges)</option>';
+    (p.gerentes || []).forEach(function (g) { o += '<option value="' + esc(g.u) + '"' + (p.aut_cubre === g.u ? ' selected' : '') + '>' + esc(g.n) + '</option>'; });
+    return o;
+  }
+  function cobCuerpo(p) {
+    var ed = p.edita && !CONSULTA, c = '';
+    if (p.faltan && ed) c += '<div class="msg mal">Falta decir quién cubre ' + (p.faltan === 1 ? 'una actividad' : p.faltan + ' actividades') + ' con fecha del SAT. La fecha del SAT no se mueve.</div>';
+    c += '<div class="sec"><h3>Quién y cuándo</h3><div class="in"><div class="dl">'
+      + '<span>Fuera</span><span>' + esc(p.tipo_txt) + ', ' + esc(rango(p.desde, p.hasta)) + '</span>'
+      + '<span>Regresa</span><span>' + esc(fechaL(p.regresa)) + '</span>'
+      + '<span>Lo arma</span><span>' + esc((p.arma || []).join(', ')) + '</span>'
+      + (ed ? '' : '<span>Sus avisos también le llegan a</span><span>' + esc(p.suplente_n || 'Nadie todavía') + '</span>')
+      + (p.es_gerente && !(p.aut_elige && !CONSULTA) ? '<span>Sus autorizaciones de RH</span><span>Las cubre ' + esc(p.aut_cubre_n || '') + '</span>' : '')
+      + (p.rcd ? '<span>Recordatorios</span><span>' + esc(p.rcd) + ' pausados: le suenan el día que regresa</span>' : '<span>Recordatorios</span><span>Los suyos se pausan y le suenan el día que regresa</span>')
+      + '</div>';
+    if (ed) {
+      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-sup">Sus avisos de renovaciones y las autorizaciones que le pidan en el WorkFlow también le llegan a</label><select id="c-sup"><option value="">Nadie</option>'
+        + (p.candidatos || []).map(function (x) { return '<option value="' + esc(x.u) + '"' + (p.suplente === x.u ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join('') + '</select></div></div>';
+    }
+    if (p.es_gerente && p.aut_elige && !CONSULTA) {
+      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-aut">Sus autorizaciones de RH (Por autorizar) las cubre</label><select id="c-aut">' + cobGerentes(p) + '</select></div></div>';
+    }
+    if (ed && p.sin_decidir) {
+      c += '<div class="campos" style="margin-top:12px"><div class="campo ancho"><label for="c-todo">Que lo cubra todo una persona (lo que falta decidir)</label><select id="c-todo"><option value="">Escoge…</option>'
+        + (p.candidatos || []).map(function (x) { return '<option value="' + esc(x.u) + '">' + esc(x.n) + '</option>'; }).join('') + '</select></div></div>'
+        + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="c-todo-ok">Que lo cubra todo</button></div>';
+    }
+    c += '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div></div></div>';
+    c += cobSecc(p, 'wf', 'WorkFlow', ed ? 'Lo del SAT: alguien lo cubre o lo deja terminado antes. Lo demás también puede quedarse con él (la fecha Profase no se recorre). Quien cubre lo ve y lo trabaja solo esos días; responsable y quien autoriza no cambian.' : '')
+      + cobSecc(p, 'pend', 'Pendientes', ed ? 'Pasan a quien cubre o cambian de fecha (desde el día que regresa). A quien lo pidió le llega el aviso.' : '')
+      + cobSecc(p, 'cita', 'Citas', 'A quien la agendó (o a su dueño, si estaba invitado) le llega el aviso para moverla o cambiar quién va.');
+    if (!(p.items || []).length) c += '<div class="sec"><div class="in"><div class="mut">No tiene nada que venza esos días.</div></div></div>';
+    return c;
+  }
+  function cobActualiza(np) {
+    var L = (COB && COB.planes) || [];
+    for (var i = 0; i < L.length; i++) if (L[i].id === np.id) { L[i] = np; break; }
+    pintaCob();
+  }
+  function fichaCob(p) {
+    abre(p.nombre, p.tipo_txt + ', ' + rango(p.desde, p.hasta), cobCuerpo(p));
+    var guarda = async function (llama, okTxt, el) {
+      try {
+        var np = await llama();
+        if (np && np.id) { cobActualiza(np); var y = $('ficha').scrollTop || 0; fichaCob(np); $('ficha').scrollTop = y; }
+        if (el && $(el)) $(el).textContent = okTxt || 'Guardado';
+        avisa(okTxt || 'Guardado.'); aviseAlPortal(); try { window.parent.postMessage({ tipo: 'cob-cambio' }, location.origin); } catch (e) {}
+      } catch (e) { msgEn(falla(e)); }
+    };
+    var s1 = $('c-sup'); if (s1) s1.onchange = function () { var v1 = this.value || null; guarda(function () { return rpc('cob_suplente', { p_plan: p.id, p_usuario: v1 }); }, 'Listo: sus avisos también le llegan a quien escogiste.'); };
+    var s2 = $('c-aut'); if (s2) s2.onchange = function () { var v2 = this.value || null; guarda(function () { return rpc('cob_aut', { p_plan: p.id, p_gerente: v2 }); }, 'Listo: ya quedó quién cubre sus autorizaciones.'); };
+    var t1 = $('c-todo-ok'); if (t1) t1.onclick = function () { if (!$('c-todo').value) { msgEn('Escoge a la persona.'); return; } this.disabled = true; var v3 = $('c-todo').value; guarda(function () { return rpc('cob_todo', { p_plan: p.id, p_cubre: v3 }); }, 'Listo: lo que faltaba lo cubre quien escogiste.'); };
+    (p.items || []).forEach(function (it) {
+      var sel = $('ci-' + it.id); if (!sel) return;
+      sel.onchange = function () {
+        var v = this.value; if (!v) return;
+        if (v === 'fecha') { $('cf-' + it.id).hidden = false; try { $('cd-' + it.id).focus(); } catch (e) {} return; }
+        if ($('cf-' + it.id)) $('cf-' + it.id).hidden = true;
+        guarda(function () { return rpc('cob_decide', { p_item: it.id, p_decision: v.indexOf('c:') === 0 ? 'cubre' : v, p_cubre: v.indexOf('c:') === 0 ? v.slice(2) : null, p_fecha: null, p_nota: null }); },
+          it.clase === 'pend' ? 'Listo: el pendiente ya es de quien escogiste y le llegó el aviso.' : 'Guardado.', 'ck-' + it.id);
+      };
+      var g = $('cg-' + it.id);
+      if (g) g.onclick = function () { var f = $('cd-' + it.id).value; if (!f) { msgEn('Escoge la nueva fecha.'); return; } guarda(function () { return rpc('cob_decide', { p_item: it.id, p_decision: 'fecha', p_cubre: null, p_fecha: f, p_nota: null }); }, 'Listo: el pendiente cambió de fecha y a quien lo pidió le llegó el aviso.'); };
+    });
+  }
+  $('c-tabs').addEventListener('click', async function (e) { var b = e.target.closest('button'); if (!b) return; CT = b.dataset.t; try { await cargaCob(); } catch (er) { error(falla(er)); } });
+  $('c-q').addEventListener('input', pintaCob);
+  $('c-xls').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var V = cobPlanes(), titulo = 'Coberturas de ausencias';
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Coberturas');
+      var head = ['Quién', 'Qué', 'Del', 'Al', 'Regresa', 'Tipo', 'Qué vence', 'Vence', 'Fecha del SAT', 'Qué pasa'];
+      ws.columns = [26, 18, 13, 13, 13, 12, 44, 13, 13, 30].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Exportado el ' + window.PROFASE_HORA.fechaHora(new Date())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      var n = 0;
+      V.forEach(function (p) {
+        var L = (p.items || []).filter(function (it) { return it.vig; });
+        if (!L.length) L = [null];
+        L.forEach(function (it) {
+          var tmp = document.createElement('div'); tmp.innerHTML = it ? cobDecision(it) : '';
+          ws.getRow(f0 + 1 + n).values = [p.nombre, p.tipo_txt, fecha(p.desde), fecha(p.hasta), fecha(p.regresa), it ? CLASE_TXT[it.clase] : '', it ? it.t : 'Nada vence esos días',
+            it && it.f ? fecha(it.f) : '', it && it.sat ? fecha(it.sat) : '', tmp.textContent];
+          n++;
+        });
+      });
+      if (n) MK.cuerpo(ws, f0 + 1, f0 + n, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Coberturas de ausencias.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
   /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
   $('r-xls').onclick = async function () {
     var b = this; b.disabled = true;
@@ -720,8 +939,9 @@ tr.click:hover td{background:var(--navy-soft)}
   var EST = null;
   var TIT = { mis: ['Mis solicitudes', 'Pide aquí tus vacaciones, permisos, incapacidades y préstamos, y mira cómo va cada uno y cuántos días de vacaciones te quedan.'],
               aut: ['Por autorizar', 'Las vacaciones y permisos que pide tu equipo, para que decidas con un motivo de la lista; y los préstamos, para que estés enterado.'],
-              rh: ['Solicitudes', 'Todo lo que pide el equipo: lo que te toca decidir con su expediente a la vista, lo que va en camino y con quién te toca platicar.'] };
-  async function recarga() { try { if (SEC === 'mis') await cargaMis(); else if (SEC === 'aut') await cargaAut(); else await cargaRh(); } catch (e) {} }
+              rh: ['Solicitudes', 'Todo lo que pide el equipo: lo que te toca decidir con su expediente a la vista, lo que va en camino y con quién te toca platicar.'],
+              cob: ['Coberturas', 'Quién cubre lo que vence mientras alguien de tu equipo está de vacaciones, con permiso o incapacidad, y lo que te toca cubrir a ti.'] };
+  async function recarga() { try { if (SEC === 'mis') await cargaMis(); else if (SEC === 'aut') await cargaAut(); else if (SEC === 'cob') { if ($('velo').hidden) await cargaCob(); } else await cargaRh(); } catch (e) {} }
   addEventListener('message', function (ev) { if (ev.origin === location.origin && ev.data && ev.data.tipo === 'rh-sol-recarga') recarga(); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) recarga(); });
   async function arranca() {
@@ -731,11 +951,13 @@ tr.click:hover td{background:var(--navy-soft)}
       if (window.top === window.self) $('logo').hidden = false;
       $('titulo').textContent = TIT[SEC][0]; $('bajada').textContent = TIT[SEC][1];
       document.title = 'Portal PROFASE · RH › ' + TIT[SEC][0];
-      EST = await rpc('rh_estado');
+      try { EST = await rpc('rh_estado'); } catch (er) { if (SEC !== 'cob' && SEC !== 'aut') throw er; EST = {}; }
       var s = (EST && EST.sol) || {};
-      CONSULTA = !!P.consulta;
+      CONSULTA = !!P.consulta; YO = p.usuario;
+      if (SEC === 'aut' || SEC === 'cob') COBE = await rpc('cob_estado');
       if (SEC === 'mis') { if (!s.mis) throw new Error('Esta pantalla todavía no está abierta para ti.'); await cargaMis(); }
-      else if (SEC === 'aut') { if (!s.gerente) throw new Error('Esta pantalla es de los gerentes.'); await cargaAut(); }
+      else if (SEC === 'aut') { if (!s.gerente && !(COBE && COBE.cubro_aut && COBE.cubro_aut.length)) throw new Error('Esta pantalla es de los gerentes.'); await cargaAut(); }
+      else if (SEC === 'cob') { if (!(COBE && COBE.ve)) throw new Error('Esta pantalla es de los gerentes, RH y la dirección.'); await cargaCob(); }
       else { if (!s.bandeja) throw new Error('Esta pantalla es de RH.'); await cargaRh(); CONSULTA = CONSULTA || !BJ.puede; }
       $('consulta').hidden = !P.consulta;
       $('s-' + SEC).hidden = false; $('cargando').hidden = true;
@@ -745,6 +967,7 @@ tr.click:hover td{background:var(--navy-soft)}
                 : SEC === 'rh' ? ((BJ && BJ.items) || []).filter(function (x) { return String(x.id) === ABRE_ID; })[0] : null;
         if (it && SEC === 'rh') fichaRh(it);
         if (it && SEC === 'aut') { AT = it.paso === 'enterado' ? 'pre' : it.pendiente ? 'pend' : 'hist'; pintaAut(); try { document.querySelector('[data-id="' + it.id + '"]').scrollIntoView({ block: 'center' }); } catch (e) {} }
+        if (SEC === 'cob') { var pc = ((COB && COB.planes) || []).filter(function (x) { return String(x.id) === ABRE_ID; })[0]; if (pc) fichaCob(pc); }
       }
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }

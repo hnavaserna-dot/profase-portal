@@ -119,6 +119,9 @@
       { k: 'mis-solicitudes', v: 'rhs', t: 'Mis solicitudes', d: 'Pide vacaciones, permisos, incapacidad o un préstamo, y mira cómo va.' },
       { k: 'por-autorizar', v: 'rha', t: 'Por autorizar', d: 'Lo que pide tu equipo: decide con un motivo de la lista.' },
       { k: 'solicitudes-rh', v: 'rhb', t: 'Solicitudes', d: 'Todo lo que pide el equipo: decidir, en camino y por platicar.' },
+      // Coberturas (1-nov-2026, Parte 165; 117_cobertura_ausencias.sql): el plan de cobertura de las ausencias; lo ven los
+      // gerentes, RH y la dirección, y quien se va o cubre, lo suyo (cob_estado())
+      { k: 'coberturas', v: 'rhk', t: 'Coberturas', d: 'Quién cubre lo que vence mientras alguien de tu equipo está fuera.' },
       { k: 'rh-vacaciones', v: 'rhv', t: 'Vacaciones y permisos', d: 'Quién está fuera y cuántos días le quedan a cada quien.' },
       { k: 'rh-prestamos', v: 'rhp', t: 'Préstamos', d: 'Préstamos al personal, su autorización y sus descuentos.' },
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },

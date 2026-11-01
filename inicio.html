@@ -161,6 +161,19 @@ button{font:inherit;color:inherit}
 /* «Tu agenda» (Daniel, 31-oct-2026, 23:09: «pilas de las nuevas cosas; pendientes, citas, recordatorios»): una pila por
    tema, lo más urgente encima; se desliza con el dedo (o las flechas) para ver lo que sigue. */
 .agenda{margin:0 0 18px}
+/* «Fuera de la ciudad» de la dirección (1-nov-2026): una franja arriba, para todos */
+.fdc{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;background:var(--navy-soft);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:10px 14px;margin:0 0 16px}
+.fdc[hidden]{display:none}
+.fdc>svg{width:22px;height:22px;color:var(--accent-ink);flex:none;margin-top:1px}
+.fdc .fdc-tx{flex:1 1 240px;min-width:0;font-size:13.5px;line-height:1.45;color:var(--ink)}
+.fdc .fdc-tx p{margin:0}
+.fdc .fdc-tx p+p{margin-top:4px}
+.fdc .fdc-tx .s{color:var(--muted);font-size:12.5px}
+.fdc .fdc-no{color:var(--red,#B42318);font-weight:700}
+.fdc .fdc-si{color:var(--green,#1D7A4F);font-weight:700}
+:root[data-theme="dark"] .fdc .fdc-no{color:#F97066}
+:root[data-theme="dark"] .fdc .fdc-si{color:#3DD68C}
+.fdc .btn{flex:none;align-self:center}
 .ag-cab{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 14px;margin:0 0 10px}
 .ag-cab h2{font-size:17px;font-weight:760}
 .ag-res{margin:0;color:var(--muted);font-size:12.5px}
@@ -241,6 +254,7 @@ button{font:inherit;color:inherit}
     </div>
     <div class="der"><span id="datos"></span><button type="button" class="btn" id="recarga">Volver a cargar</button></div>
   </section>
+  <section class="fdc" id="fdc" aria-label="Dirección fuera de la ciudad" hidden></section>
   <section class="agenda" id="agenda" aria-labelledby="ag-t" hidden>
     <div class="ag-cab"><h2 id="ag-t">Tu agenda</h2><p class="ag-res" id="ag-res"></p></div>
     <div class="pilas" id="pilas"></div>
@@ -575,6 +589,7 @@ button{font:inherit;color:inherit}
     $('fecha').textContent = (TITULO[PERFIL] || 'Inicio') + ' · ' + DIAS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESL[d.getUTCMonth()];
     $('hola').textContent = saludo() + (NOM ? ', ' + NOM : '');
     var agenda = cargaAgenda();   // «Tu agenda»: una sola llamada y aparte, para que no espere a las tarjetas
+    cargaFuera();
     quieto = !!quieto && !!$('grid').querySelector('.card[id^="c-"]:not(#c-nada)');
     if (!quieto) pintaCascarones();
     await Promise.all(TARJETAS.map(function (c) { return llena(c, mia, quieto); }));
@@ -1444,6 +1459,37 @@ button{font:inherit;color:inherit}
     ir(b.getAttribute('data-liga'));
   });
   $('recarga').onclick = function () { corre(); };
+
+  /* ---------- «Fuera de la ciudad» de la dirección (Daniel, 1-nov-2026; portal/sql/116_fuera_ciudad.sql) ----------
+     Una franja arriba, para todos: quién de la dirección está fuera hoy (con si hoy está disponible y hasta cuándo) y
+     quién sale en los próximos 7 días. Nunca el motivo: la base solo se lo da a la dirección (fuera_ciudad_lista()), y
+     aquí solo se le enseña a ella. */
+  var DIAS3 = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  function fdDia(iso) { var d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return isNaN(d) ? String(iso || '') : DIAS3[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESC[d.getUTCMonth()]; }
+  var FDC_MOT = { cliente: 'visita a cliente', vacaciones: 'vacaciones' };
+  async function cargaFuera() {
+    var b = $('fdc'); if (!b) return;
+    var L = null;
+    try { L = await rpc('fuera_ciudad_lista', { p_desde: HOY, p_hasta: masDias(HOY, 7) }); } catch (e) { L = null; }   // sin 116: no sale
+    if (!Array.isArray(L) || !L.length) { b.hidden = true; b.innerHTML = ''; return; }
+    var dom = new Date(HOY + 'T12:00:00Z').getUTCDay() === 0, lin = [];
+    L.forEach(function (f) {
+      if (!f || !f.desde || !f.hasta) return;
+      var yo = f.usuario === YO, quien = yo ? 'Tú' : esc(f.nombre || f.corto || ''), mot = f.motivo && FDC_MOT[f.motivo] ? ' <span class="s">(' + esc(FDC_MOT[f.motivo]) + ')</span>' : '';
+      if (f.desde <= HOY && f.hasta >= HOY) {
+        var hoy = dom ? '' : (f.dias && f.dias[HOY] === false ? ' · <span class="fdc-no">hoy no disponible</span>' : ' · <span class="fdc-si">hoy disponible</span>');
+        lin.push('<p><b>' + quien + '</b> ' + (yo ? 'estás' : 'está') + ' fuera de la ciudad hasta el ' + esc(fdDia(f.hasta)) + hoy + mot + '.</p>');
+      } else if (f.desde > HOY) {
+        lin.push('<p><b>' + quien + '</b> ' + (yo ? 'sales' : 'sale') + ' de la ciudad del ' + esc(fdDia(f.desde)) + ' al ' + esc(fdDia(f.hasta)) + mot + '.</p>');
+      }
+    });
+    if (!lin.length) { b.hidden = true; b.innerHTML = ''; return; }
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>'
+      + '<div class="fdc-tx">' + lin.join('') + '<p class="s">Los días que no están disponibles, el portal avisa antes de llamarles o agendarles; los mensajes les llegan igual.</p></div>'
+      + '<button type="button" class="btn" data-liga="calendario">Ver en el Calendario</button>';
+    b.hidden = false;
+  }
+  try { window.parent.addEventListener('profase:fuera', function () { if (PERFIL) cargaFuera(); }); } catch (e) { /* sin página de afuera */ }
 
   // La página de afuera avisa al regresar al Inicio: «Tu agenda» se pone al día siempre (con su firma, casi nada viaja) y
   // las tarjetas, si pasó más de un minuto, sin parpadear

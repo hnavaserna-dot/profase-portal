@@ -209,6 +209,7 @@ img.av{background:var(--surface-3);overflow:hidden}
 .cv-s[data-e="nd"]{color:var(--nd);font-weight:600}
 .nd-av{flex:none;display:flex;gap:8px;align-items:center;margin:0;padding:8px 12px;border-top:1px solid var(--line);background:var(--red-soft);color:var(--ink);font-size:13px;line-height:1.35}
 .nd-av[hidden]{display:none}
+.nd-av.fue{background:var(--navy-soft)}
 .nd-av .pe{flex:none}
 .cv-s.esc{color:var(--accent);font-weight:600}
 .bus-msg{flex:none;border-bottom:1px solid var(--line);padding:8px 12px;background:var(--surface);position:relative}
@@ -1058,8 +1059,18 @@ audio.ad-med{width:280px;max-width:100%}
     if (viva) { u.querySelector('span').textContent = viva.yo ? 'En llamada' : 'Unirse'; u.title = viva.yo ? 'Regresar a la llamada' : 'Unirse a la llamada en curso'; }
   }
   window.__chatLlamadas = function () { pintaLlamada(); };
-  $('#cv-tel').onclick = function () { var l = LL(); if (l && ACT) l.inicia(ACT.id, 'voz'); };
-  $('#cv-vid').onclick = function () { var l = LL(); if (l && ACT) l.inicia(ACT.id, 'video'); };
+  // si llamas a Daniel o a HNR un día que pusieron «No disponible» fuera de la ciudad, primero te lo dice (no lo impide)
+  async function llamaSiSePuede(como) {
+    var l = LL(); if (!l || !ACT) return;
+    var t = (ACT.info && ACT.info.tipo) || (ACT.c && ACT.c.tipo), st = t === 'directo' && ACT.otro ? estadoDe(ACT.otro) : null, f = st && st.fuera;
+    if (f && f.c && f.hoy === false) {
+      var si = await confirma('Hoy no está disponible', corto(ACT.otro) + ' está fuera de la ciudad hasta el ' + diaC(f.hasta) + ' y hoy puso «No disponible». ¿Le llamas de todos modos?', 'Llamar');
+      if (!si) return;
+    }
+    l.inicia(ACT.id, como);
+  }
+  $('#cv-tel').onclick = function () { llamaSiSePuede('voz'); };
+  $('#cv-vid').onclick = function () { llamaSiSePuede('video'); };
   $('#cv-unir').onclick = function () {
     var l = LL(); if (!l || !ACT) return;
     var v = null; try { v = l.enConv(ACT.id); } catch (e) { v = null; }
@@ -1097,13 +1108,23 @@ audio.ad-med{width:280px;max-width:100%}
     }
   }
 
-  // si la otra persona está «No disponible»: un aviso arriba de donde se escribe (el mensaje le llega, sin avisos)
+  // si la otra persona está «No disponible» o fuera: un aviso arriba de donde se escribe. Del equipo (vacaciones o
+  // permiso, 116_fuera_ciudad.sql): cuándo regresa y a quién buscar mientras, nunca el tipo ni las notas; el mensaje le
+  // llega sin sonar. De Daniel o HNR fuera de la ciudad: hasta cuándo y si hoy están disponibles (sin el motivo); a ellos
+  // siempre les llega todo (Daniel, 1-nov-2026: «Siempre siempre»).
+  function diaC(d) { var x = ESTA(); try { return x && x.diaC ? x.diaC(d) : String(d || ''); } catch (e) { return String(d || ''); } }
   function pintaNd() {
     var el = $('#nd-av'); if (!el) return;
     var t = (ACT && ACT.info) ? ACT.info.tipo : (ACT && ACT.c ? ACT.c.tipo : '');
-    var st = ACT && t === 'directo' ? estadoDe(ACT.otro) : null;
-    if (!st || st.e !== 'nd') { el.hidden = true; el.innerHTML = ''; return; }
-    el.innerHTML = '<span class="pe" data-e="nd"></span><span><b>' + esc(corto(ACT.otro)) + '</b> está ' + esc(txtEstado(st).replace(/^No disponible/, 'no disponible').replace(/\.$/, '')) + '. Tu mensaje le llega, pero sin aviso.</span>';
+    var st = ACT && t === 'directo' ? estadoDe(ACT.otro) : null, f = st && st.fuera;
+    var d = st && DIR.get(ACT.otro), dir = !!(d && d.rol === 'director');
+    if (!st || (st.e !== 'nd' && !(f && (f.a || f.c)))) { el.hidden = true; el.innerHTML = ''; el.classList.remove('fue'); return; }
+    var quien = '<b>' + esc(corto(ACT.otro)) + '</b>', h;
+    if (f && f.a) h = quien + ' está fuera' + (f.regresa ? ' y regresa el ' + esc(diaC(f.regresa)) : '') + (f.cubre ? ' · mientras, busca a <b>' + esc(f.cubre) + '</b>' : '') + '. Tu mensaje le llega, pero sin aviso.';
+    else if (f && f.c) h = quien + ' está fuera de la ciudad hasta el ' + esc(diaC(f.hasta)) + (f.hoy === false ? ' y hoy no está disponible' : f.hoy === true ? '; hoy sí está disponible' : '') + '. Tu mensaje le llega.';
+    else h = quien + ' está ' + esc(txtEstado(st).replace(/^No disponible/, 'no disponible').replace(/\.$/, '')) + (dir ? '. Tu mensaje le llega.' : '. Tu mensaje le llega, pero sin aviso.');
+    el.classList.toggle('fue', !!(f && f.c && f.hoy !== false));
+    el.innerHTML = '<span class="pe" data-e="' + esc(st.e) + '"></span><span>' + h + '</span>';
     el.hidden = false;
   }
 

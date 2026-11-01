@@ -319,6 +319,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   // configuración del mes (portal/sql/70_wf_config.sql): Reiniciar, Borrar, «Tareas a tiempo», editar el mes y agregar tarea;
   // la base dice quién: la dirección y quien Daniel autorizó (30-oct-2026)
   var CONF = { edita: false, a_tiempo: false }, PERS = null, CATS = null;
+  // lo que cubro hoy por la ausencia de alguien (117_cobertura_ausencias.sql, 1-nov-2026): la base lo deja ver y trabajar
+  // solo mientras dura; responsable y quien autoriza no cambian
+  var CUB = {};
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   var HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -359,6 +362,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
       try { var es = await P.sb.rpc('env_estado'); if (!es.error && es.data) ENV = es.data; } catch (e) { ENV = { visible: false, modo: 'apagado' }; }
       try { var ce = await P.sb.rpc('wf_conf_estado'); if (!ce.error && ce.data) CONF = ce.data; } catch (e) { CONF = { edita: false, a_tiempo: false }; }
+      try { var cm = await P.sb.rpc('cob_mias'); CUB = {}; if (!cm.error && Array.isArray(cm.data)) cm.data.forEach(function (x) { CUB[x.id] = x; }); } catch (e) { CUB = {}; }
       var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
@@ -468,7 +472,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (a) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(a.id) + '"><td><div class="rs">' + esc(a.rs) + '</div><div class="rfc">' + esc(a.rfc) + (a.grupo ? ' · ' + esc(a.grupo) : '') + '</div></td>'
         + '<td><div>' + esc(a.actividad) + '</div><div class="rfc">' + esc(a.plantilla) + ' · paso ' + esc(a.secuencia) + (a.periodicidad === 2 ? ' · anual' : '') + '</div></td>'
-        + '<td>' + chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + '</td>'
+        + '<td>' + chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + (CUB[a.id] ? '<div><span class="tag az">Cubres a ' + esc(CUB[a.id].de) + '</span></div>' : '') + '</td>'
         + '<td>' + (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + (a.aut_nombre ? '<div class="rfc">Autoriza: ' + esc(a.aut_nombre) + '</div>' : '') + '</td>'
         + '<td>' + venceHtml(a) + '</td>'
         + '<td>' + (a.n_docs ? '<span class="clip">' + esc(a.n_docs) + (a.n_docs === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>') + '</td></tr>';
@@ -479,8 +483,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   /* ---------- la ficha de la actividad (como frm_view_WFRAct_Edit del Access) ---------- */
   function sec(tit, cuerpo, nota, id) { return '<section class="sec"' + (id ? ' id="' + id + '"' : '') + '><h3>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</h3>' + cuerpo + '</section>'; }
-  function soyResp(a) { return !!a.resp_usuario && a.resp_usuario === YO; }
-  function soyAut(a) { return !!a.aut_usuario && a.aut_usuario === YO; }
+  function cubro(a, r) { var c = CUB[a.id]; return !!c && (c.rol === r || c.rol === 'ambos'); }   // lo que cubro por una ausencia (la base lo vuelve a revisar)
+  function soyResp(a) { return (!!a.resp_usuario && a.resp_usuario === YO) || cubro(a, 'resp'); }
+  function soyAut(a) { return (!!a.aut_usuario && a.aut_usuario === YO) || cubro(a, 'aut'); }
   function soyAsig(a) { return ROL === 'contador' && !!ASIGU[a.empresa_id] && ASIGU[a.empresa_id] === YO; }
   function cierra2(a) { return a.aut_nombre ? soyAut(a) : soyResp(a); }   // quien termina o rechaza (además de gerentes y dirección)
   // las mismas reglas que la base (portal/sql/44_wf_trabajo_ajustes.sql); la base es la que manda
@@ -502,6 +507,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     var h = '<div class="cab"><div><div class="rfc">' + esc(a.grupo) + ' · ' + esc(a.plantilla) + '</div><h2 id="f-tit">' + esc(a.actividad) + '</h2><div class="rfc">' + esc(a.rs) + ' · ' + esc(a.rfc) + ' · ' + esc(mesTxt(a.periodo)) + '</div></div>'
       + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar la ficha">Cerrar</button></div><div class="cuerpo">';
     if (MODO === 'practica') h += '<div class="practica" style="margin:0">Práctica: lo que cambies aquí se borra en la siguiente actualización.</div>';
+    if (CUB[a.id]) h += '<div class="pzaviso"><b>La cubres:</b> ' + esc(CUB[a.id].de) + ' no está; la trabajas tú hasta el ' + esc(fecha(CUB[a.id].hasta)) + ' y al regresar vuelve a ' + esc(CUB[a.id].de) + '. El responsable y quien autoriza no cambian.</div>';
     if (enPausa(a)) h += '<div class="pzaviso"><b>En pausa' + (a.pausa_desde ? ' desde el ' + esc(fecha(diaMty(a.pausa_desde))) : '') + ':</b> ' + esc(a.pausa)
       + '. El cliente está en pausa (Panel › Pausas y motivos). Mientras siga así no cuenta como vencida y sí se puede trabajar. Al reactivarlo, su vencimiento Profase se recorre los días hábiles que estuvo en pausa.</div>';
     var edita = puedeEditar(a);
