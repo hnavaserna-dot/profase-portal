@@ -340,7 +340,7 @@ td.emp{min-width:260px}
   .kpi:last-child{grid-column:1/-1}
 }
 
-/* ===== Agenda (31-oct-2026): citas, fechas de entrega y límite, tareas, e.firma y sellos; vistas Día, Semana y Mes ===== */
+/* ===== Agenda (31-oct-2026): citas, fechas de entrega y límite, pendientes, e.firma y sellos; vistas Día, Semana y Mes ===== */
 :root{--cita:#1F3864;--cita-soft:#e4e9f2;--cita-ink:#1F3864;--ent:#b45309;--ent-soft:#fdf0d9;--ent-ink:#8a4006;--lsat:#be123c;--lsat-soft:#fde4e8;--lsat-ink:#9f1239;
       --tar:#4f46e5;--tar-soft:#e6e7fb;--tar-ink:#3730a3;--ren:#0369a1;--ren-soft:#dff0fb;--ren-ink:#075985}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--cita:#8fb0e8;--cita-soft:#1a2740;--cita-ink:#bcd0f2;--ent:#f0a64a;--ent-soft:#3a2810;--ent-ink:#f6c27f;
@@ -667,9 +667,9 @@ button.kpi:focus-visible{outline-offset:-3px}
   var MES3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   var DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
   var AREAS=['Contabilidad','Nóminas','Fiscal','VAX','Administración','Dirección'];
-  var TIPOS={ cita:'Cita', rcd:'Recordatorio', ent:'Fecha de entrega (WorkFlow)', lsat:'Fecha límite del SAT (WorkFlow)', tar:'Tarea', ren:'e.firma y sellos', cumple:'Cumpleaños', cli:'Cumpleaños de cliente', aniv:'Aniversario en PROFASE', evento:'Evento de la empresa', aus:'Vacaciones y ausencias', fue:'Fuera de la ciudad (dirección)', lft:'Descanso obligatorio (LFT)', sat:'Inhábil SAT' };
+  var TIPOS={ cita:'Cita', rcd:'Recordatorio', ent:'Fecha de entrega (WorkFlow)', lsat:'Fecha límite del SAT (WorkFlow)', tar:'Pendiente', ren:'e.firma y sellos', cumple:'Cumpleaños', cli:'Cumpleaños de cliente', aniv:'Aniversario en PROFASE', evento:'Evento de la empresa', aus:'Vacaciones y ausencias', fue:'Fuera de la ciudad (dirección)', lft:'Descanso obligatorio (LFT)', sat:'Inhábil SAT' };
   // lo que se puede prender y apagar, juntado para que no sean tantos botones (Daniel, 31-oct-2026: «no perderse»)
-  var GRUPOS=[['cita','Citas y recordatorios',['cita','rcd']],['pend','Entregas y fechas límite',['ent','lsat']],['tar','Tareas',['tar']],['ren','e.firma y sellos',['ren']],
+  var GRUPOS=[['cita','Citas y recordatorios',['cita','rcd']],['pend','Entregas y fechas límite',['ent','lsat']],['tar','Pendientes',['tar']],['ren','e.firma y sellos',['ren']],
               ['evento','Eventos del despacho',['evento']],['cum','Cumpleaños y aniversarios',['cumple','cli','aniv']],['aus','Vacaciones y ausencias',['aus']],['fue','Dirección fuera de la ciudad',['fue']],['inh','Días inhábiles',['lft','sat']]];
   var HOY=new Date(); HOY.setHours(0,0,0,0);
   // íconos de cada tipo (pedido de Fernando, 29-oct-2026): trazos de 24×24, del color de su tipo
@@ -740,7 +740,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   var AUS_TXT={vacaciones:'De vacaciones', permiso:'Con permiso', incapacidad:'De incapacidad'};
   function capCol(){ return RHMODO==='colab'&&colabCap; }
   Object.keys(TIPOS).forEach(function(k){ filtros[k]=!EVMODO||k==='evento'; });   // en Eventos PROFASE, solo los eventos
-  /* ================= Agenda (31-oct-2026): citas, fechas de entrega y límite, tareas y renovaciones =================
+  /* ================= Agenda (31-oct-2026): citas, fechas de entrega y límite, pendientes y renovaciones =================
      Daniel (22:10 a 23:20): «poder manejar nuestra agenda dentro del CRM… Eva siempre nos agenda a HNR y a mí»; «en
      esa ventana de poder agendar… no me des por default una liga para la videollamada; que sea opcional»; «que también
      aquí cada quien vea fechas límites; fechas de entrega etc… muy entendible y fácil de usar y no perderse»; «Hay que
@@ -748,8 +748,8 @@ button.kpi:focus-visible{outline-offset:-3px}
      Todo lo decide la base (portal/sql/109_agenda_reuniones.sql): agenda_estado() (en qué agendas pongo citas, cuáles
      veo y, a un gerente, su equipo), agenda_lista(), agenda_pendientes() (SECURITY INVOKER: las reglas del WorkFlow,
      como el Panel de trabajo y «Lo tuyo del WorkFlow» del Inicio), agenda_ocupado() (de quien no puedo ver su agenda,
-     solo «Ocupado» y las horas), agenda_guarda(), agenda_cancela() y agenda_responde(). Las tareas salen del mismo
-     paquete que lee Tareas y proyectos y las renovaciones de ren_lista(), con sus mismas reglas. Las vacaciones siguen
+     solo «Ocupado» y las horas), agenda_guarda(), agenda_cancela() y agenda_responde(). Los pendientes salen de Agenda › Pendientes
+     (pend_lista(), 112; desde el 1-nov-2026: las tareas del Access eran de prueba y se borraron) y las renovaciones de ren_lista(), con sus mismas reglas. Las vacaciones siguen
      siendo solo para los gerentes y la dirección (rh_ausencias_cal()). La videollamada con gente de fuera la arma el
      portal de afuera (llamada_tab.js: window.parent.__llamada). */
   var AG={est:null, ok:false, citas:[], pend:{items:[],vencidas:0}, tareas:[], ren:[], rcd:[], de:'', rango:null, vez:0, hora:0, otros:0,
@@ -798,15 +798,15 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(AG.de==='@equipo') return (AG.est&&AG.est.equipo||[]).map(function(x){ return x.usuario; });
     return [AG.de];
   }
-  function nombresDe(){   // los nombres de quien se ve (para las tareas y las renovaciones, que traen nombres)
+  function nombresDe(){   // los nombres de quien se ve (para las renovaciones, que traen nombres)
     var u=quienes(); if(!u) return [(yo&&yo.nombre_wf)||'', (yo&&yo.nombre)||''].filter(Boolean);
     return u.map(function(x){ return persona(x).nombre; });
   }
   function esDeQuien(nombres){ var mios=nombresDe(); return (nombres||[]).some(function(n){ return mios.some(function(m){ return mismaPersona(n,m); }); }); }
-  function tareasDe(){
-    var rol=yo&&yo.rol;
-    if(!AG.de&&rol!=='director'&&rol!=='gerente') return AG.tareas;   // a un contador su paquete ya trae solo lo suyo
-    return AG.tareas.filter(function(t){ return esDeQuien([t.creo].concat(t.ri||[])); });
+  function tareasDe(){   // los pendientes (Agenda › Pendientes): los míos (los hago o los reviso) o los de quien se ve
+    if(!AG.de) return AG.tareas.filter(function(t){ return t.mio; });
+    var u=quienes()||[];
+    return AG.tareas.filter(function(t){ return t.resp&&u.indexOf(t.resp)>=0; });
   }
   function renDe(){
     var rol=yo&&yo.rol;
@@ -841,16 +841,23 @@ button.kpi:focus-visible{outline-offset:-3px}
     AG.rango={d:d,h:h,de:AG.de}; AG.hora=Date.now();   // también si falló: así no se vuelve a pedir en cada pintada
     render();
   }
+  // Los pendientes con fecha (Agenda › Pendientes, 112): los que hago y los que reviso, y los que veo (para la agenda de
+  // otro o de mi equipo). Qué ve cada quien lo decide la base (pend_lista); los abiertos, nada más.
   async function leeTareas(){
-    var rol=yo&&yo.rol, col=rol==='director'?'director':'access', id=rol==='director'?'acc_tar':rol==='gerente'?'tar_equipo':'tar_'+((yo&&yo.usuario)||'');
-    if(!window.DecompressionStream) return [];
-    var q=await P.sb.from('docs').select('data').eq('col',col).eq('id',id).maybeSingle();
-    if(q.error||!q.data||!q.data.data||!q.data.data.b64) return [];
-    var rr=await fetch('data:application/octet-stream;base64,'+q.data.data.b64);
-    var o=JSON.parse(await new Response(rr.body.pipeThrough(new DecompressionStream('gzip'))).text());
-    return (o.tareas||[]).filter(function(t){ return t.est!==3&&t.fin; }).map(function(t){
-      return {id:t.id, tarea:String(t.tarea||''), rs:String(t.rs||''), grupo:String(t.grupo||''), fin:String(t.fin).slice(0,10), ri:t.ri||[], creo:t.creo||'', avance:+t.avance||0};
+    var V=['mios','revisar','todos'], vistos={}, out=[];
+    var rr=await Promise.all(V.map(function(v){ return P.sb.rpc('pend_lista',{p:{vista:v, estatus:'abiertos'}}).then(null,function(){ return {error:true}; }); }));
+    rr.forEach(function(r,i){
+      if(r.error||!Array.isArray(r.data)) return;
+      r.data.forEach(function(x){
+        if(!x||!x.vence) return;
+        var o=vistos[x.id];
+        if(!o){ o=vistos[x.id]={id:x.id, tarea:String(x.titulo||''), rs:String(x.cliente||''), grupo:String(x.grupo||''), fin:String(x.vence).slice(0,10),
+                                  resp:String(x.resp||''), resp_n:String(x.resp_n||x.externo||''), mio:false, revisa:false}; out.push(o); }
+        if(V[i]==='mios') o.mio=true;
+        if(V[i]==='revisar'){ o.mio=true; o.revisa=true; }
+      });
     });
+    return out;
   }
   async function cargaOtros(){
     AG.otros=Date.now();
@@ -879,7 +886,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     });
     return out;
   }
-  function vencido(){   // lo atrasado: del WorkFlow (sin las de clientes en pausa), tareas y renovaciones
+  function vencido(){   // lo atrasado: del WorkFlow (sin las de clientes en pausa), pendientes y renovaciones
     var hoy=hoyK(), w=(AG.pend.items||[]).filter(function(x){ return x.ven; });
     var t=tareasDe().filter(function(x){ return x.fin<hoy; });
     var r=[]; renDe().forEach(function(x){
@@ -938,9 +945,9 @@ button.kpi:focus-visible{outline-offset:-3px}
     }
     if(x.tipo==='tar'){
       var t=x.t, ven=t.fin<hoyK();
-      return '<div class="item ag t-tar'+(ven?' venc':'')+'" data-ir="access-tareas"'+(puedoIr('access-tareas')?' role="button" tabindex="0"':'')+'><span class="ibub">'+ico('check')+'</span><div class="tt">'
-        +esc(t.tarea)+'<span class="ss">'+esc([t.rs, 'avance '+t.avance+' %', (t.ri||[]).length?'responsable '+t.ri.join(', '):''].filter(Boolean).join(' · '))+'</span>'
-        +(ven?'<span class="pls"><span class="pl mal">Vencida</span></span>':'')+'</div></div>';
+      return '<div class="item ag t-tar'+(ven?' venc':'')+'" data-pend="'+esc(String(t.id))+'"'+(puedoIr('pendientes')?' role="button" tabindex="0"':'')+'><span class="ibub">'+ico('check')+'</span><div class="tt">'
+        +esc(t.tarea)+'<span class="ss">'+esc([t.rs, t.revisa?'te toca revisarlo':'', (AG.de||!t.mio)&&t.resp_n?'responsable '+t.resp_n:''].filter(Boolean).join(' · '))+'</span>'
+        +(ven?'<span class="pls"><span class="pl mal">Vencido</span></span>':'')+'</div></div>';
     }
     if(x.tipo==='ren'){
       var r2=x.r, et={cotizar:'Por cotizar', cotizado:'Cotizado', facturado:'Falta el pago', tramite:'En trámite', cargar:'Ya se puede cargar el nuevo', vencimiento:'Por vencer', baja:'Ya no es cliente'}[r2.etapa]||'';
@@ -953,7 +960,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   // en el mes: las citas y los eventos uno por uno; lo demás junto («3 entregas»), para que nada se esconda
   var JUNTA={cumple:'cum', cli:'cum', aniv:'aniv', ent:'ent', lsat:'lsat', tar:'tar', ren:'ren', aus:'aus', fue:'fue'};
   var JORDEN=['ent','lsat','tar','ren','fue','aus','cum','aniv'];
-  var JTXT={ent:['entrega','entregas'], lsat:['límite SAT','límites SAT'], tar:['tarea','tareas'], ren:['e.firma o sello','e.firmas y sellos'],
+  var JTXT={ent:['entrega','entregas'], lsat:['límite SAT','límites SAT'], tar:['pendiente','pendientes'], ren:['e.firma o sello','e.firmas y sellos'],
             aus:['fuera','fuera'], fue:['fuera de la ciudad','fuera de la ciudad'], cum:['cumpleaños','cumpleaños'], aniv:['aniversario','aniversarios']};
   function lineasDia(it){
     var l=[], por={};
@@ -972,7 +979,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   function inhabil(it){ var f=it.filter(function(x){ return x.tipo==='lft'||x.tipo==='sat'; }); return f.length?f[0]:null; }
 
   /* --- el detalle de un día (el panel de al lado en el mes y la vista Día) --- */
-  var SECS=[['tiempo','Citas, recordatorios y eventos'],['ent','Fechas de entrega'],['lsat','Fechas límite del SAT'],['tar','Tareas'],['ren','e.firma y sellos'],['cum','Cumpleaños y aniversarios'],['aus','Fuera de la oficina']];
+  var SECS=[['tiempo','Citas, recordatorios y eventos'],['ent','Fechas de entrega'],['lsat','Fechas límite del SAT'],['tar','Pendientes'],['ren','e.firma y sellos'],['cum','Cumpleaños y aniversarios'],['aus','Fuera de la oficina']];
   function detalleDia(k, conBoton){
     var d=parse(k), it=delDia(d.getFullYear(),d.getMonth(),d.getDate()).filter(function(x){ return filtros[x.tipo]; }), por={}, inh=inhabil(it);
     it.forEach(function(x){
@@ -1023,13 +1030,13 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(vv.n){
       vb.hidden=false;
       vb.innerHTML=ico('alert')+'<span><b>'+(AG.de?esc(AG.de==='@equipo'?'Tu equipo trae ':persona(AG.de).nombre+' trae '):'Tienes ')+plural(vv.n,'pendiente vencido','pendientes vencidos')+'</b>'
-        +' · '+[vv.nw?plural(vv.nw,'del WorkFlow','del WorkFlow'):'', vv.t.length?plural(vv.t.length,'tarea','tareas'):'', vv.r.length?plural(vv.r.length,'e.firma o sello','e.firmas y sellos'):''].filter(Boolean).join(', ')+'</span>'
+        +' · '+[vv.nw?plural(vv.nw,'del WorkFlow','del WorkFlow'):'', vv.t.length?plural(vv.t.length,'pendiente','pendientes'):'', vv.r.length?plural(vv.r.length,'e.firma o sello','e.firmas y sellos'):''].filter(Boolean).join(', ')+'</span>'
         +'<button type="button" class="btn sm" data-vencido>Ver cuáles</button>';
       vb.querySelector('[data-vencido]').onclick=abreVencidas;
     } else vb.hidden=true;
     var nt=$('verNota');
-    if(AG.de&&AG.de!=='@equipo'&&AG.est&&!(AG.est.ver||[]).some(function(x){ return x.usuario===AG.de; })){ nt.hidden=false; nt.textContent='De '+persona(AG.de).nombre+' ves sus fechas de entrega y límite, sus tareas y lo que comparten; sus citas solo si te invitó.'; }
-    else if(AG.de==='@equipo'){ nt.hidden=false; nt.textContent='Las fechas de entrega y límite de tu equipo, sus tareas y sus e.firmas y sellos. Sus citas no salen aquí.'; }
+    if(AG.de&&AG.de!=='@equipo'&&AG.est&&!(AG.est.ver||[]).some(function(x){ return x.usuario===AG.de; })){ nt.hidden=false; nt.textContent='De '+persona(AG.de).nombre+' ves sus fechas de entrega y límite, sus pendientes y lo que comparten; sus citas solo si te invitó.'; }
+    else if(AG.de==='@equipo'){ nt.hidden=false; nt.textContent='Las fechas de entrega y límite de tu equipo, sus pendientes y sus e.firmas y sellos. Sus citas no salen aquí.'; }
     else nt.hidden=true;
   }
   function renderVer(){
@@ -1059,7 +1066,7 @@ button.kpi:focus-visible{outline-offset:-3px}
         return '<div class="vcli"><b>'+esc(c)+'</b><span class="n">'+a.length+'</span><div>'+a.map(function(w){ return '<span class="vact">'+esc(w.act)+' <small>'+esc(fCorta(w.pro||w.sat))+(AG.de&&w.quien?' · '+esc(pila(persona(w.quien).nombre)):'')+'</small></span>'; }).join('')+'</div></div>';
       }).join('')+(vv.nw>vv.w.length?'<p class="note">Aquí salen las '+vv.w.length+' más recientes; todas están en el Panel de trabajo.</p>':'')+'</div>';
     }
-    if(vv.t.length) h+='<div class="dsec"><h4>Tareas<span class="n">'+vv.t.length+'</span></h4>'+vv.t.map(function(t){ return itemAg({tipo:'tar', t:t, titulo:t.tarea}); }).join('')+'</div>';
+    if(vv.t.length) h+='<div class="dsec"><h4>Pendientes<span class="n">'+vv.t.length+'</span></h4>'+vv.t.map(function(t){ return itemAg({tipo:'tar', t:t, titulo:t.tarea}); }).join('')+'</div>';
     if(vv.r.length) h+='<div class="dsec"><h4>e.firma y sellos<span class="n">'+vv.r.length+'</span></h4>'+vv.r.map(function(x){ return itemAg({tipo:'ren', r:x.r, titulo:x.que+' el '+fCorta(x.k)}); }).join('')+'</div>';
     h+='<div class="mact">'+(vv.nw&&puedoIr('workflow-trabajo')?'<button type="button" class="btn" data-ir="workflow-trabajo">Abrir el Panel de trabajo</button>':'')+'<button type="button" class="btn primary" data-x>Cerrar</button></div>';
     ventana(h, function(ov,cerrar){ ov.querySelector('[data-x]').onclick=cerrar; enlazaAg(ov, cerrar); });
@@ -1070,6 +1077,12 @@ button.kpi:focus-visible{outline-offset:-3px}
     root.querySelectorAll('[data-cita]').forEach(function(b){
       var abre=function(e){ if(e.target.closest('button')) return; abrirCita(b.dataset.cita); };
       b.onclick=abre; b.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); abrirCita(b.dataset.cita); } };
+    });
+    root.querySelectorAll('[data-pend]').forEach(function(b){   // un pendiente: se abre en Agenda › Pendientes (exp_tab.js)
+      if(!puedoIr('pendientes')) return;
+      var va=function(){ if(cerrar) cerrar(); var A=null; try{ A=window.parent!==window?window.parent.PROFASE_ABRE:null; }catch(e){}
+        try{ if(A&&typeof A.pendientes==='function'&&A.pendientes(b.dataset.pend)!==false) return; }catch(e){} ir('pendientes'); };
+      b.onclick=va; b.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); va(); } };
     });
     root.querySelectorAll('[data-ir]').forEach(function(b){
       if(!puedoIr(b.dataset.ir)) return;
@@ -1683,7 +1696,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(x.tipo==='rcd') return x.hora+' '+x.titulo;
     if(x.tipo==='ent') return 'Entrega: '+x.titulo;
     if(x.tipo==='lsat') return 'Límite SAT: '+x.titulo;
-    if(x.tipo==='tar') return 'Tarea: '+x.titulo;
+    if(x.tipo==='tar') return 'Pendiente: '+x.titulo;
     return x.titulo;
   }
   var LAPIZ='<svg class="lapiz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
@@ -1819,7 +1832,8 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(i.modo==='personas') return 'Invitados: '+(i.personas||[]).length+((i.personas||[]).length===1?' persona':' personas');
     return 'Invitados: todos';
   }
-  function pila(n){ return String(n||'').split(/\s+/)[0]; }
+  // el primer nombre; la dirección, siempre con su nombre (regla «Los nombres, siempre bien», 1-nov-2026: nunca «Héctor» a secas)
+  function pila(n){ var s=String(n||'').trim(); if(/^H\u00e9ctor Nava Ramos/i.test(s)) return 'H\u00e9ctor Nava Ramos'; if(/^H\u00e9ctor Daniel Nava/i.test(s)) return 'H\u00e9ctor Daniel Nava'; return s.split(/\s+/)[0]; }
   function etiquetaResp(p){
     // quién contestó: el invitado o quien contesta por él (Daniel por su papá; su papá contesta lo suyo desde el 29-oct)
     var q=p.propio?'':'Por '+pila(p.nombre)+': ';

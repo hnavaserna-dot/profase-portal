@@ -143,6 +143,16 @@
   }
 
   var activo = false, cierre = null;
+  /* «Primero» (Héctor Daniel, 1-nov-2026: «el primer pop que vean… sea el de deja de usar el Access… y luego ya empiezas
+     el tour»): el aviso «¡Adiós Access, hola CRM!» (adios_access_tab.js) y el recorrido general (bienvenida_tab.js) se
+     anotan aquí con primero(fn); mientras alguno le falte a la persona (fn() verdadero), activo() dice que sí y ningún otro
+     recorrido ni ventana automática arranca (todas esperan a activo()). Esos dos preguntan activo(true): solo lo que de
+     verdad corre. Cada uno deja de faltar solo, a más tardar 90 s después de abrir si no se pudo saber. */
+  var primeros = [];
+  function primeroFalta() {
+    for (var i = 0; i < primeros.length; i++) { try { if (primeros[i]()) return true; } catch (e) { /* sigue */ } }
+    return false;
+  }
   function corre(def) {
     if (activo || !def || !def.pasos || !def.pasos.length) return Promise.resolve('ocupado');
     activo = true;
@@ -292,7 +302,7 @@
     }
     // a medio escribir (PORTAL.escribiendo: la minuta de una reunión) tampoco se empieza un recorrido
     function escribiendo() { try { var p = window.PORTAL; return !!(p && p.estaEscribiendo && p.estaEscribiendo()); } catch (e) { return false; } }
-    function ocupado() { return hayVentana() || document.hidden || activo || escribiendo(); }
+    function ocupado() { return hayVentana() || document.hidden || activo || escribiendo() || primeroFalta(); }
     var esperando = false;
     async function quiza(desdeAviso) {
       if (esperando) return;
@@ -322,6 +332,8 @@
     });
     quiza(false);
   }
-  window.PROFASE_RECORRIDO = { corre: corre, activo: function () { return activo; }, aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez,
+  window.PROFASE_RECORRIDO = { corre: corre, activo: function (real) { return activo || (!real && primeroFalta()); },
+                                primero: function (fn) { if (typeof fn === 'function') primeros.push(fn); }, primeroFalta: primeroFalta,
+                                aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez,
                                 alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; } };
 })();

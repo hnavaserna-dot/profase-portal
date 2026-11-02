@@ -56,14 +56,33 @@
        «Workflow» y las facturas del Access en «Tesorería». Las claves (k y v) no cambiaron, así que las ligas, el Inicio,
        los recorridos y los permisos siguen igual: el menú solo enseña lo que cada quien ya ve (lo deciden la página y la
        base). Orden: lo de todos los días primero. */
+    /* Reacomodo del 1-nov-2026 (Héctor Daniel, 16:59: «a las 19 hagas un reacomodo de menús y sub menús, para que todo quede
+       perfecto… para que todo esté en sintonía, fluido y excelente el lunes»; 17:05: «Sí, así»): lo de todos los días
+       primero, en el mismo orden del recorrido general (Workflow, Agenda, Clientes, Chat, Tesorería, Reportes, RH,
+       Administración, Usuarios, QUO y al final SuperConta, que también está en el «?» de arriba). Sale «Tareas y proyectos»
+       (las tareas ya son Agenda › Pendientes y Recordatorios) y cuatro nombres dejan de repetirse: Tesorería › Préstamos
+       por entregar y Reportes de cobranza, RH › Expedientes del personal y Usuarios › Personas del WorkFlow. Las claves
+       no cambian: permisos, ligas, Inicio y recorridos siguen igual. */
     { k: 'wf', t: 'Workflow', d: 'El avance del trabajo de cada cliente y de cada contador.', subs: [
       { k: 'panel', v: 'wf', t: 'Panel', tc: 'Mi panel', d: 'Obligaciones, vencimientos y pausas.' },
       { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
       { k: 'clientes', v: 'cli', t: 'Avance por cliente', d: 'Cada cliente y cómo va su trabajo.' },
       { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' },
-      { k: 'access-tareas', v: 'axtar', t: 'Tareas y proyectos', d: 'Pendientes por grupo con responsables, fechas y avance.' },   // antes Access › Tareas y proyectos
-      { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' },   // antes Access › WorkFlow
-      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' }] },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
+      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
+      { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' }] },   // antes Access › WorkFlow; al final (1-nov-2026)
+    /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
+       todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
+       también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */
+    { k: 'agd', t: 'Agenda', d: 'Tu calendario, los eventos del despacho, tus recordatorios, tus pendientes y tus avisos de todos los días.', subs: [
+      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
+      // Pendientes (31-oct-2026, pedido de Daniel; en «Agenda» desde el 1-nov, 04:54: «Si dale ya»): lo que hay que hacer, quién y
+      // para cuándo, y las minutas que faltan de las reuniones con clientes (expedientes.html; 112_expedientes.sql; exp_tab.js)
+      { k: 'pendientes', v: 'pen', t: 'Pendientes', d: 'Lo tuyo, lo que pediste y lo que revisas, con fecha y avisos; y las minutas que te faltan.' },
+      { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
+      // Eventos PROFASE (Héctor Daniel, 1-nov-2026: sale de RH y va en Agenda): la posada y los festejos en lista y calendario para
+      // todos; el Reporte, a quien la base deja (ev_estado(), 114_eventos_reporte.sql). calendario.html?vista=eventos; bloque cal_tab.js
+      { k: 'eventos', v: 'evt', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho: confirma tu asistencia, en lista o en calendario.' },
+      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Clientes (31-oct-2026): la ficha de cada cliente y lo del SAT, juntos
     { k: 'clis', t: 'Clientes', d: 'El expediente y la ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
       { k: 'expedientes', v: 'exp', t: 'Expedientes', d: 'Cada cliente por grupo y razón social: reuniones, notas, pendientes y documentos.' },   // 31-oct-2026, pedido de Daniel (112_expedientes.sql)
@@ -75,19 +94,6 @@
       // Héctor Daniel, 1-nov-2026, 13:45 («Si»): un acceso a las videollamadas con clientes (las citas con videollamada de la
       // Agenda; una sola versión). Solo a la dirección y los gerentes (chat_sala_puedo(); el botón lo pone llamada_tab.js)
       { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' }] },
-    /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
-       todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
-       también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */
-    { k: 'agd', t: 'Agenda', d: 'Tu calendario, los eventos del despacho, tus recordatorios, tus pendientes y tus avisos de todos los días.', subs: [
-      { k: 'calendario', v: 'cal', t: 'Calendario', d: 'Tu agenda: citas, fechas de entrega y límite, cumpleaños y eventos.' },   // cumpleaños, aniversarios y eventos: todos lo ven
-      // Eventos PROFASE (Héctor Daniel, 1-nov-2026: sale de RH y va en Agenda): la posada y los festejos en lista y calendario para
-      // todos; el Reporte, a quien la base deja (ev_estado(), 114_eventos_reporte.sql). calendario.html?vista=eventos; bloque cal_tab.js
-      { k: 'eventos', v: 'evt', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho: confirma tu asistencia, en lista o en calendario.' },
-      { k: 'mis-recordatorios', v: 'rcd', t: 'Recordatorios', d: 'Para ti y tu equipo: de una vez o que se repiten.' },   // 31-oct-2026, pedido de Daniel (107_recordatorios_agenda.sql); todos lo tienen
-      // Pendientes (31-oct-2026, pedido de Daniel; en «Agenda» desde el 1-nov, 04:54: «Si dale ya»): lo que hay que hacer, quién y
-      // para cuándo, y las minutas que faltan de las reuniones con clientes (expedientes.html; 112_expedientes.sql; exp_tab.js)
-      { k: 'pendientes', v: 'pen', t: 'Pendientes', d: 'Lo tuyo, lo que pediste y lo que revisas, con fecha y avisos; y las minutas que te faltan.' },
-      { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
     // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/79_tesoreria.sql)
@@ -96,24 +102,15 @@
       { k: 'pagos', v: 'pag', t: 'Pagos', d: 'Pagos de los clientes y su reparto a facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo cobrado y lo pendiente.' },
       { k: 'recordatorios', v: 'rec', t: 'Recordatorios de pago', d: 'Recordatorios de saldos a los clientes.' },   // etapa 5 del Access (29-oct-2026)
-      { k: 'tes-reportes', v: 'trep', t: 'Reportes', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'access-comisiones', v: 'axcom', t: 'Comisiones', d: 'Las comisiones del periodo según lo cobrado.' },   // antes en Access
       { k: 'comisiones-direccion', v: 'cdir', t: 'Comisiones de dirección', d: 'Facturas con comisión, gastos, reserva y utilidad del periodo.' },   // solo quien Daniel decidió
-      { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
+      { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos por entregar', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
+      { k: 'tes-reportes', v: 'trep', t: 'Reportes de cobranza', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
       { k: 'cartera', v: 'car', t: 'Cartera', d: 'Lo que deben los clientes.' },
       { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
       { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Los activos y su depreciación.' }] },
-    // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la
-    // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
-    { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
-      { k: 'superconta', v: 'sc', t: 'Pregúntale a SuperConta', d: 'Pregúntale como a alguien del equipo; contesta con los datos del portal.' }] },
-    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores y cambios al portal.', subs: [
-      { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
-      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
-      { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
-      { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
@@ -129,17 +126,26 @@
       { k: 'rh-prestamos', v: 'rhp', t: 'Préstamos', d: 'Préstamos al personal, su autorización y sus descuentos.' },
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },
       { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' },
-      { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
+      { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes del personal', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
+    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores y cambios al portal.', subs: [
+      { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
+      { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
+      { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
+      { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
     // (usr_estado(), portal/sql/82_usuarios.sql; bloque usr_tab.js)
     { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas, accesos y las personas del WorkFlow.', subs: [
       { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña y regresos.' },
-      { k: 'usuarios-wf', v: 'uwf', t: 'Workflow', d: 'Las personas del WorkFlow: cómo salen, si salen como contador, sus teléfonos y su carga.' },   // la pantalla «Usuarios» del Access (31-oct-2026): Daniel, Cadengo y Gabo
+      { k: 'usuarios-wf', v: 'uwf', t: 'Personas del WorkFlow', d: 'Las personas del WorkFlow: cómo salen, si salen como contador, sus teléfonos y su carga.' },   // la pantalla «Usuarios» del Access (31-oct-2026): Daniel, Cadengo y Gabo
       { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
     { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
-      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] }
+      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] },
+    // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la
+    // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
+    { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
+      { k: 'superconta', v: 'sc', t: 'Pregúntale a SuperConta', d: 'Pregúntale como a alguien del equipo; contesta con los datos del portal.' }] }
   ];
   // Una pestaña nueva que todavía no tenga lugar en el menú sale en «Más», para que nunca se pierda
   var MAS = { k: 'mas', t: 'Más', d: 'Pestañas nuevas que todavía no tienen lugar en el menú.', subs: [] };
