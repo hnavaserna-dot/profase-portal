@@ -258,6 +258,7 @@ td.sel input{width:18px;height:18px}
     <div class="tabs" role="tablist" aria-label="Cotizaciones">
       <button type="button" role="tab" data-ct="esp" aria-selected="true">En espera <span class="cta" id="n-esp">0</span></button>
       <button type="button" role="tab" data-ct="aut" aria-selected="false">Autorizadas</button>
+      <button type="button" role="tab" data-ct="con" aria-selected="false">Por conciliar <span class="cta" id="n-pcon">0</span></button>
       <button type="button" role="tab" data-ct="no" aria-selected="false">No autorizadas</button>
       <button type="button" role="tab" data-ct="tod" aria-selected="false">Todas</button>
     </div>
@@ -617,9 +618,20 @@ td.sel input{width:18px;height:18px}
   function cchip(e) { var x = CEST[e] || [e, '']; return chip(x[0], x[1]); }
   function pct(f) { return Math.round((Number(f) - 1) * 1000) / 10 + '%'; }
   function factorTxt(f) { return '× ' + Number(f).toFixed(Number(f) * 100 % 1 ? 3 : 2) + ' (' + pct(f) + ' sobre el costo)'; }
+  // lo cotizado contra lo facturado (Daniel, 2-nov-2026, 12:38: «deben de ser lo mismo»): la autorizada sin su factura,
+  // con la factura cancelada o con un subtotal distinto (a $1 o más) se tiene que revisar. Las de 2026 que vinieron del
+  // Excel con su folio y cuya factura no se subió al CRM no salen aquí (se facturaron antes del CRM)
+  function difCot(c) { return c.factura ? Math.round((Number(c.factura.subtotal || 0) - Number(c.subtotal || 0)) * 100) / 100 : null; }
+  function porConciliar(c) {
+    if (c.estatus !== 'autorizada') return false;
+    if (!c.factura) return !(c.origen === 'excel' && c.folio_factura);   // las de antes del CRM traen el folio del Excel
+    return c.factura.estatus === 'cancelada' || Math.abs(difCot(c)) >= 1;
+  }
   function cfac(c) {
+    var d = difCot(c), no = c.factura && c.factura.estatus !== 'cancelada' && Math.abs(d) >= 1;
     if (c.factura) return esc(c.factura.folio) + '<div class="mut">' + (c.factura.estatus === 'cobrada' ? 'cobrada' + (c.factura.cobrada_el ? ' el ' + esc(fecha(c.factura.cobrada_el)) : '')
-      : c.factura.estatus === 'cancelada' ? 'cancelada' : 'por cobrar') + '</div>';
+      : c.factura.estatus === 'cancelada' ? 'cancelada' : 'por cobrar') + '</div>'
+      + (no ? '<span class="chip mal">No cuadra: ' + esc((d > 0 ? '+' : '') + dinero(d)) + '</span>' : c.factura.estatus === 'cancelada' && c.estatus === 'autorizada' ? '<span class="chip mal">Factura cancelada</span>' : '');
     if (c.folio_factura) return esc(c.folio_factura) + '<div class="mut">del Excel</div>';
     return c.estatus === 'autorizada' ? '<span class="chip mal">Sin factura</span>' : '';
   }
@@ -636,13 +648,15 @@ td.sel input{width:18px;height:18px}
       + (util != null ? kpi('Utilidad de lo autorizado', esc(dinero(util)), sub - util > 0 ? pct(sub / (sub - util)) + ' sobre el costo con envío' : '')
          : kpi('No autorizadas', String(r.no_autorizadas || 0), ''));
     $('n-esp').textContent = String(r.en_espera || 0);
+    $('n-pcon').textContent = String(COTS.filter(porConciliar).length);
     pintaCot();
   }
   function pintaCot() {
-    var q = norm($('c-q').value), T = { esp: 'En espera', aut: 'Autorizadas', no: 'No autorizadas y canceladas', tod: 'Todas' };
+    var q = norm($('c-q').value), T = { esp: 'En espera', aut: 'Autorizadas', con: 'Por conciliar: lo cotizado contra lo facturado', no: 'No autorizadas y canceladas', tod: 'Todas' };
     var L = COTS.filter(function (c) {
       if (CT === 'esp' && c.estatus !== 'en_espera') return false;
       if (CT === 'aut' && c.estatus !== 'autorizada') return false;
+      if (CT === 'con' && !porConciliar(c)) return false;
       if (CT === 'no' && c.estatus !== 'no_autorizada' && c.estatus !== 'cancelada') return false;
       return !q || norm([c.nombre, c.tipo, c.solicita, c.numero, c.folio_factura, c.factura && c.factura.folio].join(' ')).indexOf(q) >= 0;
     });
@@ -653,7 +667,7 @@ td.sel input{width:18px;height:18px}
       return '<tr class="click" data-c="' + c.id + '"><td data-l="Núm." class="nw">' + esc(c.numero || '—') + '</td><td data-l="Fecha" class="nw">' + esc(fecha(c.fecha)) + '</td>'
         + '<td data-l="Pedido" class="w"><span class="rs">' + esc(c.nombre) + '</span><div class="mut">' + esc([c.tipo, c.solicita].filter(Boolean).join(' · ')) + '</div></td>'
         + '<td data-l="Total" class="monto">' + esc(dinero(c.total)) + '</td><td data-l="Estatus">' + cchip(c.estatus) + '</td><td data-l="Factura">' + cfac(c) + '</td></tr>';
-    }).join('') : '<tr><td colspan="6" class="vacio">No hay cotizaciones aquí.</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">' + (CT === 'con' ? 'Todo cuadra: cada cotización autorizada tiene su factura con el mismo subtotal.' : 'No hay cotizaciones aquí.') + '</td></tr>';
   }
   document.querySelectorAll('[data-ct]').forEach(function (b) {
     b.onclick = function () {

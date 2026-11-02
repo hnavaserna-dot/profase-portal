@@ -352,14 +352,45 @@ tr.click:hover td{background:var(--navy-soft)}
   }
 
   /* Ventana a la derecha */
-  function abre(titulo, sub, cuerpo) {
+  function abre(titulo, sub, cuerpo, fija) {
     $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
-      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
-    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+      + (fija ? '' : '<button class="btn chico" type="button" id="v-cierra">Cerrar</button>') + '</div><div class="cuerpo">' + cuerpo + '</div>';
+    if (fija) $('ficha').setAttribute('data-fija', '1'); else $('ficha').removeAttribute('data-fija');
+    $('velo').hidden = false; if (!fija) $('v-cierra').onclick = cierra;
     try { $('ficha').querySelector('input,select,textarea,button.acento').focus(); } catch (e) {}
   }
-  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
-  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  function cierra() {
+    $('velo').hidden = true; $('ficha').innerHTML = ''; $('ficha').removeAttribute('data-fija');
+    if (obligaCarga()) setTimeout(pasoCarga, 400);   // mientras falte la carga inicial, se regresa al paso que falta
+  }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo') && !$('ficha').hasAttribute('data-fija')) cierra(); });
+
+  /* Carga inicial sin salida (Héctor Daniel, 2-nov-2026, 14:52, cuando Alex llevaba casi tres horas con la ventana y 0 de 22:
+     «obligalo mediante un pop up que ya si o si lo cargue»). Antes, «Capturar ahora» lo traía aquí, pero la carga se
+     podía cerrar («Cerrar», Esc o picar afuera) y, quedándose en Vacaciones, la ventana de afuera ya no volvía. Ahora, a
+     quien la base le dice que la carga es obligatoria (rh_estado().carga.obligatoria: quien captura RH y no es la dirección),
+     en Vacaciones se le abre sola y fija: primero los días y el sueldo (puede guardar de a poco y le vuelve a salir lo que
+     falta) y luego los préstamos que ya existen (cargarlos o confirmar que no hay). Cualquier otra ficha que abra regresa
+     a la carga al cerrarla. Si se va a otra pantalla, la ventana de afuera (rh_tab.js) le vuelve a salir. */
+  var ESPERA_CARGA = false;
+  function obligaCarga() {
+    var c = (EST && EST.carga) || {};
+    return SEC === 'vac' && CAPTURA && !CONSULTA && !!c.obligatoria && ((c.pendientes || 0) > 0 || !c.prestamos);
+  }
+  function pasoCarga() {
+    if (!obligaCarga() || ESPERA_CARGA || !$('velo').hidden || !$('pregunta').hidden) return;
+    if (((EST.carga || {}).pendientes || 0) > 0) formCarga(); else formPasoPrestamos();
+  }
+  function formPasoPrestamos() {
+    abre('Carga inicial: último paso', 'Los préstamos al personal que ya existían antes del portal',
+      '<div class="msg ojo">Ya están los días y el sueldo de todos. Falta el último paso: carga cada préstamo vigente de antes del portal (cuándo se prestó, cuánto, cómo se ha descontado y el saldo de hoy)'
+      + (PRE_CARGA ? '; llevas ' + PRE_CARGA + (PRE_CARGA === 1 ? ' cargado' : ' cargados') + '. Cuando termines, confírmalo.' : ' o confirma que no hay ninguno.') + ' Hasta terminar, la carga no se puede dejar para después.</div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="cp-p">Cargar préstamo de antes</button>'
+      + (PRE_CARGA ? '<button class="btn" type="button" id="cp-l">Ya cargué los préstamos</button>' : '<button class="btn" type="button" id="cp-0">No hay préstamos vigentes</button>') + '</div>', true);
+    $('cp-p').onclick = formPreAntes;
+    if ($('cp-l')) $('cp-l').onclick = function () { prestamosListos(false); };
+    if ($('cp-0')) $('cp-0').onclick = function () { prestamosListos(true); };
+  }
   function msgEn(t, cls) { var m = $('v-msg'); if (!m) { error(t); return; } m.className = 'msg ' + (cls || 'mal'); m.textContent = t; m.hidden = !t; }
 
   /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
@@ -442,6 +473,7 @@ tr.click:hover td{background:var(--navy-soft)}
     COL = r[0] || []; AUS = r[1] || []; EST = r[2] || EST; PRE = r[3] || [];
     PRE_CARGA = PRE.filter(function (p) { return p.origen === 'carga'; }).length;
     pintaVacKpis(); pintaAus(); pintaDias();
+    pasoCarga();
   }
   function formAus(a) {
     a = a || {};
@@ -487,7 +519,7 @@ tr.click:hover td{background:var(--navy-soft)}
   function formCarga(solo) {
     var L = solo ? COL.filter(function (c) { return c.id === solo; }) : COL.filter(function (c) { return (c.vac && c.vac.pendiente) || c.sueldo == null; });
     if (!L.length) { avisa('Ya están los días y el sueldo de todos.'); return; }
-    var corr = !!solo;
+    var corr = !!solo, fija = !corr && obligaCarga();
     abre(corr ? 'Corregir días de vacaciones' : 'Carga inicial', corr ? L[0].nombre : 'Los días de vacaciones que le quedan hoy y el sueldo de cada quien',
       '<div class="msg ojo">' + (corr ? 'Escribe los días que le quedan hoy. Desde hoy se vuelve a llevar la cuenta con este número.'
         : 'Escribe los días de vacaciones que le quedan <b>hoy</b> a cada quien, según el control que ya llevas, y su <b>sueldo mensual</b>. Los días se capturan <b>una sola vez</b>: ya guardados, si hay que corregir algo, pídeselo a Daniel. Desde ahí el portal suma solo los días de cada aniversario y resta las vacaciones que captures.') + '</div>'
@@ -497,7 +529,8 @@ tr.click:hover td{background:var(--navy-soft)}
              : '<input data-carga="' + esc(c.id) + '" inputmode="decimal" autocomplete="off" aria-label="Días que le quedan a ' + esc(c.nombre) + '" placeholder="Días">')
           + (corr ? '' : (c.sueldo == null ? '<input data-sueldo-c="' + esc(c.id) + '" inputmode="decimal" autocomplete="off" aria-label="Sueldo mensual de ' + esc(c.nombre) + '" placeholder="Sueldo">' : '<span class="mut" style="text-align:right">' + esc(dinero(c.sueldo)) + '</span>')) + '</li>';
       }).join('') + '</ul></div><div class="msg" id="v-msg" hidden></div>'
-      + '<div class="acciones"><button class="btn acento" type="button" id="c-ok">' + (corr ? 'Guardar' : 'Guardar los que capturé') + '</button></div>');
+      + (fija ? '<div class="msg">Héctor Daniel Nava pidió que la carga inicial se termine ya: hasta terminarla no se puede dejar para después. Puedes guardar de a poco con «Guardar los que capturé»; te vuelven a salir los que falten.</div>' : '')
+      + '<div class="acciones"><button class="btn acento" type="button" id="c-ok">' + (corr ? 'Guardar' : 'Guardar los que capturé') + '</button></div>', fija);
     $('c-ok').onclick = async function () {
       var b = this, lista = [], malo = '', M = {};
       L.forEach(function (c) {
@@ -522,9 +555,10 @@ tr.click:hover td{background:var(--navy-soft)}
         for (var i = 0; i < soloS.length; i++) await rpc('rh_sueldo_guarda', { p: { colab_id: soloS[i].colab_id, sueldo: soloS[i].sueldo } });
         if (conDias.length) r = await rpc('rh_saldo_inicial', { p: conDias.map(function (x) { return { colab_id: x.colab_id, dias: x.dias, sueldo: x.sueldo || '' }; }) });
         else r = { pendientes: COL.filter(function (c) { return (c.vac && c.vac.pendiente) || (c.sueldo == null && !soloS.some(function (x) { return x.colab_id === c.id; })); }).length };
+        ESPERA_CARGA = true;
         cierra(); avisa(corr ? 'Corregido.' : 'Guardado. ' + (r && r.pendientes ? 'Faltan ' + r.pendientes + '.' : 'Ya están los días y el sueldo de todos. Sigue cargar los préstamos que ya existen.'));
-        await cargaVac();
-        avisaPadre();
+        try { await cargaVac(); } finally { ESPERA_CARGA = false; }
+        avisaPadre(); pasoCarga();
       } catch (e) { msgEn(falla(e)); b.disabled = false; }
     };
   }
@@ -632,7 +666,10 @@ tr.click:hover td{background:var(--navy-soft)}
       try {
         var r = await rpc('rh_prestamo_carga', { p: { colab_id: $('q-col').value, prestado: $('q-fec').value, monto: mon > 0 ? String(mon) : '', descuentos: L,
           saldo: sal === null || isNaN(sal) ? '' : String(Math.round(sal * 100) / 100), pagos: $('q-pag').value.trim(), periodicidad: $('q-per').value, proximo: $('q-prox').value, motivo: $('q-mot').value } });
-        cierra(); avisa(r && r.estado === 'liquidado' ? 'Guardado como pagado.' : 'Guardado: queda autorizado y se sigue descontando.'); await recarga(); avisaPadre();
+        ESPERA_CARGA = true;
+        cierra(); avisa(r && r.estado === 'liquidado' ? 'Guardado como pagado.' : 'Guardado: queda autorizado y se sigue descontando.');
+        try { await recarga(); } finally { ESPERA_CARGA = false; }
+        avisaPadre(); pasoCarga();
       } catch (e) { msgEn(falla(e)); b.disabled = false; }
     };
   }
@@ -642,6 +679,7 @@ tr.click:hover td{background:var(--navy-soft)}
       var r = await rpc('rh_prestamos_listos', { p_ninguno: !!ninguno });
       avisa(ninguno ? 'Listo: no hay préstamos vigentes. Terminaste la carga inicial.' : 'Listo: ' + r.prestamos + (r.prestamos === 1 ? ' préstamo' : ' préstamos') + ' con saldo de ' + dinero(r.saldo) + '. Terminaste la carga inicial.');
       await recarga(); avisaPadre();
+      if (!obligaCarga() && $('ficha').hasAttribute('data-fija')) cierra();   // terminó: se quita el último paso
     } catch (e) { error(falla(e)); }
   }
   function excelAus(b) {
@@ -1126,7 +1164,7 @@ tr.click:hover td{background:var(--navy-soft)}
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape') {
       if (!$('pregunta').hidden) { if (pregunta.cierra) pregunta.cierra(); return; }
-      if (!$('velo').hidden) { cierra(); return; }
+      if (!$('velo').hidden) { if (!$('ficha').hasAttribute('data-fija')) cierra(); return; }
     }
     if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('click')) ev.target.click();
   });

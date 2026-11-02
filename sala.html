@@ -732,8 +732,16 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   }
 
   /* --- llamadas del chat --- */
+  // la llamada con varios (149_chat_llamada_varios.sql): se llama como los demás de la llamada, sin uno mismo
+  function nomConv(info){
+    if(info&&info.conv_tipo==='llamada'){
+      const ns=(info.part||[]).filter(p=>p.usuario!==YO).map(p=>p.nombre||p.usuario);
+      if(ns.length)return ns.length>1?ns.slice(0,-1).join(', ')+' y '+ns[ns.length-1]:ns[0];
+    }
+    return (info&&info.conv_nombre)||'Llamada';
+  }
   function cfgLlamada(info,tipo,saliente){
-    return {id:info.id,conv:info.conv,info,tipo,saliente,titulo:info.conv_nombre||'Llamada',topic:'chat:llamada:'+info.id,sb:P.sb,
+    return {id:info.id,conv:info.conv,info,tipo,saliente,titulo:nomConv(info),topic:'chat:llamada:'+info.id,sb:P.sb,
       directo:info.conv_tipo==='directo',
       yo:()=>({u:YO,n:NOMBRE,uid:UID}),
       ice:()=>enlace({llamada:info.id}),
@@ -807,7 +815,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   const RECHAZADAS=new Set();
   async function muestraEntrante(info){
     if(L||ENTRA||RECHAZADAS.has(info.id))return;
-    const quien=info.conv_tipo==='directo'?info.inicia_nombre:info.conv_nombre;
+    const quien=info.conv_tipo==='directo'?info.inicia_nombre:nomConv(info);
     const v=document.createElement('div');v.className='ll-entra';v.setAttribute('role','alertdialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Llamada de '+quien);
     v.innerHTML='<div class="ll-card">'+(await avatar(info.inicia_uid,info.inicia_nombre))+'<b>'+e(quien)+'</b>'
       +'<p>'+(info.conv_tipo==='directo'?(info.tipo==='video'?'Te está llamando por video':'Te está llamando'):e(info.inicia_nombre)+(info.tipo==='video'?' te invita a una videollamada':' te invita a una llamada'))+'</p>'
@@ -1031,8 +1039,14 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     ls.innerHTML=SALAS.length?SALAS.map(x=>'<div class="re"><b>'+e(x.titulo)+'</b><small>'+e(fechaTxt(x))+(x.cliente?' · '+e(x.cliente):'')+(x.anfitrion_nombre?' · con '+e(x.anfitrion_nombre):'')+'</small>'
       +((x.en_llamada||x.esperando.length)?'<div>'+(x.en_llamada?'<span class="es vivo">En curso · '+x.en_llamada+'</span>':'')+(x.esperando.length?'<span class="es">'+x.esperando.length+(x.esperando.length===1?' espera':' esperan')+' para entrar</span>':'')+'</div>':'')
       +'<div class="bt">'+(x.hoy?'<button type="button" class="pri" data-entra="'+e(x.id)+'">Entrar</button>':'')
-      +'<button type="button" data-copia="'+e(x.id)+'">Copiar invitación</button>'+(x.cita?'<button type="button" data-cita="'+e(x.cita)+'">Ver en el Calendario</button>':'')+'</div></div>').join('')
+      +'<button type="button" data-copia="'+e(x.id)+'">Copiar invitación</button>'+pruebaDe(x)+(x.cita?'<button type="button" data-cita="'+e(x.cita)+'">Ver en el Calendario</button>':'')+'</div></div>').join('')
       :'<div class="vacio">No tienes videollamadas con clientes. Empieza una con «Nueva ahora» o agéndala para otro día.</div>';
+  }
+  // «Probar como el cliente» (Fernando Barbosa, 2-nov-2026: «quiero… ver la liga que manda… para hacer pruebas»): abre en
+  // otra pestaña lo que ve el cliente con su liga (la misma de la invitación; solo sirve el día de la cita)
+  function pruebaDe(x){
+    const m=/sala\.html#([A-Za-z0-9_%.~-]+)/.exec((x&&x.invitacion)||'');
+    return m?'<a href="'+e(location.origin+'/sala.html#'+m[1])+'" target="_blank" rel="noopener noreferrer">Probar como el cliente</a>':'';
   }
   function pantallaVcl(){
     if(REU)return REU;
@@ -1055,6 +1069,9 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
       +'#v-vcl .re .bt{display:flex;flex-wrap:wrap;gap:6px}'
       +'#v-vcl button{min-height:38px;border-radius:10px;padding:0 14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
       +'#v-vcl .re button{min-height:34px;font-size:13.5px;font-weight:600}'
+      +'#v-vcl .re a{display:inline-flex;align-items:center;min-height:34px;border-radius:10px;padding:0 14px;font-size:13.5px;font-weight:600;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit;text-decoration:none}'
+      +'#v-vcl .re a:focus-visible{outline:2px solid var(--navy,#1F3864);outline-offset:2px}'
+      +'#v-vcl .nota+.nota{margin-top:8px}'
       +'#v-vcl button.pri{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E);color:#fff}'
       +'#v-vcl button:focus-visible{outline:2px solid var(--navy,#1F3864);outline-offset:2px}'
       +'#v-vcl .vacio{background:var(--surface,#fff);border:1px dashed var(--line-strong,#C4CDDA);border-radius:12px;padding:16px;color:var(--muted,#5A6577);font-size:14px}'
@@ -1063,7 +1080,8 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     document.head.appendChild(st);
     const m=document.createElement('main');m.id='v-vcl';
     m.innerHTML='<div class="vcl-in"><div class="vcl-cab"><h2>Videollamadas con clientes</h2>'
-      +'<p class="nota">Con clientes o gente de fuera del despacho: cada quien entra con su liga y espera a que lo admitas. Nadie de fuera ve nada del portal, va cifrada y nadie la graba.</p>'
+      +'<p class="nota">Con clientes o gente de fuera del despacho. Al agendarla te damos su liga y tú se la mandas (por WhatsApp o correo); entra con ella y espera a que lo admitas. Los del despacho que van no necesitan liga: entran con «Entrar». Nadie de fuera ve nada del portal, va cifrada y nadie la graba.</p>'
+      +'<p class="nota">¿Solo con gente del despacho? No hace falta cita ni liga: en el Chat, «+ Nuevo» › «Llamada o videollamada con varios».</p>'
       +'<div class="vcl-bt" data-puedo hidden><button type="button" class="pri" data-ahora>Nueva ahora</button><button type="button" data-nueva>Para otro día</button></div></div>'
       +'<div class="vcl-t">Las de hoy y las que vienen</div><div class="reu" data-reu></div></div>';
     const mains=document.querySelectorAll('body > main');

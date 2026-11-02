@@ -145,6 +145,7 @@ main .wrap{padding-block:18px 40px;display:grid;gap:16px}
 .bar h2{font-size:19px;font-weight:600}
 .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .btn{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 12px;font-size:13.5px;font-weight:500;color:var(--ink)}
+a.btn{display:inline-block;text-decoration:none;text-align:center;cursor:pointer}
 .btn:hover:not(:disabled){background:var(--surface-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary:hover:not(:disabled){filter:brightness(.95);background:var(--accent)}
@@ -1202,6 +1203,9 @@ button.kpi:focus-visible{outline-offset:-3px}
       function(ov,cerrar){ ov.querySelector('[data-x]').onclick=cerrar; var t=ov.querySelector('textarea'); t.focus(); t.select(); });
   }
   function copiaInv(c){ if(c.video&&c.video.invitacion) copia(c.video.invitacion); else toast('Esta cita no tiene videollamada.'); }
+  // la liga del cliente (la misma de la invitación), para abrir en otra pestaña lo que él ve y probar (Barbosa, 2-nov-2026)
+  function ligaCliente(c){ return c&&c.video&&c.video.liga?location.origin+'/sala.html#'+encodeURIComponent(c.video.liga):''; }
+  function botonPrueba(c,cls){ var u=ligaCliente(c); return u?'<a class="btn '+(cls||'sm')+'" href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">Probar como el cliente</a>':''; }
 
   /* --- el detalle de una cita --- */
   async function abrirCita(id){
@@ -1236,7 +1240,7 @@ button.kpi:focus-visible{outline-offset:-3px}
     if(v&&v.estado==='abierta'&&!(ci&&ci.cierre)){
       h+='<div class="cvid">'+ico('video')+'<div><b>Videollamada con gente de fuera</b><small>'+(hoy?'Ya se puede entrar. Al cliente le mandas la invitación; tú lo admites cuando llegue.':'Se puede entrar el día de la cita. Mándale ya la invitación al cliente.')+'</small>'
         +'<div class="acts">'+(hoy?'<button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>':'')
-        +'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button></div></div></div>';
+        +'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button>'+botonPrueba(c)+'</div></div></div>';
     }
     // quiénes van: a quien le queda en su agenda y los invitados con su respuesta (141)
     if((c.invitados||[]).length){
@@ -1466,7 +1470,10 @@ button.kpi:focus-visible{outline-offset:-3px}
       +'<div class="f full"><div class="disp" id="cDisp" aria-live="polite"></div></div>'
       +'<div class="f full"><span class="lbl">¿Dónde?</span><div class="chips" id="cLug">'+Object.keys(LUGARES).map(function(k){ return '<label class="chipc"><input type="radio" name="cLug" value="'+k+'"'+(lugar===k?' checked':'')+'>'+LUGARES[k]+'</label>'; }).join('')+'</div>'
       +'<input id="cLtx" maxlength="200" autocomplete="off" style="margin-top:6px" value="'+esc(c&&c.lugar_texto||'')+'"></div>'
-      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.</small></span></label></div>'
+      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Al agendar te damos la liga para que tú se la mandes al cliente (por WhatsApp o correo): entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Los del despacho que van no necesitan liga: entran con «Entrar» en la cita. Nadie la graba.</small></span></label></div>'
+      // un tema interno no lleva liga (121): se dice por qué y cómo llamar solo a los del despacho (Fernando Barbosa,
+      // 2-nov-2026: agendó «Tema interno» para probar la liga con gente del despacho y no le salió; 149)
+      +'<div class="f full" id="cVidNo" hidden><div class="disp"><div class="inf1">'+ico('video')+'<span><b>Un tema interno no lleva liga de videollamada.</b> La liga es para gente de fuera, así que va en una cita con un cliente o un prospecto. ¿Solo con gente del despacho? No hace falta cita ni liga: en Chat › «+ Nuevo» › «Llamada o videollamada con varios» los llamas a todos a la vez.</span></div></div></div>'
       +'<div class="f"><label for="cRec">Recordatorio</label><select id="cRec">'+RECS.map(function(r){ return '<option value="'+r[0]+'"'+(r[0]===rec?' selected':'')+'>'+r[1]+'</option>'; }).join('')+'</select><small>A la campanita y al celular de quien tiene la cita y de sus invitados</small></div>'
       +'<div class="f"><label for="cNot">Notas (opcional)</label><textarea id="cNot" rows="2" maxlength="2000">'+esc(c&&c.notas||'')+'</textarea></div>'
       +'</div><div class="err" id="cErr" role="alert"></div>'
@@ -1521,8 +1528,9 @@ button.kpi:focus-visible{outline-offset:-3px}
       // la videollamada con gente de fuera: si va alguien de la dirección o un gerente a quien le queda en su agenda (la
       // sala es suya) y nunca en un tema interno (121)
       function pintaVideo(){
-        var puede=agSel().some(anfitrion)&&tipoSel()!=='interno';
+        var host=agSel().some(anfitrion), puede=host&&tipoSel()!=='interno';
         q('#cVidBox').hidden=!puede; if(!puede) q('#cVid').checked=false;
+        q('#cVidNo').hidden=!(host&&tipoSel()==='interno');
       }
       ov.querySelectorAll('input[name=cLug]').forEach(function(i){ i.onchange=pintaLugar; });
       // al cambiar la hora de inicio, la de fin se recorre para que dure lo mismo
@@ -1691,7 +1699,8 @@ button.kpi:focus-visible{outline-offset:-3px}
   function avisaVideo(c){
     ventana('<h3>Lista la videollamada</h3><p class="sub">Mándale al cliente esta invitación por WhatsApp o por correo. El día de la cita entra con la liga, escribe su nombre y espera; a ti te avisamos y lo admites desde «Entrar».</p>'
       +'<textarea rows="7" style="width:100%" readonly>'+esc(c.video.invitacion||'')+'</textarea>'
-      +'<div class="mact"><button type="button" class="btn" data-x>Después</button><button type="button" class="btn primary" data-cp>Copiar invitación</button></div>',
+      +'<p class="sub" style="margin-top:8px">La liga es solo para el cliente: a los del despacho que van no se las mandes, ellos entran con «Entrar» en la cita. ¿Quieres ver lo que ve el cliente? «Probar como el cliente» lo abre en otra pestaña (sirve el día de la cita).</p>'
+      +'<div class="mact"><button type="button" class="btn" data-x>Después</button>'+botonPrueba(c,'')+'<button type="button" class="btn primary" data-cp>Copiar invitación</button></div>',
       function(ov,cerrar){ ov.querySelector('[data-x]').onclick=cerrar; ov.querySelector('[data-cp]').onclick=function(){ copia(c.video.invitacion||''); cerrar(); }; });
   }
 
