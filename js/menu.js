@@ -2,7 +2,8 @@
    Va en las tres vistas (director, gerentes, contadores). No cambia cómo funciona cada pestaña: las pestañas siguen
    siendo los botones de siempre (.vsw), que aquí se esconden; el menú solo los pica. Por eso cada quien ve en el
    menú exactamente lo que ya veía: un sub módulo aparece solo si su botón está a la vista (lo deciden la página y
-   la base), y un módulo sin sub módulos no se pinta.
+   la base) y si la base no dice que no le toca (menu_sin(), 134_menu_lo_tuyo.sql: «solo les salga menús si tienen algo
+   que hacer», Daniel, 2-nov-2026), y un módulo sin sub módulos no se pinta.
    - Computadora: el menú se encoge a una tira de íconos («Ocultar menú» o ☰); al pasar el mouse por un ícono
      salen sus sub módulos. Se recuerda en el navegador de cada quien.
    - Celular (900 px o menos): el menú se esconde completo y ☰ lo abre encima de la página.
@@ -45,6 +46,7 @@
     msj: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.1A8.5 8.5 0 1 1 21 12Z"/><path d="M8 10.5h8M8 14h5"/>',
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
     usr: '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1.5"/>',
+    mul: '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',   // Multinacional: una caja (la comercializadora)
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
@@ -143,6 +145,15 @@
     { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] },
+    // Multinacional (2-nov-2026, Héctor Daniel, 12:01 a 12:20): la comercializadora de la dirección; no tiene que ver con
+    // las compañías que facturan el despacho. Solo la ven Mónica Pedraza (sube las facturas), Eva Rangel (marca las
+    // cobradas) y la dirección (mul_estado(), portal/sql/136_multinacional.sql; bloque mul_tab.js)
+    { k: 'mul', t: 'Multinacional', d: 'La comercializadora: cotizaciones, facturas, su banco y las comisiones.', subs: [
+      { k: 'mul-cotizador', v: 'mulq', t: 'Cotizador', d: 'Captura un pedido con el costo del proveedor; el CRM pone el precio.' },   // 143_multinacional_cotizador.sql
+      { k: 'mul-cotizaciones', v: 'mulc', t: 'Cotizaciones', d: 'Cada pedido con su costo, su precio, su estatus y su factura.' },
+      { k: 'mul-facturas', v: 'mulf', t: 'Facturas', d: 'Sube el XML y el PDF de cada factura; por cobrar y cobradas.' },
+      { k: 'mul-estado', v: 'mule', t: 'Estado de cuenta', d: 'El banco de Multinacional y cada depósito de Juárez contra su factura.' },
+      { k: 'mul-comisiones', v: 'mulk', t: 'Comisiones', d: 'La comisión de lo que paga Juárez, por mes: entregado y por entregar.' }] },
     // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la
     // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
     { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
@@ -165,7 +176,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
@@ -313,17 +324,49 @@
   function aLaVista(b) { return !!b && !b.hidden && getComputedStyle(b).display !== 'none'; }
   function subQuo(q) { return document.querySelector('#v-quo .qsw button[data-q="' + q + '"]'); }
 
+  /* Solo lo que cada quien tiene (Héctor Daniel, 2-nov-2026, 11:44, revisando con Dora su CRM: «solo les salga menús si
+     tienen "algo que hacer" en submenús, si no quítaselos… Aplica para todos los usuarios»). Además de lo que cada pestaña
+     ya enseña solo si la base la deja, aquí no salen las opciones que la base dice que no le tocan a quien entró
+     (menu_sin(), portal/sql/134_menu_lo_tuyo.sql: hoy, lo del WorkFlow y los clientes a quien no trabaja ningún cliente),
+     y un módulo que se queda sin opciones no se pinta. Lo mismo vale para el recorrido general, el «?», SuperConta y las
+     ligas del Inicio, que preguntan aquí. Mientras la base contesta, a un contador solo se le pinta el Inicio (para que
+     nada salga y luego se quite); si no contesta, se enseña todo como antes (las reglas de cada pantalla no cambian). */
+  var SIN = ROL === 'contador' ? null : {}, sinListo = null;
+  function pideSin() {
+    var P = window.PORTAL, hecho = false, avisa;
+    sinListo = new Promise(function (r) { avisa = r; });
+    function fin(l) {
+      if (hecho) return;
+      hecho = true;
+      var o = {}; (Array.isArray(l) ? l : []).forEach(function (v) { o[v] = 1; });
+      SIN = o; avisa(); if (sw) luego();
+    }
+    if (SIN) return fin([]);
+    if (!P || !P.listo || !P.sb) return fin([]);
+    setTimeout(function () { fin([]); }, 10000);   // si la base no contesta, como antes
+    P.listo.then(function (p) {
+      if (!p) return fin([]);
+      return P.sb.rpc('menu_sin').then(function (r) { fin(!r.error ? r.data : []); });
+    }).catch(function () { fin([]); });
+  }
+  pideSin();
+  // ¿Esta opción le toca y está a la vista? (una sola versión: la usan el menú, ir() y PORTAL_MENU.ve())
+  function tiene(s) {
+    if (s === INI) return aLaVista(boton(s.v));
+    return !!SIN && !SIN[s.v] && aLaVista(boton(s.v)) && (!s.q || !!subQuo(s.q));
+  }
+
   // Qué sub módulos ve esta persona (en el orden del menú), más los botones nuevos que no estén en el menú
   function modulos() {
     var conocidos = { ini: 1 }, out = [];
     MODS.forEach(function (m) {
-      var subs = m.subs.filter(function (s) { conocidos[s.v] = 1; return aLaVista(boton(s.v)) && (!s.q || subQuo(s.q)); });
+      var subs = m.subs.filter(function (s) { conocidos[s.v] = 1; return tiene(s); });
       if (subs.length) out.push({ m: m, subs: subs });
     });
     var extra = [];
     sw.querySelectorAll('button[data-view]').forEach(function (b) {
       var v = b.dataset.view;
-      if (conocidos[v] || !aLaVista(b)) return;
+      if (conocidos[v] || !SIN || SIN[v] || !aLaVista(b)) return;
       var s = ENT['v-' + v] || (ENT['v-' + v] = { k: v, v: v, t: b.textContent.trim(), m: MAS });
       extra.push(s);
     });
@@ -345,9 +388,8 @@
 
   function ir(k) {
     var s = ENT[k] || ENT['v-' + k];
-    if (!s) return false;
+    if (!s || !tiene(s)) return false;
     var b = boton(s.v);
-    if (!aLaVista(b)) return false;
     if (s.q) {
       var x = subQuo(s.q);
       if (!x) return false;
@@ -768,6 +810,8 @@
     if (!pedida || !(ENT[pedida])) { listo = true; pinta(); return; }
     (function intenta() {
       if (listo) return;
+      // una sección que no le toca (134_menu_lo_tuyo.sql: una liga vieja, por ejemplo) abre su Inicio
+      if (SIN && ENT[pedida] && ENT[pedida] !== INI && SIN[ENT[pedida].v] && aLaVista(boton(INI.v))) pedida = INI.k;
       if (ir(pedida)) return;
       if (Date.now() - t0 > 12000) { listo = true; pinta(); return; }
       setTimeout(intenta, 250);
@@ -827,8 +871,10 @@
       try { window.scrollTo(0, 0); var m = document.scrollingElement; if (m) m.scrollTop = 0; } catch (e) { /* sin página */ }
       return true;
     },
-    ve: function (k) { var s = ENT[k]; return !!(sw && s && aLaVista(boton(s.v)) && (!s.q || subQuo(s.q))); },
+    ve: function (k) { var s = ENT[k]; return !!(sw && s && tiene(s)); },
     modulos: function () { return sw ? datosModulos() : []; },
+    // se cumple cuando ya se sabe qué opciones le tocan a quien entró (menu_sin(); el recorrido general lo espera)
+    listo: sinListo,
     // la sección abierta (para el botón «?» de ayuda, portal/guia_tab.js): su clave, su nombre y su módulo
     actual: function () { var a = sw ? activo() : null; return a ? { k: a.k, t: nombre(a), v: a.v, m: a.m.k, mt: a.m.t } : null; },
     ensena: ensena,
