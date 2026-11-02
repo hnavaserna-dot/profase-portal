@@ -17,10 +17,12 @@
    - Quién ve qué no cambia: cada archivo se pide con la sesión de quien entró y la base decide (wf_docs, cubeta wfdocs).
      Cada vista y cada descarga se siguen anotando en Accesos (la página lo hace con P.registrar).
 
-   - En el expediente del cliente (expedientes.html, opción expediente: true) el menú «Con marca» / «Original» sale a todos
-     los que ven el documento (decisión de Daniel, 31-oct-2026: «dame opción original y branding»).
+   - En el expediente del cliente (expedientes.html) y en el chat interno (chat.html), con la opción originalTodos: true,
+     el menú «Con marca» / «Original» sale a todos los que ven el documento (decisiones de Daniel: expediente, 31-oct-2026,
+     «dame opción original y branding»; chat, 2-nov-2026, 13:52, «dame la opción dentro del chat; descargar original y
+     descargar»). «Ver» sigue con la marca.
    Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
-                                       doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, expediente });
+                                       doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, originalTodos });
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton); */
 (function () {
   'use strict';
@@ -139,9 +141,10 @@
     function ofrece(d) {
       var M = window.PROFASE_MARCA;
       if (!(M && M.ofreceOriginal && M.eligeMarca && op.esPdf(d))) return false;
-      // Expediente del cliente (Daniel, 31-oct-2026: «dame opción original y branding»): ahí el menú sale a todos los
-      // que ven el documento (opción «expediente», solo en expedientes.html; construir.py, exige_original()).
-      return op.expediente === true || M.ofreceOriginal();
+      // Expediente del cliente (Daniel, 31-oct-2026: «dame opción original y branding») y chat interno (Daniel,
+      // 2-nov-2026: «dame la opción dentro del chat»): ahí el menú sale a todos los que ven el documento (opción
+      // «originalTodos», solo en expedientes.html y chat.html; construir.py, exige_original()).
+      return op.originalTodos === true || M.ofreceOriginal();
     }
     // el PDF tal cual se subió, si se escogió «Original» y se pudo sellar (si no se pudo, ya es el original)
     function cual(b, orig) { return orig && b && b.original ? b.original : b; }
