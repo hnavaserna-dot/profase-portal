@@ -706,16 +706,127 @@
     clave = String(clave || 'algo');
     if (si === false) delete ESCRIBE[clave]; else ESCRIBE[clave] = Date.now();
   };
-  P.estaEscribiendo = function () {
-    var a = arriba(); if (a && a.estaEscribiendo) { try { return a.estaEscribiendo(); } catch (e) { /* sigue aquí */ } }
+  // a medio escribir de verdad (sin contar «No molestar», abajo)
+  function escribeDe() {
+    var a = arriba(); if (a && a.estaEscribiendoSolo) { try { return a.estaEscribiendoSolo(); } catch (e) { /* sigue aquí */ } }
     var t = Date.now(), k, hay = false;
     for (k in ESCRIBE) { if (t - ESCRIBE[k] < ESCRIBE_MS) hay = true; else delete ESCRIBE[k]; }
     return hay;
+  }
+  P.estaEscribiendoSolo = escribeDe;
+  // «No molestar» cuenta como «a medio escribir»: todo lo que espera a que nadie escriba (ventanas, recorridos, avisos,
+  // la versión nueva, el cierre temporal) también espera a que se quite
+  P.estaEscribiendo = function () { return P.noMolestar() || escribeDe(); };
+  // ocupado(true): sin contar «No molestar» (jalar para actualizar sigue funcionando mientras está prendido)
+  P.ocupado = function (sinNoMolestar) {
+    var a = arriba(); if (a && a.ocupado) { try { return a.ocupado(sinNoMolestar); } catch (e) { /* sigue aquí */ } }
+    try { return !!(P.enLlamada && P.enLlamada()) || (sinNoMolestar ? escribeDe() : P.estaEscribiendo()); } catch (e) { return false; }
   };
-  P.ocupado = function () {
-    var a = arriba(); if (a && a.ocupado) { try { return a.ocupado(); } catch (e) { /* sigue aquí */ } }
-    try { return !!(P.enLlamada && P.enLlamada()) || P.estaEscribiendo(); } catch (e) { return false; }
+
+  /* ---- «No molestar» (Héctor Daniel, 2-nov-2026, 13:47: «quiero agregar un no molestar… porque estaremos presentando y
+     para que no vean los mensajes que reciben las personas que están viendo las pantallas»; 13:5x: para todos los
+     usuarios, «Sí, solo se calla la pantalla donde presento» y solo con el botón, sin prenderse solo).
+     - Se prende en el menú de la foto (portal/nm_tab.js) y vale para ESTE navegador en este equipo: todas sus pestañas y
+       marcos (se guarda en localStorage, «profase-no-molestar»). Sus demás equipos (su celular) siguen igual que siempre.
+     - Mientras dura, en esta pantalla no salta nada: ni los globitos ni el sonido del chat, ni la campanita, ni llamadas,
+       ni quién espera en una videollamada, ni recordatorios, ventanas, recorridos, la versión nueva o el cierre temporal
+       (esperan a que se quite). Los mensajes, los avisos y los números llegan igual: nada se pierde.
+     - El aviso de la computadora (el que llega aunque el portal esté cerrado) tampoco llega a este equipo: la base lo
+       calla con chat_push_callar (portal/sql/147_no_molestar.sql) y la función chat-push no le manda nada mientras dure.
+     - Se apaga solo a la hora escogida (como máximo, a las 23:59 de hoy) y entonces, en la pestaña que está a la vista,
+       sale cuántos mensajes, avisos y llamadas llegaron mientras tanto (nunca de quién ni qué dicen).
+     - La red de seguridad: mientras está prendido, <html> lleva la clase «nm-on» y estos avisos flotantes no se ven
+       aunque alguno no lo revisara (NM_CSS). Un aviso flotante nuevo que salte solo revisa PORTAL.noMolestar() y, si
+       algo llegó, PORTAL.noMolestarCuenta('chat'|'avisos'|'llamadas', id). ---- */
+  var NM_K = 'profase-no-molestar', NM_R = 'profase-no-molestar-resumen', NM_EV = 'profase-no-molestar';
+  var NM_CSS = 'html.nm-on .cht-toast,html.nm-on .ntf-toast,html.nm-on .chg-toast,html.nm-on .ll-toast,html.nm-on .ll-entra,'
+    + 'html.nm-on .reu-c,html.nm-on #cal-aviso,html.nm-on .tbd-bar,html.nm-on #pv-toast{display:none!important}';
+  function nmLee() { try { var x = JSON.parse(localStorage.getItem(NM_K) || 'null'); return x && +x.hasta ? x : null; } catch (e) { return null; } }
+  function nmGuarda(x) { try { if (x) localStorage.setItem(NM_K, JSON.stringify(x)); else localStorage.removeItem(NM_K); } catch (e) { /* sin almacenamiento */ } }
+  P.noMolestar = function () { var x = nmLee(); return !!(x && +x.hasta > Date.now()); };
+  P.noMolestarDe = function () { var x = nmLee(); return x && +x.hasta > Date.now() ? { desde: +x.desde || 0, hasta: +x.hasta, min: +x.min || 0, n: x.n || {} } : null; };
+  // lo que llegó mientras tanto: solo cuántos (nunca de quién ni qué dice); con «id» no se cuenta dos veces lo mismo
+  P.noMolestarCuenta = function (tipo, id) {
+    var x = nmLee(); if (!x || +x.hasta <= Date.now()) return;
+    x.n = x.n || {}; x.ya = Array.isArray(x.ya) ? x.ya : [];
+    if (id != null) { var k = tipo + ':' + id; if (x.ya.indexOf(k) >= 0) return; x.ya.push(k); if (x.ya.length > 300) x.ya = x.ya.slice(-300); }
+    x.n[tipo] = (+x.n[tipo] || 0) + 1; nmGuarda(x);
   };
+  // las 23:59 de hoy en Monterrey (lo más que dura)
+  function nmMedianoche() {
+    var p = {};
+    try {
+      new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+        .formatToParts(new Date()).forEach(function (x) { p[x.type] = +x.value; });
+    } catch (e) { return Date.now() + 3600e3; }
+    var pasado = ((p.hour || 0) * 3600 + (p.minute || 0) * 60 + (p.second || 0)) * 1000;
+    return Math.max(Date.now() + 60e3, Date.now() - pasado + 86340e3);
+  }
+  // la dirección de avisos de este navegador (la que guardó el chat al activarlos), si la tiene
+  async function nmEquipo() {
+    try {
+      if (!('serviceWorker' in navigator)) return null;
+      var reg = await navigator.serviceWorker.getRegistration('/');
+      if (!reg || !reg.pushManager) return null;
+      var s = await reg.pushManager.getSubscription();
+      return s && s.endpoint ? s.endpoint : null;
+    } catch (e) { return null; }
+  }
+  async function nmBase(hasta) {
+    var ep = await nmEquipo(); if (!ep) return { ok: true, equipo: false };
+    try {
+      var r = await sb.rpc('chat_push_callar', { p_endpoint: ep, p_hasta: hasta ? new Date(hasta).toISOString() : null });
+      if (r.error) throw r.error;
+      return r.data || { ok: true, equipo: false };
+    } catch (e) { return { ok: false, equipo: true }; }
+  }
+  function nmClase() { try { document.documentElement.classList.toggle('nm-on', P.noMolestar()); } catch (e) { /* nada */ } }
+  function nmDispara(det) { nmClase(); try { window.dispatchEvent(new CustomEvent(NM_EV, { detail: det || {} })); } catch (e) { /* nada */ } }
+  // min: 30, 60, 120… o 0 = hasta que lo quite (las 23:59 de hoy). Regresa {hasta, equipo, base}
+  P.noMolestarPon = async function (min) {
+    var ahora = Date.now(), tope = nmMedianoche(), x = nmLee(), sigue = !!(x && +x.hasta > ahora);
+    var hasta = +min > 0 ? Math.min(ahora + min * 60000, tope) : tope;
+    nmGuarda({ desde: sigue ? +x.desde : ahora, hasta: hasta, min: +min > 0 ? +min : 0, n: sigue ? (x.n || {}) : {}, ya: sigue ? (x.ya || []) : [] });
+    try { localStorage.removeItem(NM_R); } catch (e) { /* nada */ }
+    nmDispara({ pon: true });
+    var b = await nmBase(hasta);
+    return { hasta: hasta, equipo: !!b.equipo, base: b.ok !== false };
+  };
+  // fin: lo apaga y deja el resumen para la pestaña que está a la vista (portal/nm_tab.js lo enseña)
+  function nmFin(x, como) {
+    nmGuarda(null);
+    try { localStorage.setItem(NM_R, JSON.stringify({ desde: +x.desde || 0, hasta: Math.min(+x.hasta, Date.now()), n: x.n || {}, como: como, t: Date.now() })); } catch (e) { /* nada */ }
+    nmDispara({ fin: true, como: como });
+  }
+  P.noMolestarQuita = async function () {
+    var x = nmLee(); if (!x) return null;
+    nmFin(x, 'quito');
+    await nmBase(null);
+    return x;
+  };
+  P.noMolestarResumen = function (quitar) {
+    var r = null; try { r = JSON.parse(localStorage.getItem(NM_R) || 'null'); if (quitar) localStorage.removeItem(NM_R); } catch (e) { r = null; }
+    return r && Date.now() - (+r.t || 0) < 12 * 3600e3 ? r : null;
+  };
+  (function () {
+    try { var st = document.createElement('style'); st.textContent = NM_CSS; (document.head || document.documentElement).appendChild(st); } catch (e) { /* nada */ }
+    nmClase();
+    // otra pestaña o marco lo prendió o lo quitó
+    window.addEventListener('storage', function (e) { if (e.key === NM_K || e.key === null) nmDispara({ otra: true }); });
+    var antes = P.noMolestar();
+    setInterval(function () {
+      var x = nmLee();
+      // se acabó la hora: lo apaga la página de arriba (la base vuelve sola a la misma hora)
+      if (x && +x.hasta <= Date.now() && window.parent === window) { antes = false; nmFin(x, 'hora'); return; }
+      var hoy = P.noMolestar(); if (hoy !== antes) { antes = hoy; nmDispara({}); }
+    }, 15000);
+    // al abrir con «No molestar» prendido, la base se pone al día con este navegador (por si su suscripción cambió)
+    // (P.listo se arma más abajo en este mismo archivo: se espera a que exista)
+    if (window.parent === window) setTimeout(function () {
+      if (!P.listo || !P.listo.then) return;
+      P.listo.then(function (p) { var x = nmLee(); if (p && x && +x.hasta > Date.now()) nmBase(+x.hasta); else if (p && x) nmFin(x, 'hora'); }).catch(function () {});
+    }, 0);
+  })();
 
   /* ---- Cierre temporal (30-oct-2026, pedido de Daniel: «Saca a todos del CRM con ese aviso y cuando quede ya les
      avisamos»). Al abrir, portal/cierre.js (escrito al principio de cada página) ya revisa cierre.json; aquí, en la
@@ -912,7 +1023,7 @@
           || w.matchMedia('(display-mode: fullscreen)').matches;
       } catch (e) { return false; }
     }
-    function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && (t.ocupado ? t.ocupado() : t.enLlamada && t.enLlamada())); } catch (e) { return false; } }
+    function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && (t.ocupado ? t.ocupado(true) : t.enLlamada && t.enLlamada())); } catch (e) { return false; } }
     function hastaArriba(w) {
       try { var se = w.document.scrollingElement || w.document.documentElement; return (se ? se.scrollTop : 0) <= 0 && (w.scrollY || 0) <= 0; } catch (e) { return true; }
     }
@@ -1409,7 +1520,7 @@
     + '.pu-av img{width:100%;height:100%;object-fit:cover;display:block}'
     + '.pu-av.m{width:44px;height:44px;font-size:16px}'
     + '.pu-av.l{width:112px;height:112px;font-size:38px;border:3px solid var(--surface);box-shadow:0 0 0 2px var(--accent)}'
-    + '.pu-dd{position:absolute;right:0;top:calc(100% + 8px);width:270px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:6px;z-index:85;text-align:left}'
+    + '.pu-dd{position:absolute;right:0;top:calc(100% + 8px);width:270px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:6px;z-index:85;text-align:left;overflow-y:auto;overscroll-behavior:contain}'
     + '.pu-dd[hidden]{display:none}'
     + '.pu-dh{display:flex;gap:10px;align-items:center;padding:10px 10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}'
     + '.pu-dh b{display:block;font-size:14px}.pu-dh small{display:block;font-size:12.5px;color:var(--muted)}'
@@ -1856,6 +1967,9 @@
     function despliega(o) {
       // en celular el menú se pega a la orilla derecha, justo abajo de la foto
       if (o) document.documentElement.style.setProperty('--pu-top', Math.round(btn.getBoundingClientRect().bottom + 8) + 'px');
+      // en cualquier pantalla, también una laptop baja, el menú cabe completo: si es más alto que lo que queda abajo de
+      // la foto, sus opciones se deslizan por dentro (regla de Daniel: «todos los menús… deben de siempre verse»)
+      if (o) dd.style.maxHeight = Math.max(180, Math.floor(innerHeight - btn.getBoundingClientRect().bottom - 8 - 12)) + 'px';
       dd.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false');
       if (o) { P.abreMenu('pu'); var f = dd.querySelector('[role="menuitem"]'); if (f) f.focus(); }
     }
