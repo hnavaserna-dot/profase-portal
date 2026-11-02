@@ -1,0 +1,605 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Estado de cuenta bancario</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script>
+<style>
+/* Portal PROFASE · Tesorería › Estado de cuenta bancario (Daniel, 2-nov-2026, 10:40 a 10:58). Solo la dirección y Eva Rangel.
+   El espejo del Excel de saldos que trabaja Dora Montalvo (todas sus pestañas; las del banco de cada compañía, tal cual el
+   banco) y la conciliación: cada depósito donde la columna H dice qué factura se pagó, contra los pagos del CRM. Nada se
+   aplica solo: Eva (principalmente) o Daniel marcan «Está bien» con su nota; HNR solo ve. La base decide quién ve todo
+   (tbc_estado(), portal/sql/130_tesoreria_espejo.sql); la página solo llama sus funciones tbc_*. Los nombres de las
+   compañías y de las hojas llegan con los datos. Excel y PDF con la marca PROFASE. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+/* el cliente con ancho mínimo: ya no queda una palabra por renglón en el iPad (revisión a fondo, 31-oct-2026) */
+#r-fac td[data-l="Cliente"]{min-width:220px}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+.cias{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.cias button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.cias button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.cias button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+tr.tot td{font-weight:700;background:var(--surface-2)}
+.edad{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.edad.am{background:var(--amber-soft);color:var(--amber)}
+.edad.ro{background:var(--red-soft);color:var(--red)}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px}
+
+
+.dat{color:var(--muted);font-size:12.5px;margin:14px 0 0;overflow-wrap:anywhere}
+.dat b{color:var(--ink);font-weight:600}
+.tabs.prin{margin:14px 0 4px}
+.tabs.sec{margin:12px 0 8px;flex-wrap:wrap;overflow-x:visible;gap:6px}
+.que{font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.colh{font-size:12.5px;overflow-wrap:anywhere;max-width:420px}
+td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hoja table{font-size:12.5px}
+.hoja td{white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}
+.hoja td.lar{white-space:normal;min-width:220px;max-width:420px;overflow-wrap:anywhere}
+.hoja tr.sec td{background:var(--navy-soft);font-weight:700}
+.hoja th:first-child,.hoja td:first-child{position:sticky;left:0;background:var(--surface);z-index:1}
+.hoja tr.sec td:first-child{background:var(--navy-soft)}
+.hoja th:first-child{background:var(--surface-2)}
+.sald th:first-child,.sald td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;min-width:200px;white-space:normal}
+.sald th:first-child{background:var(--surface-2)}
+.facs{width:100%;font-size:13px}
+#k-sal{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+#k-sal .v{font-size:22px;overflow-wrap:normal;white-space:nowrap}
+.acc-nota{width:100%;min-height:64px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:6px 0 10px;resize:vertical}
+.chk-l{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.chk-l input{width:18px;height:18px;accent-color:var(--navy)}
+@media (max-width:700px){.acc-nota{font-size:16px}.hoja td{max-width:240px}}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Tesorería</div>
+      <h1 id="titulo">Estado de cuenta bancario</h1>
+      <p id="subt">El Excel de saldos de Tesorería, tal como lo lleva Dora, y la revisión de los depósitos contra los pagos del CRM.</p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no marcar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="falla" hidden></div>
+  <div class="nota" id="vacio" hidden>Todavía no se lee el Excel por primera vez. En cuanto Dora lo guarde (o en unos minutos), aquí aparece.</div>
+  <p class="dat" id="dat"></p>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <div class="tabs prin" role="tablist" aria-label="Estado de cuenta bancario">
+      <button type="button" role="tab" data-pt="con" aria-selected="true">Conciliación <span class="cta" id="n-con">0</span></button>
+      <button type="button" role="tab" data-pt="sal" aria-selected="false">Saldos</button>
+      <button type="button" role="tab" data-pt="hoj" aria-selected="false">Hojas del Excel</button>
+    </div>
+
+    <!-- ===== Conciliación ===== -->
+    <section id="s-con">
+      <div class="cias" id="cias" role="group" aria-label="Compañía"></div>
+      <div class="tabs sec" role="tablist" aria-label="Qué ver">
+        <button type="button" role="tab" data-ct="rev" aria-selected="true">Por revisar <span class="cta" id="n-rev">0</span></button>
+        <button type="button" role="tab" data-ct="dora" aria-selected="false">Le toca a Dora <span class="cta" id="n-dora">0</span></button>
+        <button type="button" role="tab" data-ct="exp" aria-selected="false">Explicó Dora <span class="cta" id="n-exp">0</span></button>
+        <button type="button" role="tab" data-ct="sf" aria-selected="false">Sin factura en la columna H <span class="cta" id="n-sf">0</span></button>
+        <button type="button" role="tab" data-ct="ok" aria-selected="false">Revisados</button>
+      </div>
+      <div class="kpis" id="kpis" style="margin-top:0"></div>
+      <div class="card" style="margin-top:16px">
+        <header><div><h2 id="h-con">Por revisar</h2><div class="sub" id="con-sub"></div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-con">Excel</button></div></header>
+        <div class="filtros">
+          <input type="search" id="q-con" placeholder="Buscar cliente, folio o lo que dice la columna H" aria-label="Buscar cliente, folio o lo que dice la columna H">
+          <label class="chk-l" id="l-int" hidden><input type="checkbox" id="c-int"> Incluir traspasos, préstamos y nómina</label>
+        </div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th class="monto">Monto</th><th>Columna H</th><th>Qué encontré</th><th></th></tr></thead>
+          <tbody id="con-l"></tbody></table></div>
+      </div>
+      <p class="pie">Se revisan los depósitos desde el <span id="desde"></span>. Nada se aplica solo: si algo tiene su explicación (por ejemplo, pagó otra razón social), márcalo «Está bien» con tu nota y ya no sale.</p>
+    </section>
+
+    <!-- ===== Saldos ===== -->
+    <section id="s-sal" hidden>
+      <div class="kpis" id="k-sal"></div>
+      <div class="card" style="margin-top:16px">
+        <header><div><h2>Saldos por día</h2><div class="sub">Los últimos días de la hoja de saldos del Excel, del más nuevo al más viejo.</div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-sal">Excel</button></div></header>
+        <div class="tabla sald"><table><thead id="sal-h"></thead><tbody id="sal-l"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ===== Hojas del Excel ===== -->
+    <section id="s-hoj" hidden>
+      <div class="card hoja" style="margin-top:4px">
+        <header><div><h2 id="h-hoj">Hoja</h2><div class="sub" id="hoj-sub"></div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-hoj">Excel</button></div></header>
+        <div class="filtros">
+          <label class="mut" for="s-hoja">Hoja</label><select id="s-hoja"></select>
+          <label class="mut" for="s-mes" id="l-mes">Mes</label><select id="s-mes"></select>
+          <input type="search" id="q-hoj" placeholder="Buscar en lo que se ve" aria-label="Buscar en lo que se ve">
+        </div>
+        <div class="tabla"><table><thead id="hoj-h"></thead><tbody id="hoj-l"></tbody></table></div>
+      </div>
+      <p class="pie">Es una copia de solo lectura: el Excel lo sigue llevando Dora y aquí se ve igual, sin poder cambiarlo.</p>
+    </section>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var EST = null, CONSULTA = false, MARCA = false, LISTA = [], CIA = 0, PT = 'con', CT = 'rev', HOJA = null, HDAT = null, RES = null;
+  var DORA_SET = ['sin_pago', 'falta_monto', 'folio_no_existe', 'folio_incompleto'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : new Date(s).toLocaleString('es-MX'); } catch (e) { return String(s); } }
+  function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function numero(n) { n = Number(n); return n.toLocaleString('es-MX', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  var HOY = hoyISO();
+  function cia(id) { var c = (EST && EST.companias || []).filter(function (x) { return x.id === id; })[0]; return c ? c.nombre : ''; }
+  function folioTxt(f) { var p = String(f || '').split('|'); return (p[0] ? p[0] + '-' : '') + (p[1] || '(sin número)'); }
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  async function excel(b, nombre, titulo, lineas, head, filas, monedas, anchos) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\\/?*\[\]:]/g, ' '));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      (monedas || []).forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00;-$#,##0.00'; });
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, nombre + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+
+  /* ---------- ventana ---------- */
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('velo').hidden) cierra(); });
+
+  /* =============================== CONCILIACIÓN =============================== */
+  function enCia(x) { return !CIA || x.compania === CIA; }
+  function grupo(x) {
+    if (x.revision === 'bien' || x.revision === 'confirmado') return 'ok';
+    if (!x.activo) return '';
+    if (x.revision === 'explicado') return 'exp';
+    if (x.estado === 'ok') return '';
+    if (x.le_toca) return 'dora';
+    if (x.estado === 'sin_factura') return 'sf';
+    return 'rev';
+  }
+  function queTxt(x) {
+    var d = x.detalle || {}, fs = (x.folios || []).map(folioTxt).join(', ');
+    switch (x.estado) {
+      case 'sin_pago': return 'La columna H dice que paga ' + (fs || 'una factura') + ', pero en el CRM no tiene un pago capturado cerca de esa fecha.';
+      case 'falta_monto': return 'Entró ' + dinero(x.monto) + ', pero en el CRM solo se capturaron ' + dinero(d.aplicado) + ' a ' + (fs || 'esas facturas') + ' y siguen con saldo.';
+      case 'monto_distinto': return 'Entró ' + dinero(x.monto) + ' y en el CRM se capturaron ' + dinero(d.aplicado) + '; esas facturas ya están pagadas (quizá es saldo a favor o pagó algo más).';
+      case 'folio_no_existe': return 'La columna H dice ' + ((d.no_existen || []).join(', ') || fs) + ' y ese folio no está en el CRM para ' + (cia(x.compania) || 'esta compañía') + '.';
+      case 'folio_incompleto': return 'La columna H dice «FAC» pero sin el número del folio.';
+      case 'sin_factura': return 'La columna H no dice qué factura se pagó.';
+      case 'pago_sin_deposito': return 'En el CRM hay un pago' + (d.cliente ? ' de ' + d.cliente : '') + ' por ' + dinero(x.monto) + ' del ' + fecha(x.fecha) + ' y no se ve su depósito en el banco cerca de esa fecha.';
+      default: return 'Ya cuadra con el CRM.';
+    }
+  }
+  function estChip(x) {
+    if (x.revision === 'bien') return chip('Está bien', 'ok');
+    if (x.revision === 'confirmado') return chip('Explicación confirmada', 'ok');
+    if (x.revision === 'explicado') return chip('Explicó Dora', 'az');
+    if (x.le_toca) return chip('Le toca a Dora', 'na');
+    if (x.estado === 'pago_sin_deposito') return chip('Pago sin depósito', 'ojo');
+    if (x.estado === 'sin_factura') return chip(x.interno ? 'Movimiento interno' : 'Sin factura', '');
+    return chip(x.historico ? 'De antes de hoy' : 'Por revisar', x.historico ? '' : 'ojo');
+  }
+  function filtrada() {
+    var q = norm($('q-con').value), conInt = $('c-int').checked;
+    return LISTA.filter(enCia).filter(function (x) { return grupo(x) === CT; })
+      .filter(function (x) { return CT !== 'sf' || conInt || !x.interno; })
+      .filter(function (x) { if (!q) return true; var d = x.detalle || {}; return norm([x.concepto, x.descripcion, x.referencia, (x.folios || []).map(folioTxt).join(' '), d.cliente, x.hoja].join(' ')).indexOf(q) >= 0; });
+  }
+  var TIT = { rev: ['Por revisar', 'Lo que no cuadra con el CRM y no le toca a Dora (o es de antes de hoy). Pícalo para ver el detalle.'],
+    dora: ['Le toca a Dora', 'Depósitos que Dora tiene que capturar en Pagos o corregir en la columna H. A ella le llega el aviso a las 2 horas, a las 13:30 y, al día hábil siguiente, una ventana que no se quita hasta que lo haga o lo explique.'],
+    exp: ['Explicó Dora', 'Dora explicó por qué no va en el CRM. Confírmalo o regrésaselo con tu nota.'],
+    sf: ['Sin factura en la columna H', 'Depósitos donde la columna H no dice qué factura se pagó. No se le avisa a Dora; revísalos si quieres.'],
+    ok: ['Revisados', 'Lo que ya se marcó (los últimos 60 días).'] };
+  function pintaCon() {
+    document.querySelectorAll('[data-ct]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-ct') === CT ? 'true' : 'false'); });
+    var porG = { rev: 0, dora: 0, exp: 0, sf: 0 };
+    LISTA.filter(enCia).forEach(function (x) { var g = grupo(x); if (porG[g] != null && (g !== 'sf' || !x.interno)) porG[g]++; });
+    $('n-rev').textContent = porG.rev; $('n-dora').textContent = porG.dora; $('n-exp').textContent = porG.exp; $('n-sf').textContent = porG.sf;
+    $('n-con').textContent = porG.rev + porG.exp;
+    $('h-con').textContent = TIT[CT][0]; $('con-sub').textContent = TIT[CT][1];
+    $('l-int').hidden = CT !== 'sf';
+    var L = filtrada(), sum = 0; L.forEach(function (x) { sum += Number(x.monto || 0); });
+    var tot = LISTA.filter(enCia).filter(function (x) { return x.tipo === 'deposito' && x.activo && x.estado !== 'ok'; });
+    $('kpis').innerHTML = '<div class="kpi"><div class="l">' + esc(TIT[CT][0]) + '</div><div class="v">' + L.length + '</div><div class="s">' + esc(dinero(sum)) + '</div></div>'
+      + '<div class="kpi"><div class="l">Sin su pago en el CRM</div><div class="v">' + LISTA.filter(enCia).filter(function (x) { return x.activo && (x.estado === 'sin_pago' || x.estado === 'falta_monto') && ['rev', 'dora'].indexOf(grupo(x)) >= 0; }).length + '</div><div class="s">depósitos</div></div>'
+      + '<div class="kpi"><div class="l">Folios que no están</div><div class="v">' + LISTA.filter(enCia).filter(function (x) { return x.activo && (x.estado === 'folio_no_existe' || x.estado === 'folio_incompleto') && ['rev', 'dora'].indexOf(grupo(x)) >= 0; }).length + '</div><div class="s">en la columna H</div></div>'
+      + '<div class="kpi"><div class="l">Pagos sin depósito</div><div class="v">' + LISTA.filter(enCia).filter(function (x) { return x.estado === 'pago_sin_deposito' && grupo(x) === 'rev'; }).length + '</div><div class="s">en el CRM</div></div>';
+    void tot;
+    $('con-l').innerHTML = L.length ? L.map(function (x, i) {
+      return '<tr class="click" tabindex="0" data-i="' + i + '"><td data-l="Fecha">' + esc(fecha(x.fecha)) + '<div class="mut">' + esc(x.tipo === 'pago' ? 'Pago del CRM' : (x.hoja || '')) + '</div></td>'
+        + '<td data-l="Monto" class="monto"><b>' + esc(dinero(x.monto)) + '</b></td>'
+        + '<td data-l="Columna H" class="w"><div class="colh">' + esc(x.tipo === 'pago' ? ((x.detalle || {}).cliente || '') : (x.concepto || '—')) + '</div></td>'
+        + '<td data-l="Qué encontré" class="w"><div class="que">' + esc(queTxt(x)) + '</div></td>'
+        + '<td data-l="" class="w">' + estChip(x) + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="vacio">' + (CT === 'rev' ? 'Nada por revisar. Todo lo que dice la columna H cuadra con los pagos del CRM.' : 'Nada aquí.') + '</td></tr>';
+    $('con-l').querySelectorAll('[data-i]').forEach(function (tr) {
+      var x = L[+tr.getAttribute('data-i')];
+      tr.onclick = function () { ficha(x); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ficha(x); } };
+    });
+  }
+  function ficha(x) {
+    var d = x.detalle || {}, facs = d.facturas || [];
+    var c = '<div class="sec"><h3>' + esc(x.tipo === 'pago' ? 'El pago del CRM' : 'El depósito') + '</h3><div class="in"><div class="dl">'
+      + '<span>Fecha</span><span>' + esc(fecha(x.fecha)) + '</span><span>Monto</span><span><b>' + esc(dinero(x.monto)) + '</b></span>'
+      + '<span>Compañía</span><span>' + esc(cia(x.compania)) + '</span>'
+      + (x.tipo === 'deposito' ? '<span>Hoja</span><span>' + esc(x.hoja || '') + ' · renglón ' + esc(x.fila || '') + '</span>'
+        + '<span>Columna H</span><span>' + esc(x.concepto || '—') + '</span><span>Lo que dice el banco</span><span>' + esc(x.descripcion || '—') + '</span>'
+        + (x.referencia ? '<span>Referencia</span><span>' + esc(x.referencia) + '</span>' : '')
+        : '<span>Cliente</span><span>' + esc(d.cliente || '') + '</span>')
+      + '</div></div></div>'
+      + '<div class="msg ' + (x.estado === 'ok' ? 'bien' : 'ojo') + '">' + esc(queTxt(x)) + '</div>';
+    if (facs.length) {
+      c += '<div class="sec"><h3>Las facturas en el CRM</h3><div class="tabla"><table class="facs resp"><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody>'
+        + facs.map(function (f) { return '<tr><td data-l="Folio">' + esc(f.folio || '') + (f.efectivo ? ' ' + chip('Efectivo') : '') + '</td><td data-l="Fecha">' + esc(fecha(f.fecha)) + '</td><td data-l="Cliente" class="w">' + esc(f.cliente || '') + '</td><td data-l="Total" class="monto">' + esc(dinero(f.total)) + '</td><td data-l="Saldo" class="monto">' + (Number(f.saldo) > 1 ? '<b>' + esc(dinero(f.saldo)) + '</b>' : chip('Pagada', 'ok')) + '</td></tr>'; }).join('')
+        + '</tbody></table></div></div>';
+    }
+    if ((d.pagos || []).length) c += '<div class="sec"><h3>Pagos capturados cerca de esa fecha</h3><div class="in">' + d.pagos.map(function (p) { return esc(fecha(p.fecha)) + ' · ' + esc(dinero(p.monto)); }).join('<br>') + '</div></div>';
+    if (x.dora_texto) c += '<div class="sec"><h3>Lo que explicó Dora</h3><div class="in">' + esc(x.dora_texto) + (x.dora_en ? '<div class="mut">' + esc(fechaHora(x.dora_en)) + '</div>' : '') + '</div></div>';
+    if (x.dora_regreso && x.le_toca) c += '<div class="msg ojo">Se le pidió a Dora: ' + esc(x.dora_regreso) + '</div>';
+    if (x.revision === 'bien' || x.revision === 'confirmado') c += '<div class="msg bien">' + esc(x.revision === 'bien' ? 'Está bien' : 'Explicación confirmada') + (x.reviso ? ' · ' + esc(x.reviso) : '') + (x.revisado ? ', ' + esc(fechaHora(x.revisado)) : '') + (x.nota ? ': ' + esc(x.nota) : '') + '</div>';
+    if (MARCA && !CONSULTA) {
+      c += '<div class="sec"><h3>¿Qué hago?</h3><div class="in">';
+      if (x.revision === 'explicado') {
+        c += '<label class="mut" for="v-nota">Nota (para regresárselo a Dora es obligatoria)</label><textarea class="acc-nota" id="v-nota" maxlength="600"></textarea>'
+          + '<div class="acciones"><button class="btn bien" type="button" data-ac="confirmar">Confirmar la explicación</button><button class="btn" type="button" data-ac="regresar">Regresar a Dora</button></div>';
+      } else if (x.revision === 'bien' || x.revision === 'confirmado') {
+        c += '<div class="acciones"><button class="btn" type="button" data-ac="reabrir">Reabrir</button></div>';
+      } else {
+        c += '<label class="mut" for="v-nota">¿Por qué está bien? (por ejemplo, «pagó otra razón social»)</label><textarea class="acc-nota" id="v-nota" maxlength="600"></textarea>'
+          + '<div class="acciones"><button class="btn bien" type="button" data-ac="bien">Está bien</button>'
+          + (x.tipo === 'deposito' && DORA_SET.indexOf(x.estado) >= 0 && !x.le_toca ? '<button class="btn" type="button" data-ac="pedir_dora">Pedirle a Dora que lo capture</button>' : '')
+          + '</div>';
+      }
+      c += '</div></div>';
+    }
+    abre(x.tipo === 'pago' ? 'Pago sin depósito' : 'Depósito del ' + fecha(x.fecha), cia(x.compania) + ' · ' + dinero(x.monto), c);
+    $('ficha').querySelectorAll('[data-ac]').forEach(function (b) {
+      b.onclick = async function () {
+        var nota = $('v-nota') ? $('v-nota').value.trim() : '';
+        b.disabled = true;
+        try {
+          await rpc('tbc_marca', { p_clave: x.clave, p_accion: b.getAttribute('data-ac'), p_nota: nota });
+          cierra(); avisa({ bien: 'Quedó como «Está bien».', reabrir: 'Se volvió a abrir.', pedir_dora: 'Listo: a Dora le va a llegar el aviso para capturarlo.', confirmar: 'Explicación confirmada.', regresar: 'Se lo regresaste a Dora con tu nota.' }[b.getAttribute('data-ac')] || 'Listo.');
+          await cargaCon(); pintaCon();
+        } catch (e) { b.disabled = false; error(falla(e)); }
+      };
+    });
+  }
+  async function cargaCon() { LISTA = await rpc('tbc_conc_lista') || []; }
+  function pintaCias() {
+    var cs = EST.companias || [];
+    $('cias').innerHTML = cs.length > 1 ? '<button type="button" data-cia="0" aria-pressed="' + (!CIA) + '">Todas</button>' + cs.map(function (c) { return '<button type="button" data-cia="' + c.id + '" aria-pressed="' + (CIA === c.id) + '">' + esc(c.nombre) + '</button>'; }).join('') : '';
+    $('cias').querySelectorAll('[data-cia]').forEach(function (b) { b.onclick = function () { CIA = +b.getAttribute('data-cia'); pintaCias(); pintaCon(); }; });
+  }
+  document.querySelectorAll('[data-ct]').forEach(function (b) { b.onclick = function () { CT = b.getAttribute('data-ct'); pintaCon(); }; });
+  $('q-con').oninput = function () { pintaCon(); };
+  $('c-int').onchange = function () { pintaCon(); };
+  $('x-con').onclick = function () {
+    var L = filtrada();
+    excel(this, 'Conciliación ' + TIT[CT][0] + ' ' + HOY, 'Conciliación del banco', [TIT[CT][0] + (CIA ? ' · ' + cia(CIA) : ''), 'Exportado el ' + fecha(HOY)],
+      ['Fecha', 'Compañía', 'Hoja', 'Monto', 'Columna H', 'Qué encontré', 'Estado', 'Nota'],
+      L.map(function (x) { return [fecha(x.fecha), cia(x.compania), x.tipo === 'pago' ? 'Pago del CRM' : (x.hoja || ''), Number(x.monto || 0), x.tipo === 'pago' ? ((x.detalle || {}).cliente || '') : (x.concepto || ''), queTxt(x), estChip(x).replace(/<[^>]+>/g, ''), x.nota || x.dora_texto || '']; }),
+      [4], [12, 16, 14, 14, 44, 60, 18, 40]);
+  };
+
+  /* =============================== SALDOS =============================== */
+  async function pintaSal() {
+    var H = (EST.hojas || []).filter(function (h) { return h.saldo != null && h.ultima; })
+      .sort(function (a, b) { return (b.banco ? 1 : 0) - (a.banco ? 1 : 0) || String(b.ultima).localeCompare(String(a.ultima)); });
+    $('k-sal').innerHTML = H.length ? H.map(function (h) {
+      return '<div class="kpi"><div class="l">' + esc(h.nombre) + '</div><div class="v">' + esc(dinero(h.saldo)) + '</div><div class="s">al ' + esc(fecha(h.ultima)) + '</div></div>';
+    }).join('') : '<div class="vacio">Todavía no hay saldos.</div>';
+    if (!RES) { try { RES = await rpc('tbc_resumen_saldos') || {}; } catch (e) { RES = {}; } }
+    var F = (RES.fechas || []).slice(), idx = F.map(function (_, i) { return i; }).reverse().slice(0, 15);
+    $('sal-h').innerHTML = '<tr><th>Cuenta</th>' + idx.map(function (i) { return '<th class="num">' + esc(fecha(F[i])) + '</th>'; }).join('') + '</tr>';
+    $('sal-l').innerHTML = (RES.filas || []).length ? RES.filas.map(function (r) {
+      return '<tr><td>' + esc(r.etiqueta) + '</td>' + idx.map(function (i) { var v = r.valores[i]; return '<td class="num">' + (v == null ? '' : esc(dinero(v))) + '</td>'; }).join('') + '</tr>';
+    }).join('') : '<tr><td class="vacio">La hoja de saldos por día todavía no se lee.</td></tr>';
+  }
+  $('x-sal').onclick = function () {
+    var F = RES && RES.fechas || [];
+    excel(this, 'Saldos por día ' + HOY, 'Saldos por día', ['Del Excel de saldos de Tesorería', 'Exportado el ' + fecha(HOY)],
+      ['Cuenta'].concat(F.map(fecha)), (RES && RES.filas || []).map(function (r) { return [r.etiqueta].concat(r.valores.map(function (v) { return v == null ? '' : Number(v); })); }),
+      F.map(function (_, i) { return i + 2; }), [36].concat(F.map(function () { return 14; })));
+  };
+
+  /* =============================== HOJAS DEL EXCEL =============================== */
+  var DINERO = /(saldo|cargo|abono|retiro|dep[oó]sito|monto|total|importe|iva)/i;
+  function celda(h, col, v, r) {
+    if (col === 'A' && r.d) return fecha(r.d);
+    if (v == null) return '';
+    if (typeof v === 'number') return DINERO.test(h.cabecera[col] || '') ? dinero(v) : numero(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(v))) return fecha(v);
+    return String(v);
+  }
+  function pintaHojaSel() {
+    $('s-hoja').innerHTML = (EST.hojas || []).map(function (h) { return '<option value="' + esc(h.nombre) + '">' + esc(h.nombre) + '</option>'; }).join('');
+    if (!HOJA) { var b = (EST.hojas || []).filter(function (h) { return h.banco; })[0] || (EST.hojas || [])[0]; HOJA = b ? b.nombre : null; }
+    $('s-hoja').value = HOJA || '';
+  }
+  async function cargaHoja(desde, hasta) {
+    if (!HOJA) return;
+    $('hoj-l').innerHTML = '<tr><td class="vacio">Cargando…</td></tr>';
+    HDAT = await rpc('tbc_hoja', { p_hoja: HOJA, p_desde: desde || null, p_hasta: hasta || null });
+    var ms = HDAT.meses || [], grande = HDAT.n > 400 && HDAT.con_fecha;
+    $('s-mes').hidden = $('l-mes').hidden = !grande;
+    if (grande) {
+      var sel = HDAT.desde ? String(HDAT.desde).slice(0, 7) : (ms[0] && ms[0].mes);
+      $('s-mes').innerHTML = ms.map(function (m) { var p = m.mes.split('-'); return '<option value="' + m.mes + '">' + esc(MESES_L[+p[1] - 1] + ' ' + p[0]) + ' (' + m.n + ')</option>'; }).join('');
+      $('s-mes').value = sel || '';
+    }
+    pintaHoja();
+  }
+  function pintaHoja() {
+    var h = HDAT; if (!h || !h.ok) { $('hoj-l').innerHTML = '<tr><td class="vacio">No se pudo leer esta hoja.</td></tr>'; return; }
+    var cols = h.columnas || [], q = norm($('q-hoj').value);
+    $('h-hoj').textContent = h.nombre;
+    $('hoj-sub').textContent = h.n + (h.n === 1 ? ' renglón' : ' renglones') + (h.desde ? ' · se ve un mes a la vez' : '');
+    $('hoj-h').innerHTML = '<tr>' + cols.map(function (c) { var t = h.cabecera[c] || c; return '<th' + (DINERO.test(h.cabecera[c] || '') ? ' class="num"' : '') + '>' + esc(t) + '</th>'; }).join('') + '</tr>';
+    var F = (h.filas || []).filter(function (r) { if (r.f === h.fila_cab) return false; if (!q) return true; return norm(Object.values(r.c).join(' ')).indexOf(q) >= 0; });
+    $('hoj-l').innerHTML = F.length ? F.map(function (r) {
+      var llenas = Object.keys(r.c).length, sec = llenas === 1 && typeof r.c.A === 'string' && !r.d;
+      return '<tr' + (sec ? ' class="sec"' : '') + '>' + cols.map(function (c) {
+        var v = r.c[c], t = celda(h, c, v, r), num = typeof v === 'number';
+        return '<td' + (num ? ' class="num"' : (String(t).length > 40 ? ' class="lar"' : '')) + ' title="' + esc(t) + '">' + esc(t) + '</td>';
+      }).join('') + '</tr>';
+    }).join('') : '<tr><td colspan="' + Math.max(1, cols.length) + '" class="vacio">Nada que coincida.</td></tr>';
+  }
+  $('s-hoja').onchange = async function () { HOJA = this.value; $('q-hoj').value = ''; try { await cargaHoja(); } catch (e) { error(falla(e)); } };
+  $('s-mes').onchange = async function () {
+    var m = this.value; if (!m) return;
+    var p = m.split('-'), fin = new Date(Date.UTC(+p[0], +p[1], 0)).toISOString().slice(0, 10);
+    try { await cargaHoja(m + '-01', fin); } catch (e) { error(falla(e)); }
+  };
+  $('q-hoj').oninput = function () { pintaHoja(); };
+  $('x-hoj').onclick = function () {
+    var h = HDAT; if (!h || !h.ok) return;
+    var cols = h.columnas || [];
+    excel(this, h.nombre + (h.desde ? ' ' + String(h.desde).slice(0, 7) : '') + ' ' + HOY, h.nombre, ['Del Excel de saldos de Tesorería' + (h.desde ? ' · del ' + fecha(h.desde) + ' al ' + fecha(h.hasta) : ''), 'Exportado el ' + fecha(HOY)],
+      cols.map(function (c) { return h.cabecera[c] || c; }),
+      (h.filas || []).filter(function (r) { return r.f !== h.fila_cab; }).map(function (r) { return cols.map(function (c) { var v = r.c[c]; return c === 'A' && r.d ? fecha(r.d) : (typeof v === 'number' ? v : celda(h, c, v, r)); }); }),
+      cols.map(function (c, i) { return DINERO.test(h.cabecera[c] || '') ? i + 1 : 0; }).filter(Boolean), cols.map(function (c) { return /concepto|descrip|movim/i.test(h.cabecera[c] || '') ? 40 : 14; }));
+  };
+
+  /* =============================== Arranque =============================== */
+  function pestana(t) {
+    PT = t;
+    document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pt') === t ? 'true' : 'false'); });
+    $('s-con').hidden = t !== 'con'; $('s-sal').hidden = t !== 'sal'; $('s-hoj').hidden = t !== 'hoj';
+    if (t === 'sal') pintaSal().catch(function (e) { error(falla(e)); });
+    if (t === 'hoj' && !HDAT) { pintaHojaSel(); cargaHoja().catch(function (e) { error(falla(e)); }); }
+  }
+  document.querySelectorAll('[data-pt]').forEach(function (b) { b.onclick = function () { pestana(b.getAttribute('data-pt')); }; });
+  function pintaDatos() {
+    var a = EST.archivo || {};
+    $('dat').innerHTML = a.procesado ? 'Datos al <b>' + esc(fechaHora(a.procesado)) + '</b>' + (a.procesado_mod ? ' · el Excel lo cambió ' + esc(a.procesado_por || 'alguien') + ' el ' + esc(fechaHora(a.procesado_mod)) : '') : '';
+    var malo = a.error && a.error_en && (!a.procesado || a.error_en > a.procesado);
+    $('falla').hidden = !malo;
+    if (malo) $('falla').textContent = 'La última lectura del Excel no se pudo (' + a.error + '). Se ve lo último bueno; se vuelve a intentar solo.';
+  }
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('tbc_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para la dirección y Eva.');
+      CONSULTA = !!P.consulta || !!EST.consulta; MARCA = !!EST.marca && !CONSULTA;
+      $('consulta').hidden = !CONSULTA;
+      $('desde').textContent = fecha(EST.desde);
+      pintaDatos();
+      $('cargando').hidden = true;
+      if (!(EST.hojas || []).length) { $('vacio').hidden = false; return; }
+      await cargaCon();
+      pintaCias(); pintaCon();
+      $('todo').hidden = false;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  // al volver a la pestaña, lo más nuevo (sin preguntar mientras no se ve)
+  document.addEventListener('visibilitychange', async function () {
+    if (document.hidden || !EST || !EST.ve) return;
+    try { var e = await rpc('tbc_estado'); if (e && e.ve) { var nuevo = !EST.archivo || !e.archivo || e.archivo.procesado !== EST.archivo.procesado; EST = e; pintaDatos(); if (nuevo) { RES = null; HDAT = null; await cargaCon(); pintaCias(); pintaCon(); if (PT !== 'con') pestana(PT); } } } catch (err) {}
+  });
+  arranca();
+})();
+</script>
+</body></html>
