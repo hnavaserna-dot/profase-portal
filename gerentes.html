@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="76cf2eb5acac"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="5a0941e46236"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Gerentes</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -7465,21 +7465,33 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.appendChild(capa);
     try{capa.querySelector('button').focus()}catch(e){}
   }
+  // En cuanto Alex termina el recorrido general (y lo que esté en pantalla), le sale; no a los 2 minutos (Daniel, 2-nov-2026,
+  // 09:57: «cuando termine Alex su recorrido; oblígalo a cargar lo pendiente»). Mientras le falte el recorrido general se
+  // vuelve a preguntar cada 15 s; mientras haya otra cosa en pantalla se espera sin preguntar a la base (cada 500 ms), y si
+  // esperó más de un minuto vuelve a preguntar antes de enseñarla. Un solo reloj de reintento a la vez (tOtra).
+  let tOtra=null;
   async function revisa(){
     if(revisando||listaCarga)return;revisando=true;
+    let otraVez=0;
     try{
       const P=window.PORTAL;
-      const r=await P.sb.rpc('rh_estado');if(r.error||!r.data)return;
+      const r=await P.sb.rpc('rh_estado');if(r.error||!r.data){otraVez=30000;return}
       EST=r.data;
       const c=EST.carga||{};
       if(!c.obligatoria){listaCarga=!(c.pendientes>0)&&!!c.prestamos;quitaCapa();return}
       if(actual()==='rhv')return;           // ya está en Vacaciones: ahí captura
       const v=await P.sb.rpc('recorridos_mios');
-      if(v.error||!Array.isArray(v.data)||v.data.indexOf('bienvenida-1')<0)return;   // primero el recorrido general
-      for(let i=0;i<240&&ocupado();i++)await dormir(500);
-      if(ocupado()||actual()==='rhv')return;
+      if(v.error||!Array.isArray(v.data)||v.data.indexOf('bienvenida-1')<0){otraVez=15000;return}   // primero el recorrido general
+      const t0=Date.now();
+      while(ocupado())await dormir(500);
+      if(Date.now()-t0>60000){otraVez=200;return}
+      if(actual()==='rhv')return;
       ventana(c);
-    }catch(e){}finally{revisando=false}
+    }catch(e){otraVez=30000}finally{
+      revisando=false;
+      clearTimeout(tOtra);tOtra=null;
+      if(otraVez&&!capa&&!listaCarga)tOtra=setTimeout(revisa,otraVez);
+    }
   }
   function vigilaCarga(){
     if(!EST||!EST.captura||!EST.carga||EST.corrige||(!(EST.carga.pendientes>0)&&EST.carga.prestamos))return;
