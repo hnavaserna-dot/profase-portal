@@ -1209,16 +1209,20 @@ button.kpi:focus-visible{outline-offset:-3px}
   }
   /* Cancelar una reunión con cliente (también la que no se hizo): quién y el motivo, siempre de la lista, y si se re
      agenda ahí mismo (Daniel, 31-oct-2026, 23:14) */
-  function cancelaReunion(c, ex){
+  async function cancelaReunion(c, ex){
     var mot=AG.exp.motivos||[], dur=aMin(c.fin)-aMin(c.inicio);
+    // re agendar una reunión con un prospecto solo lo hacen la dirección y Eva (121; Daniel, 1-nov-2026, 17:09)
+    if(ex.prospecto&&!AG.expCli){ try{ var rc=await P.sb.rpc('exp_cita_clientes'); if(!rc.error&&rc.data){ AG.expCli=rc.data; AG.expCliHora=Date.now(); } }catch(er0){} }
+    var sinRe=!!(ex.prospecto&&!(AG.expCli&&AG.expCli.puede_prospecto));
     var d0=c.dia>hoyK()?c.dia:sumaD(hoyK(),1);
     var html='<form id="fCan" novalidate><h3>'+(ex.paso?'La reunión no se hizo':'Cancelar la reunión')+'</h3>'
       +'<p class="sub">«'+esc(c.titulo)+'» con '+esc(ex.cliente)+'. En su expediente queda quién la canceló y por qué.</p><div class="fg">'
       +'<div class="f full"><span class="lbl">¿Quién la canceló?</span><div class="chips"><label class="chipc"><input type="radio" name="xLado" value="cliente">El cliente</label>'
       +'<label class="chipc"><input type="radio" name="xLado" value="profase">PROFASE</label></div></div>'
       +'<div class="f full"><label for="xMot">Motivo</label><select id="xMot" disabled><option value="">Primero escoge quién la canceló</option></select></div>'
-      +'<div class="f full"><span class="lbl">¿Se re agenda?</span><div class="chips"><label class="chipc"><input type="radio" name="xRe" value="si">Sí, con nueva fecha</label>'
-      +'<label class="chipc"><input type="radio" name="xRe" value="no">No, solo cancelarla</label></div></div>'
+      +(sinRe?'<div class="f full"><span class="lbl">¿Se re agenda?</span><small>Una reunión con un prospecto la re agendan H\u00e9ctor Daniel Nava o Eva: avísales para que le pongan la nueva fecha.</small><input type="radio" name="xRe" value="no" checked hidden></div>'
+        :'<div class="f full"><span class="lbl">¿Se re agenda?</span><div class="chips"><label class="chipc"><input type="radio" name="xRe" value="si">Sí, con nueva fecha</label>'
+        +'<label class="chipc"><input type="radio" name="xRe" value="no">No, solo cancelarla</label></div></div>')
       +'<div class="f full" id="xNueva" hidden><div class="dos"><div class="f"><label for="xDia">Nuevo día</label><input id="xDia" type="date" value="'+esc(d0)+'" min="'+esc(hoyK())+'"></div>'
       +'<div class="f"><label for="xIni">Hora</label><div>'+window.PROFASE_HORA.campo('xIni', c.inicio, false)+'</div></div></div>'
       +'<small>Dura lo mismo ('+(dur>0?dur+' min':'la misma duración')+') y lleva lo mismo: la agenda, el tema, el cliente, los invitados, el lugar y el recordatorio'+(c.video?', con una liga nueva de videollamada':'')+'. A todos les llega el aviso.</small></div>'
@@ -1288,9 +1292,19 @@ button.kpi:focus-visible{outline-offset:-3px}
     }
     if(c&&ex===undefined) ex=AG.exp.citas[c.id]||null;
     var EC=AG.expCli, fijo=!!(ex&&ex.minutas>0);
+    // toda cita es con un cliente, con un prospecto o un tema interno (121): sin la lista no se puede escoger
+    if(!EC){ toast('No pude traer tu lista de clientes. Vuelve a intentar en un momento.'); return; }
     // una cita nueva con un prospecto (desde su expediente) solo la agendan la dirección y Eva (119)
     if(!c&&base.pr&&EC&&EC.puede_prospecto===false){ toast('Las citas con un prospecto las agendan H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva.'); return; }
-    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g?'cliente':ahora?'cliente':'');
+    // la cita nueva no trae nada escogido: se escoge el cliente, el prospecto o «Tema interno» (121); una que ya existía
+    // sin cliente es un tema interno; la que viene del Chat con videollamada, con un cliente
+    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):(base.pr?'prospecto':base.g||ahora||base.video===true?'cliente':c?'interno':'');
+    var TIPOS=[['cliente','Con un cliente'],['prospecto','Con un prospecto'],['interno','Tema interno']].filter(function(t){
+      if(t[0]==='prospecto') return EC.puede_prospecto!==false||tipo0==='prospecto';
+      if(t[0]==='cliente') return (EC.clientes||[]).length>0||tipo0==='cliente';
+      return true;
+    });
+    if(!tipo0&&TIPOS.length===1) tipo0=TIPOS[0][0];   // sin clientes ni prospectos que escoger: solo temas internos
     var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), e0=ex&&!ex.prospecto?ex.e:(base.e?+base.e:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
     var gru0=EC&&g0?(EC.clientes||[]).filter(function(x){ return x.g===g0; })[0]:null;
     if(EC&&pr0&&!(EC.prospectos||[]).some(function(x){ return x.id===pr0; })&&ex) EC.prospectos=(EC.prospectos||[]).concat([{id:pr0, nombre:ex.cliente}]);
@@ -1306,12 +1320,12 @@ button.kpi:focus-visible{outline-offset:-3px}
         :nuevo?'Se guarda en la agenda que escojas. Si es la de otra persona, le llega el aviso.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
       +((e.poner||[]).length>1?'<div class="f full"><label for="cDue">¿En la agenda de quién?</label><select id="cDue">'+e.poner.map(function(p){ return '<option value="'+esc(p.usuario)+'"'+(p.usuario===dueno?' selected':'')+'>'+esc(p.usuario===yoU()?'La mía ('+p.nombre+')':p.nombre)+'</option>'; }).join('')+'</select></div>':'')
       +'<div class="f full"><label for="cTit">¿De qué es?</label><input id="cTit" maxlength="120" autocomplete="off" placeholder="Ej. Revisión de la declaración anual" value="'+esc(c?c.titulo:(base.titulo||''))+'"></div>'
-      +(!EC?'':fijo
+      +(fijo
         ?'<div class="f full"><span class="lbl">'+(ex.prospecto?'Prospecto':'Cliente')+'</span><div><b>'+esc(ex.cliente)+'</b></div><small>Ya tiene minutas: su cliente ya no cambia.</small></div>'
-        :'<div class="f full"><span class="lbl">¿Es con un cliente?</span><div class="chips">'
-          // con un prospecto solo agendan la dirección y Eva (119; Daniel, 1-nov-2026, 16:18)
-          +[['','No'],['cliente','Con un cliente'],['prospecto','Con un prospecto']].filter(function(t){ return t[0]!=='prospecto'||EC.puede_prospecto!==false||tipo0==='prospecto'; })
-            .map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
+        :'<div class="f full"><span class="lbl">¿Con quién es?</span><div class="chips">'
+          // con un prospecto solo agendan la dirección y Eva (119); si no es con un cliente ni un prospecto, es un tema
+          // interno, solo con personal de PROFASE (121; Daniel, 1-nov-2026, 17:09)
+          +TIPOS.map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
           +'</div><small id="cTipoN"></small></div>'
           +'<div class="f full" id="cBoxCli" hidden><label for="cGru">Grupo</label><input id="cGru" list="cGruL" maxlength="200" autocomplete="off" placeholder="Escribe el nombre del grupo" value="'+esc(gru0?gru0.n:'')+'">'
           +'<datalist id="cGruL">'+(EC.clientes||[]).map(function(x){ return '<option value="'+esc(x.n)+'"></option>'; }).join('')+'</datalist>'
@@ -1322,15 +1336,13 @@ button.kpi:focus-visible{outline-offset:-3px}
           +'<div id="cProN" hidden><div style="display:grid;gap:6px;margin-top:8px"><input id="cProNom" maxlength="200" autocomplete="off" placeholder="Nombre del grupo (obligatorio)" aria-label="Nombre del grupo del prospecto">'
           +'<input id="cProRaz" maxlength="300" autocomplete="off" placeholder="Razón social (opcional)" aria-label="Razón social del prospecto">'
           +'<input id="cProCon" maxlength="300" autocomplete="off" placeholder="Contacto: nombre, teléfono o correo (opcional)" aria-label="Contacto del prospecto"></div></div></div>')
-      +'<div class="f full" id="cBoxLibre"><label for="cCli">'+(EC?'¿Con quién? (opcional)':'Cliente (opcional)')+'</label><input id="cCli" list="cCliL" maxlength="100" autocomplete="off" placeholder="Escribe el grupo o el nombre" value="'+esc(c&&!ex&&c.cliente||'')+'">'
-      +'<datalist id="cCliL">'+gruposCli.map(function(g){ return '<option value="'+esc(g.g)+'">'+esc(g.emp.slice(0,2).join(', '))+'</option>'; }).join('')+'</datalist></div>'
       +'<div class="f full"><label for="cDia">Día</label><input id="cDia" type="date" value="'+esc(dia)+'" min="'+esc(sumaD(hoyK(),-1))+'"></div>'
       +'<div class="f full"><div class="dos"><div class="f"><label for="cIni">Empieza</label><div>'+window.PROFASE_HORA.campo('cIni', ini, false)+'</div></div>'
       +'<div class="f"><label for="cFin">Termina</label><div>'+window.PROFASE_HORA.campo('cFin', fin, false)+'</div></div></div></div>'
       +'<div class="f full"><div class="disp" id="cDisp" aria-live="polite"></div></div>'
       +'<div class="f full"><span class="lbl">¿Dónde?</span><div class="chips" id="cLug">'+Object.keys(LUGARES).map(function(k){ return '<label class="chipc"><input type="radio" name="cLug" value="'+k+'"'+(lugar===k?' checked':'')+'>'+LUGARES[k]+'</label>'; }).join('')+'</div>'
       +'<input id="cLtx" maxlength="200" autocomplete="off" style="margin-top:6px" value="'+esc(c&&c.lugar_texto||'')+'"></div>'
-      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.'+(EC&&EC.cliente_con_video?' Con videollamada siempre escoges el cliente: el grupo y la razón social, o todo el grupo.':'')+'</small></span></label></div>'
+      +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.</small></span></label></div>'
       +'<div class="f full"><span class="lbl">Invitar a alguien del despacho (opcional)</span><input id="cIBus" type="search" placeholder="Buscar por nombre" autocomplete="off" aria-label="Buscar persona del despacho">'
       +'<div class="chips" id="cISel"></div><div class="pers" id="cIPers" hidden>'+gente.map(function(g){ return '<label data-n="'+esc(norm(g.nombre))+'"><input type="checkbox" name="cInv" value="'+esc(g.usuario)+'"'+(inv.indexOf(g.usuario)>=0?' checked':'')+'>'+esc(g.nombre)+'</label>'; }).join('')+'</div></div>'
       +'<div class="f"><label for="cRec">Recordatorio</label><select id="cRec">'+RECS.map(function(r){ return '<option value="'+r[0]+'"'+(r[0]===rec?' selected':'')+'>'+r[1]+'</option>'; }).join('')+'</select><small>A la campanita y al celular de quien tiene la cita y de sus invitados</small></div>'
@@ -1352,9 +1364,10 @@ button.kpi:focus-visible{outline-offset:-3px}
         t.placeholder=l==='cliente'?'¿Dónde? (dirección o nombre del lugar, opcional)':l==='linea'?'Liga de Zoom, Teams u otra (opcional)':'¿Dónde?';
         t.setAttribute('aria-label', t.placeholder);
       }
+      // la videollamada con gente de fuera: solo en la agenda de quien puede abrirla y nunca en un tema interno (121)
       function pintaVideo(){
         var d=(e.poner||[]).filter(function(p){ return p.usuario===dueSel(); })[0];
-        var puede=!!(d&&d.video);
+        var puede=!!(d&&d.video)&&tipoSel()!=='interno';
         q('#cVidBox').hidden=!puede; if(!puede) q('#cVid').checked=false;
       }
       function pintaInv(){
@@ -1418,8 +1431,8 @@ button.kpi:focus-visible{outline-offset:-3px}
         return out.sort();
       }
 
-      /* con quién es: sin cliente, un cliente (grupo y razón social, o todo el grupo) o un prospecto */
-      function tipoSel(){ if(!EC) return null; if(fijo) return 'fijo'; return (ov.querySelector('input[name=cTipo]:checked')||{}).value||''; }
+      /* con quién es: un cliente (grupo y razón social, o todo el grupo), un prospecto o un tema interno (121) */
+      function tipoSel(){ if(fijo) return 'fijo'; return (ov.querySelector('input[name=cTipo]:checked')||{}).value||''; }
       function grupoSel(){ var t=norm(q('#cGru')?q('#cGru').value:''); return t?(EC.clientes||[]).filter(function(x){ return norm(x.n)===t; })[0]||null:null; }
       function pintaEmp(){
         var g=grupoSel(), sl=q('#cEmp'); if(!sl) return;
@@ -1429,47 +1442,45 @@ button.kpi:focus-visible{outline-offset:-3px}
                       :'<option value="">Primero escoge el grupo</option>';
       }
       function pintaTipo(){
-        var t=tipoSel(); if(t===null) return;
+        var t=tipoSel();
         if(q('#cBoxCli')) q('#cBoxCli').hidden=t!=='cliente';
         if(q('#cBoxPro')) q('#cBoxPro').hidden=t!=='prospecto';
         if(q('#cProN')) q('#cProN').hidden=!(t==='prospecto'&&q('#cPro').value==='nuevo');
-        q('#cBoxLibre').hidden=t!=='';
+        // un tema interno no es «Con el cliente»: ese lugar no sale (si estaba escogido, pasa a «En PROFASE»)
+        var lc=ov.querySelector('input[name=cLug][value="cliente"]');
+        if(lc){ lc.parentElement.hidden=t==='interno'; if(t==='interno'&&lc.checked){ var lp=ov.querySelector('input[name=cLug][value="profase"]'); if(lp) lp.checked=true; pintaLugar(); } }
+        pintaVideo();
         var n=q('#cTipoN'); if(n) n.textContent=t==='cliente'?'Queda en el expediente del cliente y lleva minuta: si se hizo, cada quien que estuvo agrega lo suyo.'
-          :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(dueSel()!=='daniel.nava'?' Héctor Daniel va a todas las de prospecto: lo invitamos.':''):'';
+          :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(dueSel()!=='daniel.nava'?' H\u00e9ctor Daniel Nava va a todas las de prospecto: lo invitamos.':'')
+          :t==='interno'?'Solo con personal de PROFASE: sin videollamada con gente de fuera. Si es con alguien de fuera, escoge el cliente.'
+          :t===''?'Toda reunión con gente de fuera lleva su cliente: el grupo y la razón social, o todo el grupo.':'';
       }
       // en «Nueva ahora», mientras no escriban el tema, se llama como el cliente que escojan
       var titAuto=ahora&&!q('#cTit').value.trim();
       q('#cTit').addEventListener('input', function(){ titAuto=false; });
       function titDe(n){ if(titAuto&&n) q('#cTit').value='Videollamada con '+n; }
-      if(ahora&&EC&&!fijo){
+      if(ahora&&!fijo){
         q('#cGru').addEventListener('change', function(){ var g=grupoSel(); if(g) titDe(g.n); });
         q('#cPro').addEventListener('change', function(){ var o=q('#cPro').selectedOptions[0]; if(o&&o.value&&o.value!=='nuevo') titDe(o.textContent); });
       }
-      if(EC&&!fijo){
+      if(!fijo){
         ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=pintaTipo; });
         q('#cGru').addEventListener('input', pintaEmp); q('#cGru').addEventListener('change', pintaEmp);
         q('#cPro').onchange=pintaTipo;
         if(q('#cDue')) q('#cDue').addEventListener('change', pintaTipo);
         pintaEmp();
       }
-      if(EC) pintaTipo();
-      /* Los gerentes, en una videollamada, siempre escogen el cliente (119; Daniel, 1-nov-2026, 16:18): con la
-         videollamada prendida, «No» no se puede escoger y pasa a «Con un cliente». La base también lo revisa. */
-      function conVideo(){ return !!(q('#cVid')&&q('#cVid').checked&&!q('#cVidBox').hidden); }
-      function obligaCli(){
-        if(!EC||fijo||!EC.cliente_con_video) return;
-        var v=conVideo(), no=ov.querySelector('input[name=cTipo][value=""]');
-        if(!no) return;
-        no.disabled=v; no.parentElement.style.opacity=v?'.45':'';
-        if(v&&no.checked){ var cl=ov.querySelector('input[name=cTipo][value="cliente"]'); if(cl){ cl.checked=true; pintaTipo(); } }
-      }
-      if(q('#cVid')) q('#cVid').addEventListener('change', obligaCli);
-      if(q('#cDue')) q('#cDue').addEventListener('change', obligaCli);
+      /* Toda cita es con un cliente, con un prospecto o un tema interno (121; Daniel, 1-nov-2026, 17:09: «todas las
+         reuniones tienen que [llevar] grupo [y] razones sociales… las citas internas, seleccionar tema interno y solamente
+         … con Personal de PROFASE»). La base también lo revisa. */
       function liga(){
         var t=tipoSel();
-        if(t==='' && EC && EC.cliente_con_video && conVideo()) return {msg:'Con videollamada escoge el cliente: el grupo y la razón social, o todo el grupo.', foco:'#cGru'};
-        if(t===null||t==='fijo') return {ok:true};
-        if(t==='') return {ok:true, liga:{tipo:''}};
+        if(t==='fijo') return {ok:true};
+        if(t==='') return {msg:'Escoge con quién es: '+TIPOS.map(function(x){ return '«'+x[1]+'»'; }).join(', ').replace(/, ([^,]*)$/,' o $1')+'.', foco:'input[name=cTipo]'};
+        if(t==='interno'){
+          if(lugSel()==='cliente') return {msg:'Un tema interno es solo con personal de PROFASE: si es con el cliente, escoge el cliente.', foco:'input[name=cTipo]'};
+          return {ok:true, liga:{tipo:'interno'}};
+        }
         if(t==='cliente'){
           var g=grupoSel(); if(!g) return {msg:'Escoge el grupo de la lista.', foco:'#cGru'};
           return {ok:true, liga:{tipo:'cliente', grupo:g.g, empresa:q('#cEmp').value?+q('#cEmp').value:null}};
@@ -1483,7 +1494,7 @@ button.kpi:focus-visible{outline-offset:-3px}
         return {ok:true, liga:{tipo:'prospecto', prospecto:+pv}};
       }
 
-      pintaLugar(); pintaVideo(); pintaInv(); revisa(); obligaCli();
+      pintaLugar(); pintaTipo(); pintaInv(); revisa();
       if(ahora&&q('#cGru')&&!q('#cBoxCli').hidden) setTimeout(function(){ try{ q('#cGru').focus({preventScroll:true}); }catch(er){} }, 80);   // lo primero: el cliente
       q('#fCita').onsubmit=async function(ev){
         ev.preventDefault();
@@ -1494,7 +1505,8 @@ button.kpi:focus-visible{outline-offset:-3px}
         if(!a||!b){ er.textContent='Escoge la hora de inicio y la de fin.'; return; }
         if(aMin(b)<=aMin(a)){ er.textContent='La hora de fin tiene que ser después de la de inicio.'; return; }
         var L=liga(); if(!L.ok){ er.textContent=L.msg; if(L.foco&&q(L.foco)) q(L.foco).focus(); return; }
-        var p={id:c?c.id:null, dueno:dueSel(), titulo:t, cliente:q('#cBoxLibre').hidden?(c&&c.cliente||''):q('#cCli').value.trim(), dia:d, inicio:a, fin:b, lugar:lugSel(),
+        // el nombre del cliente lo pone la base (con un cliente o un prospecto); un tema interno no lleva nombres de fuera
+        var p={id:c?c.id:null, dueno:dueSel(), titulo:t, cliente:fijo?(c&&c.cliente||''):'', dia:d, inicio:a, fin:b, lugar:lugSel(),
                lugar_texto:q('#cLtx').hidden?'':q('#cLtx').value.trim(), notas:q('#cNot').value.trim(),
                recordar:q('#cRec').value===''?null:+q('#cRec').value, invitados:invSel(), video:q('#cVid').checked&&!q('#cVidBox').hidden};
         if(L.liga) p.liga=L.liga;
@@ -1503,9 +1515,9 @@ button.kpi:focus-visible{outline-offset:-3px}
         async function guarda(){
           ok.disabled=true;
           try{
-            // con cliente o prospecto (o si la página sabe de expedientes), por exp_cita_guarda(), que llama a agenda_guarda()
-            var r=EC?await P.sb.rpc('exp_cita_guarda',{p:p}):await P.sb.rpc('agenda_guarda',{p:p}); if(r.error) throw new Error(r.error.message);
-            if(EC&&p.liga&&p.liga.prospecto_nuevo) AG.expCli=null;   // el prospecto nuevo ya sale en la lista
+            // con su cliente, prospecto o tema interno, por exp_cita_guarda(), que llama a agenda_guarda()
+            var r=await P.sb.rpc('exp_cita_guarda',{p:p}); if(r.error) throw new Error(r.error.message);
+            if(p.liga&&p.liga.prospecto_nuevo) AG.expCli=null;   // el prospecto nuevo ya sale en la lista
             cerrar(); toast(nuevo?'Cita agendada'+(p.dueno!==yoU()?' · le avisamos a '+persona(p.dueno).nombre:''):'Cambios guardados');
             sel=d; var dd=parse(d); vista={y:dd.getFullYear(), m:dd.getMonth()};
             await cargaAgenda(true);
