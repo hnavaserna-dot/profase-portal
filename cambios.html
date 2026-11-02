@@ -155,6 +155,13 @@ button,select,input,textarea{font:inherit;color:inherit}
 .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .fotos a{display:block;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2);text-decoration:none;color:var(--muted);font-size:12px}
 .fotos img{display:block;width:100%;height:150px;object-fit:cover;object-position:top}
+.fotos a{cursor:zoom-in}
+.fv{position:fixed;inset:0;z-index:70;background:rgba(10,18,32,.82);display:flex;flex-direction:column;padding:12px;gap:10px}
+.fv[hidden]{display:none}
+.fv-cab{display:flex;align-items:center;gap:8px;color:#fff;flex-wrap:wrap}.fv-cab b{flex:1;min-width:0;overflow-wrap:anywhere}.fv-cab span{opacity:.8;font-size:13px}
+.fv-img{flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:center;border-radius:14px;background:rgba(255,255,255,.04)}
+.fv-img img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;border-radius:10px}.fv-img img.cerca{max-width:none;max-height:none;cursor:zoom-out}
+.mot{display:grid;gap:6px;margin:4px 0 10px}.mot label{display:flex;gap:8px;align-items:center;font-size:14px}
 .fotos span{display:block;padding:6px 8px;overflow-wrap:anywhere}
 details.tec summary{cursor:pointer;padding:12px 14px;font-weight:600;list-style:none}
 details.tec summary::-webkit-details-marker{display:none}
@@ -721,6 +728,9 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
 
   function estado(p) {
     var aut = ROL === 'autoriza' && puedeEscribir(), rev = p.revision || {}, b = [];
+    // quien la mandó la puede retirar mientras no esté publicada (2-nov-2026, pedido de Gabriel)
+    if (ROL === 'propone' && puedeEscribir() && p.proponente === YO && ['por_autorizar', 'choca', 'error', 'rechazada'].indexOf(p.estado) >= 0)
+      b.push('<button class="btn mal" type="button" data-a="retirar">Retirar propuesta</button>');
     var sqlTxt = (p.sql_archivos || []).length ? '<p>Trae cambios para la base: <code>' + (p.sql_archivos || []).map(esc).join('</code>, <code>') + '</code>. '
       + (p.estado === 'publicada'
         ? (p.sql_listo_en ? 'Ya se corrieron (' + esc(nombre(p.sql_listo_por)) + ', ' + esc(hora(p.sql_listo_en)) + ').'
@@ -803,7 +813,24 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   function fotos(p) {
     if (!(p.fotos || []).length) return '<section class="card"><header><h3>Cómo se ve</h3></header><div class="cuerpo m" style="color:var(--muted)">No mandó fotos.</div></section>';
     return '<section class="card"><header><h3>Cómo se ve</h3><span style="color:var(--muted);font-size:12.5px">Fotos que mandó con datos de prueba</span></header><div class="cuerpo"><div class="fotos" id="fotos">'
-      + p.fotos.map(function (f, i) { return '<a data-i="' + i + '" target="_blank" rel="noopener"><img alt="' + esc(f.nombre) + '"><span>' + esc(f.nombre) + '</span></a>'; }).join('') + '</div></div></section>';
+      + p.fotos.map(function (f, i) { return '<a data-i="' + i + '" role="button" tabindex="0"><img alt="' + esc(f.nombre) + '"><span>' + esc(f.nombre) + '</span></a>'; }).join('') + '</div></div></section>';
+  }
+  // Vista de fotos aquí mismo, sin abrir otra pestaña (2-nov-2026, pedido de Gabriel): ‹ › para pasar, clic para acercar, Esc cierra
+  function foto(p, i) {
+    var L = (p.fotos || []).map(function (f, k) { var a = document.querySelector('#fotos a[data-i="' + k + '"]'); return { n: f.nombre, u: a && a.dataset.url }; }).filter(function (x) { return x.u; });
+    if (!L.length) return;
+    var k = Math.max(0, L.findIndex(function (x) { return x.n === (p.fotos[i] || {}).nombre; }));
+    var v = $('fv'); if (!v) { v = document.createElement('div'); v.id = 'fv'; v.className = 'fv'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-modal', 'true'); document.body.appendChild(v); }
+    function pinta() {
+      v.innerHTML = '<div class="fv-cab"><b>' + esc(L[k].n) + '</b><span>' + (k + 1) + ' de ' + L.length + '</span><button type="button" class="btn" data-f="-1" aria-label="Anterior">‹</button><button type="button" class="btn" data-f="1" aria-label="Siguiente">›</button><button type="button" class="btn" data-f="x" aria-label="Cerrar">Cerrar</button></div>'
+        + '<div class="fv-img"><img alt="' + esc(L[k].n) + '" src="' + esc(L[k].u) + '"></div>';
+      v.querySelector('.fv-img img').onclick = function () { this.classList.toggle('cerca'); };
+    }
+    function cierra() { v.hidden = true; document.removeEventListener('keydown', tecla); }
+    function tecla(ev) { if (ev.key === 'Escape') cierra(); else if (ev.key === 'ArrowRight') { k = (k + 1) % L.length; pinta(); } else if (ev.key === 'ArrowLeft') { k = (k - 1 + L.length) % L.length; pinta(); } }
+    v.onclick = function (ev) { var b = ev.target.closest('[data-f]'); if (ev.target === v) { cierra(); return; } if (!b) return; if (b.dataset.f === 'x') cierra(); else { k = (k + (+b.dataset.f) + L.length) % L.length; pinta(); } };
+    pinta(); v.hidden = false; document.addEventListener('keydown', tecla);
+    var c = v.querySelector('[data-f="x"]'); if (c) c.focus();
   }
   async function cargaFotos(p) {
     (p.fotos || []).forEach(async function (f, i) {
@@ -815,7 +842,11 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
           u = URLS[f.ruta] = { url: r.data.signedUrl, hasta: Date.now() + 50 * 60000 };
         }
         var a = document.querySelector('#fotos a[data-i="' + i + '"]');
-        if (a) { a.href = u.url; a.querySelector('img').src = u.url; }
+        if (a) {
+          a.dataset.url = u.url; a.querySelector('img').src = u.url;
+          a.onclick = function (ev) { ev.preventDefault(); foto(p, i); };
+          a.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); foto(p, i); } };
+        }
       } catch (e) {}
     });
   }
@@ -855,15 +886,20 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     };
   }
 
-  function pregunta(titulo, html, ok, conTexto) {
+  function pregunta(titulo, html, ok, conTexto, opcional) {
     return new Promise(function (res) {
       var d = $('dlg');
       $('dlg-t').textContent = titulo;
       $('dlg-c').innerHTML = html + (conTexto ? '<textarea id="dlg-x" maxlength="4000" placeholder="' + esc(conTexto) + '"></textarea>' : '');
       $('dlg-ok').textContent = ok;
       d.returnValue = '';
-      d.onclose = function () { res(d.returnValue === 'si' ? (conTexto ? ($('dlg-x').value || '').trim() : true) : null); };
-      $('dlg-f').onsubmit = function (e) { if (e.submitter && e.submitter.value === 'si' && conTexto && !$('dlg-x').value.trim()) { e.preventDefault(); $('dlg-x').focus(); } };
+      d.onclose = function () {
+        if (d.returnValue !== 'si') { res(null); return; }
+        var x = conTexto ? ($('dlg-x').value || '').trim() : true;
+        var m = d.querySelector('input[name="dlg-mot"]:checked');   // retirar: el motivo escogido va primero
+        res(m ? m.value + (x && x !== true ? ': ' + x : '') : x);
+      };
+      $('dlg-f').onsubmit = function (e) { if (e.submitter && e.submitter.value === 'si' && conTexto && !opcional && !$('dlg-x').value.trim()) { e.preventDefault(); $('dlg-x').focus(); } };
       if (d.showModal) d.showModal(); else res(window.confirm(titulo) ? (conTexto ? (window.prompt(conTexto) || '').trim() || null : true) : null);
     });
   }
@@ -887,6 +923,13 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
         + ((p.sql_archivos || []).length && p.sql_listo_en ? '<p><b>Su SQL ya se corrió en Supabase:</b> eso no se deshace solo; pídeselo a tu Claude.</p>' : ''), 'Deshacer')) return;
       boton.disabled = true;
       r = await sb.rpc('cambios_deshacer', { p_id: p.id });
+    } else if (a === 'retirar') {
+      var MOT = ['Me arrepentí', 'No me gustó cómo quedó', 'La corregí y la mandé en otra propuesta', 'Otro'];
+      var por = await pregunta('¿Retirar tu propuesta?', '<p>«' + esc(p.titulo) + '» deja de esperar autorización y queda como «Retirada», con su conversación. Nada se publica.</p>'
+        + '<p>¿Por qué?</p><div class="mot">' + MOT.map(function (m, i) { return '<label><input type="radio" name="dlg-mot" value="' + esc(m) + '"' + (i ? '' : ' checked') + '> ' + esc(m) + '</label>'; }).join('') + '</div>', 'Retirar', 'Algo más (opcional)…', true);
+      if (por === null) return;
+      boton.disabled = true;
+      r = await sb.rpc('cambios_retirar', { p_id: p.id, p_motivo: por });
     } else if (a === 'sql') {
       if (!await pregunta('¿Ya se corrió el SQL?', '<p>Márcalo solo si ya se corrió en Supabase <code>' + (p.sql_archivos || []).map(esc).join('</code>, <code>') + '</code> y salió bien.</p>', 'Sí, ya se corrió')) return;
       boton.disabled = true;
@@ -894,7 +937,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     }
     if (r && r.error) { boton.disabled = false; aviso(r.error.message, 'mal'); window.scrollTo(0, 0); return; }
     aviso(a === 'autorizar' ? 'Autorizada. Se está publicando; en alrededor de un minuto queda en el portal.' : a === 'rechazar' ? 'Rechazada. Gabo verá el motivo.'
-      : a === 'deshacer' ? 'Se está deshaciendo; tarda alrededor de un minuto.' : 'Listo.', 'ok');
+      : a === 'deshacer' ? 'Se está deshaciendo; tarda alrededor de un minuto.' : a === 'retirar' ? 'Retirada. Ya no espera autorización.' : 'Listo.', 'ok');
     await carga(true); avisaArriba();
   }
 
