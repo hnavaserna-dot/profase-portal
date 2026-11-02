@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -476,10 +476,6 @@ button.kpi:focus-visible{outline-offset:-3px}
 .inf1{background:var(--surface-2);color:var(--ink-2)}
 .libres{flex-wrap:wrap;align-items:center;background:none!important;padding:4px 0!important}
 .libres span{font-size:12.5px;color:var(--ink-2);width:100%}
-.chipc.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-ink);gap:4px;padding-right:4px}
-.chipc.on button{border:0;background:none;color:inherit;font-size:16px;line-height:1;padding:0 6px;min-width:28px;min-height:28px}
-#cISel:empty{display:none}
-#cISel{margin:6px 0}
 .sw{display:flex;gap:10px;align-items:flex-start;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .sw input{position:absolute;opacity:0;width:1px;height:1px}
 .swb{flex:none;width:40px;height:24px;border-radius:999px;background:var(--line-2);position:relative;transition:background .15s;margin-top:1px}
@@ -792,6 +788,10 @@ button.kpi:focus-visible{outline-offset:-3px}
     return {usuario:u, nombre:u};
   }
   function nombreDe(u){ return u===yoU()?'Tú':persona(u).nombre; }
+  // la agenda de varios (141): la persona principal y quienes la tienen en su agenda
+  function agendaDe(c){ return [c.dueno_nombre].concat((c.invitados||[]).filter(function(i){ return i.en_agenda; }).map(function(i){ return i.nombre; })); }
+  function enMiAgenda(c){ return c.en_mi_agenda===true||c.dueno===yoU(); }
+  function yLista(l){ return l.length<2?(l[0]||''):l.slice(0,-1).join(', ')+' y '+l[l.length-1]; }
   function mismaPersona(a,b){
     var x=norm(a).split(' ').filter(Boolean), y=norm(b).split(' ').filter(Boolean);
     if(!x.length||!y.length) return false;
@@ -927,9 +927,11 @@ button.kpi:focus-visible{outline-offset:-3px}
   }
   function itemAg(x){
     if(x.tipo==='cita'){
-      var c=x.ci, v=c.video, hoy=c.dia===hoyK(), mia=c.dueno===yoU(), r=c.mi_respuesta;
-      var quien=!mia?'<span class="pl az">Agenda de '+esc(c.dueno_nombre)+'</span>':'';
-      var inv=(c.invitados||[]).length?'<span class="pl">'+plural(c.invitados.length,'invitado','invitados')+'</span>':'';
+      var c=x.ci, v=c.video, hoy=c.dia===hoyK(), mia=enMiAgenda(c), r=c.mi_respuesta;
+      var quien=!mia?'<span class="pl az">Agenda de '+esc(yLista(agendaDe(c)))+'</span>':'';
+      var nInv=(c.invitados||[]).filter(function(i){ return !i.en_agenda; }).length;
+      var inv=nInv?'<span class="pl">'+plural(nInv,'invitado','invitados')+'</span>':'';
+      if(mia&&r!=='rechaza') r=null;   // en mi agenda no hace falta decir «Va»
       var rr=r?'<span class="pl '+(r==='acepta'?'bien':r==='rechaza'?'mal':'ojo')+'">'+(r==='pendiente'?'Te invitó · contesta':RESP_TXT[r])+'</span>':'';
       var ex=AG.exp.citas[c.id];
       if(ex) rr+=(ex.prospecto?'<span class="pl az">Prospecto</span>':'')+(ex.debo?'<span class="pl mal">Falta lo tuyo en la minuta</span>':'');
@@ -1124,8 +1126,8 @@ button.kpi:focus-visible{outline-offset:-3px}
       var r=rr[0]; if(!r.error&&r.data) c=r.data; else if(!c){ toast('No encontré esa cita: quizá la cancelaron o ya no la ves.'); return; }
       if(!rr[1].error&&Array.isArray(rr[1].data)) ex=rr[1].data[0]||null;
     }catch(e){ if(!c) return; }
-    var v=c.video, mia=c.dueno===yoU(), hoy=c.dia===hoyK();
-    var h='<div class="cdet"><p class="eti">'+(c.estado==='cancelada'?'Cita cancelada':'Cita')+(mia?'':' · agenda de '+esc(c.dueno_nombre))+'</p><h3>'+esc(c.titulo)+'</h3>'
+    var v=c.video, mia=enMiAgenda(c), hoy=c.dia===hoyK();
+    var h='<div class="cdet"><p class="eti">'+(c.estado==='cancelada'?'Cita cancelada':'Cita')+(mia?'':' · agenda de '+esc(yLista(agendaDe(c))))+'</p><h3>'+esc(c.titulo)+'</h3>'
       +'<p class="cwhen">'+ico('clock')+'<span>'+esc(mayus(fLarga(parse(c.dia))))+' · <b class="num">'+esc(c.inicio)+'–'+esc(c.fin)+'</b>'
         +(c.cierre&&c.cierre.fin_original?' <small>(era hasta las '+esc(c.cierre.fin_original)+')</small>':'')+'</span></p>'
       +'<p class="cwhen">'+ico('pin')+'<span>'+esc(lugarTxt(c))+'</span></p>'
@@ -1151,11 +1153,16 @@ button.kpi:focus-visible{outline-offset:-3px}
         +'<div class="acts">'+(hoy?'<button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>':'')
         +'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button></div></div></div>';
     }
-    if((c.invitados||[]).length) h+='<div class="dsec"><h4>Del despacho<span class="n">'+c.invitados.length+'</span></h4><div class="asisl">'+c.invitados.map(function(i){
-        return '<span class="asis '+(i.respuesta==='acepta'?'si':i.respuesta==='rechaza'?'no':'')+'" title="'+esc(i.motivo||'')+'">'+esc(i.nombre)+' · '+esc(RESP_TXT[i.respuesta]||'')+'</span>'; }).join('')+'</div></div>';
+    // quiénes van: a quien le queda en su agenda y los invitados con su respuesta (141)
+    if((c.invitados||[]).length){
+      var van=[{nombre:c.dueno_nombre, en_agenda:true, respuesta:'acepta'}].concat(c.invitados);
+      h+='<div class="dsec"><h4>Quiénes van<span class="n">'+van.length+'</span></h4><div class="asisl">'+van.map(function(i){
+        var est=i.en_agenda?(i.respuesta==='rechaza'?'En su agenda · no va':'En su agenda'):(RESP_TXT[i.respuesta]||'');
+        return '<span class="asis '+(i.respuesta==='rechaza'?'no':i.en_agenda||i.respuesta==='acepta'?'si':'')+'" title="'+esc(i.motivo||'')+'">'+esc(i.nombre)+' · '+esc(est)+'</span>'; }).join('')+'</div></div>';
+    }
     if(ex) h+=reuDet(ex, conCli0(ex));
     h+='<p class="note">'+(c.capturo&&c.capturo!==c.dueno?'La agendó '+esc(c.capturo_nombre)+'. ':'')+'</p>';
-    if(c.mi_respuesta&&c.estado==='activa') h+='<div class="rblk"><b>¿Vas?</b><div class="btns"><button type="button" class="btn si" data-r="acepta" aria-pressed="'+(c.mi_respuesta==='acepta')+'">Sí voy</button><button type="button" class="btn no" data-r="rechaza" aria-pressed="'+(c.mi_respuesta==='rechaza')+'">No puedo</button></div><div class="err" id="rErr"></div></div>';
+    if(c.mi_respuesta&&c.estado==='activa') h+='<div class="rblk"><b>'+(mia?'Está en tu agenda. ¿Vas?':'¿Vas?')+'</b><div class="btns"><button type="button" class="btn si" data-r="acepta" aria-pressed="'+(c.mi_respuesta==='acepta')+'">Sí voy</button><button type="button" class="btn no" data-r="rechaza" aria-pressed="'+(c.mi_respuesta==='rechaza')+'">No puedo</button></div><div class="err" id="rErr"></div></div>';
     // con cliente: cancelarla es antes de que empiece (con quién y el motivo de la lista); ya empezada, el cierre de la Agenda
     var conCli=!!(ex&&(ex.g||ex.pr));
     // ya empezada, ninguna se cancela: quien la cierra marca «No se realizó» (110_agenda_cierre.sql)
@@ -1181,7 +1188,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       ov.querySelectorAll('[data-cita-otra]').forEach(function(b){ b.onclick=function(){ cerrar(); abrirCita(b.dataset.citaOtra); }; });
       var ca=ov.querySelector('[data-cancela]'); if(ca&&conCli) ca.onclick=function(){ cerrar(); cancelaReunion(c, ex); };
       else if(ca) ca.onclick=function(){
-        pregunta('¿Cancelar «'+c.titulo+'»?', 'A '+(mia?'tus invitados':c.dueno_nombre+' y a sus invitados')+' les llega el aviso a la campanita.'+(v?' La liga de la videollamada deja de servir.':''), 'Sí, cancelarla', true, async function(motivo){
+        pregunta('¿Cancelar «'+c.titulo+'»?', 'A quienes van les llega el aviso a la campanita.'+(v?' La liga de la videollamada deja de servir.':''), 'Sí, cancelarla', true, async function(motivo){
           var r=await P.sb.rpc('agenda_cancela',{p_id:c.id, p_motivo:motivo||null});
           if(r.error) throw new Error(r.error.message);
           cerrar(); toast('Cita cancelada'); cargaAgenda(true);
@@ -1328,20 +1335,29 @@ button.kpi:focus-visible{outline-offset:-3px}
       return true;
     });
     if(!tipo0&&TIPOS.length===1) tipo0=TIPOS[0][0];   // sin clientes ni prospectos que escoger: solo temas internos
-    var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), e0=ex&&!ex.prospecto?ex.e:(base.e?+base.e:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
+    var g0=ex&&!ex.prospecto?ex.g:(base.g?+base.g:null), pr0=ex&&ex.prospecto?ex.pr:(base.pr?+base.pr:null);
+    // las razones sociales escogidas: varias (141), una sola o ninguna (todas las del grupo)
+    var es0=ex&&!ex.prospecto?((ex.es&&ex.es.length)?ex.es:(ex.e?[ex.e]:[])):(base.e?[+base.e]:[]);
     var gru0=EC&&g0?(EC.clientes||[]).filter(function(x){ return x.g===g0; })[0]:null;
     if(EC&&pr0&&!(EC.prospectos||[]).some(function(x){ return x.id===pr0; })&&ex) EC.prospectos=(EC.prospectos||[]).concat([{id:pr0, nombre:ex.cliente}]);
     var dueno=c?c.dueno:(base.dueno||(AG.de&&AG.de!=='@equipo'&&(e.poner||[]).some(function(x){ return x.usuario===AG.de; })?AG.de:yoU()));
     var dia=c?c.dia:(base.dia&&base.dia>=hoyK()?base.dia:hoyK());
     if(ahora) dia=hoyK();
     var ini=c?c.inicio:(base.inicio||(ahora?horaYa():dia===hoyK()?horaSig():'10:00')), fin=c?c.fin:deMin(Math.min(aMin(ini)+60, 1439));
-    var lugar=c?c.lugar:'profase', inv=c?(c.invitados||[]).map(function(i){ return i.usuario; }):[], video=c?!!(c.video&&c.video.estado==='abierta'):base.video===true;
+    var lugar=c?c.lugar:'profase', video=c?!!(c.video&&c.video.estado==='abierta'):base.video===true;
     var rec=c?(c.recordar==null?'':String(c.recordar)):'30';
-    var gente=(e.directorio||[]).filter(function(p){ return p.usuario!==yoU(); });
+    /* «¿Quiénes van?» (Héctor Daniel, 2-nov-2026: «permite "en la agenda de quién"; seleccionar varios» y unir «la agenda
+       de quién» con «invitar a quién»; 141_citas_quienes_van.sql). A quien puedo agendar (la regla de quién agenda a quién,
+       e.poner) le queda en su agenda, confirmada; a los demás les llega la invitación y confirman. La persona principal
+       de la cita la escojo yo sola (principal()). */
+    var PON={}; (e.poner||[]).forEach(function(x){ PON[x.usuario]=x; });
+    var YA={}; if(c){ YA[c.dueno]=true; (c.invitados||[]).forEach(function(i){ if(i.en_agenda) YA[i.usuario]=true; }); }
+    var RES0={}; if(c) (c.invitados||[]).forEach(function(i){ RES0[i.usuario]=i; });
+    var quien0=c?[c.dueno].concat((c.invitados||[]).map(function(i){ return i.usuario; })):[dueno];
     var html='<form id="fCita" novalidate><h3>'+(ahora?'Videollamada con cliente, ahora':nuevo?'Nueva cita':'Cambiar la cita')+'</h3>'
-      +'<p class="sub">'+(ahora?'Empieza en este momento. Escoge el cliente, a quién invitas del despacho y hasta qué hora; al agendarla te damos la liga para mandársela.'
-        :nuevo?'Se guarda en la agenda que escojas. Si es la de otra persona, le llega el aviso.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
-      +((e.poner||[]).length>1?'<div class="f full"><label for="cDue">¿En la agenda de quién?</label><select id="cDue">'+e.poner.map(function(p){ return '<option value="'+esc(p.usuario)+'"'+(p.usuario===dueno?' selected':'')+'>'+esc(p.usuario===yoU()?'La mía ('+p.nombre+')':p.nombre)+'</option>'; }).join('')+'</select></div>':'')
+      +'<p class="sub">'+(ahora?'Empieza en este momento. Escoge el cliente, quiénes van del despacho y hasta qué hora; al agendarla te damos la liga para mandársela.'
+        :nuevo?'Escoge quiénes van: a quien puedes agendar le queda en su agenda y a los demás les llega la invitación para que confirmen.':'Si cambias el día, la hora o el lugar, se les vuelve a preguntar a los invitados si van.')+'</p><div class="fg">'
+      +'<div class="f full"><label for="cQui">¿Quiénes van?</label><div id="cQuiBox"></div><small id="cQuiN"></small></div>'
       +'<div class="f full"><label for="cTit">¿De qué es?</label><input id="cTit" maxlength="120" autocomplete="off" placeholder="Ej. Revisión de la declaración anual" value="'+esc(c?c.titulo:(base.titulo||''))+'"></div>'
       +(fijo
         ?'<div class="f full"><span class="lbl">'+(ex.prospecto?'Prospecto':'Cliente')+'</span><div><b>'+esc(ex.cliente)+'</b></div><small>Ya tiene minutas: su cliente ya no cambia.</small></div>'
@@ -1350,9 +1366,9 @@ button.kpi:focus-visible{outline-offset:-3px}
           // interno, solo con personal de PROFASE (121; Daniel, 1-nov-2026, 17:09)
           +TIPOS.map(function(t){ return '<label class="chipc"><input type="radio" name="cTipo" value="'+t[0]+'"'+(tipo0===t[0]?' checked':'')+'>'+t[1]+'</label>'; }).join('')
           +'</div><small id="cTipoN"></small></div>'
-          +'<div class="f full" id="cBoxCli" hidden><label for="cGru">Grupo</label><input id="cGru" list="cGruL" maxlength="200" autocomplete="off" placeholder="Escribe el nombre del grupo" value="'+esc(gru0?gru0.n:'')+'">'
-          +'<datalist id="cGruL">'+(EC.clientes||[]).map(function(x){ return '<option value="'+esc(x.n)+'"></option>'; }).join('')+'</datalist>'
-          +'<label for="cEmp" style="margin-top:8px">Razón social</label><select id="cEmp"></select></div>'
+          // el grupo, uno solo; la razón social, varias o todas (Daniel, 2-nov-2026); los dos se filtran al escribir
+          +'<div class="f full" id="cBoxCli" hidden><label for="cGru">Grupo</label><div id="cGruBox"></div>'
+          +'<label for="cEmp" style="margin-top:10px">Razón social <small>(una, varias o todas)</small></label><div id="cEmpBox"></div></div>'
           +'<div class="f full" id="cBoxPro" hidden><label for="cPro">Prospecto</label><select id="cPro"><option value="">Escoge el prospecto</option>'
           +(EC.prospectos||[]).map(function(x){ return '<option value="'+x.id+'"'+(x.id===pr0?' selected':'')+'>'+esc(x.nombre)+'</option>'; }).join('')
           +(EC.nuevo_prospecto?'<option value="nuevo">+ Uno nuevo</option>':'')+'</select>'
@@ -1366,8 +1382,6 @@ button.kpi:focus-visible{outline-offset:-3px}
       +'<div class="f full"><span class="lbl">¿Dónde?</span><div class="chips" id="cLug">'+Object.keys(LUGARES).map(function(k){ return '<label class="chipc"><input type="radio" name="cLug" value="'+k+'"'+(lugar===k?' checked':'')+'>'+LUGARES[k]+'</label>'; }).join('')+'</div>'
       +'<input id="cLtx" maxlength="200" autocomplete="off" style="margin-top:6px" value="'+esc(c&&c.lugar_texto||'')+'"></div>'
       +'<div class="f full" id="cVidBox"><label class="sw"><input type="checkbox" id="cVid"'+(video?' checked':'')+'><span class="swb" aria-hidden="true"></span><span><b>Videollamada con el cliente o gente de fuera</b><small>Opcional. Te damos una liga para mandarle al cliente: entra desde su celular o su computadora, sin instalar nada, y tú lo admites. Nadie la graba.</small></span></label></div>'
-      +'<div class="f full"><span class="lbl">Invitar a alguien del despacho (opcional)</span><input id="cIBus" type="search" placeholder="Buscar por nombre" autocomplete="off" aria-label="Buscar persona del despacho">'
-      +'<div class="chips" id="cISel"></div><div class="pers" id="cIPers" hidden>'+gente.map(function(g){ return '<label data-n="'+esc(norm(g.nombre))+'"><input type="checkbox" name="cInv" value="'+esc(g.usuario)+'"'+(inv.indexOf(g.usuario)>=0?' checked':'')+'>'+esc(g.nombre)+'</label>'; }).join('')+'</div></div>'
       +'<div class="f"><label for="cRec">Recordatorio</label><select id="cRec">'+RECS.map(function(r){ return '<option value="'+r[0]+'"'+(r[0]===rec?' selected':'')+'>'+r[1]+'</option>'; }).join('')+'</select><small>A la campanita y al celular de quien tiene la cita y de sus invitados</small></div>'
       +'<div class="f"><label for="cNot">Notas (opcional)</label><textarea id="cNot" rows="2" maxlength="2000">'+esc(c&&c.notas||'')+'</textarea></div>'
       +'</div><div class="err" id="cErr" role="alert"></div>'
@@ -1375,8 +1389,40 @@ button.kpi:focus-visible{outline-offset:-3px}
     ventana(html, function(ov,cerrar){
       var q=function(s){ return ov.querySelector(s); }, ocup={}, revT=0, revVez=0;
       q('[data-x]').onclick=cerrar;
-      function dueSel(){ return q('#cDue')?q('#cDue').value:dueno; }
-      function invSel(){ return [].slice.call(ov.querySelectorAll('input[name=cInv]:checked')).map(function(i){ return i.value; }); }
+      // ¿le queda en su agenda? (si la puedo agendar, o ya la tenía en su agenda); ¿puede abrir videollamada con gente de fuera?
+      function enAgenda(u){ return !!(PON[u]||YA[u]); }
+      function anfitrion(u){ return !!((PON[u]&&PON[u].video)||(c&&c.dueno===u&&c.video)); }
+      function notaQui(u){
+        var i=RES0[u];
+        if(enAgenda(u)) return (u===yoU()?'En tu agenda':'En su agenda')+(i&&i.en_agenda&&i.respuesta==='rechaza'?' · no va':'');
+        return 'Confirma'+(i&&!i.en_agenda?' · '+(RESP_TXT[i.respuesta]||'').toLowerCase():'');
+      }
+      var dir=(e.directorio||[]).slice().sort(function(a,b){ return (a.usuario===yoU()?0:1)-(b.usuario===yoU()?0:1); });
+      quien0.forEach(function(u){ if(!dir.some(function(x){ return x.usuario===u; })) dir.push(persona(u)); });   // quien ya iba, aunque ya no esté en el directorio
+      var bQui=window.PROFASE_BUSCA.crea({donde:q('#cQuiBox'), id:'cQui', varios:true, lista:'al-buscar',
+        opciones:dir.map(function(x){ return {v:x.usuario, t:x.usuario===yoU()?'Tú ('+x.nombre+')':x.nombre, nota:notaQui(x.usuario), otro:!enAgenda(x.usuario)}; }),
+        valor:quien0, marcador:'Escribe un nombre para agregar', vacio:'Nadie del despacho con ese nombre',
+        cambio:function(){ pintaTipo(); revisa(); }});
+      function quienes(){ return bQui.valor(); }
+      function agSel(){ return quienes().filter(enAgenda); }
+      function invSel(){ return quienes().filter(function(u){ return !enAgenda(u); }); }
+      function conVideo(){ return q('#cVid').checked&&!q('#cVidBox').hidden; }
+      // la persona principal: la que ya era (si sigue); si no, yo si voy; si no, la primera a quien le queda en su agenda.
+      // Con videollamada, alguien de la dirección o un gerente (la sala es suya).
+      function principal(vid){
+        var ag=agSel(), vale=function(u){ return !vid||anfitrion(u); }, orden=(e.poner||[]).map(function(x){ return x.usuario; });
+        if(c&&ag.indexOf(c.dueno)>=0&&vale(c.dueno)) return c.dueno;
+        if(ag.indexOf(yoU())>=0&&vale(yoU())) return yoU();
+        return ag.filter(vale).sort(function(a,b){ var i=orden.indexOf(a), j=orden.indexOf(b); return (i<0?999:i)-(j<0?999:j); })[0]||null;
+      }
+      function dueSel(){ return principal(conVideo())||yoU(); }
+      function pintaQuiN(){
+        var n=q('#cQuiN'), ag=agSel(), iv=invSel();
+        n.textContent=!quienes().length?'Escoge al menos a una persona.'
+          :!ag.length?'Agrégate tú o a alguien con «En su agenda»: la cita tiene que quedar en la agenda de alguien.'
+          :iv.length?'A quien dice «Confirma» le llega la invitación para que conteste si va.'
+          :ag.length>1||ag[0]!==yoU()?'A cada quien le queda en su agenda y le llega el aviso.':'';
+      }
       function lugSel(){ return (ov.querySelector('input[name=cLug]:checked')||{}).value||'profase'; }
       function iniSel(){ return window.PROFASE_HORA.lee(ov,'cIni'); }
       function finSel(){ return window.PROFASE_HORA.lee(ov,'cFin'); }
@@ -1387,24 +1433,13 @@ button.kpi:focus-visible{outline-offset:-3px}
         t.placeholder=l==='cliente'?'¿Dónde? (dirección o nombre del lugar, opcional)':l==='linea'?'Liga de Zoom, Teams u otra (opcional)':'¿Dónde?';
         t.setAttribute('aria-label', t.placeholder);
       }
-      // la videollamada con gente de fuera: solo en la agenda de quien puede abrirla y nunca en un tema interno (121)
+      // la videollamada con gente de fuera: si va alguien de la dirección o un gerente a quien le queda en su agenda (la
+      // sala es suya) y nunca en un tema interno (121)
       function pintaVideo(){
-        var d=(e.poner||[]).filter(function(p){ return p.usuario===dueSel(); })[0];
-        var puede=!!(d&&d.video)&&tipoSel()!=='interno';
+        var puede=agSel().some(anfitrion)&&tipoSel()!=='interno';
         q('#cVidBox').hidden=!puede; if(!puede) q('#cVid').checked=false;
       }
-      function pintaInv(){
-        var s=invSel();
-        q('#cISel').innerHTML=s.map(function(u){ return '<span class="chipc on">'+esc(persona(u).nombre)+'<button type="button" data-qi="'+esc(u)+'" aria-label="Quitar a '+esc(persona(u).nombre)+'">×</button></span>'; }).join('');
-        q('#cISel').querySelectorAll('[data-qi]').forEach(function(b){ b.onclick=function(){ var i=ov.querySelector('input[name=cInv][value="'+b.dataset.qi+'"]'); if(i){ i.checked=false; } pintaInv(); revisa(); }; });
-      }
-      q('#cIBus').addEventListener('input', function(){
-        var t=norm(this.value), box=q('#cIPers'); box.hidden=!t;
-        box.querySelectorAll('label').forEach(function(l){ l.hidden=t&&l.dataset.n.indexOf(t)<0; });
-      });
-      q('#cIPers').addEventListener('change', function(){ pintaInv(); revisa(); });
       ov.querySelectorAll('input[name=cLug]').forEach(function(i){ i.onchange=pintaLugar; });
-      if(q('#cDue')) q('#cDue').onchange=function(){ pintaVideo(); revisa(); };
       // al cambiar la hora de inicio, la de fin se recorre para que dure lo mismo
       var durac=aMin(fin)-aMin(ini);
       ['cIni','cIni-m'].forEach(function(id){ var x=q('#'+id); if(x) x.addEventListener('change', function(){ var a=aMin(iniSel()); if(!isNaN(a)&&durac>0) ponHora('cFin', deMin(Math.min(a+durac,1439))); revisa(); }); });
@@ -1418,7 +1453,8 @@ button.kpi:focus-visible{outline-offset:-3px}
       async function revisaYa(){
         var vez=++revVez, d=q('#cDia').value, a=iniSel(), b=finSel(), box=q('#cDisp');
         if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!a||!b||aMin(b)<=aMin(a)){ box.innerHTML=''; box.className='disp'; ocup={}; return; }
-        var gente=[dueSel()].concat(invSel()).slice(0,12);
+        var gente=quienes().slice(0,12);
+        if(!gente.length){ box.innerHTML=''; box.className='disp'; ocup={}; return; }
         try{ var r=await P.sb.rpc('agenda_ocupado',{p_dia:d, p_usuarios:gente, p_excepto:c?c.id:null}); if(vez!==revVez) return; ocup=!r.error&&r.data?r.data:{}; }catch(er){ ocup={}; }
         var choques=[], A=aMin(a), B=aMin(b);
         gente.forEach(function(u){ (ocup[u]||[]).forEach(function(x){ if(aMin(x.inicio)<B&&aMin(x.fin)>A) choques.push({u:u, x:x}); }); });
@@ -1431,7 +1467,7 @@ button.kpi:focus-visible{outline-offset:-3px}
         var libres=sugiere(d, gente, B-A, A);
         var h='';
         if(!choques.length&&!fuera.length){
-          h='<div class="ok1">'+ico('check')+'<span>'+(gente.length>1?'Todos están libres a esa hora.':(dueSel()===yoU()?'Estás libre a esa hora.':esc(persona(dueSel()).nombre)+' está libre a esa hora.'))+'</span></div>';
+          h='<div class="ok1">'+ico('check')+'<span>'+(gente.length>1?'Todos están libres a esa hora.':(gente[0]===yoU()?'Estás libre a esa hora.':esc(persona(gente[0]).nombre)+' está libre a esa hora.'))+'</span></div>';
         } else {
           h='<div class="oj1">'+ico('alert')+'<div>'+fuera.map(function(f){ return '<p><b>'+esc(f.u===yoU()?'Tú':persona(f.u).nombre)+'</b> '+(f.u===yoU()?'estás':'está')+' '+(f.cd?'fuera de la ciudad y ese día '+(f.u===yoU()?'pusiste':'puso')+' «No disponible»':esc((AUS_TXT[f.z.tipo]||'fuera').toLowerCase())+' ese día')+'.</p>'; }).join('')
             +choques.map(function(ch){ return '<p><b>'+esc(ch.u===yoU()?'Tú ya tienes':persona(ch.u).nombre+' ya tiene')+'</b> '+(ch.x.titulo?'«'+esc(ch.x.titulo)+'»':'algo')+' de <span class="num">'+esc(ch.x.inicio)+' a '+esc(ch.x.fin)+'</span>.</p>'; }).join('')
@@ -1456,13 +1492,15 @@ button.kpi:focus-visible{outline-offset:-3px}
 
       /* con quién es: un cliente (grupo y razón social, o todo el grupo), un prospecto o un tema interno (121) */
       function tipoSel(){ if(fijo) return 'fijo'; return (ov.querySelector('input[name=cTipo]:checked')||{}).value||''; }
-      function grupoSel(){ var t=norm(q('#cGru')?q('#cGru').value:''); return t?(EC.clientes||[]).filter(function(x){ return norm(x.n)===t; })[0]||null:null; }
-      function pintaEmp(){
-        var g=grupoSel(), sl=q('#cEmp'); if(!sl) return;
-        var v=sl.value||(g&&g.g===g0&&e0?String(e0):'');
-        sl.disabled=!g;
-        sl.innerHTML=g?'<option value="">Todo el grupo</option>'+(g.e||[]).map(function(x){ return '<option value="'+x.id+'"'+(String(x.id)===v?' selected':'')+'>'+esc(x.r)+'</option>'; }).join('')
-                      :'<option value="">Primero escoge el grupo</option>';
+      var bGru=null, bEmp=null;
+      function grupoSel(){ var v=bGru?bGru.valor()[0]:null; return v?(EC.clientes||[]).filter(function(x){ return String(x.g)===v; })[0]||null:null; }
+      // al cambiar de grupo, las razones sociales son las de ese grupo y quedan «todas»
+      function pintaEmp(otro){
+        if(!bEmp) return;
+        var g=grupoSel();
+        bEmp.opciones(g?(g.e||[]).map(function(x){ return {v:String(x.id), t:x.r}; }):[]);
+        if(otro) bEmp.pon([]);
+        bEmp.habilita(!!g);
       }
       function pintaTipo(){
         var t=tipoSel();
@@ -1474,24 +1512,31 @@ button.kpi:focus-visible{outline-offset:-3px}
         if(lc){ lc.parentElement.hidden=t==='interno'; if(t==='interno'&&lc.checked){ var lp=ov.querySelector('input[name=cLug][value="profase"]'); if(lp) lp.checked=true; pintaLugar(); } }
         pintaVideo();
         var n=q('#cTipoN'); if(n) n.textContent=t==='cliente'?'Queda en el expediente del cliente y lleva minuta: si se hizo, cada quien que estuvo agrega lo suyo.'
-          :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(dueSel()!=='daniel.nava'?' H\u00e9ctor Daniel Nava va a todas las de prospecto: lo invitamos.':'')
+          :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(quienes().indexOf('daniel.nava')<0?' H\u00e9ctor Daniel Nava va a todas las de prospecto: lo invitamos.':'')
           :t==='interno'?'Solo con personal de PROFASE: sin videollamada con gente de fuera. Si es con alguien de fuera, escoge el cliente.'
-          :t===''?'Toda reunión con gente de fuera lleva su cliente: el grupo y la razón social, o todo el grupo.':'';
+          :t===''?'Toda reunión con gente de fuera lleva su cliente: el grupo y una, varias o todas sus razones sociales.':'';
+        pintaQuiN();
       }
       // en «Nueva ahora», mientras no escriban el tema, se llama como el cliente que escojan
       var titAuto=ahora&&!q('#cTit').value.trim();
       q('#cTit').addEventListener('input', function(){ titAuto=false; });
       function titDe(n){ if(titAuto&&n) q('#cTit').value='Videollamada con '+n; }
       if(ahora&&!fijo){
-        q('#cGru').addEventListener('change', function(){ var g=grupoSel(); if(g) titDe(g.n); });
         q('#cPro').addEventListener('change', function(){ var o=q('#cPro').selectedOptions[0]; if(o&&o.value&&o.value!=='nuevo') titDe(o.textContent); });
       }
       if(!fijo){
+        bGru=window.PROFASE_BUSCA.crea({donde:q('#cGruBox'), id:'cGru',
+          opciones:(EC.clientes||[]).map(function(x){ return {v:String(x.g), t:x.n, buscar:(x.e||[]).map(function(y){ return y.r; }).join(' ')}; }),
+          valor:gru0?[String(gru0.g)]:[], marcador:'Escribe parte del nombre', vacio:'Ningún grupo con ese nombre',
+          cambio:function(){ pintaEmp(true); var g=grupoSel(); if(ahora&&g) titDe(g.n); }});
+        bEmp=window.PROFASE_BUSCA.crea({donde:q('#cEmpBox'), id:'cEmp', varios:true, lista:'abierta', todos:'Todas las razones sociales',
+          marcador:'Busca la razón social', vacio:'Ninguna razón social con ese nombre', sinOpciones:'Primero escoge el grupo',
+          // escoger una por una todas las del grupo es «Todas las razones sociales» (así lo guarda la base, 141)
+          cambio:function(v){ var g=grupoSel(), n=g?(g.e||[]).length:0; if(n>1&&v.length===n) bEmp.pon([]); }});
+        pintaEmp(false);
+        if(gru0&&gru0.g===g0) bEmp.pon(es0.map(String));
         ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=pintaTipo; });
-        q('#cGru').addEventListener('input', pintaEmp); q('#cGru').addEventListener('change', pintaEmp);
         q('#cPro').onchange=pintaTipo;
-        if(q('#cDue')) q('#cDue').addEventListener('change', pintaTipo);
-        pintaEmp();
       }
       /* Toda cita es con un cliente, con un prospecto o un tema interno (121; Daniel, 1-nov-2026, 17:09: «todas las
          reuniones tienen que [llevar] grupo [y] razones sociales… las citas internas, seleccionar tema interno y solamente
@@ -1505,8 +1550,9 @@ button.kpi:focus-visible{outline-offset:-3px}
           return {ok:true, liga:{tipo:'interno'}};
         }
         if(t==='cliente'){
-          var g=grupoSel(); if(!g) return {msg:'Escoge el grupo de la lista.', foco:'#cGru'};
-          return {ok:true, liga:{tipo:'cliente', grupo:g.g, empresa:q('#cEmp').value?+q('#cEmp').value:null}};
+          var g=grupoSel(); if(!g) return {msg:'Escoge el grupo de la lista (escribe parte de su nombre).', foco:'#cGru'};
+          // ninguna escogida es «todas las razones sociales» (todo el grupo); una o varias, esas (141)
+          return {ok:true, liga:{tipo:'cliente', grupo:g.g, empresas:bEmp.valor().map(Number)}};
         }
         var pv=q('#cPro').value;
         if(pv==='nuevo'){
@@ -1517,7 +1563,7 @@ button.kpi:focus-visible{outline-offset:-3px}
         return {ok:true, liga:{tipo:'prospecto', prospecto:+pv}};
       }
 
-      pintaLugar(); pintaTipo(); pintaInv(); revisa();
+      pintaLugar(); pintaTipo(); revisa();
       if(ahora&&q('#cGru')&&!q('#cBoxCli').hidden) setTimeout(function(){ try{ q('#cGru').focus({preventScroll:true}); }catch(er){} }, 80);   // lo primero: el cliente
       q('#fCita').onsubmit=async function(ev){
         ev.preventDefault();
@@ -1527,11 +1573,15 @@ button.kpi:focus-visible{outline-offset:-3px}
         if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ er.textContent='Escoge el día.'; return; }
         if(!a||!b){ er.textContent='Escoge la hora de inicio y la de fin.'; return; }
         if(aMin(b)<=aMin(a)){ er.textContent='La hora de fin tiene que ser después de la de inicio.'; return; }
+        if(!quienes().length){ er.textContent='Escoge quiénes van (tú o alguien del despacho).'; bQui.foco(); return; }
+        var due=principal(conVideo());
+        if(!due){ er.textContent='La cita tiene que quedar en tu agenda o en la de alguien a quien puedes agendar: agrégate o agrega a alguien con «En su agenda».'; bQui.foco(); return; }
         var L=liga(); if(!L.ok){ er.textContent=L.msg; if(L.foco&&q(L.foco)) q(L.foco).focus(); return; }
         // el nombre del cliente lo pone la base (con un cliente o un prospecto); un tema interno no lleva nombres de fuera
-        var p={id:c?c.id:null, dueno:dueSel(), titulo:t, cliente:fijo?(c&&c.cliente||''):'', dia:d, inicio:a, fin:b, lugar:lugSel(),
+        var p={id:c?c.id:null, dueno:due, agendas:agSel().filter(function(u){ return u!==due; }), invitados:invSel(),
+               titulo:t, cliente:fijo?(c&&c.cliente||''):'', dia:d, inicio:a, fin:b, lugar:lugSel(),
                lugar_texto:q('#cLtx').hidden?'':q('#cLtx').value.trim(), notas:q('#cNot').value.trim(),
-               recordar:q('#cRec').value===''?null:+q('#cRec').value, invitados:invSel(), video:q('#cVid').checked&&!q('#cVidBox').hidden};
+               recordar:q('#cRec').value===''?null:+q('#cRec').value, video:conVideo()};
         if(L.liga) p.liga=L.liga;
         await revisaYa();
         var hay=q('#cDisp').classList.contains('hay');
@@ -1541,7 +1591,8 @@ button.kpi:focus-visible{outline-offset:-3px}
             // con su cliente, prospecto o tema interno, por exp_cita_guarda(), que llama a agenda_guarda()
             var r=await P.sb.rpc('exp_cita_guarda',{p:p}); if(r.error) throw new Error(r.error.message);
             if(p.liga&&p.liga.prospecto_nuevo) AG.expCli=null;   // el prospecto nuevo ya sale en la lista
-            cerrar(); toast(nuevo?'Cita agendada'+(p.dueno!==yoU()?' · le avisamos a '+persona(p.dueno).nombre:''):'Cambios guardados');
+            var otros=quienes().filter(function(u){ return u!==yoU(); });
+            cerrar(); toast(nuevo?'Cita agendada'+(otros.length===1?' · le avisamos a '+persona(otros[0]).nombre:otros.length?' · les avisamos a los '+otros.length:''):'Cambios guardados');
             sel=d; var dd=parse(d); vista={y:dd.getFullYear(), m:dd.getMonth()};
             await cargaAgenda(true);
             if(r.data&&r.data.video&&p.video&&(nuevo||!(c&&c.video))) avisaVideo(r.data);
@@ -2733,7 +2784,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       var filas=[], dias=new Date(y,m+1,0).getDate();
       for(var d=1; d<=dias; d++) delDia(y,m,d).filter(function(x){ return filtros[x.tipo]; }).forEach(function(x){
         var det=x.tipo==='cumple'?(x.c.area||''):x.tipo==='evento'?[x.e.hora,x.e.lugar,x.e.desc].filter(Boolean).join(' · '):x.sub;
-        if(x.tipo==='cita') det=[citaSub(x.ci), x.ci.dueno!==yoU()?'Agenda de '+x.ci.dueno_nombre:''].filter(Boolean).join(' · ');
+        if(x.tipo==='cita') det=[citaSub(x.ci), !enMiAgenda(x.ci)?'Agenda de '+yLista(agendaDe(x.ci)):''].filter(Boolean).join(' · ');
         if(x.tipo==='ent'||x.tipo==='lsat') det=[x.w.rs, x.w.grupo, x.w.ven?'Vencida':'', x.w.pz?'En pausa':'', AG.de&&x.w.quien?persona(x.w.quien).nombre:''].filter(Boolean).join(' · ');
         if(x.tipo==='evento') det=[x.e.cliente&&x.e.cliente.g?'Cliente '+x.e.cliente.g:'', x.e.privado?'Privado (solo invitados)':'', det].filter(Boolean).join(' · ');
         filas.push([new Date(Date.UTC(y,m,d)), DIAS[new Date(y,m,d).getDay()], x.tipo==='evento'?'Evento: '+CLASES[claseDe(x.e)][0]:TIPOS[x.tipo], x.titulo, det||'']);
