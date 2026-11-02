@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=62dc0ab134"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=dc30af6b92"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=62dc0ab134"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=dc30af6b92"></script><script src="js/buscador.js?v=aed1833b56"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -249,7 +249,25 @@ tr.fila:hover td{background:var(--navy-soft)}
   .ficha .cab h2{font-size:18px}
   .band h1{font-size:22px}
   .form select,.form textarea{font-size:16px}
+  .form input[type=date],.form input[type=text]{font-size:16px}
 }
+/* Devoluciones de IVA por caso (portal/sql/151_devolucion_iva.sql; petición de Fernando Cadengo autorizada por Daniel, 2-nov-2026) */
+.form input[type=date],.form input[type=text]{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit;min-width:0}
+.dev-res{padding:10px 14px;border-bottom:1px solid var(--line)}
+.dev-res .grande{font-family:var(--f-display);font-size:19px;font-weight:750;overflow-wrap:anywhere}
+.dev-est{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap;background:var(--navy-soft);color:var(--ink)}
+.dev-est.ojo{background:var(--accent-soft);color:var(--accent-ink)}
+.dev-est.ok{background:var(--ok-soft);color:var(--ok)}
+.dev-est.mal{background:var(--red-soft);color:var(--red)}
+.dev-est.no{background:var(--surface-2);color:var(--muted)}
+.dev-paso{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;justify-content:space-between}
+.dev-paso .q{min-width:0;flex:1 1 220px}
+.dev-sat{display:flex;flex-wrap:wrap;gap:8px}
+.dev-sat .btn{flex:1 1 140px}
+.dev-sat .btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.dev-nota{font-size:12.5px;color:var(--muted)}
+.btn.nuevo{box-shadow:0 0 0 3px var(--accent);border-color:var(--accent)}
+.nuevo-nota{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin:16px 0 0;font-size:13.5px;font-weight:600}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div>
@@ -292,6 +310,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
         <button class="btn" type="button" id="env-abre" hidden>Enviar al cliente</button>
         <button class="btn acento" type="button" id="gen-abre" hidden>Generar el mes</button>
+        <button class="btn" type="button" id="dev-abre" hidden>Nueva devolución de IVA</button>
         <button class="btn" type="button" id="agr-abre" hidden>Agregar tarea</button>
         <button class="btn" type="button" id="at-abre" hidden>Tareas a tiempo</button>
         <button class="btn" type="button" id="mes-abre" hidden>Reiniciar o borrar</button>
@@ -311,7 +330,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey', PAGINA = 200;
-  var COLS = 'id,origen,periodo,plantilla_id,plantilla,periodicidad,actividad_id,actividad,empresa_id,rs,rfc,grupo,resp_nombre,resp_usuario,aut_nombre,aut_usuario,estatus,terminado,ven_sat,ven_pro,secuencia,req_archivo,req_secuencia,activa,a_tiempo_manual,reservado,n_docs,pausa,pausa_desde,ven_pro_orig,dias_pausa';
+  var COLS = 'id,origen,periodo,plantilla_id,plantilla,periodicidad,actividad_id,actividad,empresa_id,rs,rfc,grupo,resp_nombre,resp_usuario,aut_nombre,aut_usuario,estatus,terminado,ven_sat,ven_pro,secuencia,req_archivo,req_secuencia,activa,a_tiempo_manual,reservado,n_docs,pausa,pausa_desde,ven_pro_orig,dias_pausa,dev_caso,dev_paso';
   var EST = { 2: 'Terminada', 3: 'Rechazada', 4: 'En Proceso', 5: 'Por Iniciar', 6: 'Cancelado' }, ORDEN_EST = [5, 4, 2, 3, 6];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -324,6 +343,14 @@ tr.fila:hover td{background:var(--navy-soft)}
   // lo que cubro hoy por la ausencia de alguien (117_cobertura_ausencias.sql, 1-nov-2026): la base lo deja ver y trabajar
   // solo mientras dura; responsable y quien autoriza no cambian
   var CUB = {};
+  // devoluciones de IVA por caso (portal/sql/151_devolucion_iva.sql; petición de Fernando Cadengo autorizada por Daniel el
+  // 2-nov-2026): una por solicitud, con las fechas de ley y los botones de la respuesta del SAT. La base decide quién.
+  var DEV = { crea: false, factura: false }, DEVC = {}, DEVF = null;
+  var DEV_EST = { espera_sat: ['Esperando al SAT', ''], requerimiento: ['Requerimiento por contestar', 'ojo'], autorizada: ['Autorizada · falta el depósito', 'ok'],
+                  pagada: ['Pagada · falta la factura', 'ok'], facturada: ['Terminada (facturada)', 'ok'], rechazada: ['Rechazada', 'mal'],
+                  desistida: ['Desistida', 'mal'], cancelada: ['Cancelada', 'no'] };
+  var DEV_SAT = { autorizada: ['Autorizada', 'Fecha de la autorización'], requerimiento: ['Requerimiento', 'Fecha en que lo notificaron'],
+                  rechazada: ['Rechazada', 'Fecha del rechazo'], desistida: ['Desistida', 'Fecha del desistimiento'] };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   var HOY = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -365,6 +392,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       try { var es = await P.sb.rpc('env_estado'); if (!es.error && es.data) ENV = es.data; } catch (e) { ENV = { visible: false, modo: 'apagado' }; }
       try { var ce = await P.sb.rpc('wf_conf_estado'); if (!ce.error && ce.data) CONF = ce.data; } catch (e) { CONF = { edita: false, a_tiempo: false }; }
       try { var cm = await P.sb.rpc('cob_mias'); CUB = {}; if (!cm.error && Array.isArray(cm.data)) cm.data.forEach(function (x) { CUB[x.id] = x; }); } catch (e) { CUB = {}; }
+      try { var de = await P.sb.rpc('wf_dev_estado'); if (!de.error && de.data) DEV = de.data; } catch (e) { DEV = { crea: false, factura: false }; }
       var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
@@ -373,12 +401,14 @@ tr.fila:hover td{background:var(--navy-soft)}
       periodos(); fijoPeriodo();
       if (window.matchMedia('(min-width: 900px)').matches) $('masf').open = true;
       $('gen-abre').hidden = !genero();
+      $('dev-abre').hidden = !(DEV.crea && !CONSULTA);
       $('env-abre').hidden = !(ENV.visible && !CONSULTA);
       $('agr-abre').hidden = $('mes-abre').hidden = !(CONF.edita && !CONSULTA);
       $('at-abre').hidden = !(CONF.a_tiempo && !CONSULTA);
       await cargaPeriodo();
       if (!FIJO_OK) { fijoResto(); mostrar = PAGINA; pinta(); }
       $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
+      var hv = /^#ver-([a-z-]{1,40})$/.exec(location.hash || ''); if (hv) verNuevo(hv[1]);
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
       $('error').textContent = 'No se pudo leer el WorkFlow. Vuelve a intentar en un momento.';
@@ -542,7 +572,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (enPausa(a)) h += '<div class="pzaviso"><b>En pausa' + (a.pausa_desde ? ' desde el ' + esc(fecha(diaMty(a.pausa_desde))) : '') + ':</b> ' + esc(a.pausa)
       + '. El cliente está en pausa (Panel › Pausas y motivos). Mientras siga así no cuenta como vencida y sí se puede trabajar. Al reactivarlo, su vencimiento Profase se recorre los días hábiles que estuvo en pausa.</div>';
     var edita = puedeEditar(a);
-    var ops = ORDEN_EST.map(function (e) { var ok = e === a.estatus || puedeEstatus(a, e); return '<option value="' + e + '"' + (e === a.estatus ? ' selected' : '') + (ok ? '' : ' disabled') + '>' + esc(EST[e]) + (ok ? '' : ' (no te toca)') + '</option>'; }).join('');
+    var ops = ORDEN_EST.map(function (e) { var ok = e === a.estatus || (puedeEstatus(a, e) && !devBloquea(a, e)); return '<option value="' + e + '"' + (e === a.estatus ? ' selected' : '') + (ok ? '' : ' disabled') + '>' + esc(EST[e]) + (ok ? '' : ' (no te toca)') + '</option>'; }).join('');
     var form = '<div class="form">'
       + '<div><label for="fe-est">Estatus</label><select id="fe-est"' + (edita ? '' : ' disabled') + '>' + ops + '</select></div>'
       + '<div id="fe-com-c"><label for="fe-com">Comentarios</label><textarea id="fe-com" maxlength="4000"' + (edita ? '' : ' readonly') + ' placeholder="' + (edita ? 'Escribe aquí' : 'Sin comentario') + '"></textarea></div>'
@@ -551,11 +581,13 @@ tr.fila:hover td{background:var(--navy-soft)}
         + ((soyResp(a) || soyAsig(a) || jefe()) && a.aut_usuario && !soyAut(a) && !cerrada(a) ? '<button class="btn" type="button" id="fe-pide">Pedir autorización a ' + esc(a.aut_nombre) + '</button>' : '') + '</div>' : '')
       + '<div class="rfc">' + (CONSULTA ? 'Solo consulta.' : (edita ? 'Terminarla o rechazarla le toca a ' + esc(quienCierra(a)) + ', a un gerente o a la dirección.' : 'Esta actividad la mueven ' + esc(quienCierra(a)) + (a.aut_nombre && a.resp_nombre ? ' y ' + esc(a.resp_nombre) + ' (responsable)' : '') + ', un gerente o la dirección.')) + '</div>'
       + '</div>';
+    if (a.dev_caso) form = form.replace('<div class="msg" id="fe-msg" hidden></div>', '<div class="dev-nota">' + esc(devNotaPaso(a)) + '</div><div class="msg" id="fe-msg" hidden></div>');
     h += sec('Estatus y comentarios', form);
+    if (a.dev_caso) h += '<section class="sec" id="dev-sec"><h3>Devolución de IVA <small id="dev-n"></small></h3><div id="dev-in"><div class="vacio">Revisando…</div></div></section>';
     // la pausa la pide el contador y la autoriza el gerente (Daniel, 30-oct-2026, 21:50; portal/sql/78_wf_pausas_quien.sql)
     var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a);
     if (pidePz) h += '<section class="sec" id="pz-sec"><h3>Pausa del cliente</h3><div id="pz-in"><div class="vacio">Revisando…</div></div></section>';
-    var req = [a.req_archivo ? 'Un documento para terminarla' : '', a.req_secuencia ? 'El paso anterior terminado' : ''].filter(Boolean).join(' · ');
+    var req = [a.dev_paso === 'contestar' ? 'Los dos documentos: papeles de trabajo y acuse de solventación' : a.req_archivo ? 'Un documento para terminarla' : '', a.req_secuencia ? 'El paso anterior terminado' : ''].filter(Boolean).join(' · ');
     h += sec('La actividad', '<div class="in"><dl class="dl">'
       + '<dt>Responsable</dt><dd>' + (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + '</dd>'
       + '<dt>Autoriza</dt><dd>' + (esc(a.aut_nombre) || '<span class="no">Nadie (la termina el responsable)</span>') + '</dd>'
@@ -585,7 +617,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
-    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes) pintaMes(a); if (pidePz) pintaPausa(a);
+    leeComentario(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes) pintaMes(a); if (pidePz) pintaPausa(a); if (a.dev_caso) pintaDev(a);
   }
   function cierra() { ABIERTA = null; $('velo').hidden = true; $('ficha').innerHTML = ''; }
   function msg(t, ok) { var m = $('fe-msg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
@@ -617,6 +649,203 @@ tr.fila:hover td{background:var(--navy-soft)}
     catch (er) { msg(falla(er), false); }
     setTimeout(function () { if ($('fe-pide')) $('fe-pide').disabled = false; }, 3000);
   }
+
+  /* ---------- Devoluciones de IVA por caso (portal/sql/151_devolucion_iva.sql; petición de Fernando Cadengo autorizada por
+     Daniel el 2-nov-2026). Cada solicitud es su propio caso: nacen documentos, acuse y la respuesta del SAT con sus fechas de
+     ley; «¿Qué contestó el SAT?» (quien autoriza, un gerente o la dirección) cierra la respuesta y crea solo el paso que sigue;
+     al terminar «Contestar requerimiento» nace la siguiente respuesta; al marcar el depósito, la factura de honorarios, que se
+     termina sola al confirmarla en Facturación. La base decide quién puede cada cosa. ---------- */
+  function devBloquea(a, e) {
+    if (!a.dev_caso) return false;
+    if (a.dev_paso === 'respuesta') return e === 2 || e === 3 || e === 6;
+    if (e === 6) return true;
+    return a.dev_paso === 'factura' && e === 2 && !jefe();
+  }
+  function devNotaPaso(a) {
+    if (a.dev_paso === 'respuesta') return 'Este paso se cierra abajo, con «¿Qué contestó el SAT?»: lo registra ' + (a.aut_nombre || 'quien autoriza') + ', un gerente o la dirección.';
+    if (a.dev_paso === 'contestar') return 'Al terminarlo (con los papeles de trabajo y el acuse de solventación) nace solo la siguiente respuesta del SAT.';
+    if (a.dev_paso === 'deposito') return 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nace la factura de honorarios.';
+    if (a.dev_paso === 'factura') return 'Se termina sola cuando quien factura la confirma en Tesorería › Facturación («¿Es de la devolución de IVA de …?»).';
+    return 'Es parte de una devolución de IVA: abajo está todo el caso.';
+  }
+  function devChip(e) { var x = DEV_EST[e] || [e, '']; return '<span class="dev-est ' + x[1] + '">' + esc(x[0]) + '</span>'; }
+  async function pintaDev(a, aviso) {
+    var box = $('dev-in'); if (!box) return;
+    var r;
+    try { r = await P.sb.rpc('wf_dev_caso', { p_caso: a.dev_caso }); } catch (e) { r = { error: e }; }
+    if (ABIERTA !== a.id || !$('dev-in')) return;
+    if (r.error || !r.data) { box.innerHTML = '<div class="vacio">' + esc(r.error ? falla(r.error) : 'No se pudo leer la devolución.') + '</div>'; return; }
+    var c = r.data; DEVC[c.id] = c;
+    $('dev-n').textContent = c.titulo.replace(/^Devolución de IVA · /, '');
+    var h = '<div class="dev-res"><div class="grande">' + esc(c.rs) + '</div><div style="margin-top:4px">' + devChip(c.estado) + '</div></div>';
+    h += '<div class="in"><dl class="dl">'
+      + '<dt>Solicitada</dt><dd>' + esc(fecha(c.solicitud)) + ' <span class="rfc">(mes contable ' + esc(mesTxt(c.periodo)) + ')</span></dd>'
+      + '<dt>Mes que se solicita</dt><dd>' + esc(mesTxt(c.mes_solicitado)) + '</dd>'
+      + (c.n_req ? '<dt>Requerimientos</dt><dd>' + esc(c.n_req) + (c.notificado ? ' <span class="rfc">· el último notificado el ' + esc(fecha(c.notificado)) + '</span>' : '') + '</dd>' : '')
+      + (c.autorizado ? '<dt>Autorizada</dt><dd>' + esc(fecha(c.autorizado)) + '</dd>' : '')
+      + (c.pagado ? '<dt>Depositada</dt><dd>' + esc(fecha(c.pagado)) + '</dd>' : '')
+      + '<dt>Contador</dt><dd>' + (esc(c.contador) || '<span class="no">—</span>') + '</dd>'
+      + '<dt>Autoriza la respuesta</dt><dd>' + (esc(c.gerente) || '<span class="no">—</span>') + '</dd>'
+      + '<dt>Factura</dt><dd>' + (c.factura_folio ? 'Folio ' + esc(c.factura_folio) + (c.facturo ? ' · la hizo ' + esc(c.facturo) : '') : esc(c.factura) || '<span class="no">—</span>') + '</dd>'
+      + '</dl></div>';
+    h += '<ul class="lista">' + (c.pasos || []).map(function (x) {
+      var cerr = x.estatus === 2 || x.estatus === 3 || x.estatus === 6;
+      var v = x.ven_pro || x.ven_sat, tarde = !cerr && v && v < HOY;
+      return '<li><div class="dev-paso"><div class="q">' + (x.id === a.id ? '<b>' + esc(x.actividad) + '</b> <span class="rfc">(esta)</span>' : '<button type="button" class="link" data-dev-act="' + esc(x.id) + '">' + esc(x.actividad) + '</button>')
+        + '<div class="d">' + (x.ven_pro ? '<span class="vence' + (tarde ? ' mal' : '') + '">Profase ' + esc(fecha(x.ven_pro)) + '</span> · ' : '') + (x.ven_sat ? 'SAT ' + esc(fecha(x.ven_sat)) : 'Sin fecha')
+        + (x.terminado ? ' · terminada el ' + esc(fecha(diaMty(x.terminado))) : '') + (x.resp ? ' · ' + esc(x.resp) : '') + '</div></div>' + chipEst(x.estatus) + '</div></li>';
+    }).join('') + '</ul>';
+    var pu = c.puede || {}, ops = [];
+    if (pu.responder) ops = ['autorizada', 'requerimiento', 'rechazada'];
+    if (pu.desistir) ops.push('desistida');
+    if (ops.length && !CONSULTA) {
+      h += '<div class="form" id="dev-sat-c"><div><label>¿Qué contestó el SAT?</label><div class="dev-sat">' + ops.map(function (k) { return '<button class="btn" type="button" data-dsat="' + k + '" aria-pressed="false">' + esc(DEV_SAT[k][0]) + '</button>'; }).join('') + '</div></div>'
+        + '<div id="dev-sat-f" hidden></div>'
+        + '<div class="dev-nota">' + (pu.responder ? 'Al registrarla se cierra la respuesta y nace solo el paso que sigue con su fecha: el requerimiento se contesta en 20 días hábiles (10 el segundo); mientras, el reloj del SAT se para y, al contestar, le corre lo que le quedaba de sus 40 días; el depósito va dentro de esos mismos días (art. 22 del CFF). Rechazada o desistida cierra el caso.' : 'Si el cliente desiste o el SAT la tiene por desistida, regístralo aquí: el caso se cierra.') + '</div></div>';
+    } else if (c.estado === 'espera_sat' && !CONSULTA) {
+      h += '<div class="aviso">La respuesta del SAT la registra ' + esc(c.gerente || 'quien autoriza') + ', un gerente o la dirección.</div>';
+    }
+    if (!CONSULTA && (pu.deshacer || pu.cancelar)) {
+      var u = c.ultima ? (DEV_SAT[String(c.ultima.que).replace('sat:', '')] || ['', ''])[0] : '';
+      h += '<div class="form"><div class="botones">'
+        + (pu.deshacer && c.ultima ? '<button class="btn" type="button" id="dev-desh">Deshacer la última respuesta (' + esc(u) + (c.ultima.fecha ? ' del ' + esc(fecha(c.ultima.fecha)) : '') + ')</button>' : '')
+        + (pu.cancelar ? '<button class="btn peligro" type="button" id="dev-canc">Cancelar esta devolución</button>' : '') + '</div><div id="dev-canc-f" hidden></div></div>';
+    }
+    var ev = c.eventos || [];
+    var EVQ = { alta: 'Se dio de alta', contestado: 'Se contestó el requerimiento', pagada: 'Se depositó al cliente', factura: 'Se ligó la factura de honorarios',
+                'factura:quitada': 'Se quitó la liga de la factura', cancelada: 'Se canceló', deshacer: 'Se deshizo una respuesta del SAT' };
+    if (ev.length) h += '<ul class="bit">' + ev.slice().reverse().map(function (x) {
+      var q = /^sat:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(4)] || [x.que])[0] : /^deshecha:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(9)] || [x.que])[0] + ' (deshecha)' : (EVQ[x.que] || x.que);
+      return '<li><span class="q">' + esc(q) + (x.fecha ? ' · ' + esc(fecha(x.fecha)) : '') + '</span><span class="c">' + esc(x.quien || '') + ' · ' + esc(fechaHora(x.cuando)) + '</span>' + (x.nota ? '<span class="c" style="flex-basis:100%">' + esc(x.nota) + '</span>' : '') + '</li>';
+    }).join('') + '</ul>';
+    if (aviso) h = '<div class="msg ok" style="margin:10px 14px 0">' + esc(aviso) + '</div>' + h;
+    box.innerHTML = h;
+  }
+  function devAbreFuera() { msg('Ese paso no está en tu lista: lo lleva otra persona.', false); }
+  function devSatForm(k, b) {
+    document.querySelectorAll('[data-dsat]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    var f = $('dev-sat-f'); if (!f) return;
+    f.hidden = false;
+    f.innerHTML = '<div><label for="dev-sat-fe">' + esc(DEV_SAT[k][1]) + '</label><input type="date" id="dev-sat-fe" max="' + esc(HOY) + '" value="' + esc(HOY) + '"></div>'
+      + '<div><label for="dev-sat-no">Nota (opcional)</label><textarea id="dev-sat-no" maxlength="500" placeholder="' + (k === 'requerimiento' ? 'Qué pide el SAT' : 'Algo que deba saberse') + '"></textarea></div>'
+      + '<div class="botones"><button class="btn acento" type="button" id="dev-sat-ok" data-k="' + k + '">Registrar: ' + esc(DEV_SAT[k][0]) + '</button><button class="btn" type="button" id="dev-sat-x">Cancelar</button></div>'
+      + '<div class="msg" id="dev-sat-m" hidden></div>';
+    try { $('dev-sat-fe').focus(); } catch (e) {}
+  }
+  function devMsg(id, t, ok) { var m = $(id); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
+  async function devRecarga(a, aviso) { var id = a.id; await cargaPeriodo(); if (POR_ID[id]) { abre(id); if (aviso) setTimeout(function () { var x = POR_ID[id]; if (x && $('dev-in')) pintaDev(x, aviso); }, 0); } }
+  async function devResponde(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    var k = b.getAttribute('data-k'), f = $('dev-sat-fe').value;
+    if (!f) { devMsg('dev-sat-m', 'Pon la fecha.', false); return; }
+    b.disabled = true; devMsg('dev-sat-m', '');
+    try {
+      var r = await P.sb.rpc('wf_dev_responde', { p_caso: a.dev_caso, p_que: k, p_fecha: f, p_nota: $('dev-sat-no').value || null });
+      if (r.error) throw r.error;
+      await devRecarga(a, k === 'requerimiento' ? 'Listo: nació «Contestar requerimiento» con su fecha y al contador le llegó el aviso.'
+        : k === 'autorizada' ? 'Listo: nació «Depósito al cliente (pagado)» con su fecha y al contador le llegó el aviso.' : 'Listo: el caso quedó cerrado.');
+    } catch (e) { devMsg('dev-sat-m', falla(e), false); b.disabled = false; }
+  }
+  async function devDeshace(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    if (!window.confirm('¿Deshacer la última respuesta del SAT? Se quita el paso que creó y la respuesta vuelve a quedar abierta.')) return;
+    b.disabled = true;
+    try { var r = await P.sb.rpc('wf_dev_deshace', { p_caso: a.dev_caso }); if (r.error) throw r.error; await devRecarga(a, 'Listo: se deshizo la última respuesta.'); }
+    catch (e) { msg(falla(e), false); b.disabled = false; }
+  }
+  function devCancelaForm() {
+    var f = $('dev-canc-f'); if (!f) return;
+    f.hidden = false;
+    f.innerHTML = '<div><label for="dev-canc-mo">Por qué se cancela (queda anotado)</label><textarea id="dev-canc-mo" maxlength="500" placeholder="Por ejemplo: se dio de alta dos veces"></textarea></div>'
+      + '<div class="botones"><button class="btn peligro" type="button" id="dev-canc-ok">Sí, cancelar la devolución</button><button class="btn" type="button" id="dev-canc-x">No</button></div><div class="msg" id="dev-canc-m" hidden></div>';
+    try { $('dev-canc-mo').focus(); } catch (e) {}
+  }
+  async function devCancela(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    b.disabled = true;
+    try { var r = await P.sb.rpc('wf_dev_cancela', { p_caso: a.dev_caso, p_motivo: $('dev-canc-mo').value }); if (r.error) throw r.error; await devRecarga(a, 'Listo: la devolución quedó cancelada.'); }
+    catch (e) { devMsg('dev-canc-m', falla(e), false); b.disabled = false; }
+  }
+
+  /* «Nueva devolución de IVA»: una por solicitud (la da de alta quien genera el mes) */
+  var DVB = null;
+  async function abreDev() {
+    if (!(DEV.crea && !CONSULTA)) return;
+    ABIERTA = null;
+    var y = +HOY.slice(0, 4), m = +HOY.slice(5, 7) - 1; if (m === 0) { m = 12; y--; }
+    var anios = []; for (var k = +HOY.slice(0, 4); k >= 2015; k--) anios.push(k);
+    var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Nueva devolución de IVA</h2><div class="rfc">Una por solicitud: cada una es su propio caso, con las fechas de ley</div></div>'
+      + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">';
+    var form = '<div class="form">'
+      + '<div><label for="dv-cli-in">Cliente (razón social)</label><div id="dv-cli"></div></div>'
+      + '<div><label for="dv-sol">Fecha de solicitud</label><input type="date" id="dv-sol" max="' + esc(HOY) + '" value="' + esc(HOY) + '"><div class="dev-nota">De aquí sale el mes contable de la devolución.</div></div>'
+      + '<div><label for="dv-mes">Mes que se solicita (el del saldo a favor)</label><div class="dos"><select id="dv-mes" aria-label="Mes">' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'
+      + '<select id="dv-anio" aria-label="Año">' + anios.map(function (a) { return '<option' + (a === y ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div></div>'
+      + '<div><label for="dv-con">Contador responsable</label><select id="dv-con"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="dv-ger">Gerente que autoriza (registra la respuesta del SAT)</label><select id="dv-ger"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="dv-fac">Quién hace la factura de honorarios</label><select id="dv-fac"><option value="">Cargando…</option></select></div>'
+      + '<div><label for="dv-not">Nota (opcional)</label><textarea id="dv-not" maxlength="500"></textarea></div>'
+      + '<div id="dv-prev"></div>'
+      + '<div class="botones"><button class="btn acento" type="button" id="dv-ok">Dar de alta la devolución</button></div>'
+      + '<div class="msg" id="dv-msg" hidden></div></div>';
+    h += sec('La solicitud', form);
+    h += '<p class="rfc gen-nota">Al darla de alta nacen «Documentos de solicitud» y «Acuse de solicitud» (2 días hábiles después de la solicitud) y «Respuesta del SAT» (40 días hábiles, art. 22 del CFF; la fecha Profase, 3 días hábiles antes). Cuando el SAT conteste, quien autoriza lo registra en la ficha y nace solo el paso que sigue. Las devoluciones que ya estaban en proceso siguen con sus plantillas de antes.</p>';
+    h += '</div>';
+    $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
+    try { $('cerrar').focus(); } catch (er) {}
+    try {
+      if (!DEVF) { var r = await P.sb.rpc('wf_dev_opciones'); if (r.error) throw r.error; DEVF = r.data; }
+      if (!$('dv-cli')) return;
+      var op = function (L, v) { return '<option value="">Escoge…</option>' + (L || []).map(function (x) { return '<option value="' + esc(x.u) + '"' + (x.u === v ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join(''); };
+      $('dv-con').innerHTML = op(DEVF.contadores); $('dv-ger').innerHTML = op(DEVF.gerentes); $('dv-fac').innerHTML = op(DEVF.facturan);
+      DVB = window.PROFASE_BUSCA.crea({ donde: $('dv-cli'), id: 'dv-cli-in', varios: false, lista: 'al-buscar',
+        opciones: (DEVF.clientes || []).map(function (c) { return { v: String(c.id), t: c.rs, nota: [c.rfc, c.grupo].filter(Boolean).join(' · ') }; }),
+        marcador: 'Escribe parte de la razón social, el RFC o el grupo', vacio: 'No hay clientes activos con eso',
+        cambio: function (v) { devSugerido(+v[0] || 0); } });
+    } catch (e) { devMsg('dv-msg', 'No se pudieron leer los clientes. Cierra y vuelve a abrir.', false); }
+  }
+  async function devSugerido(emp) {
+    if (!emp || !$('dv-prev')) { if ($('dv-prev')) $('dv-prev').innerHTML = ''; return; }
+    try {
+      var r = await P.sb.rpc('wf_dev_sugerido', { p_empresa: emp }); if (r.error) throw r.error;
+      var s = r.data || {}, pon = function (id, v) { var e = $(id); if (e && v && Array.prototype.some.call(e.options, function (o) { return o.value === v; })) e.value = v; };
+      pon('dv-con', s.contador); pon('dv-ger', s.gerente); pon('dv-fac', s.factura);
+      var L = s.casos || [];
+      $('dv-prev').innerHTML = L.length ? '<div class="dev-nota"><b>Devoluciones de este cliente:</b> ' + L.slice(0, 6).map(function (c) { return esc(c.titulo.replace(/^Devolución de IVA · /, '')) + ' (' + esc((DEV_EST[c.estado] || [c.estado])[0].toLowerCase()) + ', solicitada el ' + esc(fecha(c.solicitud)) + ')'; }).join(' · ') + '</div>' : '';
+    } catch (e) { $('dv-prev').innerHTML = ''; }
+  }
+  async function creaDev(b) {
+    var emp = DVB ? +(DVB.valor()[0] || 0) : 0;
+    if (!emp) { devMsg('dv-msg', 'Escoge el cliente.', false); return; }
+    if (!$('dv-sol').value) { devMsg('dv-msg', 'Pon la fecha de solicitud.', false); return; }
+    var p = { empresa_id: emp, solicitud: $('dv-sol').value, mes_solicitado: $('dv-anio').value + '-' + dos(+$('dv-mes').value) + '-01',
+              contador: $('dv-con').value, gerente: $('dv-ger').value, factura: $('dv-fac').value, nota: $('dv-not').value };
+    if (!p.contador || !p.gerente || !p.factura) { devMsg('dv-msg', 'Escoge al contador, al gerente que autoriza y a quien hace la factura.', false); return; }
+    b.disabled = true; devMsg('dv-msg', '');
+    try {
+      var r = await P.sb.rpc('wf_dev_nueva', { p: p }); if (r.error) throw r.error;
+      var c = r.data || {}, per = String(c.periodo || '').slice(0, 10);
+      if (per) { $('f-anio').value = per.slice(0, 4); $('f-mes').value = String(+per.slice(5, 7)); }
+      await cargaPeriodo();
+      var pr = (c.pasos || [])[0];
+      if (pr && POR_ID[pr.id]) { abre(pr.id); setTimeout(function () { var x = POR_ID[pr.id]; if (x && $('dev-in')) pintaDev(x, 'Listo: se dio de alta «' + c.titulo + '» y al contador le llegó el aviso.'); }, 0); }
+      else { cierra(); }
+    } catch (e) { devMsg('dv-msg', falla(e), false); b.disabled = false; }
+  }
+  // Lo nuevo, desde su aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']; regla de Daniel del 2-nov-2026: lo que avisa
+  // Claude lleva a lo nuevo): «devolucion-iva» ilumina «Nueva devolución de IVA» con una nota corta de qué es
+  function verNuevo(t) {
+    if (t !== 'devolucion-iva') return;
+    if (!$('p-lista') || $('p-lista').hidden) { setTimeout(function () { verNuevo(t); }, 400); return; }
+    var nota = document.getElementById('nuevo-dev');
+    if (!nota) { nota = document.createElement('div'); nota.id = 'nuevo-dev'; nota.className = 'nuevo-nota'; nota.setAttribute('role', 'status'); $('p-lista').parentNode.insertBefore(nota, $('p-lista')); }
+    nota.textContent = 'Nuevo: las devoluciones de IVA van una por solicitud, con las fechas de ley de cada paso y los botones de «¿Qué contestó el SAT?» en la ficha.'
+      + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla («Devolución de IVA · …»).');
+    var b = $('dev-abre');
+    if (b && !b.hidden) { b.classList.add('nuevo'); try { b.scrollIntoView({ block: 'center' }); } catch (e) {} setTimeout(function () { b.classList.remove('nuevo'); }, 12000); }
+    else { try { nota.scrollIntoView({ block: 'center' }); } catch (e) {} }
+  }
+  window.__abreVer = verNuevo;
 
   /* ---------- Pedir la pausa del cliente (contadores): queda por confirmar y la autoriza el gerente en Panel › Pausas y
      motivos; solo aplica al WorkFlow (la facturación y la cobranza siguen igual) ---------- */
@@ -1292,6 +1521,16 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'fe-pide') { pideAut(); return; }
     if (ev.target.id === 'fe-sube') { sube(); return; }
     if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
+    if (ev.target.id === 'dev-abre') { abreDev(); return; }
+    if (ev.target.id === 'dv-ok') { creaDev(ev.target); return; }
+    var ds = ev.target.closest('[data-dsat]'); if (ds) { devSatForm(ds.getAttribute('data-dsat'), ds); return; }
+    if (ev.target.id === 'dev-sat-ok') { devResponde(ev.target); return; }
+    if (ev.target.id === 'dev-sat-x') { var sf = $('dev-sat-f'); if (sf) { sf.hidden = true; sf.innerHTML = ''; } document.querySelectorAll('[data-dsat]').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); }); return; }
+    if (ev.target.id === 'dev-desh') { devDeshace(ev.target); return; }
+    if (ev.target.id === 'dev-canc') { devCancelaForm(); return; }
+    if (ev.target.id === 'dev-canc-ok') { devCancela(ev.target); return; }
+    if (ev.target.id === 'dev-canc-x') { var cf = $('dev-canc-f'); if (cf) { cf.hidden = true; cf.innerHTML = ''; } return; }
+    var da = ev.target.closest('[data-dev-act]'); if (da) { var did = +da.getAttribute('data-dev-act'); if (POR_ID[did]) abre(did); else devAbreFuera(did); return; }
     if (ev.target.id === 'agr-abre') { abreAgregar(); return; }
     if (ev.target.id === 'at-abre') { abreATiempo(); return; }
     if (ev.target.id === 'mes-abre') { abreMes(); return; }

@@ -418,11 +418,35 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="tot"><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span>'
         + (difFac(f) ? '<span>Diferencia no cobrada <small class="no">(menos de $10, cuenta como pagada)</small></span><span class="r">' + esc(dinero(difFac(f))) + '</span>' : '')
         + '<span class="f">Saldo</span><span class="r f">' + esc(dinero(f.pagada ? 0 : f.saldo)) + '</span></div>', String(d.pagos.length));
+    // la factura de honorarios de una devolución de IVA (portal/sql/151_devolucion_iva.sql; Daniel, 2-nov-2026): «¿Es de la
+    // devolución de IVA de …?» con el «sí» se liga al caso y su actividad del WorkFlow se termina sola
+    if (f.compania === 1) h += '<section class="sec" id="dev-fac" hidden><h3>Devolución de IVA</h3><div class="in" id="dev-fac-in"></div></section>';
     var hi = d.historia || [];
     h += sec('Historia', hi.length ? '<ul class="lista">' + hi.map(function (x) { return '<li><div class="t">' + esc(x.que) + '</div><div class="d">' + esc(x.nombre || x.usuario) + ' · ' + esc(fechaHora(x.cuando)) + (x.motivo ? ' · ' + esc(x.motivo) : '') + '</div></li>'; }).join('') + '</ul>'
       : '<div class="vacio">' + (f.origen === 'portal' || f.creado_por ? 'Sin cambios anotados.' : 'Viene del Access (antes del portal no se anotaba quién hizo cada cosa).') + '</div>');
     h += '</div>';
     abre(h);
+    if (f.compania === 1) devFac(f.id);
+  }
+  async function devFac(id, aviso) {
+    var r;
+    try { r = await rpc('wf_dev_factura', { p_factura: id }); } catch (e) { r = null; }
+    var box = $('dev-fac'), inn = $('dev-fac-in'); if (!box || !inn) return;
+    if (!r || (!r.ligada && !(r.candidatos || []).length)) { box.hidden = true; return; }
+    var h = aviso ? '<div class="msg ok" style="margin-bottom:8px">' + esc(aviso) + '</div>' : '';
+    if (r.ligada) h += '<div>Es la factura de honorarios de la devolución de IVA de <b>' + esc(r.ligada.mes) + '</b> de ' + esc(r.ligada.rs) + '.</div>';
+    else h += (r.candidatos || []).map(function (c) {
+      return '<div class="dev-c" style="padding:6px 0"><div>¿Es de la devolución de IVA de <b>' + esc(c.mes) + '</b> de ' + esc(c.rs) + '?' + (c.pagado ? ' <span class="no">(le depositaron el ' + esc(fecha(c.pagado)) + ')</span>' : '') + '</div>'
+        + (r.puede ? '<div class="acciones" style="margin-top:6px"><button class="btn acento" type="button" data-devliga="' + esc(c.caso) + '" data-f="' + esc(id) + '">Sí, es de esa</button></div>' : '') + '</div>';
+    }).join('') + (r.puede ? '<div class="no" style="font-size:12.5px;margin-top:4px">Si no es de ninguna, no hagas nada. Con el «sí», su «Factura de honorarios» del WorkFlow se termina sola.</div>' : '');
+    h += '<div class="msg" id="dev-fac-m" hidden></div>';
+    inn.innerHTML = h; box.hidden = false;
+  }
+  async function devLiga(b) {
+    var caso = +b.getAttribute('data-devliga'), id = +b.getAttribute('data-f');
+    b.disabled = true;
+    try { await rpc('wf_dev_liga', { p_caso: caso, p_factura: id }); devFac(id, 'Listo: quedó ligada a la devolución y su «Factura de honorarios» se terminó sola.'); }
+    catch (e) { msgEn('dev-fac-m', 'mal', falla(e)); b.disabled = false; }
   }
 
   function zonaFolio(id) {
@@ -721,6 +745,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
     if (t.id === 'a-editar') { abreManual(+t.getAttribute('data-f')); return; }
     if (t.id === 'a-folio') { zonaFolio(+t.getAttribute('data-f')); return; }
+    if (t.hasAttribute && t.hasAttribute('data-devliga')) { devLiga(t); return; }
     if (t.id === 'a-borra') { zonaBorra(+t.getAttribute('data-f')); return; }
     if (t.id === 'z-folio-ok') { guardaFolio(+t.getAttribute('data-f'), t); return; }
     if (t.id === 'z-borra-ok') { borra(+t.getAttribute('data-f'), t); return; }
