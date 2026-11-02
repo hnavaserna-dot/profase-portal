@@ -735,6 +735,7 @@
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {
           if (!j || j.cerrado !== true) return;
+          if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;   // «hasta»: ya abrió solo
           try { sessionStorage.setItem('profase-regreso', location.pathname + location.search + location.hash); } catch (e) { /* nada */ }
           location.replace('/cerrado.html');
         }, function () { /* sin red: se revisa después */ });
