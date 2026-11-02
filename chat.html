@@ -251,6 +251,13 @@ img.av{background:var(--surface-3);overflow:hidden}
 .m-tx{white-space:pre-wrap;font-size:14.5px;line-height:1.4}
 .m-tx a{color:inherit;text-decoration:underline}
 .m-tx.emoji{font-size:34px;line-height:1.15}
+/* mensajes largos (un prompt, un texto pegado): plegados, con «Ver todo» y «Copiar» */
+.m-mas{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:7px 0 1px}
+.m-mas button{display:inline-flex;align-items:center;gap:5px;min-height:32px;border:1px solid var(--line-strong);background:var(--surface);color:var(--navy-2);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.m-mas button .ic{width:15px;height:15px;flex:none}
+:root[data-theme="dark"] .m-mas button{color:#9CC0F2}
+.m-mas small{font-size:12px;color:var(--muted)}
+.m.yo .m-mas small{color:var(--mio-sub)}
 .m-borr{font-style:italic;color:var(--muted);display:flex;gap:6px;align-items:center}
 .m.yo .m-borr{color:var(--mio-sub)}
 .m-reenv{display:flex;align-items:center;gap:4px;font-size:12px;font-style:italic;color:var(--muted);margin:0 0 3px}
@@ -574,7 +581,7 @@ audio.ad-med{width:280px;max-width:100%}
         <button type="button" class="bi" id="clip" aria-label="Adjuntar archivos"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
         <input type="file" id="archivo" multiple hidden>
         <button type="button" class="bi" id="emo-b" aria-label="Emojis y stickers" aria-expanded="false" aria-controls="emo"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg></button>
-        <textarea id="texto" rows="1" maxlength="4000" placeholder="Escribe un mensaje" aria-label="Mensaje"></textarea>
+        <textarea id="texto" rows="1" placeholder="Escribe un mensaje" aria-label="Mensaje"></textarea>
         <button type="button" class="manda mic" id="mic" aria-label="Grabar una nota de voz" title="Nota de voz" hidden><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <div class="graba" role="status" aria-live="polite"><button type="button" class="bi" id="gr-x" aria-label="Cancelar la nota de voz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13M9 7V4h6v3"/></svg></button><span class="gr-p"></span><span>Grabando <b id="gr-t">0:00</b></span><button type="button" class="manda" id="gr-ok" aria-label="Mandar la nota de voz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div>
         <button type="button" class="manda" id="manda" aria-label="Mandar" disabled><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
@@ -775,6 +782,34 @@ audio.ad-med{width:280px;max-width:100%}
     }
     return out + estilo(esc(t.slice(i)));
   }
+  // Mensajes largos (Daniel, 2-nov-2026: «gabo le quiso pasar un prompt a Cadengo y el chat simplemente lo corta»).
+  // Ya no hay tope de 4,000 letras: hasta un millón (lo mismo que acepta la base, 132_chat_sin_tope.sql). Un mensaje
+  // largo sale plegado (las primeras líneas) con «Ver todo», «Copiar» y cuántas letras trae, para que el chat no se
+  // vuelva una tira infinita en el celular y quien lo recibe sepa que le llegó completo.
+  var TOPE_TX = 1000000, LARGO_TX = 1500, LARGO_LIN = 24, ABIERTOS = {};   // los mensajes largos que cada quien abrió (solo en esta pantalla)
+  function lineasHasta(t, n, hasta) { var c = 0, i = -1; while ((i = t.indexOf('\n', i + 1)) >= 0 && i < hasta) { if (++c >= n) return i; } return -1; }
+  function esLargo(t) { return !!t && (t.length > LARGO_TX || lineasHasta(t, LARGO_LIN, t.length) >= 0); }
+  function textoHTML(m) {
+    var t = m.texto || '';
+    if (!esLargo(t)) return '<div class="m-tx' + (soloEmoji(t) ? ' emoji' : '') + '">' + formato(t) + '</div>';
+    var abierto = !!ABIERTOS[String(m.id)], corte = Math.min(t.length, 600), l = lineasHasta(t, 10, corte);
+    if (l >= 0) corte = l;
+    else if (corte < t.length) { var sp = t.lastIndexOf(' ', corte); if (sp > corte - 60) corte = sp; }   // sin cortar a media palabra
+    return '<div class="m-tx m-largo">' + formato(abierto ? t : t.slice(0, corte).replace(/\s+$/, '') + ' …') + '</div>'
+      + '<div class="m-mas"><button type="button" data-largo="' + esc(m.id) + '" aria-expanded="' + abierto + '">' + (abierto ? 'Ver menos' : 'Ver todo') + '</button>'
+      + '<button type="button" data-copia-tx="' + esc(m.id) + '">' + IC.copia + 'Copiar</button>'
+      + '<small>' + esc(t.length.toLocaleString('es-MX')) + ' letras</small></div>';
+  }
+  function copiaTexto(t) {
+    function aMano() {
+      var a = document.createElement('textarea'); a.value = t; a.setAttribute('readonly', '');
+      a.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px';
+      document.body.appendChild(a); a.select(); try { a.setSelectionRange(0, t.length); } catch (e) { /* ya */ }
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      a.remove(); aviso(ok ? 'Texto copiado' : 'No se pudo copiar', !ok);
+    }
+    try { navigator.clipboard.writeText(t).then(function () { aviso('Texto copiado'); }, aMano); } catch (e) { aMano(); }
+  }
   var RE_EMO = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|\s)+$/u;
   function soloEmoji(t) {
     if (!t || t.length > 24 || !RE_EMO.test(t)) return false;
@@ -784,7 +819,7 @@ audio.ad-med{width:280px;max-width:100%}
   function vistaPrevia(m) {
     if (!m) return '';
     if (m.borrado) return 'Se eliminó este mensaje';
-    var t = (m.texto || '').replace(/\s+/g, ' ').trim();
+    var t = (m.texto || '').slice(0, 400).replace(/\s+/g, ' ').trim();
     var sk = stickerDe(t); if (sk) return 'Sticker «' + sk[1].join(' ') + '»';
     if (t) return t;
     if (m.n_adj || (m.adjuntos && m.adjuntos.length)) {
@@ -1178,7 +1213,7 @@ audio.ad-med{width:280px;max-width:100%}
       if (stk) h += stickerSVG(stk);
       else {
         h += adjuntosHTML(m);
-        if (m.texto) h += '<div class="m-tx' + (soloEmoji(m.texto) ? ' emoji' : '') + '">' + formato(m.texto) + '</div>';
+        if (m.texto) h += textoHTML(m);
       }
     }
     h += '<div class="m-meta">' + (m.editado && !m.borrado ? '<span>editado</span>' : '') + '<time title="' + esc(fCompleta.format(new Date(m.creado))) + '">' + esc(fHora.format(new Date(m.creado))) + '</time>'
@@ -1416,7 +1451,7 @@ audio.ad-med{width:280px;max-width:100%}
   $('#manda').onclick = function () { manda(); };
   function pintaBarra() {
     var b = $('#barra-x');
-    if (EDIT) { b.hidden = false; $('#bx-t').textContent = 'Corrigiendo tu mensaje'; $('#bx-s').textContent = EDIT.texto; }
+    if (EDIT) { b.hidden = false; $('#bx-t').textContent = 'Corrigiendo tu mensaje'; $('#bx-s').textContent = (EDIT.texto || '').slice(0, 300); }
     else if (RESP) { b.hidden = false; $('#bx-t').textContent = 'Contestando a ' + (RESP.autor === YO.usuario ? 'ti' : nombre(RESP.autor)); $('#bx-s').textContent = vistaPrevia(RESP); }
     else b.hidden = true;
     $('#clip').disabled = !!EDIT;
@@ -1425,6 +1460,7 @@ audio.ad-med{width:280px;max-width:100%}
   async function manda() {
     if (!ACT || ENVIANDO) return;
     var tx = texto.value.replace(/\s+$/, '').replace(/^\s*\n/, '');
+    if (tx.length > TOPE_TX) { aviso('El mensaje pasa de un millón de letras (' + tx.length.toLocaleString('es-MX') + '). Mándalo como archivo, por ejemplo un .txt.', true); return; }
     if (EDIT) {
       var e = EDIT;
       if (!tx.trim() && !(e.adjuntos || []).length) { aviso('El mensaje quedaría vacío; mejor elimínalo.', true); return; }
@@ -1463,6 +1499,8 @@ audio.ad-med{width:280px;max-width:100%}
     if ((x = ev.target.closest('[data-reintenta]'))) { var t = TEMP.find(function (y) { return y.m.id === x.dataset.reintenta; }); if (t) { t.falla = false; pintaMsgs(); envia(t); } return; }
     if ((x = ev.target.closest('[data-quita]'))) { TEMP = TEMP.filter(function (y) { return y.m.id !== x.dataset.quita; }); pintaMsgs(); return; }
     if ((x = ev.target.closest('[data-ir]'))) { irA(+x.dataset.ir); return; }
+    if ((x = ev.target.closest('[data-largo]'))) { verLargo(x); return; }
+    if ((x = ev.target.closest('[data-copia-tx]'))) { var mc = msgDe(x.dataset.copiaTx); if (mc && mc.texto) copiaTexto(mc.texto); return; }
     if ((x = ev.target.closest('[data-rellamar]'))) { var lr = LL(); if (lr && ACT) lr.inicia(ACT.id, x.dataset.rellamar); return; }
     if ((x = ev.target.closest('[data-op]'))) { ev.stopPropagation(); menuMsg(ACT.msgs.get(+x.dataset.op), x); return; }
     if ((x = ev.target.closest('[data-rc]'))) { reacciona(+x.dataset.m, x.dataset.rc); return; }
@@ -1471,6 +1509,18 @@ audio.ad-med{width:280px;max-width:100%}
     if ((x = ev.target.closest('[data-xver]'))) { verArchivo(x.dataset.xver, x); return; }
     if ((x = ev.target.closest('[data-dbaja]'))) { VISOR.baja(docDe(x), x); return; }
   });
+  function msgDe(id) { var t = TEMP.find(function (y) { return String(y.m.id) === String(id); }); return (ACT && (ACT.msgs.get(+id) || ACT.msgs.get(id))) || (t && t.m) || null; }
+  function verLargo(b) {
+    var id = b.dataset.largo, m = msgDe(id), bur = b.closest('.bur');
+    if (!m || !bur) return;
+    var abrir = !ABIERTOS[String(id)];
+    ABIERTOS[String(id)] = abrir;
+    var tmp = document.createElement('div'); tmp.innerHTML = textoHTML(m);
+    var nuevos = Array.prototype.slice.call(tmp.children), tx = bur.querySelector('.m-largo'), mas = bur.querySelector('.m-mas');
+    if (tx && mas && nuevos.length === 2) { tx.replaceWith(nuevos[0]); mas.replaceWith(nuevos[1]); }
+    if (!abrir) { try { bur.scrollIntoView({ block: 'nearest' }); } catch (e) { /* ya */ } }
+    var nb = bur.querySelector('[data-largo]'); if (nb) try { nb.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+  }
   // en el celular: dejar el dedo sobre un mensaje abre sus opciones
   (function () {
     var t = 0, x0 = 0, y0 = 0;
@@ -1541,7 +1591,7 @@ audio.ad-med{width:280px;max-width:100%}
       var a = b.dataset.a;
       if (a === 'resp') { RESP = m; EDIT = null; pintaBarra(); texto.focus(); }
       else if (a === 'reenvia') reenviar(m);
-      else if (a === 'copia') { try { navigator.clipboard.writeText(m.texto).then(function () { aviso('Texto copiado'); }); } catch (e) { aviso('No se pudo copiar', true); } }
+      else if (a === 'copia') copiaTexto(m.texto);
       else if (a === 'corrige') corrige(m);
       else if (a === 'info') infoMsg(m);
       else if (a === 'borra') borra(m);
