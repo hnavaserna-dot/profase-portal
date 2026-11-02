@@ -287,7 +287,7 @@ tr.fila:hover td{background:var(--navy-soft)}
           <select id="f-cont" aria-label="Contador asignado"><option value="">Todos los contadores asignados</option></select>
           <select id="f-aut" aria-label="Autoriza"><option value="">Todos los que autorizan</option></select>
           <select id="f-per" aria-label="Periodicidad"><option value="">Mensuales y anuales</option><option value="1">Mensuales</option><option value="2">Anuales</option></select>
-          <button class="btn" type="button" id="limpia">Quitar filtros</button>
+          <button class="btn" type="button" id="limpia">Limpiar filtros</button>
         </div></details>
         <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
         <button class="btn" type="button" id="env-abre" hidden>Enviar al cliente</button>
@@ -370,13 +370,14 @@ tr.fila:hover td{background:var(--navy-soft)}
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.';
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
-      periodos();
+      periodos(); fijoPeriodo();
       if (window.matchMedia('(min-width: 900px)').matches) $('masf').open = true;
       $('gen-abre').hidden = !genero();
       $('env-abre').hidden = !(ENV.visible && !CONSULTA);
       $('agr-abre').hidden = $('mes-abre').hidden = !(CONF.edita && !CONSULTA);
       $('at-abre').hidden = !(CONF.a_tiempo && !CONSULTA);
       await cargaPeriodo();
+      if (!FIJO_OK) { fijoResto(); mostrar = PAGINA; pinta(); }
       $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
@@ -392,6 +393,34 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('f-mes').innerHTML = '<option value="">Todo el año</option>' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === mm ? ' selected' : '') + '>' + n + '</option>'; }).join('');
   }
   function dos(n) { return (n < 10 ? '0' : '') + n; }
+
+  // Filtros fijos (2-nov-2026, pedido de Gabriel): lo que cada quien escoge se queda, aunque cambie de pestaña, recargue
+  // o cierre el portal, hasta que pique «Limpiar filtros». Se guarda solo en su navegador (no en la base) y por usuario.
+  var FIJOS = ['f-anio', 'f-mes', 'f-buscar', 'f-est', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'], FIJO_OK = false;
+  function fijoClave() { return 'profase-wft-filtros|' + (YO || ''); }
+  function fijoLee() { try { return JSON.parse(localStorage.getItem(fijoClave()) || 'null'); } catch (e) { return null; } }
+  function fijoGuarda() {
+    if (!FIJO_OK) return;
+    var o = {}; FIJOS.forEach(function (k) { o[k] = $(k).value; });
+    try { localStorage.setItem(fijoClave(), JSON.stringify(o)); } catch (e) { /* sin almacenamiento: no se recuerda */ }
+  }
+  function fijoBorra() { try { localStorage.removeItem(fijoClave()); } catch (e) { /* nada */ } }
+  // el periodo guardado se pone antes de leer; lo demás, cuando ya hay opciones
+  function fijoPeriodo() {
+    var g = fijoLee(); if (!g) return;
+    ['f-anio', 'f-mes'].forEach(function (k) { if (g[k] != null && [].some.call($(k).options, function (o) { return o.value === g[k]; })) $(k).value = g[k]; });
+  }
+  function fijoResto() {
+    var g = fijoLee();
+    if (g) {
+      $('f-buscar').value = g['f-buscar'] || '';
+      ['f-est', 'f-pla', 'f-resp', 'f-cont', 'f-aut', 'f-per'].forEach(function (k) { if (g[k] && [].some.call($(k).options, function (o) { return o.value === g[k]; })) $(k).value = g[k]; });
+      actividades();
+      if (g['f-act'] && [].some.call($('f-act').options, function (o) { return o.value === g['f-act']; })) $('f-act').value = g['f-act'];
+      if (['f-buscar', 'f-est', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'].some(function (k) { return g[k]; }) && $('masf')) $('masf').open = true;
+    }
+    FIJO_OK = true; fijoGuarda();
+  }
 
   async function cargaPeriodo() {
     var y = +$('f-anio').value, m = +$('f-mes').value || 0, filas;
@@ -1236,7 +1265,17 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('f-mes').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-pla').addEventListener('change', function () { actividades(); mostrar = PAGINA; pinta(); });
   ['f-buscar', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
-  $('limpia').onclick = function () { ['f-buscar', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; }); actividades(); mostrar = PAGINA; pinta(); };
+  $('limpia').onclick = function () {
+    ['f-buscar', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; });
+    fijoBorra();
+    // el periodo regresa al de siempre (el mes contable que se trabaja)
+    var y0 = $('f-anio').value, m0 = $('f-mes').value; periodos();
+    actividades(); mostrar = PAGINA; pinta();
+    if ($('f-anio').value !== y0 || $('f-mes').value !== m0) cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; });
+    fijoGuarda();
+  };
+  // cada cambio de filtro se guarda para la próxima vez
+  FIJOS.forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', fijoGuarda); });
   $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
   $('x-lista').onclick = function () { excel(this); };
   document.addEventListener('change', function (ev) {
