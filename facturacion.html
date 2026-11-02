@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=aed1833b56"></script>
 <style>
 /* Portal PROFASE · Tesorería › Facturación (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): alta masiva del mes
    (propuesta con los servicios contratados y su precio vigente), alta y cambio a mano, folios y bajas con motivo, como
@@ -471,29 +471,34 @@ tr.fila:hover td{background:var(--navy-soft)}
       + sec('Qué se factura', '<div class="in"><div class="campos">'
         + campoCia('g-cia', G.cia, false)
         + '<div class="campo"><label for="g-fecha">Fecha de la factura</label><input id="g-fecha" type="date" value="' + hoy() + '"></div>'
-        + '<div class="campo"><label for="g-buscar">Buscar grupo</label><input id="g-buscar" type="search" placeholder="Nombre del grupo o razón social" autocomplete="off"></div>'
-        + '<div class="campo"><label for="g-grupo">Grupo</label><select id="g-grupo"><option value="">Cargando…</option></select></div>'
+        + '<div class="campo ancho"><label for="g-grupo">Grupo</label><div id="g-grupoBox"></div></div>'
         + '<div class="campo ancho"><label for="g-modo">Cómo se arman</label><select id="g-modo"><option value="razon">Una factura por razón social que paga (con todos sus conceptos)</option><option value="concepto">Una factura por razón social y por servicio</option></select></div>'
         + '</div><div class="acciones" style="margin-top:12px"><button class="btn acento" type="button" id="g-ver">Ver propuesta</button></div></div>')
       + '<div id="g-prop"></div></div>';
     abre(h);
+    // «Grupo» se busca y se escoge en el mismo campo: al escribir parte del nombre del grupo, de una de sus razones
+    // sociales o su RFC, la lista se acorta sola (Daniel, 2-nov-2026: «le escribes y no pasa nada; corrígelo»; js/buscador.js)
+    G.bGru = window.PROFASE_BUSCA.crea({ donde: $('g-grupoBox'), id: 'g-grupo', opciones: [], valor: [],
+      marcador: 'Escribe parte del nombre del grupo, de una razón social o su RFC', vacio: 'Ningún grupo coincide', sinOpciones: 'Cargando los grupos…' });
     cargaGrupos();
   }
+  function grupoSel() { return G && G.bGru ? (+G.bGru.valor()[0] || 0) : 0; }
   async function cargaGrupos() {
     try {
-      var E = await empresas(G.cia), q = norm($('g-buscar') ? $('g-buscar').value.trim() : ''), vistos = {}, L = [];
+      var E = await empresas(G.cia), vistos = {}, L = [], g0 = String(grupoSel() || '');
       E.forEach(function (e) {
         if (!e.grupo_id || e.reg === false) return;   // «Generar del mes»: solo grupos con registro en esa compañía
-        var g = vistos[e.grupo_id]; if (!g) { g = vistos[e.grupo_id] = { id: e.grupo_id, nombre: e.grupo || ('Grupo ' + e.grupo_id), txt: '' }; L.push(g); }
-        g.txt += ' ' + e.razon + ' ' + e.rfc;
+        var g = vistos[e.grupo_id]; if (!g) { g = vistos[e.grupo_id] = { id: e.grupo_id, nombre: e.grupo || ('Grupo ' + e.grupo_id), raz: [] }; L.push(g); }
+        g.raz.push(e.razon || ''); g.txt = (g.txt || '') + ' ' + (e.razon || '') + ' ' + (e.rfc || '');
       });
-      L = L.filter(function (g) { return !q || norm(g.nombre + g.txt).indexOf(q) >= 0; }).sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
-      $('g-grupo').innerHTML = L.length ? L.map(function (g) { return '<option value="' + g.id + '">' + esc(g.nombre) + '</option>'; }).join('') : '<option value="">Ningún grupo</option>';
-    } catch (e) { $('g-grupo').innerHTML = '<option value="">No se pudieron leer los grupos</option>'; }
+      L.sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
+      G.bGru.opciones(L.map(function (g) { return { v: String(g.id), t: g.nombre, nota: g.raz.length === 1 ? '1 razón social' : g.raz.length + ' razones sociales', buscar: g.txt }; }));
+      G.bGru.pon(g0 && vistos[g0] ? [g0] : []);
+    } catch (e) { $('g-prop').innerHTML = '<div class="msg mal">No se pudieron leer los grupos: ' + esc(falla(e)) + '</div>'; }
   }
   async function verPropuesta(b) {
-    var g = +$('g-grupo').value, f = $('g-fecha').value;
-    if (!g || !f) { $('g-prop').innerHTML = '<div class="msg mal">Escoge el grupo y la fecha.</div>'; return; }
+    var g = grupoSel(), f = $('g-fecha').value;
+    if (!g || !f) { $('g-prop').innerHTML = '<div class="msg mal">' + (g ? 'Pon la fecha.' : 'Escoge el grupo (escribe parte de su nombre y pícalo en la lista).') + '</div>'; if (!g) G.bGru.foco(); return; }
     b.disabled = true; $('g-prop').innerHTML = '<div class="cargando">Armando la propuesta…</div>';
     try {
       var L = await rpc('fac_propuesta', { p_compania: G.cia, p_grupo_id: g, p_fecha: f }) || [];
@@ -606,8 +611,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       + sec('Datos de la factura', '<div class="in"><div class="campos">'
         + campoCia('m-cia', M.cia, !!id)
         + '<div class="campo"><label for="m-fecha">Fecha</label><input id="m-fecha" type="date" value="' + esc(f ? f.fecha : hoy()) + '"></div>'
-        + '<div class="campo"><label for="m-buscar">Buscar razón social</label><input id="m-buscar" type="search" placeholder="Nombre, RFC o grupo" autocomplete="off"></div>'
-        + '<div class="campo"><label for="m-emp">A quién se factura</label><select id="m-emp"><option value="">Cargando…</option></select></div>'
+        + '<div class="campo ancho"><label for="m-emp">A quién se factura</label><div id="m-empBox"></div></div>'
         + '<div class="campo"><label for="m-folio">Folio</label><input id="m-folio" maxlength="20" value="' + esc(f ? (f.folio || '') : '') + '" placeholder="Se puede poner después" autocomplete="off"></div>'
         + '<div class="campo"><span class="l">Forma de pago</span><label class="chk"><input id="m-efe" type="checkbox"' + (f && f.efectivo ? ' checked' : '') + '> En efectivo (sin IVA)</label></div>'
         + '</div></div>')
@@ -615,23 +619,36 @@ tr.fila:hover td{background:var(--navy-soft)}
       + (id ? sec('Motivo del cambio', '<div class="in"><div class="campo"><label for="m-motivo">Opcional; queda anotado</label><textarea id="m-motivo" maxlength="300"></textarea></div></div>') : '')
       + '<div class="msg" id="m-msg" hidden></div><div class="acciones"><button class="btn acento" type="button" id="m-guarda">Guardar factura</button></div></div>';
     abre(h);
+    // «A quién se factura» se busca y se escoge en el mismo campo: al escribir parte del nombre, el RFC o el grupo, la
+    // lista se acorta sola (Daniel, 2-nov-2026, 13:02: «buscar razón social; no funciona.. le escribes y no pasa nada;
+    // corrígelo»; antes era un buscador aparte que solo achicaba la lista de al lado; js/buscador.js)
+    M.bEmp = window.PROFASE_BUSCA.crea({ donde: $('m-empBox'), id: 'm-emp', opciones: [], valor: [],
+      marcador: 'Escribe parte del nombre, el RFC o el grupo', vacio: 'Ninguna razón social coincide', sinOpciones: 'Cargando las razones sociales…',
+      cambio: alEscogerEmp });
     await cargaManual();
     if (!M.conceptos.length) agregaConcepto();
     pintaConceptos();
   }
   async function cargaManual() {
     try {
-      var E = await empresas(M.cia), q = norm($('m-buscar').value.trim()), sel = M.empresa;
-      var L = E.filter(function (e) { return e.id === sel || !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0; });
+      var E = await empresas(M.cia), sel = M.empresa;
       // Como en el Access, a quien factura le salen todas las razones sociales: primero las que ya son clientes de esa
-      // compañía (con registro o facturas) y luego las demás (77_fac_empresas_todas.sql)
-      var opt = function (e) { return '<option value="' + e.id + '"' + (e.id === sel ? ' selected' : '') + '>' + esc(e.razon) + ' · ' + esc(e.rfc) + (e.estatus === 0 ? ' · inactiva' : '') + '</option>'; };
-      var reg = L.filter(function (e) { return e.reg !== false; }), otras = L.filter(function (e) { return e.reg === false; });
-      $('m-emp').innerHTML = '<option value="">Escoge la razón social</option>' + (otras.length
-        ? (reg.length ? '<optgroup label="Clientes de esta compañía">' + reg.map(opt).join('') + '</optgroup>' : '') + '<optgroup label="Otras razones sociales">' + otras.map(opt).join('') + '</optgroup>'
-        : reg.map(opt).join(''));
+      // compañía (con registro o facturas) y luego las demás (77_fac_empresas_todas.sql), marcadas «Otra razón social»
+      var reg = E.filter(function (e) { return e.reg !== false; }), otras = E.filter(function (e) { return e.reg === false; });
+      M.bEmp.opciones(reg.concat(otras).map(function (e) {
+        return { v: String(e.id), t: e.razon, buscar: [e.rfc, e.grupo].join(' '),
+                 nota: (e.reg === false && reg.length ? 'Otra razón social · ' : '') + (e.rfc || '') + (e.estatus === 0 ? ' · inactiva' : '') };
+      }));
+      M.bEmp.pon(sel && E.some(function (e) { return e.id === sel; }) ? [String(sel)] : []);
       await catalogo(M.cia);
     } catch (e) { msgEn('m-msg', 'mal', falla(e)); }
+  }
+  // Al escoger «A quién se factura», los conceptos toman esa razón social si la que traían no es de su grupo
+  function alEscogerEmp() {
+    if (!M || !M.bEmp) return;
+    M.empresa = +M.bEmp.valor()[0] || null;
+    M.conceptos.forEach(function (c) { if (!c.empresa_id || !delGrupo().some(function (e) { return e.id === c.empresa_id; })) c.empresa_id = M.empresa; });
+    pintaConceptos();
   }
   function delGrupo() {
     var E = EMP[M.cia] || [], yo = E.filter(function (e) { return e.id === M.empresa; })[0];
@@ -657,8 +674,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('m-tot').innerHTML = '<div class="tot"><span>Subtotal</span><span class="r">' + esc(dinero(sub)) + '</span><span>IVA' + (efe ? ' (en efectivo, sin IVA)' : '') + '</span><span class="r">' + esc(dinero(iva)) + '</span><span class="f">Total</span><span class="r f">' + esc(dinero(sub + iva)) + '</span></div>';
   }
   async function guardaManual(b) {
-    var emp = +$('m-emp').value;
-    if (!emp) { msgEn('m-msg', 'mal', 'Escoge a quién se factura.'); return; }
+    var emp = M.empresa;
+    if (!emp) { msgEn('m-msg', 'mal', 'Escoge a quién se factura (escribe parte del nombre y pícalo en la lista).'); M.bEmp.foco(); return; }
     if (!$('m-fecha').value) { msgEn('m-msg', 'mal', 'Pon la fecha de la factura.'); return; }
     var C = M.conceptos.filter(function (c) { return c.servicio_id || c.concepto || c.precio; });
     if (!C.length) { msgEn('m-msg', 'mal', 'Agrega mínimo un concepto.'); return; }
@@ -721,10 +738,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (G && t.getAttribute('data-g') === 'con') { G.lineas[i].concepto = t.value; return; }
     if (G && t.getAttribute('data-g') === 'pre') { G.lineas[i].precio = num(t.value); pintaPagan(); return; }
     if (G && t.getAttribute('data-g') === 'folio') { G.folios[t.getAttribute('data-k')] = t.value.trim(); return; }
-    if (G && t.id === 'g-buscar') { cargaGrupos(); return; }
     if (M && t.getAttribute('data-m') === 'con') { M.conceptos[i].concepto = t.value; return; }
     if (M && t.getAttribute('data-m') === 'pre') { M.conceptos[i].precio = num(t.value); totManual(); return; }
-    if (M && t.id === 'm-buscar') { cargaManual(); return; }
   });
   document.addEventListener('change', function (ev) {
     var t = ev.target, i = +t.getAttribute('data-i');
@@ -734,7 +749,6 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (G && t.id === 'g-cia') { G.cia = +t.value; $('g-prop').innerHTML = ''; cargaGrupos(); return; }
     if (G && t.id === 'g-modo') { G.modo = t.value; if (G.lineas.length && $('g-pagan')) pintaPagan(); return; }
     if (M && t.id === 'm-cia') { M.cia = +t.value; M.empresa = null; M.conceptos = []; agregaConcepto(); cargaManual().then(pintaConceptos); return; }
-    if (M && t.id === 'm-emp') { M.empresa = +t.value || null; M.conceptos.forEach(function (c) { if (!c.empresa_id || !delGrupo().some(function (e) { return e.id === c.empresa_id; })) c.empresa_id = M.empresa; }); pintaConceptos(); return; }
     if (M && t.id === 'm-efe') { totManual(); return; }
     if (M && t.getAttribute('data-m') === 'srv') {
       var s = (CAT[M.cia] || []).filter(function (x) { return x.id === +t.value; })[0], c = M.conceptos[i];

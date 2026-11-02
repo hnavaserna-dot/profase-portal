@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=aed1833b56"></script>
 <style>
 /* Portal PROFASE · Tesorería › Pagos (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): como el Access «Registro de
    Pagos» de Dora Montalvo y Eva Rangel, con sus errores corregidos: «Facturas disponibles», pagar varias facturas con su
@@ -535,14 +535,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     var Cs = ciasAlta(); if (!Cs.length) return;
     C = { modo: modo, emp: emp || null, cia: c || Cs[0], factura: factura || null, pago: pagoId || null, facturas: [], abona: {}, disp: 0 };
     var tit = modo === 'nc' ? 'Nota de crédito' : modo === 'aplicar' ? 'Aplicar saldo a favor' : 'Pago';
+    var fechaC = modo === 'aplicar' ? '' : '<div class="campo"><label for="c-fecha">Fecha ' + (modo === 'nc' ? 'de la nota' : 'del pago') + '</label><input id="c-fecha" type="date" value="' + hoy() + '"></div>';
     var h = cab(modo === 'aplicar' ? 'Pago ' + pagoId : 'Captura', tit, '', modo === 'nc' ? 'nc' : '') + '<div class="cuerpo">';
     h += sec('Datos', '<div class="in"><div class="campos">'
       + (modo === 'aplicar' || emp ? '<div class="campo ancho"><span class="l">Razón social</span><div class="rs" id="c-rs">…</div><div class="rfc" id="c-rfc"></div></div>'
         : '<div class="campo"' + (Cs.length < 2 ? ' hidden' : '') + '><label for="c-cia">Compañía que cobra</label><select id="c-cia">' + Cs.map(function (x) { return '<option value="' + x + '"' + (x === C.cia ? ' selected' : '') + '>' + esc(cia(x)) + '</option>'; }).join('') + '</select></div>'
-          + '<div class="campo"><label for="c-buscar">Buscar razón social</label><input id="c-buscar" type="search" placeholder="Nombre, RFC o grupo" autocomplete="off"></div>'
-          + '<div class="campo ancho"><label for="c-emp">Razón social que paga</label><select id="c-emp"><option value="">Cargando…</option></select></div>')
+          // con dos compañías, la fecha va junto a la compañía (sin huecos en la forma)
+          + (Cs.length < 2 ? '' : fechaC) + '<div class="campo ancho"><label for="c-emp">Razón social que paga</label><div id="c-empBox"></div></div>' + (Cs.length < 2 ? fechaC : ''))
       + (modo === 'aplicar' ? '<div class="campo"><span class="l">Por aplicar</span><div class="rs num" id="c-disp">…</div></div>'
-        : '<div class="campo"><label for="c-fecha">Fecha ' + (modo === 'nc' ? 'de la nota' : 'del pago') + '</label><input id="c-fecha" type="date" value="' + hoy() + '"></div>'
+        : (emp ? fechaC : '')
           + '<div class="campo"><label for="c-monto">Monto ' + (modo === 'nc' ? 'de la nota' : 'del pago') + ' (con IVA)</label><input id="c-monto" inputmode="decimal" placeholder="0.00" autocomplete="off"></div>'
           + (modo === 'nc' ? '<div class="campo"><label for="c-folio">Folio de la nota de crédito</label><input id="c-folio" maxlength="10" autocomplete="off"></div>' : ''))
       + '</div></div>');
@@ -550,13 +551,25 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="acciones"><button class="btn acento" type="button" id="c-guarda">' + (modo === 'aplicar' ? 'Aplicar' : 'Guardar ' + (modo === 'nc' ? 'la nota de crédito' : 'el pago')) + '</button></div></div>';
     abre(h);
     if (modo === 'aplicar') { var pg = PG_ID[pagoId] || {}; C.disp = Number(pg.por_aplicar || 0); $('c-disp').textContent = dinero(C.disp); }
+    // «Razón social que paga» se busca y se escoge en el mismo campo: al escribir parte del nombre, el RFC o el grupo, la
+    // lista se acorta sola (Daniel, 2-nov-2026, 13:02: «buscar razón social; no funciona.. le escribes y no pasa nada;
+    // corrígelo»; antes era un buscador aparte que solo achicaba la lista de abajo; js/buscador.js)
+    if ($('c-empBox')) C.bEmp = window.PROFASE_BUSCA.crea({ donde: $('c-empBox'), id: 'c-emp', opciones: [], valor: [],
+      marcador: 'Escribe parte del nombre, el RFC o el grupo', vacio: 'Ninguna razón social coincide', sinOpciones: 'Cargando las razones sociales…',
+      cambio: function () {
+        var v = +C.bEmp.valor()[0] || null;
+        if (v === C.emp) return;
+        C.emp = v; C.facturas = []; C.abona = {};
+        if (C.emp) cargaFacturas(); else { $('c-facs').innerHTML = ''; $('c-tot').innerHTML = ''; }
+      } });
     if (C.emp) await cargaFacturas(); else await cargaEmpresas();
   }
   async function cargaEmpresas() {
     try {
-      var E = await empresas(C.cia), q = norm($('c-buscar') ? $('c-buscar').value.trim() : '');
-      var L = E.filter(function (e) { return e.id === C.emp || !q || norm([e.razon, e.rfc, e.grupo].join(' ')).indexOf(q) >= 0; });
-      $('c-emp').innerHTML = '<option value="">Escoge la razón social</option>' + L.map(function (e) { return '<option value="' + e.id + '"' + (e.id === C.emp ? ' selected' : '') + '>' + esc(e.razon) + ' · ' + esc(e.rfc) + '</option>'; }).join('');
+      var L = await empresas(C.cia);
+      if (!C.bEmp) return;
+      C.bEmp.opciones(L.map(function (e) { return { v: String(e.id), t: e.razon, buscar: [e.rfc, e.grupo].join(' '), nota: e.rfc || '' }; }));
+      C.bEmp.pon(C.emp && L.some(function (e) { return e.id === C.emp; }) ? [String(C.emp)] : []);
     } catch (e) { msgEn('c-msg', 'mal', falla(e)); }
   }
   async function cargaFacturas() {
@@ -598,8 +611,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     totales();
   }
   async function guardaCaptura(b) {
-    var emp = C.emp || +($('c-emp') ? $('c-emp').value : 0);
-    if (!emp) { msgEn('c-msg', 'mal', 'Escoge la razón social.'); return; }
+    var emp = C.emp;
+    if (!emp) { msgEn('c-msg', 'mal', 'Escoge la razón social que paga (escribe parte del nombre y pícala en la lista).'); if (C.bEmp) C.bEmp.foco(); return; }
     var apl = Object.keys(C.abona).filter(function (k) { return C.abona[k] > 0; }).map(function (k) { return { factura_id: +k, monto: r2(C.abona[k]) }; });
     var p;
     if (C.modo === 'aplicar') {
@@ -713,7 +726,6 @@ tr.fila:hover td{background:var(--navy-soft)}
   document.addEventListener('input', function (ev) {
     var t = ev.target;
     if (!C) return;
-    if (t.id === 'c-buscar') { cargaEmpresas(); return; }
     if (t.id === 'c-monto') { var hay = disponible() > 0; document.querySelectorAll('[data-ab],[data-todo]').forEach(function (x) { x.disabled = !hay; }); if (aplicado() > disponible()) { C.abona = {}; pintaFacturas(); } else totales(); return; }
   });
   document.addEventListener('change', function (ev) {
@@ -721,7 +733,6 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (!C) return;
     if (t.getAttribute && t.getAttribute('data-ab')) { ponAbono(+t.getAttribute('data-ab'), num(t.value), t); return; }
     if (t.id === 'c-cia') { C.cia = +t.value; C.emp = null; C.facturas = []; C.abona = {}; $('c-facs').innerHTML = ''; $('c-tot').innerHTML = ''; cargaEmpresas(); return; }
-    if (t.id === 'c-emp') { C.emp = +t.value || null; if (C.emp) cargaFacturas(); else { $('c-facs').innerHTML = ''; $('c-tot').innerHTML = ''; } return; }
     if (t.id === 'c-monto') { t.value = num(t.value) ? r2(num(t.value)).toFixed(2) : ''; return; }
   });
   document.addEventListener('keydown', function (ev) {

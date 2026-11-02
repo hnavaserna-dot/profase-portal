@@ -34,7 +34,7 @@
     + '--pb-ink:var(--ink,#131F2D);--pb-mu:var(--ink-3,#7B8A9B);--pb-ac:var(--accent,#F07A1E);--pb-acs:var(--accent-soft,#FDEEDF);--pb-aci:var(--accent-ink,#A24B08);'
     + 'position:relative;min-width:0;display:grid;gap:6px}'
     + '.pb *{box-sizing:border-box}'
-    + '.pb-caja{display:flex;align-items:center;gap:6px;min-width:0;min-height:40px;border:1px solid var(--pb-ln);background:var(--pb-sf);border-radius:8px;padding:0 6px 0 10px}'
+    + '.pb-caja{position:relative;display:flex;align-items:center;gap:6px;min-width:0;min-height:40px;border:1px solid var(--pb-ln);background:var(--pb-sf);border-radius:8px;padding:0 6px 0 10px}'
     + '.pb-caja:focus-within{border-color:var(--pb-ac);box-shadow:0 0 0 2px var(--pb-acs)}'
     + '.pb.off .pb-caja{opacity:.6}'
     + '.pb-caja svg{width:16px;height:16px;flex:none;color:var(--pb-mu)}'
@@ -44,6 +44,10 @@
     + '.pb-val{flex:1;min-width:0;padding:8px 0;font-size:14px;line-height:1.35;color:var(--pb-ink);overflow-wrap:anywhere;cursor:text}'
     + '.pb-val[hidden]{display:none!important}'
     + '.pb.lleno:not(.foco) .pb-in{position:absolute;left:0;top:0;width:1px!important;height:1px;opacity:0;pointer-events:none}'
+    // con algo escogido y el campo con el foco, se escribe encima del nombre (que se queda sin verse, guardando su alto):
+    // la caja mide lo mismo antes y después, y el siguiente toque no se va de lado (Facturación, 2-nov-2026)
+    + '.pb.lleno.foco .pb-val{visibility:hidden}'
+    + '.pb.lleno.foco .pb-in{position:absolute;left:10px;right:40px;top:0;bottom:0;width:auto!important;height:auto;padding:0!important}'
     + '.pb-x{flex:none;width:30px;height:30px;border-radius:50%;border:0;background:none;color:var(--pb-mu);font:inherit;font-size:18px;line-height:1;cursor:pointer;display:grid;place-items:center}'
     + '.pb-x:hover{background:var(--pb-sf2);color:var(--pb-ink)}'
     + '.pb-lst{border:1px solid var(--pb-ln2);border-radius:8px;background:var(--pb-sf);max-height:232px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}'
@@ -70,7 +74,10 @@
     + '.pb-chip.otro{border-color:var(--pb-ln);background:var(--pb-sf2);color:var(--pb-ink)}'
     + '.pb-chip button{flex:none;width:24px;height:24px;border-radius:50%;border:0;background:rgba(127,127,127,.18);color:inherit;font:inherit;font-size:15px;line-height:1;cursor:pointer;display:grid;place-items:center}'
     + '.pb-res{font-size:12.5px;color:var(--pb-mu)}'
-    + '@media (max-width:600px){.pb .pb-in{font-size:16px}.pb-it,.pb-val{font-size:15px}}';
+    + '@media (max-width:600px){.pb .pb-in{font-size:16px}.pb-it,.pb-val{font-size:15px}'
+    // en el celular la nota va debajo del nombre (a lo ancho), para que el nombre no se apriete en una columna angosta
+    + '.pb-it{flex-wrap:wrap;row-gap:2px}.pb-it .pb-nota{max-width:none;flex:1 0 100%;text-align:left;font-size:12.5px}'
+    + '.pb-it .pb-bx~.pb-nota{padding-left:28px}}';
 
   function pegaCSS() {
     if (document.getElementById('pb-css')) return;
@@ -182,11 +189,14 @@
       var b = e.target.closest('.pb-it'); if (!b || off) return;
       if (b.hasAttribute('data-todos')) { if (sel.length) { sel = []; pinta(); avisa(); } return; }
       escoge(vistos[+b.dataset.i]);
+      // con una sola opción, al picarla se suelta el campo: el nombre completo queda a la vista y en el celular se va el
+      // teclado (con Enter el foco se queda, para seguir con el teclado)
+      if (!varios) { try { inp.blur(); } catch (e2) { /* nada */ } }
     });
     if (chips) chips.addEventListener('click', function (e) { var b = e.target.closest('[data-q]'); if (b) { quita(b.dataset.q); inp.focus(); } });
     if (bx) bx.addEventListener('click', function () { if (sel.length) { sel = []; inp.value = ''; pinta(); avisa(); } inp.focus(); abre(true); });
     inp.addEventListener('focus', function () {
-      w.classList.add('foco'); if (val) val.hidden = true;
+      w.classList.add('foco');
       if (off) return; if (!varios) { try { inp.select(); } catch (e) { /* nada */ } } abre(true);
     });
     inp.addEventListener('blur', function () { w.classList.remove('foco'); if (val) val.hidden = !sel.length; });

@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/visor.js?v=2280475113"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=2280475113"></script>
 <style>
 /* Portal PROFASE · menú Multinacional (2-nov-2026, decisiones de Daniel, 12:01 a 12:20). Multinacional es una
    comercializadora de la dirección (Héctor Nava Ramos y Héctor Daniel Nava), con su propio banco; no tiene que ver con las
@@ -45,7 +45,12 @@
    Lo ven solo ellos cuatro (mul_quien y la dirección; candado multinacional_protegida(), portal/sql/136_multinacional.sql).
    Todo por funciones mul_*; la página no lee tablas. El XML y el PDF salen tal cual se subieron: son los comprobantes de
    Multinacional y nunca llevan la marca PROFASE («ahí nunca llevaría branding profase… en todo caso sería branding
-   multinacional»). */
+   multinacional»).
+   ?s=cot  Cotizaciones y ?s=nueva  Cotizador (143_multinacional_cotizador.sql): Mónica captura el pedido y el costo del
+   proveedor; la base pone el envío (vueltas × su costo, repartido por costo), el precio ((costo + envío) × el sobrecosto
+   que pone solo Héctor Daniel Nava) y los totales; la utilidad solo la ve la dirección; Eva no ve cotizaciones. La
+   cotización del cliente y la nota de recibido salen en PDF con la marca de Multinacional (js/marca.js solo carga la
+   librería del PDF: PROFASE_MARCA.pdfJS). */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -115,7 +120,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
 .kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
-.tabla{overflow-x:auto}
+.tabla{overflow-x:auto;position:relative}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
 td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -192,6 +197,13 @@ td.nw{white-space:nowrap}
 #rango{display:inline-flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
 input[type="file"]{max-width:100%}
 @media (max-width:700px){#rango{width:100%}#rango input{flex:1 1 130px}.pregunta input[type="date"]{font-size:16px}}
+.ed input,.ed select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 8px;font-size:13.5px;width:100%;min-width:0}
+.ed td{vertical-align:top}
+.ed td[data-l="Unidad"]{width:120px;min-width:110px}.ed td[data-l="Cantidad"]{width:90px}.ed td[data-l="Costo unitario"]{width:120px}
+.ed td[data-l="Producto"]{min-width:200px}.ed td[data-l="Especificaciones"]{min-width:160px}
+.ed td[data-pu],.ed td[data-pt]{padding-top:13px}
+.campo select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+@media (max-width:700px){.ed input,.ed select,.campo select{font-size:16px}.ed td[data-l]{width:auto}.ed td[data-pu],.ed td[data-pt]{padding-top:0}}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -202,7 +214,7 @@ input[type="file"]{max-width:100%}
       <p id="subt">Las facturas que emite Multinacional: lo que está por cobrar y lo que ya se cobró.</p>
     </div>
   </div>
-  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-subir" hidden>Subir facturas</button></div>
+  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-subir" hidden>Subir facturas</button><button class="btn acento" type="button" id="b-nueva" hidden>Nueva cotización</button></div>
 </div></div>
 
 <div class="wrap">
@@ -230,6 +242,51 @@ input[type="file"]{max-width:100%}
     </div>
     <p class="pie" id="pie">Cada factura sale de su XML: el folio, el cliente y los montos los lee el CRM, nadie los captura. Nada se borra: una factura cancelada en el SAT se marca «Cancelada».</p>
   </section>
+
+  <!-- ===== Cotizaciones (Mónica y la dirección; 143_multinacional_cotizador.sql) ===== -->
+  <section id="s-cot" hidden>
+    <div class="kpis" id="c-kpis"></div>
+    <div class="tabs" role="tablist" aria-label="Cotizaciones">
+      <button type="button" role="tab" data-ct="esp" aria-selected="true">En espera <span class="cta" id="n-esp">0</span></button>
+      <button type="button" role="tab" data-ct="aut" aria-selected="false">Autorizadas</button>
+      <button type="button" role="tab" data-ct="no" aria-selected="false">No autorizadas</button>
+      <button type="button" role="tab" data-ct="tod" aria-selected="false">Todas</button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="c-h">En espera</h2><div class="sub" id="c-sub"></div></div></header>
+      <div class="filtros"><input type="search" id="c-q" placeholder="Buscar pedido, tipo o quién lo pide" aria-label="Buscar pedido, tipo o quién lo pide"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Núm.</th><th>Fecha</th><th>Pedido</th><th class="monto">Total</th><th>Estatus</th><th>Factura</th></tr></thead>
+        <tbody id="c-lista"></tbody></table></div>
+    </div>
+    <p class="pie">El precio de cada renglón lo calcula el CRM con los mismos números que la cotización del cliente: nadie copia nada a mano. Las de antes del CRM (2026) vienen del Excel del control con sus precios como estaban.</p>
+  </section>
+
+  <!-- ===== Cotizador: una nueva o el cambio de una en espera ===== -->
+  <section id="s-ed" hidden>
+    <div class="card">
+      <header><div><h2 id="e-h">Nueva cotización</h2><div class="sub" id="e-sub">Captura el pedido y el costo del proveedor de cada renglón; el CRM pone el envío, el precio y los totales.</div></div></header>
+      <div style="padding:12px 14px"><div class="campos">
+        <div class="campo ancho"><label for="e-nombre">Pedido</label><input id="e-nombre" maxlength="120" placeholder="Ejemplo: PAPELERÍA #32 NOVIEMBRE" autocomplete="off"></div>
+        <div class="campo"><label for="e-tipo">Tipo</label><input id="e-tipo" list="e-tipos" maxlength="60" autocomplete="off"></div>
+        <div class="campo"><label for="e-fecha">Fecha del pedido</label><input type="date" id="e-fecha"></div>
+        <div class="campo"><label for="e-solicita">Quién lo pide</label><input id="e-solicita" maxlength="120" autocomplete="off"></div>
+        <div class="campo"><label for="e-entregar">Entregar en</label><input id="e-entregar" maxlength="160" autocomplete="off"></div>
+        <div class="campo"><label for="e-vueltas">Vueltas de entrega</label><input type="number" id="e-vueltas" min="0" max="500" step="1" inputmode="numeric"></div>
+        <div class="campo"><label>Sobrecosto</label><div class="mut" id="e-factor" style="padding:8px 0"></div></div>
+        <div class="campo ancho"><label for="e-nota">Nota (opcional)</label><input id="e-nota" maxlength="500" autocomplete="off"></div>
+      </div></div>
+    </div>
+    <div class="card">
+      <header><div><h2>Renglones</h2><div class="sub">Precio = (costo + su parte del envío) × el sobrecosto.</div></div>
+        <div class="acciones"><button class="btn" type="button" id="e-pegar">Pegar desde Excel</button><button class="btn" type="button" id="e-mas">Agregar renglón</button></div></header>
+      <div class="tabla"><table class="resp ed"><thead><tr><th>#</th><th>Unidad</th><th class="monto">Cantidad</th><th>Producto</th><th>Especificaciones</th><th class="monto">Costo unitario</th><th class="monto">Precio unitario</th><th class="monto">Precio total</th><th><span class="sr">Quitar</span></th></tr></thead>
+        <tbody id="e-ren"></tbody></table></div>
+    </div>
+    <div class="kpis" id="e-tot"></div>
+    <div class="msg mal" id="e-msg" hidden role="alert" style="margin-top:12px"></div>
+    <div class="acciones" style="margin:14px 0 24px;justify-content:flex-end"><button class="btn" type="button" id="e-cancelar">Cancelar</button><button class="btn acento" type="button" id="e-guardar">Guardar cotización</button></div>
+  </section>
+  <datalist id="e-tipos"><option>PAPELERIA</option><option>MOBILIARIO</option><option>ELECTRODOMESTICOS</option><option>LIMPIEZA</option><option>COMPUTO</option><option>VARIOS</option><option>COCINA</option><option>ELECTRONICA</option><option>DEPORTES</option><option>DIDACTICO</option></datalist>
 </div>
 
 <div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
@@ -501,6 +558,313 @@ input[type="file"]{max-width:100%}
   }
   $('b-subir').onclick = abreSubir;
 
+  /* ============ Cotizaciones y Cotizador (143_multinacional_cotizador.sql; Mónica y la dirección) ============ */
+  var SEC = new URLSearchParams(location.search).get('s') || 'fac';
+  var COTS = [], CT = 'esp', ED = null;   // ED: la cotización que se cambia (null: una nueva)
+  var CEST = { en_espera: ['En espera', 'ojo'], autorizada: ['Autorizada', 'ok'], no_autorizada: ['No autorizada', 'mal'], cancelada: ['Cancelada', 'mal'] };
+  var UNIDADES = ['PIEZA', 'CAJA', 'PAQUETE', 'JUEGO', 'KILO', 'LITRO', 'METRO', 'ROLLO', 'GALÓN', 'SERVICIO'];
+  function cchip(e) { var x = CEST[e] || [e, '']; return chip(x[0], x[1]); }
+  function pct(f) { return Math.round((Number(f) - 1) * 1000) / 10 + '%'; }
+  function factorTxt(f) { return '× ' + Number(f).toFixed(Number(f) * 100 % 1 ? 3 : 2) + ' (' + pct(f) + ' sobre el costo)'; }
+  function cfac(c) {
+    if (c.factura) return esc(c.factura.folio) + '<div class="mut">' + (c.factura.estatus === 'cobrada' ? 'cobrada' + (c.factura.cobrada_el ? ' el ' + esc(fecha(c.factura.cobrada_el)) : '')
+      : c.factura.estatus === 'cancelada' ? 'cancelada' : 'por cobrar') + '</div>';
+    if (c.folio_factura) return esc(c.folio_factura) + '<div class="mut">del Excel</div>';
+    return c.estatus === 'autorizada' ? '<span class="chip mal">Sin factura</span>' : '';
+  }
+  async function cargaCot() {
+    var d = await rpc('mul_cot_lista', { p: {} });
+    COTS = (d && d.cotizaciones) || [];
+    var r = (d && d.resumen) || {};
+    var aut = COTS.filter(function (c) { return c.estatus === 'autorizada'; });
+    var sub = aut.reduce(function (a, c) { return a + Number(c.subtotal || 0); }, 0);
+    var util = EST.utilidad ? aut.reduce(function (a, c) { return a + Number(c.utilidad || 0); }, 0) : null;
+    $('c-kpis').innerHTML = kpi('En espera', String(r.en_espera || 0), 'por autorizar el cliente')
+      + kpi('Autorizadas', String(r.autorizadas || 0), dinero(sub) + ' sin IVA')
+      + kpi('Autorizadas sin factura', String(r.sin_factura || 0), r.sin_factura ? 'falta ligar su factura' : 'todas con su factura', r.sin_factura ? 'mal' : '')
+      + (util != null ? kpi('Utilidad de lo autorizado', esc(dinero(util)), sub - util > 0 ? pct(sub / (sub - util)) + ' sobre el costo con envío' : '')
+         : kpi('No autorizadas', String(r.no_autorizadas || 0), ''));
+    $('n-esp').textContent = String(r.en_espera || 0);
+    pintaCot();
+  }
+  function pintaCot() {
+    var q = norm($('c-q').value), T = { esp: 'En espera', aut: 'Autorizadas', no: 'No autorizadas y canceladas', tod: 'Todas' };
+    var L = COTS.filter(function (c) {
+      if (CT === 'esp' && c.estatus !== 'en_espera') return false;
+      if (CT === 'aut' && c.estatus !== 'autorizada') return false;
+      if (CT === 'no' && c.estatus !== 'no_autorizada' && c.estatus !== 'cancelada') return false;
+      return !q || norm([c.nombre, c.tipo, c.solicita, c.numero, c.folio_factura, c.factura && c.factura.folio].join(' ')).indexOf(q) >= 0;
+    });
+    $('c-h').textContent = T[CT];
+    var suma = L.reduce(function (a, c) { return a + Number(c.total || 0); }, 0);
+    $('c-sub').textContent = L.length + (L.length === 1 ? ' cotización' : ' cotizaciones') + ' · ' + dinero(suma) + ' con IVA';
+    $('c-lista').innerHTML = L.length ? L.map(function (c) {
+      return '<tr class="click" data-c="' + c.id + '"><td data-l="Núm." class="nw">' + esc(c.numero || '—') + '</td><td data-l="Fecha" class="nw">' + esc(fecha(c.fecha)) + '</td>'
+        + '<td data-l="Pedido" class="w"><span class="rs">' + esc(c.nombre) + '</span><div class="mut">' + esc([c.tipo, c.solicita].filter(Boolean).join(' · ')) + '</div></td>'
+        + '<td data-l="Total" class="monto">' + esc(dinero(c.total)) + '</td><td data-l="Estatus">' + cchip(c.estatus) + '</td><td data-l="Factura">' + cfac(c) + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">No hay cotizaciones aquí.</td></tr>';
+  }
+  document.querySelectorAll('[data-ct]').forEach(function (b) {
+    b.onclick = function () {
+      CT = b.getAttribute('data-ct');
+      document.querySelectorAll('[data-ct]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      pintaCot();
+    };
+  });
+  $('c-q').addEventListener('input', pintaCot);
+  $('c-lista').addEventListener('click', function (e) { var tr = e.target.closest('tr[data-c]'); if (tr) fichaCot(+tr.getAttribute('data-c')); });
+
+  /* ---------- la ficha de una cotización ---------- */
+  var QUEC = { creada: 'Se creó', cambiada: 'Se cambió', estatus: 'Estatus', sobrecosto: 'Sobrecosto', factura: 'Factura', 'del Excel': 'Vino del Excel' };
+  async function fichaCot(id) {
+    var c; try { c = await rpc('mul_cot_ver', { p_id: id }); } catch (e) { error(falla(e)); return; }
+    var cot = !!EST.cotiza && !CONSULTA, fac = !!EST.factor && !CONSULTA, esp = c.estatus === 'en_espera', crm = c.origen === 'crm';
+    var acc = '';
+    if (cot && esp && crm) acc += '<button class="btn acento" type="button" id="k-editar">Cambiar</button>';
+    if (cot && !c.factura) {
+      if (c.estatus !== 'autorizada') acc += '<button class="btn bien" type="button" data-est="autorizada">Autorizada</button>';
+      if (c.estatus !== 'no_autorizada') acc += '<button class="btn" type="button" data-est="no_autorizada">No autorizada</button>';
+      if (c.estatus !== 'en_espera') acc += '<button class="btn" type="button" data-est="en_espera">Regresar a «En espera»</button>';
+      if (c.estatus !== 'cancelada') acc += '<button class="btn peligro" type="button" data-est="cancelada">Cancelar</button>';
+    }
+    var dl = [['Número', c.numero || '—'], ['Fecha del pedido', fecha(c.fecha)], ['Tipo', c.tipo], ['Quién lo pide', c.solicita], ['Entregar en', c.entregar_en],
+      ['Vueltas', Number(c.vueltas) + ' × ' + dinero(c.costo_vuelta) + ' = ' + dinero(c.envio)], ['Sobrecosto', factorTxt(c.factor)],
+      ['Viene de', crm ? 'El CRM' : 'El Excel del control (' + c.nombre + ')'], ['Nota', c.nota]];
+    var ren = (c.renglones || []).map(function (r) {
+      return '<tr><td data-l="#">' + r.orden + '</td><td data-l="Unidad">' + esc(r.unidad) + '</td><td data-l="Cantidad" class="monto">' + esc(Number(r.cantidad)) + '</td>'
+        + '<td data-l="Producto" class="w"><span class="rs">' + esc(r.producto) + '</span>' + (r.especificacion ? '<div class="mut">' + esc(r.especificacion) + '</div>' : '') + '</td>'
+        + '<td data-l="Costo unitario" class="monto">' + esc(dinero(r.costo_unit)) + '</td><td data-l="Costo + envío" class="monto">' + esc(dinero(r.costo_envio)) + '</td>'
+        + '<td data-l="Precio unitario" class="monto">' + esc(dinero(r.precio_unit)) + '</td><td data-l="Precio total" class="monto">' + esc(dinero(r.precio_total)) + '</td></tr>';
+    }).join('');
+    var tot = [['Costo del proveedor', dinero(c.costo)], ['Envío', dinero(c.envio)], ['Costo con envío', dinero(c.costo_envio)],
+      ['Subtotal', dinero(c.subtotal)], ['IVA', dinero(c.iva)], ['Total', dinero(c.total)]];
+    if (c.utilidad != null) tot.push(['Utilidad', dinero(c.utilidad)], ['Margen', c.margen ? pct(c.margen) + ' sobre el costo con envío' : '—']);
+    var facH = '';
+    if (c.factura) {
+      var dif = Math.round((Number(c.factura.subtotal) - Number(c.subtotal)) * 100) / 100;
+      facH = '<div class="dl"><span>Folio</span><span>' + esc(c.factura.folio) + '</span><span>Fecha</span><span>' + esc(fecha(c.factura.fecha)) + '</span>'
+        + '<span>Subtotal</span><span>' + esc(dinero(c.factura.subtotal)) + '</span><span>Estatus</span><span>' + esc(c.factura.estatus === 'por_cobrar' ? 'Por cobrar' : c.factura.estatus === 'cobrada' ? 'Cobrada' : 'Cancelada') + '</span></div>'
+        + (Math.abs(dif) >= 1 ? '<div class="msg mal" style="margin-top:10px">La factura no cuadra con la cotización: ' + esc(dinero(Math.abs(dif))) + (dif > 0 ? ' de más' : ' de menos') + ' en el subtotal.</div>'
+           : '<div class="msg bien" style="margin-top:10px">Cuadra con la cotización.</div>')
+        + (cot ? '<div class="acciones" style="margin-top:10px"><button class="btn" type="button" id="k-desliga">Quitarle la factura</button></div>' : '');
+    } else if (c.folio_factura) {
+      facH = '<div class="mut">Folio en el Excel: ' + esc(c.folio_factura) + '. Cuando su factura esté en Facturas, se puede ligar aquí.</div>';
+    }
+    if (!c.factura && cot && c.estatus !== 'no_autorizada' && c.estatus !== 'cancelada') {
+      facH += '<div class="campo" style="margin-top:10px"><label for="k-fac">Ligar la factura que la cobra</label><select id="k-fac"><option value="">Cargando…</option></select></div>'
+        + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="k-liga">Ligar</button></div>';
+    }
+    if (!facH) facH = '<span class="mut">Sin factura.</span>';
+    var bit = (c.bitacora || []).map(function (b) { return '<li><b>' + esc(QUEC[b.que] || b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(hora(b.hora)) + (b.texto ? '<div class="mut">' + esc(b.texto) + '</div>' : '') + '</li>'; }).join('');
+    abre((c.numero ? 'Núm. ' + c.numero + ' · ' : '') + c.nombre, dinero(c.total) + ' con IVA',
+      '<div class="sec"><h3>Estatus</h3><div class="in">' + cchip(c.estatus) + (acc ? '<div class="acciones" style="margin-top:10px">' + acc + '</div>' : '') + '</div></div>'
+      + '<div class="sec"><h3>Para el cliente</h3><div class="in acciones"><button class="btn" type="button" id="k-pdf">Cotización (PDF)</button><button class="btn" type="button" id="k-nota">Nota de recibido (PDF)</button></div>'
+      + '<div class="in mut" style="padding-top:0">Con la marca de Multinacional y los mismos números de aquí.</div></div>'
+      + '<div class="sec"><h3>Datos</h3><div class="in"><div class="dl">' + dl.filter(function (x) { return x[1]; }).map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>'; }).join('') + '</div>'
+      + (fac && esp && crm ? '<div class="campo" style="margin-top:10px"><label for="k-factor">Sobrecosto de esta cotización (solo tú)</label><input type="number" id="k-factor" step="0.01" min="1" max="5" value="' + Number(c.factor) + '" inputmode="decimal"></div>'
+         + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="k-factor-b">Cambiar sobrecosto</button></div>' : '') + '</div></div>'
+      + '<div class="sec"><h3>Renglones</h3><div class="tabla"><table class="resp"><thead><tr><th>#</th><th>Unidad</th><th class="monto">Cant.</th><th>Producto</th><th class="monto">Costo unitario</th><th class="monto">Costo + envío</th><th class="monto">Precio unitario</th><th class="monto">Precio total</th></tr></thead><tbody>' + ren + '</tbody></table></div></div>'
+      + '<div class="sec"><h3>Totales</h3><div class="in"><div class="dl">' + tot.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>'; }).join('') + '</div></div></div>'
+      + '<div class="sec"><h3>Factura</h3><div class="in">' + facH + '</div></div>'
+      + '<div class="sec"><h3>Bitácora</h3><div class="in"><ul class="bit">' + (bit || '<li class="mut">Sin movimientos.</li>') + '</ul></div></div>');
+    if ($('k-editar')) $('k-editar').onclick = function () { cierra(); editor(c); };
+    $('ficha').querySelectorAll('[data-est]').forEach(function (b) { b.onclick = function () { estatusCot(c, b.getAttribute('data-est')); }; });
+    $('k-pdf').onclick = function () { pdfCot(c, true, this); };
+    $('k-nota').onclick = function () { pdfCot(c, false, this); };
+    if ($('k-factor-b')) $('k-factor-b').onclick = async function () {
+      try { await rpc('mul_cot_factor', { p_id: c.id, p_factor: Number($('k-factor').value) }); avisa('Listo: se recalcularon los precios.'); await cargaCot(); fichaCot(c.id); }
+      catch (e) { error(falla(e)); }
+    };
+    if ($('k-desliga')) $('k-desliga').onclick = async function () {
+      var r = await pregunta({ texto: '¿Quitarle la factura ' + c.factura.folio + ' a esta cotización?', si: 'Sí, quitarla' }); if (!r) return;
+      try { await rpc('mul_cot_liga', { p_id: c.id, p_factura: null }); await cargaCot(); fichaCot(c.id); } catch (e) { error(falla(e)); }
+    };
+    if ($('k-fac')) {
+      rpc('mul_cot_facturas_libres').then(function (L) {
+        L = L || []; var s = $('k-fac'); if (!s) return;
+        s.innerHTML = L.length ? '<option value="">Escoge la factura…</option>' + L.map(function (f) {
+          var dif = Math.abs(Number(f.subtotal) - Number(c.subtotal)) < 1;
+          return '<option value="' + f.id + '">' + esc(f.folio + ' · ' + fecha(f.fecha) + ' · ' + dinero(f.subtotal) + ' sin IVA' + (dif ? ' · cuadra' : '')) + '</option>';
+        }).join('') : '<option value="">No hay facturas libres: súbela en Facturas</option>';
+      }).catch(function () {});
+      $('k-liga').onclick = async function () {
+        var v = +$('k-fac').value; if (!v) return;
+        try { await rpc('mul_cot_liga', { p_id: c.id, p_factura: v }); avisa('Listo: la factura quedó ligada.'); await cargaCot(); fichaCot(c.id); } catch (e) { error(falla(e)); }
+      };
+    }
+  }
+  async function estatusCot(c, e) {
+    var T = { autorizada: '¿El cliente autorizó la cotización?', no_autorizada: '¿El cliente no la autorizó?', en_espera: '¿Regresarla a «En espera»?', cancelada: '¿Cancelar esta cotización?' };
+    var r = await pregunta({ texto: T[e], si: 'Sí', nota: 'Nota (opcional)' }); if (!r) return;
+    try { await rpc('mul_cot_estatus', { p_id: c.id, p_estatus: e, p_nota: r.nota }); avisa('Listo.'); await cargaCot(); fichaCot(c.id); } catch (x) { error(falla(x)); }
+  }
+
+  /* ---------- el Cotizador: nueva o el cambio de una en espera ---------- */
+  function num(v) { var n = Number(String(v == null ? '' : v).replace(/[$,\s]/g, '')); return isFinite(n) ? n : 0; }
+  function filaEd(r, i) {
+    r = r || {};
+    var u = String(r.unidad || 'PIEZA').toUpperCase(), ops = UNIDADES.indexOf(u) < 0 ? UNIDADES.concat([u]) : UNIDADES;
+    return '<tr data-i="' + i + '"><td data-l="#" class="nw">' + (i + 1) + '</td>'
+      + '<td data-l="Unidad"><select data-k="unidad" aria-label="Unidad del renglón ' + (i + 1) + '">' + ops.map(function (o) { return '<option' + (o === u ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></td>'
+      + '<td data-l="Cantidad"><input data-k="cantidad" inputmode="decimal" value="' + esc(r.cantidad != null ? Number(r.cantidad) : '') + '" aria-label="Cantidad del renglón ' + (i + 1) + '"></td>'
+      + '<td data-l="Producto" class="w"><input data-k="producto" maxlength="200" value="' + esc(r.producto || '') + '" aria-label="Producto del renglón ' + (i + 1) + '"></td>'
+      + '<td data-l="Especificaciones" class="w"><input data-k="especificacion" maxlength="300" value="' + esc(r.especificacion || '') + '" aria-label="Especificaciones del renglón ' + (i + 1) + '"></td>'
+      + '<td data-l="Costo unitario"><input data-k="costo_unit" inputmode="decimal" value="' + esc(r.costo_unit != null ? Number(r.costo_unit) : '') + '" aria-label="Costo unitario del renglón ' + (i + 1) + '"></td>'
+      + '<td data-l="Precio unitario" class="monto" data-pu></td><td data-l="Precio total" class="monto" data-pt></td>'
+      + '<td data-l=""><button class="btn chico" type="button" data-quita aria-label="Quitar el renglón ' + (i + 1) + '">Quitar</button></td></tr>';
+  }
+  function leeEd() {
+    return Array.prototype.map.call($('e-ren').querySelectorAll('tr[data-i]'), function (tr) {
+      var g = function (k) { var x = tr.querySelector('[data-k="' + k + '"]'); return x ? x.value : ''; };
+      return { unidad: g('unidad'), cantidad: num(g('cantidad')), producto: g('producto').trim(), especificacion: g('especificacion').trim(), costo_unit: num(g('costo_unit')) };
+    });
+  }
+  function pintaEd(R) { $('e-ren').innerHTML = R.map(filaEd).join(''); calcEd(); }
+  function factorEd() { return Number(ED ? ED.factor : EST.factor_actual) || 1; }
+  function vueltaEd() { return Number(ED ? ED.costo_vuelta : EST.costo_vuelta) || 0; }
+  // el mismo cálculo de la base (mul_cot_precio): para ver los números mientras se captura; al guardar los pone la base
+  function calcEd() {
+    var R = leeEd(), f = factorEd(), env = Math.max(0, num($('e-vueltas').value)) * vueltaEd();
+    var ct = R.reduce(function (a, r) { return a + r.costo_unit * r.cantidad; }, 0), sub = 0;
+    Array.prototype.forEach.call($('e-ren').querySelectorAll('tr[data-i]'), function (tr, i) {
+      var r = R[i], pu = r.cantidad > 0 ? Math.round(((r.costo_unit * r.cantidad) + (ct > 0 ? env * r.costo_unit * r.cantidad / ct : 0)) * f / r.cantidad * 100) / 100 : 0;
+      var pt = Math.round(pu * r.cantidad * 100) / 100; if (r.producto) sub += pt;
+      tr.querySelector('[data-pu]').textContent = r.producto && r.cantidad > 0 ? dinero(pu) : '';
+      tr.querySelector('[data-pt]').textContent = r.producto && r.cantidad > 0 ? dinero(pt) : '';
+    });
+    var iva = Math.round(sub * 16) / 100;
+    $('e-factor').textContent = factorTxt(f);
+    $('e-tot').innerHTML = kpi('Costo con envío', esc(dinero(ct + env)), dinero(env) + ' de envío') + kpi('Subtotal', esc(dinero(sub)), 'sin IVA')
+      + kpi('IVA', esc(dinero(iva)), '16%') + kpi('Total', esc(dinero(sub + iva)), 'lo que paga el cliente')
+      + (EST.utilidad ? kpi('Utilidad', esc(dinero(sub - ct - env)), ct + env > 0 ? pct(sub / (ct + env)) + ' sobre el costo' : '') : '');
+  }
+  var calcPend = 0;
+  function calcLuego() { if (calcPend) return; calcPend = requestAnimationFrame(function () { calcPend = 0; calcEd(); }); }
+  function editor(c) {
+    ED = c && c.id ? c : null;
+    $('e-h').textContent = ED ? 'Cambiar la cotización núm. ' + (ED.numero || ED.id) : 'Nueva cotización';
+    $('e-nombre').value = ED ? ED.nombre : ''; $('e-tipo').value = ED ? ED.tipo : ''; $('e-fecha').value = ED ? String(ED.fecha).slice(0, 10) : HOY;
+    $('e-solicita').value = ED ? ED.solicita : ''; $('e-entregar').value = ED ? ED.entregar_en : ''; $('e-vueltas').value = ED ? Number(ED.vueltas) : 1;
+    $('e-nota').value = ED ? ED.nota : ''; $('e-msg').hidden = true;
+    pintaEd(ED ? ED.renglones.map(function (r) { return r; }) : [{}, {}, {}]);
+    muestra('ed');
+    try { $('e-nombre').focus(); } catch (e) {}
+  }
+  $('e-ren').addEventListener('input', calcLuego);
+  $('e-ren').addEventListener('change', calcLuego);
+  $('e-vueltas').addEventListener('input', calcLuego);
+  $('e-ren').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-quita]'); if (!b) return;
+    var R = leeEd(); R.splice(+b.closest('tr').getAttribute('data-i'), 1); pintaEd(R.length ? R : [{}]);
+  });
+  $('e-mas').onclick = function () {
+    var R = leeEd(); R.push({}); pintaEd(R);
+    var ins = $('e-ren').querySelectorAll('[data-k="producto"]'); try { ins[ins.length - 1].focus(); } catch (e) {}
+  };
+  // «Pegar desde Excel»: las columnas del control (unidad, cantidad, descripción, especificaciones y el costo unitario)
+  $('e-pegar').onclick = function () {
+    abre('Pegar desde Excel', 'Los renglones del pedido',
+      '<div class="sec"><h3>Pega aquí</h3><div class="in"><p class="mut" style="margin:0 0 8px">En el Excel copia los renglones de la columna de la unidad (PIEZA, CAJA…) a la del costo unitario y pégalos aquí. El precio lo pone el CRM.</p>'
+      + '<textarea id="pg-t" rows="10" style="width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px;background:var(--surface)" aria-label="Renglones copiados del Excel"></textarea>'
+      + '<div class="msg mal" id="pg-m" hidden style="margin-top:8px"></div><div class="acciones" style="margin-top:10px"><button class="btn acento" type="button" id="pg-ok">Agregar renglones</button></div></div></div>');
+    $('pg-ok').onclick = function () {
+      var nuevos = String($('pg-t').value || '').split(/\r?\n/).map(function (l) { return l.split('\t'); }).filter(function (c) { return c.join('').trim(); }).map(function (c) {
+        var nums = c.slice(4).map(num).filter(function (n) { return n > 0; });
+        return { unidad: String(c[0] || 'PIEZA').trim().toUpperCase(), cantidad: num(c[1]), producto: String(c[2] || '').trim(), especificacion: String(c[3] || '').trim(), costo_unit: nums.length ? nums[0] : 0 };
+      }).filter(function (r) { return r.producto; });
+      if (!nuevos.length) { $('pg-m').textContent = 'No encontré renglones con producto. Copia de la columna de la unidad a la del costo unitario.'; $('pg-m').hidden = false; return; }
+      var R = leeEd().filter(function (r) { return r.producto; }); pintaEd(R.concat(nuevos)); cierra();
+      avisa('Se agregaron ' + nuevos.length + (nuevos.length === 1 ? ' renglón.' : ' renglones.'));
+    };
+  };
+  $('e-cancelar').onclick = function () { if (ED) { var id = ED.id; ED = null; muestra('cot'); fichaCot(id); } else if (SEC === 'nueva') editor(null); else muestra('cot'); };
+  $('e-guardar').onclick = async function () {
+    var R = leeEd().filter(function (r) { return r.producto; }), m = '';
+    if ($('e-nombre').value.trim().length < 3) m = 'Escribe el nombre del pedido.';
+    else if (!R.length) m = 'Agrega al menos un renglón con su producto.';
+    else if (R.some(function (r) { return !(r.cantidad > 0); })) m = 'Cada renglón lleva su cantidad.';
+    if (m) { $('e-msg').textContent = m; $('e-msg').hidden = false; return; }
+    var b = this; b.disabled = true; $('e-msg').hidden = true;
+    try {
+      var c = await rpc('mul_cot_guarda', { p: { id: ED ? ED.id : null, nombre: $('e-nombre').value, tipo: $('e-tipo').value, fecha: $('e-fecha').value,
+        solicita: $('e-solicita').value, entregar_en: $('e-entregar').value, vueltas: num($('e-vueltas').value), nota: $('e-nota').value, renglones: R } });
+      ED = null; avisa('Listo: la cotización núm. ' + (c.numero || c.id) + ' quedó guardada.');
+      await cargaCot(); muestra('cot'); fichaCot(c.id);
+    } catch (e) { $('e-msg').textContent = falla(e); $('e-msg').hidden = false; }
+    b.disabled = false;
+  };
+
+  /* ---------- la cotización y la nota de recibido en PDF, con la marca de Multinacional ---------- */
+  // Nunca la marca PROFASE (Daniel, 2-nov-2026: «ahí nunca llevaría branding profase… en todo caso sería branding
+  // multinacional»): su logo (img/multinacional.png, cuando esté), su nombre, su RFC y su lema.
+  var LOGO = null;
+  async function logoMul() {
+    if (LOGO !== null) return LOGO;
+    try {
+      var r = await fetch('img/multinacional.png', { cache: 'force-cache' }); if (!r.ok) throw new Error('sin logo');
+      var bl = await r.blob();
+      LOGO = await new Promise(function (ok) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result || '')); }; fr.onerror = function () { ok(''); }; fr.readAsDataURL(bl); });
+    } catch (e) { LOGO = ''; }
+    return LOGO;
+  }
+  var GRIS = [60, 60, 60], NAR = [232, 121, 43], VER = [62, 125, 79];
+  async function marcaMul(doc, titulo, c) {
+    var W = doc.internal.pageSize.getWidth(), lg = await logoMul(), x = 40, emp = c.empresa || {};
+    if (lg) { try { doc.addImage(lg, 'PNG', 40, 28, 54, 48); x = 106; } catch (e) { x = 40; } }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor.apply(doc, GRIS);
+    doc.text(doc.splitTextToSize(emp.nombre || 'MULTINACIONAL', W - x - 190), x, 42);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(110, 110, 110); doc.text('RFC ' + (emp.rfc || ''), x, 70);
+    doc.setTextColor.apply(doc, NAR); doc.text(emp.lema || '', x, 82);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor.apply(doc, VER); doc.text(titulo, W - 40, 42, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, GRIS);
+    doc.text('Fecha: ' + fecha(c.fecha), W - 40, 58, { align: 'right' });
+    if (c.numero) doc.text('Núm. ' + c.numero, W - 40, 70, { align: 'right' });
+    doc.setDrawColor.apply(doc, NAR); doc.setLineWidth(1.5); doc.line(40, 92, W - 40, 92);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, GRIS); doc.text(doc.splitTextToSize(c.nombre, W - 80), 40, 110);
+  }
+  async function pdfCot(c, precios, b) {
+    var t = b.textContent; b.disabled = true; b.textContent = 'Armando…';
+    try {
+      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth();
+      await marcaMul(doc, precios ? 'COTIZACIÓN' : 'NOTA DE RECIBIDO', c);
+      var cab = precios ? ['#', 'Unidad', 'Cantidad', 'Producto', 'Descripción adicional', 'Precio unitario', 'Precio total'] : ['#', 'Unidad', 'Cantidad', 'Producto', 'Descripción adicional'];
+      var cuerpo = (c.renglones || []).map(function (r) {
+        var f = [r.orden, r.unidad, String(Number(r.cantidad)), r.producto, r.especificacion || ''];
+        return precios ? f.concat([dinero(r.precio_unit), dinero(r.precio_total)]) : f;
+      });
+      doc.autoTable({ head: [cab], body: cuerpo, startY: 124, margin: { left: 40, right: 40 }, styles: { fontSize: 8.5, cellPadding: 4, textColor: GRIS },
+        headStyles: { fillColor: VER, textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [246, 246, 246] },
+        columnStyles: precios ? { 0: { cellWidth: 22 }, 2: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } } : { 0: { cellWidth: 22 }, 2: { halign: 'right' } } });
+      var y = doc.lastAutoTable.finalY + 14;
+      if (precios) {
+        [['Subtotal', c.subtotal], ['IVA', c.iva], ['Total', c.total]].forEach(function (x, i) {
+          doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); doc.setFontSize(i === 2 ? 11 : 9.5); doc.setTextColor.apply(doc, GRIS);
+          doc.text(x[0], W - 150, y, { align: 'right' }); doc.text(dinero(x[1]), W - 40, y, { align: 'right' }); y += 15;
+        });
+      } else {
+        y = Math.max(y + 40, 600); doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.6); doc.line(W / 2 - 130, y, W / 2 + 130, y);
+        doc.setFontSize(9); doc.setTextColor.apply(doc, GRIS); doc.text('Nombre y firma de recibido', W / 2, y + 12, { align: 'center' });
+        y += 40; if (c.solicita) { doc.text('Solicita: ' + c.solicita, 40, y); y += 13; } if (c.entregar_en) doc.text('Entregar en: ' + c.entregar_en, 40, y);
+      }
+      doc.save((precios ? 'Cotizacion ' : 'Nota de recibido ') + String(c.nombre).replace(/[\\/:*?"<>|#]+/g, ' ').trim() + '.pdf');
+      b.textContent = 'Listo';
+    } catch (e) { b.textContent = 'No se pudo'; error(falla(e)); }
+    setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
+  }
+
+  /* ---------- qué sección se ve ---------- */
+  var TIT = { fac: ['Facturas', 'Las facturas que emite Multinacional: lo que está por cobrar y lo que ya se cobró.'],
+              cot: ['Cotizaciones', 'Cada pedido con su costo, su precio y su factura.'],
+              ed: ['Cotizador', 'Captura el pedido y el costo del proveedor; el CRM pone el envío, el precio y los totales.'] };
+  function muestra(s) {
+    ['fac', 'cot', 'ed'].forEach(function (k) { $('s-' + k).hidden = k !== s; });
+    $('titulo').textContent = TIT[s][0]; $('subt').textContent = TIT[s][1];
+    $('b-subir').hidden = s !== 'fac' || !EST.sube || CONSULTA;
+    $('b-nueva').hidden = s !== 'cot' || !EST.cotiza || CONSULTA;
+    try { scrollTo(0, 0); } catch (e) {}
+  }
+  $('b-nueva').onclick = function () { editor(null); };
+
   /* =============================== Arranque =============================== */
   async function arranca() {
     try {
@@ -510,13 +874,21 @@ input[type="file"]{max-width:100%}
       if (!EST || !EST.ve) throw new Error('Esta pantalla es de Multinacional.');
       CONSULTA = !!P.consulta || !!EST.consulta;
       $('consulta').hidden = !CONSULTA;
-      $('b-subir').hidden = !EST.sube || CONSULTA;
       var img = $('mul-logo'); img.onload = function () { if (window.top === window.self) img.hidden = false; }; img.onerror = function () { img.hidden = true; };
+      var id = +(new URLSearchParams(location.search).get('id') || 0);
+      if (SEC === 'cot' || SEC === 'nueva') {
+        if (!EST.ver_cot) throw new Error('Las cotizaciones de Multinacional solo las ven quien cotiza y la dirección.');
+        await cargaCot();
+        $('cargando').hidden = true;
+        if (SEC === 'nueva' && EST.cotiza && !CONSULTA) editor(null); else muestra('cot');
+        if (id > 0) fichaCot(id);
+        return;
+      }
+      if (!EST.facturas) throw new Error('Las facturas de Multinacional las ven quien las sube, quien las cobra y la dirección.');
       $('f-desde').value = masDias(HOY.slice(0, 8) + '01', -62).slice(0, 8) + '01'; $('f-hasta').value = HOY;
       await carga();
-      $('s-fac').hidden = false; $('cargando').hidden = true;
+      muestra('fac'); $('cargando').hidden = true;
       // desde un aviso de la campanita: abre esa factura (mul_tab.js, PROFASE_ABRE['mul-facturas'])
-      var id = +(new URLSearchParams(location.search).get('id') || 0);
       if (id > 0) ficha(id);
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
@@ -524,7 +896,8 @@ input[type="file"]{max-width:100%}
   addEventListener('message', function (ev) {
     if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'mul-refresca' || !EST || !EST.ve) return;
     if (!$('velo').hidden || !$('pregunta').hidden) return;   // no le cambia nada a quien está en una ventana
-    carga().catch(function () {});
+    if (!$('s-fac').hidden) carga().catch(function () {});
+    else if (!$('s-cot').hidden) cargaCot().catch(function () {});   // en el Cotizador no se toca lo que se está capturando
   });
   arranca();
 })();
