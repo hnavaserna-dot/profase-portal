@@ -42,7 +42,9 @@
    última instancia (ya pasó el filtro de Él para lo de gabo o es idea de Él) y gabo (que principalmente debe de verla
    cadengo)»): solo a la dirección (pcad_estado(), portal/sql/144_peticiones_cadengo.sql). «Cadengo» enseña las
    peticiones de autorización de Fernando Cadengo (docs/peticiones/ del repositorio privado, que sube la acción
-   «Peticiones de Cadengo al portal»); «Gabo», las propuestas, como siempre. A Fernando y a Gabo la ventana les queda igual.
+   «Peticiones de Cadengo al portal»); «Gabo», las propuestas, como siempre. Desde 149 (Daniel, 2-nov-2026, 14:50: «Si»),
+   Fernando también ve el filtro como «Mis peticiones»: en qué va cada una y lo que decidió Daniel (papel «pide»; no
+   decide ni ve la frase para el Claude de Daniel). A Gabo la ventana le queda igual.
    Las horas siempre en hora de Monterrey. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
@@ -283,7 +285,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   var ROL = null, YO = null, FILTRO = 'pend', FILAS = [], VISTO = {}, NOMBRES = {}, ABIERTA = null, CAMBIO = {}, MSJS = [], FIRMA = '', URLS = {}, cargando = false;
   // Filtro «Cadengo» / «Gabo» (2-nov-2026; 144_peticiones_cadengo.sql): PCAD es lo que dice pcad_estado() (solo la
   // dirección; null para los demás: a ellos la ventana les queda igual). PFILAS, las peticiones; PABIERTA, la abierta.
-  var QUIEN = 'gab', PCAD = null, PFILAS = [], PFILTRO = 'pend', PABIERTA = null, PDET = null, pcargando = false, SUB = {}, LEER_GAB = '';
+  var QUIEN = 'gab', PCAD = null, PFILAS = [], PFILTRO = 'pend', PABIERTA = null, PDET = null, pcargando = false, SUB = {}, LEER_GAB = '', pFiltroAuto = true;
   var PEND = ['por_autorizar', 'choca', 'error', 'autorizada', 'deshaciendo'];
   var ESTADO = { por_autorizar: 'Por autorizar', autorizada: 'Publicándose', publicada: 'Publicada', rechazada: 'Rechazada',
     retirada: 'Retirada', choca: 'Choca con cambios recientes', error: 'No se pudo publicar', deshaciendo: 'Deshaciéndose', deshecha: 'Deshecha' };
@@ -337,10 +339,19 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     ROL = r.error ? null : r.data;
     if (!ROL) { $('sub').textContent = 'Sin acceso'; $('sin-acceso').hidden = false; return; }
     if (ROL === 'autoriza') { try { var ri = await sb.rpc('cambios_respaldo_info'); if (!ri.error && ri.data) RESP = ri.data; } catch (e) {} }
-    if (P.perfil && P.perfil.rol === 'director') { try { var pe = await sb.rpc('pcad_estado'); if (!pe.error && pe.data && pe.data.ve) PCAD = pe.data; } catch (e) {} }
-    SUB.cad = PCAD && PCAD.consulta
+    // ¿ve el filtro «Cadengo»? la dirección y quien decidió Daniel (Fernando, sus peticiones; 144 y 149)
+    try { var pe = await sb.rpc('pcad_estado'); if (!pe.error && pe.data && pe.data.ve) PCAD = pe.data; } catch (e) {}
+    SUB.cad = papel() === 'pide'
+      ? 'Lo que le pides autorizar a H\u00e9ctor Daniel Nava (ideas tuyas o de Gabo que tú filtraste) y en qué va cada una: por decidir o ya decidida, con lo que dijo. Aquí solo las ves; las escribe tu Claude.'
+      : papel() === 'consulta'
       ? 'Lo que Fernando Cadengo le pide autorizar a H\u00e9ctor Daniel Nava: ideas suyas o de Gabo que él ya filtró. Tocan la lógica, el dinero, quién ve qué o las reglas del CRM, así que su Claude no las aplica sin el «sí» de H\u00e9ctor Daniel Nava. Puedes verlas; no cambiar nada.'
       : 'Lo que Fernando Cadengo te pide autorizar: ideas suyas o de Gabo que él ya filtró. Tocan la lógica, el dinero, quién ve qué o las reglas del CRM, así que su Claude no las aplica sin tu «sí».';
+    if (papel() === 'pide') {
+      var bc = document.querySelector('#quien [data-q="cad"]'), bg = document.querySelector('#quien [data-q="gab"]');
+      bc.firstChild.firstChild.nodeValue = 'Mis peticiones ';
+      bc.querySelector('.d').textContent = 'Lo que le pides a H\u00e9ctor Daniel Nava';
+      bg.querySelector('.d').textContent = 'Sus propuestas: las revisas tú';
+    }
     SUB.gab = RESP.respaldo ? 'Lo que propone Gabo desde su Claude. La revisión la lleva ' + encargados() + '; si hace falta, tú también puedes autorizarlas o regresarlas. «Marcar todo como leído» te quita los avisos.'
       : ROL === 'autoriza' ? 'Lo que propone Gabo desde su Claude. Basta que uno de ustedes dos lo autorice para que se publique solo.'
       : ROL === 'propone' ? 'Tus propuestas de cambio. Cuando Daniel o Fernando Cadengo la autorizan, se publica sola en el portal.'
@@ -354,8 +365,9 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     }
     try { var n = await sb.rpc('cambios_nombres'); (n.data || []).forEach(function (x) { NOMBRES[x.usuario] = x.nombre; }); } catch (e) {}
     var hs = location.hash, id = +(hs.match(/^#p(\d+)$/) || [])[1], pk = (hs.match(/^#c([0-9a-z-]{13,110})$/) || [])[1];
-    // la dirección abre en «Cadengo» (la última instancia: ya pasó por él); en «Gabo» si viene a una propuesta
-    ponQuien(PCAD && !id && hs !== '#gabo' ? 'cad' : 'gab');
+    // la dirección abre en «Cadengo» (la última instancia: ya pasó por él); en «Gabo» si viene a una propuesta. Fernando
+    // abre en «Gabo» (es lo que él revisa), salvo que venga a una petición suya
+    ponQuien(PCAD && !id && hs !== '#gabo' && (papel() !== 'pide' || pk) ? 'cad' : 'gab');
     await Promise.all([carga(), PCAD ? cargaPcad() : null]);
     if (id) abre(id);
     else if (pk && PCAD) abrePet(pk);
@@ -372,19 +384,23 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   function aLaVista() { try { return !document.hidden && (!window.frameElement || window.frameElement.getClientRects().length > 0); } catch (e) { return !document.hidden; } }
 
   /* --- Filtro «Cadengo» / «Gabo» --- */
+  // decide: daniel.nava; consulta: hnava; pide: Fernando (sus peticiones, 149)
+  function papel() { return PCAD ? (PCAD.papel || (PCAD.consulta ? 'consulta' : 'decide')) : ''; }
+  function quienDecide() { return papel() !== 'decide'; }   // los textos hablan de H\u00e9ctor Daniel Nava, no de «tú»
   function ponQuien(q) {
     if (!PCAD) q = 'gab';
     QUIEN = q;
     var cad = q === 'cad';
     $('quien').hidden = !PCAD;
-    if (PCAD && PCAD.consulta) document.querySelector('#quien [data-q="cad"] .d').textContent = 'Lo que le pide autorizar a H\u00e9ctor Daniel Nava';
+    if (papel() === 'consulta') document.querySelector('#quien [data-q="cad"] .d').textContent = 'Lo que le pide autorizar a H\u00e9ctor Daniel Nava';
     document.querySelectorAll('#quien [data-q]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.q === q ? 'true' : 'false'); });
     $('sub').textContent = SUB[q] || '';
     $('v-lista').hidden = cad || !!ABIERTA; $('v-det').hidden = cad || !ABIERTA;
     $('v-pcad').hidden = !cad || !!PABIERTA; $('v-pdet').hidden = !cad || !PABIERTA;
     if (puedeEscribir()) $('mandar').hidden = cad;
-    $('leer').hidden = cad ? !(PCAD && !PCAD.consulta && !P.consulta) : !(puedeEscribir() && RESP.respaldo);
-    $('leer').title = cad ? 'Te quita el «Nuevo», el punto naranja y los avisos de estas peticiones; las que esperan tu decisión siguen en «Por decidir»' : LEER_GAB;
+    $('leer').hidden = cad ? !(PCAD && papel() !== 'consulta' && !P.consulta) : !(puedeEscribir() && RESP.respaldo);
+    $('leer').title = cad ? (papel() === 'pide' ? 'Te quita el «Nuevo», el punto naranja y los avisos de lo que ya decidió H\u00e9ctor Daniel Nava'
+      : 'Te quita el «Nuevo», el punto naranja y los avisos de estas peticiones; las que esperan tu decisión siguen en «Por decidir»') : LEER_GAB;
     aviso('');
     pintaCuentas();
   }
@@ -409,6 +425,11 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       var r = await sb.rpc('pcad_lista');
       if (r.error) throw r.error;
       PFILAS = Array.isArray(r.data) ? r.data : [];
+      if (pFiltroAuto && papel() === 'pide' && PFILAS.some(function (p) { return p.nueva && p.estado !== 'por_decidir'; })) {
+        PFILTRO = 'hist';
+        document.querySelectorAll('#v-pcad .tabs button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.g === 'hist' ? 'true' : 'false'); });
+      }
+      pFiltroAuto = false;
       if (QUIEN === 'cad') $('hora').textContent = 'Al momento · ' + hora(new Date()).replace(/^.*?, /, '');
       pintaPcad();
       if (PABIERTA) await pintaPet(true);
@@ -423,9 +444,10 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     document.querySelector('#v-pcad [data-g="hist"]').textContent = 'Decididas' + (hist.length ? ' (' + hist.length + ')' : '');
     var l = PFILTRO === 'pend' ? pend : hist;
     $('plista').innerHTML = l.length ? l.map(itemP).join('') : '<div class="vacio">' + (PFILTRO === 'pend'
-      ? (PCAD.consulta ? 'No hay peticiones de Fernando Cadengo por decidir.' : 'No hay peticiones de Cadengo por decidir. Cuando su Claude te pida autorizar algo, aparece aquí y te llega el aviso a la campanita.')
+      ? (papel() === 'pide' ? 'No tienes peticiones esperando a H\u00e9ctor Daniel Nava. Cuando tu Claude le pida autorizar algo, aparece aquí; cuando la decida, te llega el aviso.'
+        : papel() === 'consulta' ? 'No hay peticiones de Fernando Cadengo por decidir.' : 'No hay peticiones de Cadengo por decidir. Cuando su Claude te pida autorizar algo, aparece aquí y te llega el aviso a la campanita.')
       : 'Todavía no hay peticiones decididas.') + '</div>';
-    $('ppie').textContent = pend.length ? pend.length + (pend.length === 1 ? ' petición espera ' : ' peticiones esperan ') + (PCAD.consulta ? 'la decisión de H\u00e9ctor Daniel Nava.' : 'tu decisión.') : '';
+    $('ppie').textContent = pend.length ? pend.length + (pend.length === 1 ? ' petición espera ' : ' peticiones esperan ') + (quienDecide() ? 'la decisión de H\u00e9ctor Daniel Nava.' : 'tu decisión.') : '';
     pintaCuentas();
   }
   function itemP(p) {
@@ -435,7 +457,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       + '<div class="m">Fernando Cadengo · ' + esc(hora(p.pedida)) + (seMovio(p) ? ' · se actualizó ' + esc(hace(p.actualizada)) : '') + '</div>'
       + '<div class="chips"><span class="chip ' + e[1] + '">' + e[0] + '</span><span class="chip">' + origen(p) + '</span>'
       + (p.area ? '<span class="chip gris area">' + esc(p.area) + '</span>' : '') + '</div>'
-      + (p.estado !== 'por_decidir' && p.decision ? '<div class="dec"><b>' + (PCAD.consulta ? 'Decidió:' : 'Decidiste:') + '</b> ' + esc(p.decision) + '</div>' : '')
+      + (p.estado !== 'por_decidir' && p.decision ? '<div class="dec"><b>' + (quienDecide() ? 'Decidió:' : 'Decidiste:') + '</b> ' + esc(p.decision) + '</div>' : '')
       + '</button>';
   }
   // k: el archivo completo o sus primeros 13 (AAAAMMDD-HHMM, como trae la clave del aviso de la campanita)
@@ -448,7 +470,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     ponQuien('cad');
     window.scrollTo(0, 0);
     await pintaPet(false);
-    if (p && !PCAD.consulta && !P.consulta) {
+    if (p && papel() !== 'consulta' && !P.consulta) {
       try { var r = await sb.rpc('pcad_leer', { p_archivo: p.archivo }); if (!r.error && r.data) { p.nueva = false; pintaCuentas(); avisaArriba(); } } catch (e) {}
     }
   }
@@ -501,13 +523,15 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   }
   function estadoPet(d, dec) {
     if (d.estado === 'por_decidir') {
-      if (PCAD.consulta) return caja('amarillo', '<b>Espera la decisión de H\u00e9ctor Daniel Nava.</b> Fernando Cadengo no lo cambia sin su «sí».', []);
+      // con su id, como las demás, para el «?» y la campanita
+      if (papel() === 'pide') return caja('amarillo', '<b>Espera la decisión de H\u00e9ctor Daniel Nava.</b> Tu Claude no lo cambia sin su «sí». Cuando la decida, te llega el aviso y aquí ves lo que dijo.', []).replace('<div class="estado amarillo">', '<div class="estado amarillo" id="pestado">');
+      if (quienDecide()) return caja('amarillo', '<b>Espera la decisión de H\u00e9ctor Daniel Nava.</b> Fernando Cadengo no lo cambia sin su «sí».', []).replace('<div class="estado amarillo">', '<div class="estado amarillo" id="pestado">');
       return '<div class="estado amarillo" id="pestado"><div><b>Espera tu decisión.</b> Fernando no lo cambia sin tu «sí». Dile a tu Claude esta frase: te la explica en palabras, con su recomendación, y la aplica solo si le dices que sí.</div>'
         + '<div class="frase"><code id="frase">Revisa la petición ' + esc(d.archivo) + '</code><button class="btn pri" type="button" id="copiar">Copiar</button></div></div>';
     }
-    var t = d.sentido === 'si' ? (PCAD.consulta ? 'La autorizó H\u00e9ctor Daniel Nava.' : 'La autorizaste.')
-      : d.sentido === 'no' ? (PCAD.consulta ? 'H\u00e9ctor Daniel Nava no la autorizó.' : 'No la autorizaste.')
-      : (PCAD.consulta ? 'Ya la decidió H\u00e9ctor Daniel Nava.' : 'Ya la decidiste.');
+    var t = d.sentido === 'si' ? (quienDecide() ? 'La autorizó H\u00e9ctor Daniel Nava.' : 'La autorizaste.')
+      : d.sentido === 'no' ? (quienDecide() ? 'H\u00e9ctor Daniel Nava no la autorizó.' : 'No la autorizaste.')
+      : (quienDecide() ? 'Ya la decidió H\u00e9ctor Daniel Nava.' : 'Ya la decidiste.');
     return '<div class="estado ' + (d.sentido === 'si' ? 'verde' : d.sentido === 'no' ? 'rojo' : '') + '" id="pestado"><div><b>' + t + '</b></div>'
       + (dec && dec.md ? '<div class="md" style="margin-top:8px">' + md(dec.md) + '</div>' : d.decision ? '<p style="margin:8px 0 0">' + esc(d.decision) + '</p>' : '') + '</div>';
   }
@@ -883,7 +907,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   });
   document.querySelectorAll('#v-pcad .tabs button').forEach(function (b) {
     b.onclick = function () {
-      PFILTRO = b.dataset.g;
+      PFILTRO = b.dataset.g; pFiltroAuto = false;
       document.querySelectorAll('#v-pcad .tabs button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
       pintaPcad();
     };
@@ -908,7 +932,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       if (rp.error) { aviso(rp.error.message, 'mal'); return; }
       PFILAS.forEach(function (p) { p.nueva = false; });
       pintaPcad(); avisaArriba();
-      aviso('Listo: ya no te salen como nuevas ni en la campanita. Las que esperan tu decisión siguen en «Por decidir».', 'ok');
+      aviso(papel() === 'pide' ? 'Listo: ya no te salen como nuevas ni en la campanita.' : 'Listo: ya no te salen como nuevas ni en la campanita. Las que esperan tu decisión siguen en «Por decidir».', 'ok');
       return;
     }
     b.disabled = true;
