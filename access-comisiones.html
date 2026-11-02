@@ -347,14 +347,14 @@ tr.fila:hover td{background:var(--navy-soft)}
         <div><h2 id="h-lig">Qué factura cobra qué trabajo</h2><div class="sub" id="lig-sub">&nbsp;</div></div>
         <div class="filtros">
           <select id="l-mes" aria-label="Mes contable del trabajo"></select>
-          <select id="l-ver" aria-label="Cuáles"><option value="">Todos</option><option value="sin">Sin factura</option></select>
+          <select id="l-ver" aria-label="Cuáles"><option value="">Todos</option><option value="sin">Sin factura</option><option value="crm">Ligadas solas por el CRM</option></select>
           <button class="btn" type="button" id="l-auto" hidden>Ligar automático</button>
         </div>
       </header>
       <div id="lista-lig"></div>
       <div class="vacio" id="lig-vacia" hidden>No hay trabajo del WorkFlow en ese mes.</div>
     </section>
-    <p class="pie" id="pie-lig">Cada trabajo del mes se cobra con la factura de DECOMSA del mes siguiente del mismo servicio: se liga solo. Lo demás (anticipos, Coordinación y supervisión, anuales) se liga a mano, y a Daniel le llega un aviso.</p>
+    <p class="pie" id="pie-lig">Cada trabajo del mes se cobra con la factura de DECOMSA del mes siguiente del mismo servicio: se liga solo y lleva «ligó el CRM» (para revisarlas, «Ligadas solas por el CRM»). Lo demás (anticipos, Coordinación y supervisión, anuales) se liga a mano, y a Daniel le llega un aviso.</p>
   </div>
   <div id="p-sw" role="tabpanel" aria-labelledby="t-sw" hidden>
     <section class="card" aria-labelledby="h-sw">
@@ -616,16 +616,19 @@ tr.fila:hover td{background:var(--navy-soft)}
     pintaLig();
   }
   function pintaLig() {
-    var G = (LIG && LIG.grupos) || [], F = (LIG && LIG.facturas) || [], ed = !!(LIG && LIG.editable), sin = $('l-ver').value === 'sin';
-    var L = G.filter(function (g) { return !sin || !(g.fac || []).length; });
-    var nsin = G.filter(function (g) { return !(g.fac || []).length; }).length;
-    $('lig-sub').textContent = G.length + (G.length === 1 ? ' trabajo' : ' trabajos') + ' · ' + nsin + ' sin factura';
+    var G = (LIG && LIG.grupos) || [], F = (LIG && LIG.facturas) || [], ed = !!(LIG && LIG.editable), ver = $('l-ver').value;
+    // ligadas solas por el CRM (desde que las facturas están en el CRM, 1-nov-2026): las marca «o» de ceq_ligas_mes() (123)
+    var delCrm = function (g) { return (g.fac || []).some(function (f) { return f.o === 'crm'; }); };
+    var L = G.filter(function (g) { return ver === 'sin' ? !(g.fac || []).length : ver === 'crm' ? delCrm(g) : true; });
+    var nsin = G.filter(function (g) { return !(g.fac || []).length; }).length, ncrm = G.filter(delCrm).length;
+    $('lig-sub').textContent = G.length + (G.length === 1 ? ' trabajo' : ' trabajos') + ' · ' + nsin + ' sin factura'
+      + (ncrm ? ' · ' + ncrm + (ncrm === 1 ? ' ligado solo por el CRM' : ' ligados solos por el CRM') : '');
     $('l-auto').hidden = !ed;
     $('lista-lig').innerHTML = L.map(function (g, i) {
       var propias = F.filter(function (f) { return f.e === g.e; }), otras = F.filter(function (f) { return f.e !== g.e; });
       var opt = function (f) { return '<option value="' + esc(f.id) + '">' + esc(f.folio || 'sin folio') + ' · ' + esc(fecha(f.fecha)) + ' · ' + esc(f.rs) + '</option>'; };
       return '<div class="grupo"><div class="t">' + esc(g.rs) + '</div><div class="d">' + esc(g.pln) + ' · ' + g.n + (g.n === 1 ? ' actividad' : ' actividades') + (g.term ? ' · terminado' : ' · <b>sin terminar</b> (todavía no comisiona)') + '</div>'
-        + '<div class="facs">' + ((g.fac || []).length ? g.fac.map(function (f) { return '<span class="fchip">' + esc(f.folio || 'sin folio') + ' · ' + esc(fecha(f.fecha)) + (ed ? '<button type="button" data-quita="' + i + '" data-f="' + esc(f.id) + '" aria-label="Quitar la factura ' + esc(f.folio) + '">Quitar</button>' : '') + '</span>'; }).join('') : '<span class="chip ojo">sin factura</span>') + '</div>'
+        + '<div class="facs">' + ((g.fac || []).length ? g.fac.map(function (f) { return '<span class="fchip">' + esc(f.folio || 'sin folio') + ' · ' + esc(fecha(f.fecha)) + (f.o === 'crm' ? ' <span class="chip az" title="La ligó el CRM solo el ' + esc(fecha(f.en)) + ', con la regla del Access">ligó el CRM</span>' : '') + (ed ? '<button type="button" data-quita="' + i + '" data-f="' + esc(f.id) + '" aria-label="Quitar la factura ' + esc(f.folio) + '">Quitar</button>' : '') + '</span>'; }).join('') : '<span class="chip ojo">sin factura</span>') + '</div>'
         + (ed ? '<div class="ligar"><select data-sel="' + i + '" aria-label="Factura para ligar"><option value="">Ligar una factura…</option>' + (propias.length ? '<optgroup label="Del mismo cliente">' + propias.map(opt).join('') + '</optgroup>' : '') + (otras.length ? '<optgroup label="Otras">' + otras.map(opt).join('') + '</optgroup>' : '') + '</select><button class="btn" type="button" data-pon="' + i + '">Ligar</button></div>' : '')
         + '</div>';
     }).join('');
