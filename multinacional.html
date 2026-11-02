@@ -1,0 +1,532 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Multinacional</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=76abbc28e6"></script><script src="js/visor.js?v=2280475113"></script>
+<style>
+/* Portal PROFASE · menú Multinacional (2-nov-2026, decisiones de Daniel, 12:01 a 12:20). Multinacional es una
+   comercializadora de la dirección (Héctor Nava Ramos y Héctor Daniel Nava), con su propio banco; no tiene que ver con las
+   compañías que facturan el despacho. Esta pantalla (?s=fac) es «Facturas»:
+     - Mónica Pedraza (la que opera Multinacional) solo sube el XML de cada factura y su PDF («mónica nadamas puede cargar»).
+       El CRM lee del XML el folio, el cliente y los montos (mul_factura_nueva(), nadie los captura) y le avisa a Eva.
+     - Eva Rangel ve el tablero y marca «Cobrada» («Ver y macar cobradas»); la dirección ve todo (HNR, solo consulta) y
+       solo Héctor Daniel Nava marca una factura cancelada en el SAT.
+   Lo ven solo ellos cuatro (mul_quien y la dirección; candado multinacional_protegida(), portal/sql/136_multinacional.sql).
+   Todo por funciones mul_*; la página no lee tablas. El XML y el PDF salen tal cual se subieron: son los comprobantes de
+   Multinacional y nunca llevan la marca PROFASE («ahí nunca llevaría branding profase… en todo caso sería branding
+   multinacional»). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .mlogo{height:40px;width:auto;max-width:140px;display:block;background:#fff;border-radius:6px;padding:3px}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+#lista td[data-l="Cliente"]{min-width:220px}
+td.nw{white-space:nowrap}
+/* el monto de cada tarjeta en un renglón: en el iPad y el celular partía el número (revisión a fondo, 2-nov-2026) */
+@media (max-width:900px){.kpi .v{font-size:20px}}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bit{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.bit li{overflow-wrap:anywhere}
+.bit .msg{margin-top:4px;padding:6px 10px}
+.pregunta .campo{margin:0 0 10px}
+.pregunta input[type="date"]{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;width:100%}
+#rango{display:inline-flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+input[type="file"]{max-width:100%}
+@media (max-width:700px){#rango{width:100%}#rango input{flex:1 1 130px}.pregunta input[type="date"]{font-size:16px}}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="mlogo" id="mul-logo" src="img/multinacional.png" alt="Multinacional" hidden>
+    <div style="min-width:0">
+      <div class="eti">Multinacional</div>
+      <h1 id="titulo">Facturas</h1>
+      <p id="subt">Las facturas que emite Multinacional: lo que está por cobrar y lo que ya se cobró.</p>
+    </div>
+  </div>
+  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-subir" hidden>Subir facturas</button></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <section id="s-fac" hidden>
+    <div class="kpis" id="kpis"></div>
+    <div class="tabs" role="tablist" aria-label="Facturas">
+      <button type="button" role="tab" data-ft="por" aria-selected="true">Por cobrar <span class="cta" id="n-por">0</span></button>
+      <button type="button" role="tab" data-ft="cob" aria-selected="false">Cobradas</button>
+      <button type="button" role="tab" data-ft="can" aria-selected="false">Canceladas</button>
+      <button type="button" role="tab" data-ft="tod" aria-selected="false">Todas</button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="h-lista">Por cobrar</h2><div class="sub" id="lista-sub"></div></div></header>
+      <div class="filtros">
+        <input type="search" id="q" placeholder="Buscar folio, cliente o RFC" aria-label="Buscar folio, cliente o RFC">
+        <span id="rango" hidden><label class="mut" for="f-desde">Del</label> <input type="date" id="f-desde"> <label class="mut" for="f-hasta">al</label> <input type="date" id="f-hasta"></span>
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th class="monto">Total</th><th>Estatus</th><th><span class="sr">Acción</span></th></tr></thead>
+        <tbody id="lista"></tbody></table></div>
+    </div>
+    <p class="pie" id="pie">Cada factura sale de su XML: el folio, el cliente y los montos los lee el CRM, nadie los captura. Nada se borra: una factura cancelada en el SAT se marca «Cancelada».</p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div>
+  <p id="pq-t"></p>
+  <div class="campo" id="pq-f-c" hidden><label for="pq-f">¿Qué día entró el dinero al banco?</label><input type="date" id="pq-f"></div>
+  <div class="campo" id="pq-x-c" hidden><label for="pq-x" id="pq-x-l">Nota</label><textarea id="pq-x" maxlength="300"></textarea></div>
+  <div class="msg mal" id="pq-m" hidden></div>
+  <div class="acciones"><button class="btn" type="button" id="pq-no">Cancelar</button><button class="btn acento" type="button" id="pq-si">Sí</button></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var EST = null, CONSULTA = false, DATOS = null, FT = 'por', FAC = [], V = null;
+  var ESTATUS = { por_cobrar: ['Por cobrar', 'ojo'], cobrada: ['Cobrada', 'ok'], cancelada: ['Cancelada', 'mal'] };
+  var METODO = { PUE: 'Pago en una sola exhibición (PUE)', PPD: 'Pago en parcialidades o diferido (PPD)' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function dinero(n, mon) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (mon && mon !== 'MXN' ? ' ' + mon : ''); }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function masDias(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function folio(f) { return (String(f.serie || '') + ' ' + String(f.folio || '')).trim() || 'Sin folio'; }
+  var HOY = hoyISO();
+
+  /* ---------- ventanas ---------- */
+  function pregunta(op) {
+    return new Promise(function (res) {
+      $('pq-t').textContent = op.texto; $('pq-si').textContent = op.si || 'Sí';
+      $('pq-f-c').hidden = !op.fecha; $('pq-f').value = op.fecha || ''; $('pq-f').max = HOY;
+      $('pq-x-c').hidden = !op.nota; $('pq-x').value = ''; $('pq-x-l').textContent = op.nota || 'Nota';
+      $('pq-m').hidden = true; $('pregunta').hidden = false;
+      try { (op.fecha ? $('pq-f') : op.nota ? $('pq-x') : $('pq-no')).focus(); } catch (e) {}
+      function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
+      $('pq-si').onclick = function () {
+        var f = $('pq-f').value, x = $('pq-x').value.trim();
+        if (op.fecha && (!f || f > HOY)) { $('pq-m').textContent = 'Escribe la fecha (hoy o antes).'; $('pq-m').hidden = false; return; }
+        if (op.notaObligada && x.length < 5) { $('pq-m').textContent = 'Escribe el motivo.'; $('pq-m').hidden = false; return; }
+        fin({ fecha: f, nota: x });
+      };
+      $('pq-no').onclick = function () { fin(null); };
+      pregunta.cierra = function () { fin(null); };
+    });
+  }
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo" id="v-cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { if (cierra.ocupado) return; $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('pregunta').hidden && pregunta.cierra) pregunta.cierra(); else if (!$('velo').hidden) cierra();
+  });
+
+  /* ---------- el tablero ---------- */
+  function kpi(l, v, s, cls) { return '<div class="kpi' + (cls ? ' ' + cls : '') + '"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div><div class="s">' + esc(s || '') + '</div></div>'; }
+  function pintaKpis() {
+    var r = (DATOS && DATOS.resumen) || {};
+    $('kpis').innerHTML = kpi('Por cobrar', esc(dinero(r.por_cobrar_total)), (r.por_cobrar || 0) + (r.por_cobrar === 1 ? ' factura' : ' facturas') + (r.por_cobrar_otra ? ' · ' + r.por_cobrar_otra + ' en otra moneda' : ''))
+      + kpi('Más de 30 días', String(r.mas_30 || 0), r.mas_30 ? 'facturas por cobrar de hace más de un mes' : 'ninguna atrasada', r.mas_30 ? 'mal' : '')
+      + kpi('Cobrado este mes', esc(dinero(r.cobradas_mes_total)), (r.cobradas_mes || 0) + (r.cobradas_mes === 1 ? ' factura' : ' facturas'))
+      + kpi('Facturado este mes', esc(dinero(r.facturado_mes)), (r.facturas_mes || 0) + (r.facturas_mes === 1 ? ' factura' : ' facturas') + ' (menos notas de crédito)');
+    $('n-por').textContent = String(r.por_cobrar || 0);
+  }
+  function filtradas() {
+    var q = norm($('q').value), d = $('f-desde').value, h = $('f-hasta').value;
+    return FAC.filter(function (f) {
+      if (FT === 'por' && !(f.estatus === 'por_cobrar' && f.tipo === 'I')) return false;
+      if (FT === 'cob' && f.estatus !== 'cobrada') return false;
+      if (FT === 'can' && f.estatus !== 'cancelada') return false;
+      if (FT !== 'por' && ((d && f.fecha < d) || (h && f.fecha > h))) return false;
+      return !q || norm(folio(f) + ' ' + f.cliente + ' ' + f.rfc + ' ' + f.uuid).indexOf(q) >= 0;
+    });
+  }
+  function estatusDe(f) {
+    if (f.tipo === 'E') return chip('Nota de crédito', 'az');
+    var e = ESTATUS[f.estatus] || [f.estatus, ''];
+    if (f.estatus === 'por_cobrar') return chip(e[0], f.dias > 30 ? 'mal' : 'ojo') + (f.dias != null ? '<div class="mut">' + (f.dias <= 0 ? 'de hoy' : 'hace ' + f.dias + (f.dias === 1 ? ' día' : ' días')) + '</div>' : '');
+    if (f.estatus === 'cobrada') return chip(e[0], e[1]) + (f.cobrada_el ? '<div class="mut">el ' + esc(fecha(f.cobrada_el)) + '</div>' : '');
+    return chip(e[0], e[1]);
+  }
+  function pinta() {
+    var L = filtradas(), T = { por: 'Por cobrar', cob: 'Cobradas', can: 'Canceladas', tod: 'Todas' };
+    $('h-lista').textContent = T[FT];
+    var suma = 0; L.forEach(function (f) { if (f.moneda === 'MXN' && f.estatus !== 'cancelada') suma += f.tipo === 'E' ? -f.total : +f.total; });
+    $('lista-sub').textContent = L.length + (L.length === 1 ? ' factura' : ' facturas') + ' · ' + dinero(suma) + (FT === 'por' ? ' · la más vieja arriba' : '');
+    $('rango').hidden = FT === 'por';
+    if (FT === 'por') L = L.slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.id - b.id; });
+    var cobra = !!(EST && EST.cobra) && !CONSULTA;
+    $('lista').innerHTML = L.length ? L.map(function (f) {
+      return '<tr class="click" data-id="' + f.id + '"><td data-l="Fecha" class="nw">' + esc(fecha(f.fecha)) + '</td><td data-l="Folio" class="nw">' + esc(folio(f)) + '</td>'
+        + '<td data-l="Cliente" class="w"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.rfc) + '</div></td>'
+        + '<td data-l="Total" class="monto">' + esc(dinero(f.tipo === 'E' ? -f.total : f.total, f.moneda)) + '</td>'
+        + '<td data-l="Estatus">' + estatusDe(f) + '</td>'
+        + '<td data-l="">' + (cobra && f.estatus === 'por_cobrar' && f.tipo === 'I' ? '<button class="btn chico bien" type="button" data-cobrada="' + f.id + '">Cobrada</button>' : '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">' + (FT === 'por' ? 'No hay facturas por cobrar.' : 'No hay facturas con lo que escogiste.') + '</td></tr>';
+  }
+  async function carga() {
+    DATOS = await rpc('mul_facturas_lista', { p: { desde: $('f-desde').value || null, hasta: $('f-hasta').value || null } });
+    FAC = (DATOS && DATOS.facturas) || [];
+    pintaKpis(); pinta();
+  }
+  document.querySelectorAll('[data-ft]').forEach(function (b) {
+    b.onclick = function () {
+      FT = b.getAttribute('data-ft');
+      document.querySelectorAll('[data-ft]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      pinta();
+    };
+  });
+  $('q').addEventListener('input', pinta);
+  ['f-desde', 'f-hasta'].forEach(function (id) { $(id).addEventListener('change', function () { carga().catch(function (e) { error(falla(e)); }); }); });
+  $('lista').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cobrada]');
+    if (b) { e.stopPropagation(); cobrada(+b.getAttribute('data-cobrada')); return; }
+    var tr = e.target.closest('tr[data-id]'); if (tr) ficha(+tr.getAttribute('data-id'));
+  });
+
+  /* ---------- Eva: cobrada / de regreso; la dirección: cancelada ---------- */
+  async function cobrada(id) {
+    var f = FAC.filter(function (x) { return x.id === id; })[0]; if (!f) return;
+    var r = await pregunta({ texto: '¿Ya se cobró la factura ' + folio(f) + ' de ' + f.cliente + ' por ' + dinero(f.total, f.moneda) + '?', si: 'Sí, cobrada', fecha: HOY, nota: 'Nota (opcional: banco, referencia…)' });
+    if (!r) return;
+    try { await rpc('mul_cobrada', { p_id: id, p_fecha: r.fecha, p_nota: r.nota }); avisa('Listo: la factura ' + folio(f) + ' quedó cobrada.'); cierra(); await carga(); }
+    catch (e) { error(falla(e)); }
+  }
+  async function porCobrar(id) {
+    var r = await pregunta({ texto: '¿Regresar esta factura a «Por cobrar»?', si: 'Sí, regresarla', nota: '¿Por qué?', notaObligada: true });
+    if (!r) return;
+    try { await rpc('mul_por_cobrar', { p_id: id, p_motivo: r.nota }); avisa('Listo: regresó a «Por cobrar».'); cierra(); await carga(); }
+    catch (e) { error(falla(e)); }
+  }
+  async function cancela(id) {
+    var r = await pregunta({ texto: '¿Marcar esta factura como cancelada en el SAT? Ya no cuenta para lo por cobrar ni lo facturado.', si: 'Sí, cancelada', nota: 'Motivo', notaObligada: true });
+    if (!r) return;
+    try { await rpc('mul_cancela', { p_id: id, p_motivo: r.nota }); avisa('Listo: quedó cancelada.'); cierra(); await carga(); }
+    catch (e) { error(falla(e)); }
+  }
+
+  /* ---------- la ficha de una factura ---------- */
+  function hora(t) { try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t)); } catch (e) { return String(t || ''); } }
+  var QUE = { subida: 'Se subió', cobrada: 'Cobrada', por_cobrar: 'Regresó a «Por cobrar»', cancelada: 'Cancelada' };
+  async function ficha(id) {
+    var f;
+    try { f = await rpc('mul_factura', { p_id: id }); } catch (e) { error(falla(e)); return; }
+    var cobra = !!(EST && EST.cobra) && !CONSULTA, canc = !!(EST && EST.cancela) && !CONSULTA;
+    var dl = [['Folio fiscal', f.uuid], ['Fecha', fecha(f.fecha)], ['Cliente', f.cliente], ['RFC', f.rfc], ['Uso del CFDI', f.uso],
+      ['Método de pago', METODO[f.metodo] || f.metodo], ['Forma de pago', f.forma], ['Moneda', f.moneda],
+      ['Subtotal', dinero(f.subtotal, f.moneda)], ['Impuestos', dinero(f.impuestos, f.moneda)], ['Total', dinero(f.total, f.moneda)],
+      ['Subió', (f.subida_por || '') + ' · ' + hora(f.subida)]];
+    if (f.estatus === 'cobrada' && f.tipo === 'I') dl.push(['Cobrada', fecha(f.cobrada_el) + (f.cobrada_por ? ' · ' + f.cobrada_por : '') + (f.cobrada_nota ? ' · ' + f.cobrada_nota : '')]);
+    if (f.estatus === 'cancelada') dl.push(['Cancelada', (f.cancelada_motivo || '') + (f.cancelada_en ? ' · ' + hora(f.cancelada_en) : '')]);
+    var acc = '';
+    if (cobra && f.tipo === 'I' && f.estatus === 'por_cobrar') acc += '<button class="btn bien" type="button" id="f-cob">Cobrada</button>';
+    if (cobra && f.tipo === 'I' && f.estatus === 'cobrada') acc += '<button class="btn" type="button" id="f-reg">Regresar a «Por cobrar»</button>';
+    if (canc && f.estatus !== 'cancelada') acc += '<button class="btn peligro" type="button" id="f-can">Marcar cancelada</button>';
+    var bit = (f.bitacora || []).map(function (b) { return '<li><b>' + esc(QUE[b.que] || b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(hora(b.hora)) + (b.texto ? '<div class="mut">' + esc(b.texto) + '</div>' : '') + '</li>'; }).join('');
+    abre(folio(f) + (f.tipo === 'E' ? ' · Nota de crédito' : ''), f.cliente + ' · ' + dinero(f.total, f.moneda),
+      '<div class="sec"><h3>Estatus</h3><div class="in">' + estatusDe(f) + (acc ? '<div class="acciones" style="margin-top:10px">' + acc + '</div>' : '') + '</div></div>'
+      + '<div class="sec"><h3>Archivos</h3><div class="in acciones">'
+      + (f.pdf ? '<button class="btn" type="button" id="f-ver">Ver PDF</button><button class="btn" type="button" id="f-pdf">Bajar PDF</button>' : '<span class="mut">Se subió sin PDF.</span>')
+      + '<button class="btn" type="button" id="f-xml">Bajar XML</button></div><div class="in mut" style="padding-top:0">Salen tal cual se subieron.</div></div>'
+      + '<div class="sec"><h3>Datos de la factura</h3><div class="in"><div class="dl">' + dl.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1] || '—') + '</span>'; }).join('') + '</div></div></div>'
+      + '<div class="sec"><h3>Bitácora</h3><div class="in"><ul class="bit">' + (bit || '<li class="mut">Sin movimientos.</li>') + '</ul></div></div>');
+    if ($('f-cob')) $('f-cob').onclick = function () { cobrada(f.id); };
+    if ($('f-reg')) $('f-reg').onclick = function () { porCobrar(f.id); };
+    if ($('f-can')) $('f-can').onclick = function () { cancela(f.id); };
+    if ($('f-xml')) $('f-xml').onclick = function () { bajaXml(f, this); };
+    var d = { id: f.id, nombre: folio(f).replace(/\s+/g, '') + '.pdf' };
+    if ($('f-ver')) { $('f-ver').onclick = function () { visor().ver(d, this); }; }
+    if ($('f-pdf')) { $('f-pdf').onclick = function () { visor().baja(d, this); }; }
+  }
+  function visor() {
+    if (V) return V;
+    V = window.PROFASE_VISOR.nuevo({
+      trae: async function (d) {
+        var r = await P.sb.storage.from('multinacional').download(d.id + '.pdf');
+        if (r.error || !r.data) throw (r.error || new Error('sin archivo'));
+        return new Uint8Array(await r.data.arrayBuffer());   // el PDF tal cual se subió
+      },
+      esPdf: function () { return true; }, nombre: function (d) { return d.nombre; }
+    });
+    return V;
+  }
+  async function bajaXml(f, b) {
+    b.disabled = true; var t = b.textContent; b.textContent = 'Bajando…';
+    try {
+      var x = await rpc('mul_xml', { p_id: f.id });
+      // el XML de la factura, tal cual (es el comprobante fiscal: la marca lo echaría a perder)
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([x.xml], { type: 'application/xml' }));
+      a.download = String(x.nombre || 'factura.xml').replace(/[\\/:*?"<>|]/g, '_');
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 1500);
+      b.textContent = 'Listo';
+    } catch (e) { b.textContent = 'No se pudo'; }
+    setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
+  }
+
+  /* ---------- Mónica: subir facturas (el XML y su PDF) ---------- */
+  var SUBIR = [];
+  function base(n) { return String(n || '').replace(/\.[^.]+$/, '').toLowerCase(); }
+  function arma(files) {
+    var xs = [], ps = [];
+    Array.prototype.forEach.call(files, function (f) { if (/\.xml$/i.test(f.name)) xs.push(f); else if (/\.pdf$/i.test(f.name)) ps.push(f); });
+    var usados = {};
+    xs.forEach(function (x) {
+      var p = ps.filter(function (y) { return !usados[y.name] && base(y.name) === base(x.name); })[0];
+      if (!p && xs.length === 1 && ps.length === 1) p = ps[0];
+      if (p) usados[p.name] = 1;
+      SUBIR.push({ xml: x, pdf: p || null, est: 'lista', msg: '' });
+    });
+    ps.forEach(function (y) { if (!usados[y.name]) SUBIR.push({ xml: null, pdf: y, est: 'sola', msg: 'Este PDF no trae su XML: súbelo con el XML del mismo nombre.' }); });
+    pintaSubir();
+  }
+  function pintaSubir() {
+    var c = $('s-lista'); if (!c) return;
+    c.innerHTML = SUBIR.length ? SUBIR.map(function (s) {
+      var n = s.xml ? s.xml.name : s.pdf.name, cls = { lista: '', ok: 'bien', mal: 'mal', sola: 'ojo', subiendo: '' }[s.est];
+      return '<li><b>' + esc(n) + '</b>' + (s.xml ? (s.pdf ? ' <span class="mut">+ ' + esc(s.pdf.name) + '</span>' : ' <span class="mut">(sin PDF)</span>') : '')
+        + (s.msg ? '<div class="msg ' + cls + '">' + esc(s.msg) + '</div>' : '') + '</li>';
+    }).join('') : '<li class="mut">Todavía no escoges archivos.</li>';
+    var hay = SUBIR.some(function (s) { return s.est === 'lista'; });
+    $('s-ir').disabled = !hay;
+  }
+  function abreSubir() {
+    SUBIR = [];
+    abre('Subir facturas', 'El XML de cada factura y su PDF',
+      '<div class="sec"><h3>Escoge los archivos</h3><div class="in">'
+      + '<p class="mut" style="margin:0 0 10px">Escoge el XML de cada factura que emitió Multinacional y su PDF (con el mismo nombre). Puedes escoger varias a la vez. El CRM lee del XML el folio, el cliente y los montos; si ya se había subido, te avisa.</p>'
+      + '<input type="file" id="s-arch" accept=".xml,.pdf,application/xml,text/xml,application/pdf" multiple aria-label="Archivos XML y PDF">'
+      + '</div></div><div class="sec"><h3>Por subir</h3><div class="in"><ul class="bit" id="s-lista"></ul>'
+      + '<div class="acciones" style="margin-top:10px"><button class="btn acento" type="button" id="s-ir" disabled>Subir</button></div></div></div>');
+    $('s-arch').onchange = function () { SUBIR = []; arma(this.files); };
+    $('s-ir').onclick = sube;
+    pintaSubir();
+  }
+  async function sube() {
+    $('s-ir').disabled = true; $('s-arch').disabled = true; cierra.ocupado = true;
+    var bien = 0;
+    try {
+      for (var i = 0; i < SUBIR.length; i++) {
+        var s = SUBIR[i]; if (s.est !== 'lista') continue;
+        s.est = 'subiendo'; s.msg = 'Subiendo…'; pintaSubir();
+        try {
+          var xml = await s.xml.text();
+          var f = await rpc('mul_factura_nueva', { p_xml: xml, p_con_pdf: !!s.pdf });
+          if (s.pdf) {
+            var up = await P.sb.storage.from('multinacional').upload(f.id + '.pdf', s.pdf, { contentType: 'application/pdf', upsert: false });
+            if (up.error) throw new Error('La factura quedó, pero su PDF no se subió: vuelve a intentar con el PDF');
+            await rpc('mul_factura_pdf_listo', { p_id: f.id });
+          }
+          s.est = 'ok'; s.msg = 'Lista: ' + folio(f) + ' · ' + f.cliente + ' · ' + dinero(f.total, f.moneda); bien++;
+        } catch (e) { s.est = 'mal'; s.msg = falla(e); }
+        pintaSubir();
+      }
+    } finally { cierra.ocupado = false; $('s-arch').disabled = false; }
+    if (bien) { avisa(bien === 1 ? 'Se subió 1 factura.' : 'Se subieron ' + bien + ' facturas.'); await carga().catch(function () {}); }
+  }
+  $('b-subir').onclick = abreSubir;
+
+  /* =============================== Arranque =============================== */
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      EST = await rpc('mul_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es de Multinacional.');
+      CONSULTA = !!P.consulta || !!EST.consulta;
+      $('consulta').hidden = !CONSULTA;
+      $('b-subir').hidden = !EST.sube || CONSULTA;
+      var img = $('mul-logo'); img.onload = function () { if (window.top === window.self) img.hidden = false; }; img.onerror = function () { img.hidden = true; };
+      $('f-desde').value = masDias(HOY.slice(0, 8) + '01', -62).slice(0, 8) + '01'; $('f-hasta').value = HOY;
+      await carga();
+      $('s-fac').hidden = false; $('cargando').hidden = true;
+      // desde un aviso de la campanita: abre esa factura (mul_tab.js, PROFASE_ABRE['mul-facturas'])
+      var id = +(new URLSearchParams(location.search).get('id') || 0);
+      if (id > 0) ficha(id);
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  // al volver a la pestaña, lo último (mul_tab.js manda el aviso; sin relojes)
+  addEventListener('message', function (ev) {
+    if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'mul-refresca' || !EST || !EST.ve) return;
+    if (!$('velo').hidden || !$('pregunta').hidden) return;   // no le cambia nada a quien está en una ventana
+    carga().catch(function () {});
+  });
+  arranca();
+})();
+</script>
+</body></html>
