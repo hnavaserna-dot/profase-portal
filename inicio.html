@@ -1044,6 +1044,9 @@ button{font:inherit;color:inherit}
   }
 
   // --- Avisos sin leer y chat ---
+  // un aviso se abre con lo mismo que la campanita (window.__ntfAbre de notif_tab.js): se marca como leído y lleva a su
+  // lugar, o sale completo si no lleva a ninguna parte (Daniel, 2-nov-2026: «que te lleve a donde te debe de llegar»)
+  var AVISOS = {};
   function tAvisos() {
     return { id: 'avisos', t: 'Avisos y mensajes', s: 'Lo nuevo para ti', liga: 'notificaciones', ligaTxt: 'Ver todos', arma: async function () {
       var res = await Promise.all([rpc('notif_mias', { p_limite: 5, p_antes: null, p_sin_leer: true }).catch(function () { return null; }),
@@ -1051,6 +1054,7 @@ button{font:inherit;color:inherit}
       var n = res[0], ch = res[1], f = [];
       if (ch && +ch.total > 0) f.push({ pt: 'na', a: 'Chat', b: plural(+ch.total, 'mensaje sin leer', 'mensajes sin leer'), n: fi(ch.total), liga: 'chat' });
       if (n && n.items) n.items.forEach(function (x) {
+        AVISOS[x.id] = x;
         f.push({ pt: x.tipo === 'cumple' || x.tipo === 'aniversario' || x.tipo === 'evento' ? 'az' : 'ojo', a: esc(x.titulo), b: esc(x.texto || '') , n: haceTxt(x.creada).replace('hace ', ''), liga: x.liga || 'notificaciones', notif: x.id });
       });
       if (!f.length) return aldia('No tienes avisos ni mensajes nuevos.');
@@ -1457,7 +1461,10 @@ button{font:inherit;color:inherit}
     var b = e.target.closest('[data-liga],[data-equipo]'); if (!b) return;
     if (b.hasAttribute('data-equipo') || b.closest('#c-conectados')) { abreEquipo(); return; }
     var id = b.getAttribute('data-notif');
-    if (id) { try { P.sb.rpc('notif_leer', { p_ids: [+id] }); } catch (er) { /* no detiene la liga */ } }
+    if (id) {
+      try { if (window.parent && window.parent !== window && typeof window.parent.__ntfAbre === 'function') { window.parent.__ntfAbre(AVISOS[id] || { id: +id, liga: b.getAttribute('data-liga') }); return; } } catch (er) { /* sigue como antes */ }
+      try { P.sb.rpc('notif_leer', { p_ids: [+id] }); } catch (er) { /* no detiene la liga */ }
+    }
     ir(b.getAttribute('data-liga'));
   });
   $('recarga').onclick = function () { corre(); };
