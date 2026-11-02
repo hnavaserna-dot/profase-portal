@@ -374,14 +374,9 @@
     + '.pt-acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:14px}'
     + '.pt-b{font:inherit;font-size:14px;font-weight:600;border-radius:9px;padding:10px 14px;cursor:pointer;border:1px solid #C5CEDC;background:#fff;color:#1A2333;flex:1 1 auto;min-height:44px}'
     + '.pt-b.pri{background:#1F3864;border-color:#1F3864;color:#fff}.pt-b:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
-    + '.pt-toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:2147483000;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;'
-    + 'display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:#1A2333;color:#fff;border-left:5px solid #F07A1E;border-radius:10px;padding:10px 14px;'
-    + 'font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3)}'
-    + '.pt-toast button{font:inherit;font-weight:700;background:none;border:0;color:#FFB070;text-decoration:underline;cursor:pointer;padding:6px 0}'
     + ':root[data-theme="dark"] .pt-dlg{background:#172133;color:#E5EAF2;box-shadow:0 18px 50px rgba(0,0,0,.6)}'
     + ':root[data-theme="dark"] .pt-dlg h2{color:#fff}:root[data-theme="dark"] .pt-ic{background:#22324D;color:#F07A1E}'
-    + ':root[data-theme="dark"] .pt-b{background:#1E2A40;border-color:#3A4A66;color:#E5EAF2}:root[data-theme="dark"] .pt-b.pri{background:#F07A1E;border-color:#F07A1E;color:#fff}'
-    + ':root[data-theme="dark"] .pt-toast{background:#F5F7FB;color:#1A2333}:root[data-theme="dark"] .pt-toast button{color:#B4520A}';
+    + ':root[data-theme="dark"] .pt-b{background:#1E2A40;border-color:#3A4A66;color:#E5EAF2}:root[data-theme="dark"] .pt-b.pri{background:#F07A1E;border-color:#F07A1E;color:#fff}';
   function cssModo() {
     if (document.getElementById('pt-css')) return;
     var st = document.createElement('style'); st.id = 'pt-css'; st.textContent = CSS_MODO; document.head.appendChild(st);
@@ -411,18 +406,163 @@
     };
     document.getElementById('pt-mano').focus();
   }
+  // ya escogido a mano: el aviso chico de abajo con «Usar el de mi dispositivo» (con su ✕, como todos: P.avisoChico)
   function avisoManual(txt) {
-    cssModo();
-    var a = document.getElementById('pt-toast');
-    if (!a) { a = document.createElement('div'); a.id = 'pt-toast'; a.className = 'pt-toast'; a.setAttribute('role', 'status'); document.body.appendChild(a); }
-    if (txt) { a.innerHTML = '<span></span>'; a.firstChild.textContent = txt; }
-    else {
-      a.innerHTML = '<span>Modo ' + NOMBRE_MODO[P.tema()] + ', escogido por ti.</span><button type="button">Usar el de mi dispositivo</button>';
-      a.querySelector('button').onclick = function () { P.ponModo('auto'); avisoManual('Listo: el portal sigue otra vez a tu dispositivo.'); };
-    }
-    a.hidden = false;
-    clearTimeout(a._t); a._t = setTimeout(function () { a.hidden = true; }, txt ? 3500 : 7000);
+    if (txt) return P.avisoChico({ id: 'modo', texto: txt, ms: 3500 });
+    P.avisoChico({ id: 'modo', texto: 'Modo ' + NOMBRE_MODO[P.tema()] + ', escogido por ti.', boton: 'Usar el de mi dispositivo', ms: 7000,
+      accion: function () { P.ponModo('auto'); avisoManual('Listo: el portal sigue otra vez a tu dispositivo.'); } });
   }
+
+  /* ---- Avisos chicos (regla de Héctor Daniel, 2-nov-2026, 11:40 a 11:46: «quisiera poderle picar tachita y que se
+     cierre; pero si le pico ver; se cierra la notificación y no me lleva a ver»; «quiero que a todos los avisos de este
+     tipo; les salga la tachita y que sí te lleven: corrige eso con lo actual y para lo nuevo»).
+     Un solo lugar para los avisos que flotan abajo con un botón («Ver», «Ya los capturé, revisar»…): P.avisoChico(o).
+       o.id       uno por id: uno nuevo con el mismo id reemplaza al anterior
+       o.texto    lo que dice (texto, nunca HTML); o.detalle, un segundo renglón más chico
+       o.html     solo texto fijo escrito en el código (nunca datos): para un contador como el de «versión nueva»
+       o.boton    el botón principal; o.accion, lo que hace; o.botones = [{texto, accion}] para más botones
+       o.ms       se quita solo a los o.ms (15 s por omisión; 0 = hasta que lo quiten); se queda mientras el puntero
+                  o el dedo esté encima
+       o.alCerrar lo que pasa al picar ✕ (además de quitarlo)
+     Regresa {el, cierra()}.
+     - Siempre lleva ✕, que solo lo quita.
+     - Un botón quita el aviso y hace lo suyo DESPUÉS del clic (setTimeout): así el mismo clic ya no cierra lo que el
+       botón abrió (así fallaba «Ver» de la campanita: abría su ventanita y el clic, al seguir a la página, la cerraba).
+     - Se apilan abajo al centro, sin encimarse entre ellos ni con la pastilla de la llamada o las reuniones por cerrar;
+       los menús abiertos y las ventanas van encima de ellos. Desde una pestaña en su marco sale en la página de arriba.
+     - Red de seguridad para lo que no use esta pieza: a un aviso flotante (role="status" o clase con «toast» o «aviso»)
+       con botón y sin ✕, se le pone su ✕ (vigilaAviso). Los que no se deben poder quitar (las ventanas obligatorias)
+       son ventanas (aria-modal), no avisos chicos; un aviso que de verdad no se deba quitar lleva data-sin-cerrar.
+     construir.py (exige_avisos_chicos()) lo cuida y herramientas/pruebas/pantallas/prueba_aviso_abajo.py lo comprueba. */
+  var CSS_AVISOS = '#pa-avisos{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:65;'
+    + 'display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:min(460px,calc(100vw - 24px));pointer-events:none}'
+    + '#pa-avisos:empty{display:none}'
+    + '.pa-av{pointer-events:auto;box-sizing:border-box;max-width:100%;display:flex;flex-wrap:nowrap;align-items:center;gap:6px 8px;background:#1F3864;color:#fff;'
+    + 'border-left:5px solid #F07A1E;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:8px 6px 8px 14px;'
+    + 'font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;animation:pa-sube .18s ease-out}'
+    + '.pa-tx{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;padding:3px 0}.pa-tx small{display:block;font-size:12.5px;color:#DCE5F3;margin-top:2px}'
+    + '.pa-tx b{font-variant-numeric:tabular-nums}'
+    // con dos botones: el texto y la ✕ arriba, los botones abajo (la ✕ nunca queda sola en otro renglón)
+    + '.pa-av.dos{flex-wrap:wrap}.pa-av.dos .pa-tx{flex:1 1 calc(100% - 52px)}.pa-av.dos .pa-x{order:1;align-self:flex-start}.pa-av.dos .pa-ok,.pa-av.dos .pa-sec{order:2}'
+    + '.pa-av button{flex:none;font:inherit;font-weight:600;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;min-height:34px}'
+    + '.pa-av .pa-ok{background:#F07A1E;color:#fff}.pa-av .pa-sec{background:rgba(255,255,255,.14);color:#fff}'
+    + '.pa-av .pa-x{background:transparent;color:#DCE5F3;padding:7px 10px;font-size:15px;line-height:1}.pa-av .pa-x:hover{background:rgba(255,255,255,.12)}'
+    + '.pa-av button:focus-visible{outline:2px solid #fff;outline-offset:2px}'
+    + '.pa-x-auto{flex:none;font:inherit;font-size:15px;line-height:1;border:0;border-radius:8px;background:transparent;color:inherit;opacity:.8;padding:7px 10px;cursor:pointer;margin-left:4px}'
+    + '.pa-x-auto:hover{opacity:1}'
+    + '@keyframes pa-sube{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'
+    + '@media (prefers-reduced-motion: reduce){.pa-av{animation:none}}@media print{#pa-avisos{display:none}}';
+  function avCaja() {
+    if (!document.getElementById('pa-css')) { var st = document.createElement('style'); st.id = 'pa-css'; st.textContent = CSS_AVISOS; document.head.appendChild(st); }
+    var c = document.getElementById('pa-avisos');
+    if (!c) { c = document.createElement('div'); c.id = 'pa-avisos'; c.setAttribute('aria-live', 'polite'); document.body.appendChild(c); }
+    return c;
+  }
+  // que no se encimen con lo que ya flota abajo (la pastilla de la llamada, las reuniones por cerrar)
+  function avAcomoda() {
+    var c = document.getElementById('pa-avisos'); if (!c) return;
+    c.style.bottom = '';
+    if (!c.firstChild) return;
+    var r = c.getBoundingClientRect(), alto = 0;
+    ['.ll-pill', '.reu-c'].forEach(function (s) {
+      var o = document.querySelector(s); if (!o || o.hidden) return;
+      var q = o.getBoundingClientRect();
+      if (!q.height || q.right <= r.left || q.left >= r.right || q.top >= r.bottom || q.bottom <= r.top) return;
+      alto = Math.max(alto, innerHeight - q.top + 10);
+    });
+    if (alto) c.style.bottom = Math.round(alto) + 'px';
+  }
+  // salió o se quitó un aviso chico: quien deba hacerle lugar (SuperConta deja dónde escribir arriba de ellos) se entera
+  var avN = 0;
+  function avCambio() { var k = document.getElementById('pa-avisos'); avN = k ? k.children.length : 0; avAcomoda(); try { document.dispatchEvent(new CustomEvent('profase-avisos')); } catch (e) { /* nada */ } }
+  var avTic = 0;
+  P.avisoChico = function (o) {
+    o = o || {};
+    var a = arriba();
+    if (a && a.avisoChico) { try { return a.avisoChico(o); } catch (e) { /* sigue aquí */ } }
+    var c = avCaja();
+    if (o.id) { var viejo = c.querySelector('[data-pa="' + String(o.id).replace(/["\\]/g, '') + '"]'); if (viejo) viejo.remove(); }
+    var el = document.createElement('div');
+    el.className = 'pa-av'; el.setAttribute('role', 'status'); el.setAttribute('data-aviso-chico', '');
+    if (o.id) el.setAttribute('data-pa', String(o.id));
+    var tx = document.createElement('span'); tx.className = 'pa-tx';
+    if (o.html) tx.innerHTML = o.html; else tx.textContent = o.texto || '';
+    if (o.detalle) { var sm = document.createElement('small'); sm.textContent = o.detalle; tx.appendChild(sm); }
+    el.appendChild(tx);
+    var bts = [];
+    if (o.boton) bts.push({ texto: o.boton, accion: o.accion, pri: true });
+    (o.botones || []).forEach(function (b) { if (b && b.texto) bts.push(b); });
+    var reloj = 0;
+    function cierra() { clearTimeout(reloj); if (el.parentNode) el.parentNode.removeChild(el); avCambio(); }
+    function espera(ms) { clearTimeout(reloj); if (ms > 0) reloj = setTimeout(cierra, ms); }
+    bts.forEach(function (b, i) {
+      var x = document.createElement('button'); x.type = 'button';
+      x.className = (b.pri || (i === 0 && !o.boton)) ? 'pa-ok' : 'pa-sec';
+      x.textContent = b.texto;
+      x.onclick = function () {
+        cierra();
+        // después del clic, para que el mismo clic no cierre lo que el botón abre
+        setTimeout(function () { try { if (typeof b.accion === 'function') b.accion(); } catch (e) { /* nada */ } }, 0);
+      };
+      el.appendChild(x);
+    });
+    if (bts.length > 1) el.classList.add('dos');
+    var cx = document.createElement('button'); cx.type = 'button'; cx.className = 'pa-x'; cx.textContent = '✕';
+    cx.setAttribute('aria-label', 'Cerrar aviso'); cx.title = 'Cerrar';
+    cx.onclick = function () { cierra(); try { if (typeof o.alCerrar === 'function') o.alCerrar(); } catch (e) { /* nada */ } };
+    el.appendChild(cx);
+    var ms = o.ms == null ? 15000 : +o.ms || 0;
+    el.addEventListener('pointerenter', function () { clearTimeout(reloj); });
+    el.addEventListener('pointerleave', function () { espera(ms ? 6000 : 0); });
+    el.addEventListener('focusin', function () { clearTimeout(reloj); });
+    c.appendChild(el);
+    avCambio();
+    espera(ms);
+    clearInterval(avTic);
+    // mientras haya avisos: se acomodan y, si alguno se quitó por fuera (la ventana de versión nueva quita el suyo), se avisa
+    avTic = setInterval(function () { var k = document.getElementById('pa-avisos'), n = k ? k.children.length : 0;
+      if (n !== avN) avCambio(); else avAcomoda();
+      if (!n) clearInterval(avTic); }, 1000);
+    return { el: el, cierra: cierra };
+  };
+  // un aviso de solo texto (por ejemplo «Ojo: ahora se empalma con otra cita tuya»)
+  P.toast = function (txt, ms) { return P.avisoChico({ texto: txt, ms: ms == null ? 6000 : ms }); };
+  addEventListener('resize', avAcomoda);
+  // la red de seguridad: un aviso flotante con botón y sin ✕ recibe su ✕
+  function esAviso(el) {
+    if (!el || el.nodeType !== 1 || el.hasAttribute('data-aviso-chico') || el.hasAttribute('data-sin-cerrar') || el.id === 'pa-avisos') return false;
+    var rol = el.getAttribute('role') || '', cls = typeof el.className === 'string' ? el.className : '';
+    if (!/^(status|alert)$/.test(rol) && !/toast|aviso/i.test(cls)) return false;
+    if (el.getAttribute('aria-modal') === 'true' || el.querySelector('[aria-modal="true"]')) return false;
+    if (!el.querySelector('button')) return false;
+    var cs = getComputedStyle(el); if (cs.position !== 'fixed' || cs.display === 'none') return false;
+    var r = el.getBoundingClientRect();
+    return r.height > 0 && r.height < innerHeight * 0.5 && r.width * r.height < innerWidth * innerHeight * 0.5;
+  }
+  function tieneCerrar(el) {
+    if (el.querySelector('.x,.pa-x,.pa-x-auto,[data-cerrar],[aria-label^="Cerrar"],[aria-label^="cerrar"]')) return true;
+    return [].some.call(el.querySelectorAll('button'), function (b) { return /^\s*(✕|×|x|Cerrar)\s*$/i.test(b.textContent); });
+  }
+  function vigilaAviso(el) {
+    setTimeout(function () {
+      try {
+        if (!el.isConnected || !esAviso(el) || tieneCerrar(el)) return;
+        var x = document.createElement('button'); x.type = 'button'; x.className = 'pa-x-auto'; x.textContent = '✕';
+        x.setAttribute('aria-label', 'Cerrar aviso'); x.title = 'Cerrar';
+        x.onclick = function () { if (el.parentNode) el.parentNode.removeChild(el); };
+        el.appendChild(x);
+      } catch (e) { /* nada */ }
+    }, 0);
+  }
+  function vigilaAvisos() {
+    if (!document.body) return document.addEventListener('DOMContentLoaded', vigilaAvisos);
+    try {
+      new MutationObserver(function (ms) {
+        ms.forEach(function (m) { [].forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) vigilaAviso(n); }); });
+      }).observe(document.body, { childList: true });
+    } catch (e) { /* navegador viejo: sin la red */ }
+  }
+  vigilaAvisos();
   P.pintaTema();
   // otra ventana del portal lo cambió
   window.addEventListener('storage', function (e) { if (e.key === MODO) { modoMem = ''; P.pintaTema(); } });
@@ -769,7 +909,6 @@
     return recargaSola && Date.now() - CARGA_T < 30000;
   };
   var CSS_VERSION = '.pv-nota{font-size:13px;color:#5A6474}.pv-seg{font-variant-numeric:tabular-nums}#pv-dlg:focus{outline:none}'
-    + '.pt-toast.pv-toast b{font-variant-numeric:tabular-nums}'
     + ':root[data-theme="dark"] .pv-nota{color:#A9B4C6}';
   var IC_VERSION = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
@@ -849,12 +988,11 @@
     function espera() {
       espero = true;
       var fin = Date.now() + ESPERA;
-      var a = document.createElement('div');
-      a.id = 'pv-toast'; a.className = 'pt-toast pv-toast'; a.setAttribute('role', 'status');
-      a.innerHTML = '<span>El portal se va a actualizar en <b data-mmss="1">3:00</b>.</span><button type="button">Actualizar ahora</button>';
-      document.body.appendChild(a);
-      var num = a.querySelector('b');
-      a.querySelector('button').onclick = function () { clearInterval(tic); recarga(nueva, false); };
+      // con su ✕, como todos los avisos chicos (P.avisoChico): la ✕ solo lo quita; la cuenta sigue y la ventana regresa
+      var av = P.avisoChico({ id: 'version', html: 'El portal se va a actualizar en <b data-mmss="1">3:00</b>.', boton: 'Actualizar ahora', ms: 0,
+        accion: function () { clearInterval(tic); recarga(nueva, false); } });
+      av.el.id = 'pv-toast';
+      var num = av.el.querySelector('b');
       clearInterval(tic);
       tic = setInterval(function () { if (cuenta(fin, num) <= 0) { clearInterval(tic); ventana(); } }, 1000);
     }
