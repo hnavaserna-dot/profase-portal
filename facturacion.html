@@ -263,7 +263,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
       <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
     </section>
-    <p class="pie">Total = conceptos más IVA (las de efectivo, sin IVA). Saldo = total menos lo aplicado de pagos y notas de crédito; menos de $1 cuenta como pagada, como en la Cobranza. Los pagos se capturan en Administración › Pagos.</p>
+    <p class="pie">Total = conceptos más IVA (las de efectivo, sin IVA). Saldo = total menos lo aplicado de pagos y notas de crédito. Si ya tiene abono y le quedan menos de $10, cuenta como pagada (la diferencia se ve en su ficha y no se cobra); sin abono, menos de $1. Los pagos se capturan en Tesorería › Pagos.</p>
   </div>
 </div>
 
@@ -293,6 +293,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   function ciasAlta() { return Object.keys(CIAS).map(Number).filter(puedeAlta); }
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  // La diferencia menor (Daniel, 2-nov-2026; portal/sql/137): con abono y menos de $10, no se cobra; aquí solo se enseña.
+  function difFac(f) { var d = r2(Number(f.total || 0) - Number(f.pagado || 0) - Number(f.saldo || 0)); return d > 0.005 ? d : 0; }
   function chipEst(f) { return f.pagada ? '<span class="chip ok">Pagada</span>' : (f.pagado > 0 ? '<span class="chip ojo">Abonada</span>' : '<span class="chip mal">Sin pago</span>'); }
   function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; setTimeout(function () { $('aviso').hidden = true; }, 8000); }
   function error(t) { $('error').textContent = t; $('error').hidden = false; }
@@ -411,7 +413,9 @@ tr.fila:hover td{background:var(--navy-soft)}
     h += sec('Pagos aplicados', (d.pagos.length ? '<ul class="lista">' + d.pagos.map(function (p) {
       return '<li><div class="t">' + esc(dinero(p.aplicado)) + (p.nota_credito ? ' <span class="tag az">Nota de crédito' + (p.folio_nc ? ' ' + esc(p.folio_nc) : '') + '</span>' : '') + '</div><div class="d">' + esc(fecha(p.fecha)) + ' · pago ' + esc(p.pago_id) + ' de ' + esc(dinero(p.monto_pago)) + '</div></li>';
     }).join('') + '</ul>' : '<div class="vacio">Sin pagos aplicados.</div>')
-      + '<div class="tot"><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span><span class="f">Saldo</span><span class="r f">' + esc(dinero(f.pagada ? 0 : f.saldo)) + '</span></div>', String(d.pagos.length));
+      + '<div class="tot"><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span>'
+        + (difFac(f) ? '<span>Diferencia no cobrada <small class="no">(menos de $10, cuenta como pagada)</small></span><span class="r">' + esc(dinero(difFac(f))) + '</span>' : '')
+        + '<span class="f">Saldo</span><span class="r f">' + esc(dinero(f.pagada ? 0 : f.saldo)) + '</span></div>', String(d.pagos.length));
     var hi = d.historia || [];
     h += sec('Historia', hi.length ? '<ul class="lista">' + hi.map(function (x) { return '<li><div class="t">' + esc(x.que) + '</div><div class="d">' + esc(x.nombre || x.usuario) + ' · ' + esc(fechaHora(x.cuando)) + (x.motivo ? ' · ' + esc(x.motivo) : '') + '</div></li>'; }).join('') + '</ul>'
       : '<div class="vacio">' + (f.origen === 'portal' || f.creado_por ? 'Sin cambios anotados.' : 'Viene del Access (antes del portal no se anotaba quién hizo cada cosa).') + '</div>');

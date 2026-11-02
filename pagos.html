@@ -266,7 +266,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
       <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
     </section>
-    <p class="pie">Saldo = total con IVA (las de efectivo, sin IVA) menos lo aplicado de pagos y notas de crédito; menos de $1 cuenta como pagada. Un pago solo se reparte entre facturas de la misma razón social y la misma compañía.</p>
+    <p class="pie">Saldo = total con IVA (las de efectivo, sin IVA) menos lo aplicado de pagos y notas de crédito. Si ya tiene abono y le quedan menos de $10, cuenta como pagada (la diferencia se ve en su ficha y no se cobra); sin abono, menos de $1. Lo mismo con lo que le sobra a un pago. Un pago solo se reparte entre facturas de la misma razón social y la misma compañía.</p>
   </div>
 
   <div id="p-pag" role="tabpanel" aria-labelledby="t-pag" hidden>
@@ -321,6 +321,10 @@ tr.fila:hover td{background:var(--navy-soft)}
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
   function conSaldo(f) { return f.saldo > 0.009; }
+  // La diferencia menor (Daniel, 2-nov-2026; portal/sql/137): con abono y menos de $10, no se cobra. La base ya la deja
+  // en 0; aquí solo se enseña cuánto fue (nada se registra).
+  function difFac(f) { var d = r2(Number(f.total || 0) - Number(f.pagado || 0) - Number(f.saldo || 0)); return d > 0.005 ? d : 0; }
+  function difPago(p) { var d = r2(Number(p.monto || 0) - Number(p.aplicado || 0) - Number(p.por_aplicar || 0)); return d > 0.005 ? d : 0; }
   function chipEst(f) { return f.pagada ? '<span class="chip ok">Pagada</span>' : (f.pagado > 0 ? '<span class="chip ojo">Abonada</span>' : '<span class="chip mal">Sin pago</span>'); }
   function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; setTimeout(function () { $('aviso').hidden = true; }, 8000); }
   function error(t) { $('error').textContent = t; $('error').hidden = false; }
@@ -458,7 +462,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       return '<li><div class="t">' + esc(dinero(p.aplicado)) + (p.nota_credito ? ' <span class="tag az">Nota de crédito' + (p.folio_nc ? ' ' + esc(p.folio_nc) : '') + '</span>' : '') + '</div>'
         + '<div class="d">' + esc(fecha(p.fecha)) + ' · <button class="link" type="button" data-pago="' + esc(p.pago_id) + '">pago ' + esc(p.pago_id) + '</button> de ' + esc(dinero(p.monto_pago)) + '</div></li>';
     }).join('') + '</ul>' : '<div class="vacio">Sin pagos aplicados.</div>')
-      + '<div class="tot"><span>Total</span><span class="r">' + esc(dinero(f.total)) + '</span><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span><span class="f">Saldo</span><span class="r f">' + esc(dinero(f.saldo > 0.009 ? f.saldo : 0)) + '</span></div>', String(d.pagos.length));
+      + '<div class="tot"><span>Total</span><span class="r">' + esc(dinero(f.total)) + '</span><span>Pagado</span><span class="r">' + esc(dinero(f.pagado)) + '</span>'
+        + (difFac(f) ? '<span>Diferencia no cobrada <small class="no">(menos de $10, cuenta como pagada)</small></span><span class="r">' + esc(dinero(difFac(f))) + '</span>' : '')
+        + '<span class="f">Saldo</span><span class="r f">' + esc(dinero(f.saldo > 0.009 ? f.saldo : 0)) + '</span></div>', String(d.pagos.length));
     h += sec('Conceptos', d.conceptos.length ? '<ul class="lista">' + d.conceptos.map(function (c) { return '<li><div class="t">' + esc(c.concepto) + ' · ' + esc(dinero(c.precio)) + '</div><div class="d">' + esc(c.razon) + '</div></li>'; }).join('') + '</ul>' : '<div class="vacio">Sin conceptos.</div>');
     h += '</div>';
     abre(h);
@@ -479,7 +485,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       return '<li class="ap"><div><div class="t">Folio ' + (esc(a.folio) || 'sin folio') + ' · ' + esc(dinero(a.monto)) + '</div><div class="d">Factura del ' + esc(fecha(a.fecha)) + '</div></div>'
         + (alta ? '<button class="btn chico" type="button" data-quita="' + a.id + '" data-pg="' + p.id + '">Quitar</button>' : '') + '</li>';
     }).join('') + '</ul>' : '<div class="vacio">Todavía no se aplica a ninguna factura.</div>')
-      + '<div class="tot"><span>Monto</span><span class="r">' + esc(dinero(p.monto)) + '</span><span>Aplicado</span><span class="r">' + esc(dinero(p.aplicado)) + '</span><span class="f">Por aplicar</span><span class="r f">' + esc(dinero(p.por_aplicar)) + '</span></div>', String(d.aplicaciones.length));
+      + '<div class="tot"><span>Monto</span><span class="r">' + esc(dinero(p.monto)) + '</span><span>Aplicado</span><span class="r">' + esc(dinero(p.aplicado)) + '</span>'
+        + (difPago(p) ? '<span>Sobrante sin aplicar <small class="no">(menos de $10, no queda a favor)</small></span><span class="r">' + esc(dinero(difPago(p))) + '</span>' : '')
+        + '<span class="f">Por aplicar</span><span class="r f">' + esc(dinero(p.por_aplicar)) + '</span></div>', String(d.aplicaciones.length));
     h += historia(d.historia) + '</div>';
     abre(h);
   }
@@ -677,7 +685,14 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('ver-mas-p').onclick = function () { mostrarP += PAGINA; pintaPagos(); };
   $('x-fac').onclick = function () { excelFacturas(this); };
   $('x-pag').onclick = function () { excelPagos(this); };
-  $('b-pago').onclick = function () { abreCaptura('pago'); };
+  // «Registrar pago» abre con la compañía que ya se filtró (Daniel, 2-nov-2026): primero la de la pestaña que se ve,
+  // si no, la de la otra; solo si quien captura puede dar de alta en esa compañía (si no, la de siempre).
+  function ciaFiltrada() {
+    var ver = $('p-pag').hidden ? ['f-cia', 'g-cia'] : ['g-cia', 'f-cia'];
+    for (var i = 0; i < ver.length; i++) { var s = $(ver[i]), c = s && !s.hidden ? +s.value || 0 : 0; if (c && puedeAlta(c)) return c; }
+    return null;
+  }
+  $('b-pago').onclick = function () { abreCaptura('pago', null, ciaFiltrada()); };
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (t.getAttribute && t.getAttribute('data-liq')) { ev.stopPropagation(); liquida(+t.getAttribute('data-liq'), t); return; }
