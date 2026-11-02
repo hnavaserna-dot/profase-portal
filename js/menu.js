@@ -67,7 +67,7 @@
       { k: 'panel', v: 'wf', t: 'Panel', tc: 'Mi panel', d: 'Obligaciones, vencimientos y pausas.' },
       { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
       { k: 'clientes', v: 'cli', t: 'Avance por cliente', d: 'Cada cliente y cómo va su trabajo.' },
-      { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Las notas del equipo.' },
+      { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Ideas de cambio para las pantallas del Workflow.' },
       { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
       { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' }] },   // antes Access › WorkFlow; al final (1-nov-2026)
     /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
@@ -100,7 +100,7 @@
     { k: 'tes', t: 'Tesorería', d: 'Facturas, pagos, cobranza, comisiones y préstamos.', subs: [
       { k: 'facturacion', v: 'fac', t: 'Facturación', d: 'Alta y control de facturas.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'pagos', v: 'pag', t: 'Pagos', d: 'Pagos de los clientes y su reparto a facturas.' },   // etapa 5 del Access (29-oct-2026)
-      { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo cobrado y lo pendiente.' },
+      { k: 'cobranza', v: 'cxc', t: 'Cobranza', d: 'Lo que falta por cobrar, por grupo.' },
       { k: 'recordatorios', v: 'rec', t: 'Recordatorios de pago', d: 'Recordatorios de saldos a los clientes.' },   // etapa 5 del Access (29-oct-2026)
       { k: 'access-comisiones', v: 'axcom', t: 'Comisiones', d: 'Las comisiones del periodo según lo cobrado.' },   // antes en Access
       { k: 'comisiones-direccion', v: 'cdir', t: 'Comisiones de dirección', d: 'Facturas con comisión, gastos, reserva y utilidad del periodo.' },   // solo quien Daniel decidió
@@ -108,9 +108,9 @@
       { k: 'tes-reportes', v: 'trep', t: 'Reportes de cobranza', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
-      { k: 'cartera', v: 'car', t: 'Cartera', d: 'Lo que deben los clientes.' },
+      { k: 'cartera', v: 'car', t: 'Cartera', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo.' },
       { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
-      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Los activos y su depreciación.' }] },
+      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes

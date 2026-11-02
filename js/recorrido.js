@@ -79,8 +79,12 @@
   }
   function dentro(el) {
     try {
-      var r = el.getBoundingClientRect(), v = el.ownerDocument.defaultView;
-      if (r.top < 0 || r.bottom > v.innerHeight || r.left < 0 || r.right > v.innerWidth) el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      var r = el.getBoundingClientRect(), v = el.ownerDocument.defaultView, g = caja(el);
+      var fuera = r.top < 0 || r.bottom > v.innerHeight || r.left < 0 || r.right > v.innerWidth;
+      // dentro del marco de una pestaña que en el celular es más alto que lo que se ve: también cuenta la pantalla de
+      // afuera (si no, una parte de abajo del marco se brincaba; 2-nov-2026, Caja chica en el celular)
+      if (!fuera && g && v !== window) fuera = g.y < 0 || g.y + g.h > innerHeight;
+      if (fuera) el.scrollIntoView({ block: 'center', inline: 'nearest' });
     } catch (e) { /* se queda donde está */ }
   }
   function clamp(v, a, b) { return Math.max(a, Math.min(v, b)); }
