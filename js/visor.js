@@ -23,7 +23,8 @@
      descargar»). «Ver» sigue con la marca.
    Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
                                        doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, originalTodos });
-         V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton); */
+         V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton);
+         V.bajaVarios([{d, ruta: 'Carpeta/'}], boton, 'nombre del zip', (i, n) => {})   (expediente, 3-nov-2026: un ZIP) */
 (function () {
   'use strict';
   var PDFJS = 'js/lib/pdfjs/pdf.min.js', PDFJS_TRABAJADOR = 'js/lib/pdfjs/pdf.worker.min.js';
@@ -60,6 +61,46 @@
   }
   function idle(f) { (window.requestIdleCallback || function (g) { return setTimeout(g, 120); })(f, { timeout: 1500 }); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  /* Un ZIP sencillo, sin comprimir (los PDF y las fotos ya vienen comprimidos), con los nombres en UTF-8 y la fecha de
+     cada archivo. archivos: [{nombre: 'INE/Juan.pdf', bytes: Uint8Array, fecha: Date}] → Blob. */
+  var TABLA_CRC = null;
+  function crc32(b) {
+    if (!TABLA_CRC) {
+      TABLA_CRC = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; TABLA_CRC[n] = c >>> 0; }
+    }
+    var x = 0xFFFFFFFF;
+    for (var i = 0; i < b.length; i++) x = TABLA_CRC[(x ^ b[i]) & 0xFF] ^ (x >>> 8);
+    return (x ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zip(archivos) {
+    var enc = new TextEncoder(), partes = [], central = [], off = 0;
+    archivos.forEach(function (a) {
+      var nom = enc.encode(a.nombre), b = a.bytes instanceof Uint8Array ? a.bytes : new Uint8Array(a.bytes), crc = crc32(b), d = a.fecha || new Date();
+      var hr = (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2);
+      var dia = ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+      var h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint16(10, hr, true); h.setUint16(12, dia, true); h.setUint32(14, crc, true); h.setUint32(18, b.length, true);
+      h.setUint32(22, b.length, true); h.setUint16(26, nom.length, true); h.setUint16(28, 0, true);
+      partes.push(new Uint8Array(h.buffer), nom, b);
+      var c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+      c.setUint16(10, 0, true); c.setUint16(12, hr, true); c.setUint16(14, dia, true); c.setUint32(16, crc, true);
+      c.setUint32(20, b.length, true); c.setUint32(24, b.length, true); c.setUint16(28, nom.length, true);
+      c.setUint16(30, 0, true); c.setUint16(32, 0, true); c.setUint16(34, 0, true); c.setUint16(36, 0, true);
+      c.setUint32(38, 0, true); c.setUint32(42, off, true);
+      central.push(new Uint8Array(c.buffer), nom);
+      off += 30 + nom.length + b.length;
+    });
+    var tam = central.reduce(function (s, x) { return s + x.length; }, 0);
+    var e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(4, 0, true); e.setUint16(6, 0, true);
+    e.setUint16(8, archivos.length, true); e.setUint16(10, archivos.length, true);
+    e.setUint32(12, tam, true); e.setUint32(16, off, true); e.setUint16(20, 0, true);
+    return new Blob(partes.concat(central, [new Uint8Array(e.buffer)]), { type: 'application/zip' });
+  }
 
   var CSS = ''
     + '.pv-velo{position:fixed;inset:0;z-index:60;background:rgba(10,18,32,.62);display:flex;align-items:center;justify-content:center;padding:16px}'
@@ -159,12 +200,60 @@
       var aviso = btn ? setTimeout(function () { btn.textContent = 'Bajando…'; }, 120) : 0;
       bytes(d).then(function (b) {
         guardaArchivo(cual(b, orig), d);
-        try { if (op.alBajar) op.alBajar(d); } catch (e) { /* la descarga ya salió */ }
+        try { if (op.alBajar) op.alBajar(d, orig); } catch (e) { /* la descarga ya salió */ }
         if (btn) btn.textContent = 'Listo';
       }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); } }).then(function () {
         clearTimeout(aviso);
         if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1200);
       });
+    }
+
+    /* ---------- Bajar varios en un ZIP (expediente: lo escogido o una carpeta completa; Héctor Daniel, 3-nov-2026:
+       «agregar ahí a todo la posibilidad de descargar… originales o branding profase; recuerdas?») ----------
+       lista: [{d, ruta}] (ruta: la carpeta dentro del ZIP, «» o «INE/»). Si hay algún PDF y se le ofrece el «Original»,
+       primero el mismo menú de siempre («Con marca PROFASE» / «Original»), una sola vez para todos; los PDF salen como
+       se escogió y los demás archivos, tal cual se subieron. avance(i, n) dice cómo va; regresa una promesa. */
+    function bajaVarios(lista, btn, nombreZip, avance) {
+      lista = (lista || []).filter(function (x) { return x && x.d; });
+      if (!lista.length) return Promise.resolve(false);
+      return new Promise(function (ok) {
+        var sale = function (orig) { zipComo(lista, btn, nombreZip, orig, avance).then(ok, function () { ok(false); }); };
+        if (lista.some(function (x) { return ofrece(x.d); })) window.PROFASE_MARCA.eligeMarca(btn, sale, 'los PDF');
+        else sale(false);
+      });
+    }
+    async function zipComo(lista, btn, nombreZip, orig, avance) {
+      var t0 = btn ? btn.textContent : '';
+      if (btn) btn.disabled = true;
+      var sal = [], usados = {}, fallas = [];
+      try {
+        for (var i = 0; i < lista.length; i++) {
+          var x = lista[i];
+          if (avance) { try { avance(i + 1, lista.length); } catch (e) { /* nada */ } }
+          if (btn) btn.textContent = 'Juntando ' + (i + 1) + ' de ' + lista.length + '…';
+          try {
+            var b = await bytes(x.d);
+            var n = String(x.ruta || '') + nombre(x.d), k = n.toLowerCase(), j = 1;
+            while (usados[k]) { j += 1; n = String(x.ruta || '') + nombre(x.d).replace(/(\.[^.]+)?$/, ' (' + j + ')$1'); k = n.toLowerCase(); }
+            usados[k] = true;
+            sal.push({ nombre: n, bytes: cual(b, orig), fecha: x.fecha ? new Date(x.fecha) : new Date() });
+            try { if (op.alBajar) op.alBajar(x.d, orig); } catch (e) { /* ya se juntó */ }
+          } catch (e) { fallas.push(nombre(x.d)); }
+        }
+        if (!sal.length) throw new Error('No se pudo traer ningún archivo');
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(zip(sal));
+        a.download = String(nombreZip || 'Documentos').replace(/[\\/:*?"<>|]/g, '_') + '.zip'; a.rel = 'noopener'; a.style.display = 'none';
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 8000);
+        if (btn) btn.textContent = fallas.length ? 'Faltaron ' + fallas.length : 'Listo';
+        return { ok: true, n: sal.length, fallas: fallas };
+      } catch (e) {
+        if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); }
+        throw e;
+      } finally {
+        if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1600);
+      }
     }
 
     /* ---------- Ver: la capa encima de la ficha ---------- */
@@ -198,7 +287,7 @@
         if (b && b.getAttribute('data-pv') === 'baja' && c.bytes) {
           var sale = function (orig) {
             guardaArchivo(cual(c.bytes, orig), d);
-            try { if (op.alBajar) op.alBajar(d); } catch (e) { /* ya salió */ }
+            try { if (op.alBajar) op.alBajar(d, orig); } catch (e) { /* ya salió */ }
           };
           if (ofrece(d)) window.PROFASE_MARCA.eligeMarca(b, sale, 'el PDF'); else sale(false);
         }
@@ -324,7 +413,7 @@
     document.addEventListener('focusin', intencion);
     document.addEventListener('touchstart', intencion, { passive: true });
 
-    return { ver: ver, baja: baja, precarga: precarga, bytes: bytes, cierra: cierraCapa, abierta: function () { return !!CAPA; } };
+    return { ver: ver, baja: baja, bajaVarios: bajaVarios, precarga: precarga, bytes: bytes, cierra: cierraCapa, abierta: function () { return !!CAPA; } };
   }
 
   window.PROFASE_VISOR = { nuevo: nuevo, nativo: nativo };

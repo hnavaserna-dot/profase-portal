@@ -91,7 +91,7 @@
       { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Clientes (31-oct-2026): la ficha de cada cliente y lo del SAT, juntos
     { k: 'clis', t: 'Clientes', d: 'El expediente y la ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
-      { k: 'expedientes', v: 'exp', t: 'Expedientes', d: 'Cada cliente por grupo y razón social: reuniones, notas, pendientes y documentos.' },   // 31-oct-2026, pedido de Daniel (112_expedientes.sql)
+      { k: 'expedientes', v: 'exp', t: 'Expedientes', d: 'Cada cliente por grupo y razón social: cómo vamos, pendientes, reuniones, notas y documentos en carpetas.' },   // 31-oct-2026, pedido de Daniel (112_expedientes.sql); 3-nov-2026, carpetas (188)
       { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026); antes en Administración
       { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' }] },   // antes Access › Clientes
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
