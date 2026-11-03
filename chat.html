@@ -168,6 +168,12 @@ button{cursor:pointer}
 .ci-b{flex:none;min-width:21px;height:21px;border-radius:11px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;line-height:21px;text-align:center;padding:0 6px}
 .ci-b.sil{background:var(--line-strong);color:var(--ink)}
 /* «@»: te mencionaron y no lo has leído (162_chat_menciones.sql); naranja aunque el chat esté silenciado */
+.ci-borr{color:var(--ok);font-weight:700;flex:none}
+/* contestar deslizando el mensaje a la derecha (Fernando Cadengo, 3-nov-2026): la flecha sale a la izquierda del globito */
+.m[data-id] .bur{touch-action:pan-y pinch-zoom}
+.m .m-desl{position:absolute;left:0;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:var(--navy-soft,#E6ECF6);color:var(--navy,#1F3864);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none}
+.m .m-desl svg{width:15px;height:15px}
+.m-vuelve{transition:transform .18s ease}
 .ci-at{flex:none;width:21px;height:21px;border-radius:50%;background:var(--accent);color:#fff;font-size:12.5px;font-weight:800;line-height:20px;text-align:center}
 .ci-x{flex:none;color:var(--muted);width:15px;height:15px}
 .lista-vacia{padding:28px 18px;text-align:center;color:var(--muted)}
@@ -231,7 +237,7 @@ img.av{background:var(--surface-3);overflow:hidden}
 .bus-res mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px}
 .bus-res .nada{padding:14px;color:var(--muted);text-align:center}
 
-.msgs{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 10px;background:var(--fondo-msgs);overscroll-behavior:contain;position:relative}
+.msgs{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 16px 10px;background:var(--fondo-msgs);overscroll-behavior:contain;position:relative}
 .cargando{text-align:center;color:var(--muted);font-size:13px;padding:10px}
 .dia{display:flex;justify-content:center;margin:12px 0 8px;position:sticky;top:0;z-index:2;pointer-events:none}
 .dia span{background:var(--surface);border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
@@ -1021,9 +1027,11 @@ audio.ad-med{width:280px;max-width:100%}
       if (FILTRO === 'personas' && c.tipo !== 'directo') return false;
       return !q || sinAcentos(c.nombre).indexOf(q) >= 0;
     });
+    var BORRS = borrTodos();
     ls.forEach(function (c) {
-      var u = c.ultimo, prev = '', tk = '';
-      if (u) {
+      var u = c.ultimo, prev = '', tk = '', br = !(ACT && ACT.id === c.id) && BORRS[c.id] && BORRS[c.id].t;
+      if (br && br.trim()) prev = '<span class="ci-borr">Borrador:</span> ' + esc(br.trim().replace(/\s+/g, ' ').slice(0, 140));
+      else if (u) {
         if (u.tipo === 'sistema') prev = esc(u.texto);
         else {
           if (u.autor === YO.usuario) { tk = u.borrado ? '' : (u.leido ? IC.doble(true) : IC.check); prev = 'Tú: '; }
@@ -1131,6 +1139,7 @@ audio.ad-med{width:280px;max-width:100%}
     var c = CONVS.find(function (x) { return x.id === id; }) || null;
     ACT = { id: id, c: c, info: null, msgs: new Map(), orden: [], mas: false, t: null, lect: {}, ultimo: 0, primero: 0, nuevosAbajo: 0, divisor: null, arroba: [] };
     TEMP = [];
+    texto.value = borrDe(id); ajusta();   // lo que dejaste escrito en este chat, para seguir donde ibas
     document.body.classList.add('en-conv');
     $('#vacio').hidden = true; $('#cv').hidden = false;
     cierraBusca();
@@ -1165,6 +1174,7 @@ audio.ad-med{width:280px;max-width:100%}
     if ($('#info') && !$('#info').hidden) { ARCH = []; pintaInfo(); cargaArchivos(); }
   }
   async function dejaConv() {
+    guardaBorr();   // lo escrito se queda como borrador de esa conversación (antes de limpiar la caja)
     if (CC) { try { sb.removeChannel(CC); } catch (e) { /* ya */ } CC = null; }
     ESCRIBEN = {}; GRABAN = {};
     if (GRAB) terminaGrab('borra');   // una nota de voz a medias no se pasa a otra conversación
@@ -1587,12 +1597,138 @@ audio.ad-med{width:280px;max-width:100%}
 
   // ---------------------------------------------------------------- escribir y mandar
   var texto = $('#texto');
+
+  // ---------------------------------------------------------------- borrador, como WhatsApp
+  // Fernando Cadengo, 3-nov-2026: «al dejar algo escrito no se borre, y quede como borrador el mensaje para continuar donde
+  // vas, tipo whatsapp»; escogió que viva solo en ese equipo, que se borre al cerrar sesión y que sea solo el texto.
+  // Vive solo en este navegador (localStorage, por usuario y por conversación; nunca va a la base ni a nadie más) y la
+  // entrada (index.html) lo borra al llegar sin sesión: Salir, el cierre por inactividad o la sesión cerrada. Mientras se
+  // corrige un mensaje no se toca (al terminar o cancelar, regresa lo que tenías escrito). Se olvida a los 30 días.
+  var BORR_PRE = 'profase-chat-borr:', BORR_MS = 30 * 864e5, borrT = 0;
+  function borrTodos() {
+    if (!YO) return {};
+    try { var o = JSON.parse(localStorage.getItem(BORR_PRE + YO.usuario) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; }
+  }
+  function borrDe(id) { var b = borrTodos()[id]; return b && typeof b.t === 'string' ? b.t : ''; }
+  function borrPon(id, t) {
+    if (!YO || !id) return;
+    var o = borrTodos(), lim = Date.now() - BORR_MS;
+    if (t && t.trim()) o[id] = { t: t, e: Date.now() }; else delete o[id];
+    Object.keys(o).forEach(function (c) { if (!o[c] || !(o[c].e > lim)) delete o[c]; });
+    try { if (Object.keys(o).length) localStorage.setItem(BORR_PRE + YO.usuario, JSON.stringify(o)); else localStorage.removeItem(BORR_PRE + YO.usuario); }
+    catch (e) { /* sin almacenamiento o sin espacio: se queda en la caja mientras no salgas del chat */ }
+  }
+  function guardaBorr() { clearTimeout(borrT); borrT = 0; if (ACT && !EDIT) borrPon(ACT.id, texto.value); }
+  function borrPronto() { clearTimeout(borrT); borrT = setTimeout(guardaBorr, 400); }
+  function sinEdit() { return ACT ? borrDe(ACT.id) : ''; }
+  addEventListener('pagehide', guardaBorr);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) guardaBorr(); });
+
+  // ---------------------------------------------------------------- contestar rápido
+  // Fernando Cadengo, 3-nov-2026: «al dar doble clic a un mensaje, se ponga para responder automáticamente»; en el celular
+  // escogió «deslizas el mensaje con el dedo a la derecha», como WhatsApp. Una sola pieza con «Contestar» del menú.
+  function contesta(m) {
+    if (!ACT || !m || m.borrado || m.tipo !== 'msg' || typeof m.id !== 'number') return false;
+    if (EDIT) { EDIT = null; texto.value = sinEdit(); ajusta(); }
+    RESP = m; pintaBarra();
+    try { texto.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+    return true;
+  }
+  var NO_CONTESTA = 'a,button,input,textarea,select,video,audio,img,.vz,.vz-ondas,[data-largo],[data-img]';
+  function globitoDe(ev) {
+    var b = ev.target && ev.target.closest && ev.target.closest('.m[data-id] .bur');
+    if (!b || ev.target.closest(NO_CONTESTA) || !ACT) return null;
+    var el = b.closest('.m'), m = ACT.msgs.get(+el.dataset.id);
+    return m && !m.borrado && m.tipo === 'msg' ? { m: m, el: el, b: b } : null;
+  }
+  (function () {
+    var ultToque = 0;
+    $('#msgs').addEventListener('touchstart', function () { ultToque = Date.now(); }, { passive: true });
+    // computadora: doble clic sobre el globito (sin seleccionar la palabra)
+    $('#msgs').addEventListener('mousedown', function (ev) { if (ev.detail === 2 && globitoDe(ev)) ev.preventDefault(); });
+    $('#msgs').addEventListener('dblclick', function (ev) {
+      if (Date.now() - ultToque < 900) return;   // en el celular es deslizando, no con doble toque
+      var x = globitoDe(ev); if (!x) return;
+      ev.preventDefault();
+      try { var sel = getSelection(); if (sel && !sel.isCollapsed) sel.removeAllRanges(); } catch (e) { /* sin selección */ }
+      contesta(x.m);
+    });
+    // celular y tableta: deslizar el globito a la derecha (más de 60 px) lo deja para contestar; hacia arriba o abajo, el
+    // chat se desliza como siempre, y dejar el dedo encima sigue abriendo las opciones
+    var D = null, MAX = 84, UMBRAL = 60;
+    function suelta(conAnim) {
+      if (!D) return;
+      var el = D.el, fl = D.fl;
+      if (conAnim) { el.classList.add('m-vuelve'); setTimeout(function () { el.classList.remove('m-vuelve'); }, 220); }
+      el.style.transform = '';
+      if (fl) fl.remove();
+      D = null;
+    }
+    $('#msgs').addEventListener('touchstart', function (ev) {
+      suelta(false);
+      if (ev.touches.length !== 1) return;
+      var x = globitoDe(ev); if (!x) return;
+      var t = ev.touches[0];
+      if (t.clientX < 24) return;   // la orilla izquierda es el gesto de «regresar» del iPhone
+      D = { el: x.el, m: x.m, x0: t.clientX, y0: t.clientY, dx: 0, eje: null, fl: null, listo: false,
+            bl: x.b.getBoundingClientRect().left - x.el.getBoundingClientRect().left };
+    }, { passive: true });
+    $('#msgs').addEventListener('touchmove', function (ev) {
+      if (!D || ev.touches.length !== 1) { if (D) suelta(true); return; }
+      var t = ev.touches[0], dx = t.clientX - D.x0, dy = t.clientY - D.y0;
+      if (!D.eje) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        D.eje = Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0 ? 'x' : 'y';
+        if (D.eje === 'y') { D = null; return; }
+        D.fl = document.createElement('span'); D.fl.className = 'm-desl'; D.fl.setAttribute('aria-hidden', 'true'); D.fl.innerHTML = IC.resp;
+        D.el.appendChild(D.fl);
+      }
+      D.dx = Math.max(0, Math.min(MAX, dx));
+      D.el.style.transform = 'translateX(' + D.dx + 'px)';
+      D.fl.style.left = (D.bl - D.dx / 2 - 13) + 'px';   // en medio del hueco que deja el globito al moverse
+      D.fl.style.opacity = String(Math.min(1, D.dx / UMBRAL));
+      var listo = D.dx >= UMBRAL;
+      if (listo && !D.listo) { try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* sin vibrar */ } }
+      D.listo = listo;
+    }, { passive: true });   // el globito solo se deja mover a lo ancho (touch-action: pan-y): la página sigue deslizándose sola
+    function fin() {
+      if (!D) return;
+      var m = D.m, listo = D.eje === 'x' && D.listo;
+      suelta(true);
+      if (listo) contesta(m);
+    }
+    $('#msgs').addEventListener('touchend', fin);
+    $('#msgs').addEventListener('touchcancel', function () { suelta(true); });
+  })();
+
+  // ---------------------------------------------------------------- Esc cierra la conversación
+  // Fernando Cadengo, 3-nov-2026: «al estar en una conversación, podamos picar la tecla esc y se cierre la conversación».
+  // Primero va lo chico: si hay algo abierto (el menú de un mensaje, los emojis, la lista de «@», contestar o corregir,
+  // buscar en la conversación, una nota de voz, el panel de información angosto, el menú de «Bajar» (con marca u original)
+  // o cualquier otro menú o lista abierta, una ventana o una foto), Esc cierra eso
+  // y no la conversación. Se revisa en la fase de captura, antes de que corran esos cierres, para que un solo Esc no cierre
+  // las dos cosas.
+  addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape' || ev.isComposing || ev.defaultPrevented || !ACT || $('#cv').hidden) return;
+    var a = document.activeElement;
+    if (a && a.id === 'q') return;   // buscando en la lista de chats
+    var R = null; try { var w = arriba(); R = (w && w.PROFASE_RECORRIDO) || window.PROFASE_RECORRIDO; } catch (e) { R = null; }
+    if (MENU || MENC || RESP || EDIT || GRAB || !$('#emo').hidden || !$('#bus-msg').hidden
+      || (!$('#info').hidden && innerWidth < 1280)
+      || [].some.call(document.querySelectorAll('.velo,.lb,.vx,.pv-velo,.velo-menu,.pm-menu,[role="menu"],[role="listbox"],[aria-modal="true"]'), function (x) { return x.getClientRects().length > 0; })
+      || (R && R.activo && R.activo(true))) return;   // true: solo si de verdad hay un recorrido corriendo
+    var id = ACT.id;
+    ev.preventDefault();
+    cierraConv();
+    // el foco regresa al chat que cerraste, en la lista (para seguir con el teclado)
+    setTimeout(function () { var b = $('#convs').querySelector('[data-c="' + id + '"]'); if (b && b.getClientRects().length) try { b.focus({ preventScroll: true }); } catch (e) { /* sin foco */ } }, 30);
+  }, true);
   function ajusta() {
     texto.style.height = 'auto'; texto.style.height = Math.min(150, texto.scrollHeight + 2) + 'px';
     $('#manda').disabled = !(texto.value.trim() || PEND.length);
     botonesCaja();
   }
-  texto.addEventListener('input', function () { ajusta(); if (texto.value.trim()) avisaEscribo(); buscaMenc(); });
+  texto.addEventListener('input', function () { ajusta(); if (texto.value.trim()) avisaEscribo(); buscaMenc(); borrPronto(); });
   texto.addEventListener('click', function () { buscaMenc(); });
   texto.addEventListener('keyup', function (ev) { if (/^(ArrowLeft|ArrowRight|Home|End)$/.test(ev.key)) buscaMenc(); });
   texto.addEventListener('keydown', function (ev) {
@@ -1603,7 +1739,7 @@ audio.ad-med{width:280px;max-width:100%}
       if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cierraMenc(true); return; }
     }
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && !tactil) { ev.preventDefault(); manda(); }
-    else if (ev.key === 'Escape' && (RESP || EDIT)) { ev.preventDefault(); RESP = null; if (EDIT) { EDIT = null; texto.value = ''; ajusta(); } pintaBarra(); }
+    else if (ev.key === 'Escape' && (RESP || EDIT)) { ev.preventDefault(); RESP = null; if (EDIT) { EDIT = null; texto.value = sinEdit(); ajusta(); } pintaBarra(); }
     else if (ev.key === 'ArrowUp' && !texto.value && ACT) {
       // flecha arriba con la caja vacía: corregir el último mensaje propio (como en otras apps de chat)
       var mio = ACT.orden.slice().reverse().map(function (k) { return ACT.msgs.get(k); }).find(function (m) { return m.autor === YO.usuario && m.tipo === 'msg' && !m.borrado; });
@@ -1623,7 +1759,7 @@ audio.ad-med{width:280px;max-width:100%}
     else b.hidden = true;
     $('#clip').disabled = !!EDIT;
   }
-  $('#bx-x').onclick = function () { if (EDIT) { EDIT = null; texto.value = ''; ajusta(); } RESP = null; pintaBarra(); texto.focus(); };
+  $('#bx-x').onclick = function () { if (EDIT) { EDIT = null; texto.value = sinEdit(); ajusta(); } RESP = null; pintaBarra(); texto.focus(); };
   async function manda() {
     if (!ACT || ENVIANDO) return;
     var tx = texto.value.replace(/\s+$/, '').replace(/^\s*\n/, '');
@@ -1632,7 +1768,7 @@ audio.ad-med{width:280px;max-width:100%}
       var e = EDIT;
       if (!tx.trim() && !(e.adjuntos || []).length) { aviso('El mensaje quedaría vacío; mejor elimínalo.', true); return; }
       ENVIANDO = true; cierraMenc();
-      try { var r = await rpc('chat_edita', { p_id: e.id, p_texto: tx }); EDIT = null; texto.value = ''; ajusta(); pintaBarra(); if (r) agrega([r]); }
+      try { var r = await rpc('chat_edita', { p_id: e.id, p_texto: tx }); EDIT = null; texto.value = sinEdit(); ajusta(); pintaBarra(); if (r) agrega([r]); }
       catch (x) { aviso(err(x), true); }
       ENVIANDO = false;
       return;
@@ -1646,7 +1782,7 @@ audio.ad-med{width:280px;max-width:100%}
     if (adj.length) t.m.adjuntos = adj.map(function (a) { return Object.assign({}, a); });
     t.m.menciones = mencionesDe(tx);   // solo para enseñarlo mientras se manda: la base decide al guardarlo
     cierraMenc();
-    texto.value = ''; PEND = []; pintaPend(); RESP = null; pintaBarra(); ajusta(); ACT.divisor = null;
+    texto.value = ''; guardaBorr(); PEND = []; pintaPend(); RESP = null; pintaBarra(); ajusta(); ACT.divisor = null;
     TEMP.push(t); pintaMsgs({ abajo: true });
     envia(t);
   }
@@ -1758,7 +1894,7 @@ audio.ad-med{width:280px;max-width:100%}
       cierraMenu();
       if (b.dataset.e) { reacciona(m.id, b.dataset.e); return; }
       var a = b.dataset.a;
-      if (a === 'resp') { RESP = m; EDIT = null; pintaBarra(); texto.focus(); }
+      if (a === 'resp') contesta(m);
       else if (a === 'reenvia') reenviar(m);
       else if (a === 'copia') copiaTexto(m.texto);
       else if (a === 'corrige') corrige(m);
@@ -2166,7 +2302,7 @@ audio.ad-med{width:280px;max-width:100%}
     cierraMenc();
     var p = i + ins.length;
     try { texto.focus({ preventScroll: true }); texto.setSelectionRange(p, p); } catch (e) { /* ya */ }
-    ajusta(); avisaEscribo();
+    ajusta(); avisaEscribo(); borrPronto();
   }
   // tocar la lista no le quita el foco (ni el teclado del celular) a donde se escribe
   $('#menc-l').addEventListener('mousedown', function (ev) { ev.preventDefault(); });
