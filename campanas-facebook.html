@@ -1,0 +1,441 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Campañas Facebook</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script>
+<style>
+/* Portal PROFASE · Administración › Campañas Facebook (Héctor Daniel, 3-nov-2026, 12:12 a 12:24: «desde el crm te puedo
+   autorizar y demás las campañas mensuales?… en administración, campañas facebook… que nadamás me salga a mi»; «si dale»).
+   Cada campaña que prepara la tarea de Facebook, publicación por publicación, como saldrá en la página Profase Fiscal; él
+   la autoriza (una o toda la campaña), pide un cambio, dice «No publicar» o corrige el texto. La nube la programa sola en
+   Facebook. Solo él la ve (fb_estado(), portal/sql/193_campanas_facebook.sql); la página solo llama sus funciones fb_* y
+   solo lee las imágenes de la cubeta privada «facebook». No baja archivos. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabs button:focus-visible,.cias button:focus-visible,summary:focus-visible,.foto:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin:16px 0 4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.cias{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
+.cias button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted);max-width:100%;overflow-wrap:anywhere;text-align:left}
+.cias button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+/* La campaña */
+.camp{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:16px 0;overflow:hidden;min-width:0}
+.camp>header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.camp h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.camp .res{margin:4px 0 0;font-size:13px;color:var(--muted);overflow-wrap:anywhere;max-width:80ch}
+.cuenta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.vacio{padding:20px 16px;color:var(--muted)}
+/* Las publicaciones, como se verán en Facebook */
+.pubs{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:14px 16px 18px}
+.pub{background:var(--bg);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.pub.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.pub .top{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;justify-content:space-between;padding:10px 12px 8px}
+.pub .cuando{font-weight:700;font-size:13.5px}
+.fbcab{display:flex;gap:8px;align-items:center;padding:0 12px 8px}
+.fbcab img{width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid var(--line);object-fit:contain;padding:3px}
+.fbcab b{font-size:13px;display:block}
+.fbcab span{font-size:11.5px;color:var(--muted)}
+.txt{padding:0 12px 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px;line-height:1.45}
+.txt.corto{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+.mas{border:0;background:none;padding:0 12px 8px;color:var(--navy);font-weight:700;cursor:pointer;text-align:left;font-size:13px}
+:root[data-theme="dark"] .mas{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .mas{color:var(--accent-ink)}}
+.foto{display:block;width:100%;aspect-ratio:1638/2048;background:var(--surface-2);border:0;padding:0;cursor:zoom-in;position:relative}
+.foto img{display:block;width:100%;height:100%;object-fit:cover}
+.foto .sin{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12.5px}
+.pub .info{padding:10px 12px 0;display:grid;gap:6px}
+.msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.msg.az{background:var(--navy-soft);color:var(--ink)}
+.pub details{padding:0 12px;font-size:12.5px}
+.pub details summary{cursor:pointer;color:var(--muted);font-weight:600;padding:4px 0}
+.pub details .cuerpo{padding:2px 0 6px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.bit{list-style:none;margin:0;padding:0 0 6px;display:grid;gap:4px}
+.bit li{color:var(--muted);overflow-wrap:anywhere}
+.bit b{color:var(--ink);font-weight:600}
+.pub .acc{margin-top:auto;padding:10px 12px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line);background:var(--surface)}
+/* Ventanas */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:560px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:18px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.pregunta textarea{width:100%;min-height:90px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;margin:0 0 6px;resize:vertical;line-height:1.45}
+.pregunta textarea.largo{min-height:260px}
+.pregunta .cnt{font-size:12px;color:var(--muted);margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+.pregunta .msg{margin:0 0 10px}
+.visor{position:fixed;inset:0;background:rgba(10,18,32,.85);z-index:45;display:grid;place-items:center;padding:16px}
+.visor img{max-width:100%;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px);border-radius:8px;display:block;margin:0 auto}
+.visor .acciones{justify-content:center;margin-top:10px}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:700px){
+  input,select,textarea,.pregunta textarea{font-size:16px}
+  .band h1{font-size:22px}
+  .pubs{grid-template-columns:minmax(0,1fr);padding:12px}
+  .camp>header{padding:12px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Administración</div>
+      <h1>Campañas Facebook</h1>
+      <p>Cada publicación como saldrá en la página Profase Fiscal. Nada se programa en Facebook sin tu visto bueno.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver las campañas, pero no autorizar ni cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+  <div class="nota" id="vacio" hidden>Todavía no hay campañas. La tarea de Facebook las sube aquí cuando están listas para tu visto bueno, y te llega un aviso.</div>
+
+  <div id="todo" hidden>
+    <div class="tabs" role="tablist" aria-label="Qué ver">
+      <button type="button" role="tab" data-t="aut" aria-selected="true">Por autorizar <span class="cta" id="n-aut">0</span></button>
+      <button type="button" role="tab" data-t="cam" aria-selected="false">Cambios pedidos <span class="cta" id="n-cam">0</span></button>
+      <button type="button" role="tab" data-t="pro" aria-selected="false">Autorizadas y programadas <span class="cta" id="n-pro">0</span></button>
+      <button type="button" role="tab" data-t="pub" aria-selected="false">Publicadas <span class="cta" id="n-pub">0</span></button>
+      <button type="button" role="tab" data-t="tod" aria-selected="false">Todas</button>
+    </div>
+    <div class="cias" id="cias" role="group" aria-label="Campaña"></div>
+    <div id="lista"></div>
+    <p class="pie">Lo que autorizas se programa solo en Facebook en cuanto cabe (Meta deja programar hasta 29 días antes). Si pides un cambio a una que ya estaba programada, se quita de Facebook hasta que autorices la versión corregida; la tarea de Facebook la rehace a las 11:10. Lo que pasa su hora sin tu visto bueno no se publica. Nunca se promociona ni se paga nada.</p>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<div class="visor" id="visor" hidden role="dialog" aria-modal="true" aria-label="Imagen de la publicación"><div><img id="visor-img" alt=""><div class="acciones"><button class="btn" type="button" id="visor-cierra">Cerrar</button></div></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false, DATOS = null, TAB = 'aut', CAMP = '', URLS = {}, SEL = '', VIGILA = null;
+  var ESTADOS = {
+    por_autorizar: ['Por autorizar', 'na'], autorizada: ['Autorizada', 'az'], programada: ['Programada en Facebook', 'ok'],
+    publicada: ['Publicada', 'ok'], cambio_pedido: ['Cambio pedido', 'ojo'], no_publicar: ['No se publica', ''], vencida: ['Pasó su hora sin publicarse', 'mal']
+  };
+  var TABS = { aut: ['por_autorizar'], cam: ['cambio_pedido'], pro: ['autorizada', 'programada'], pub: ['publicada'], tod: null };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : new Date(s).toLocaleString('es-MX'); } catch (e) { return String(s); } }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function pubs() { var a = []; (DATOS && DATOS.campanas || []).forEach(function (c) { (c.pubs || []).forEach(function (p) { a.push(p); }); }); return a; }
+  function cuenta(est) { return pubs().filter(function (p) { return est.indexOf(p.estado) >= 0 && (!CAMP || p.campana === CAMP); }).length; }
+
+  /* ---------- las imágenes (cubeta privada; se piden juntas y se guardan una hora) ---------- */
+  async function urls(rutas) {
+    var faltan = rutas.filter(function (r) { return r && !URLS[r]; });
+    if (!faltan.length) return;
+    try {
+      var s = await P.sb.storage.from('facebook').createSignedUrls(faltan, 3600);
+      (s.data || []).forEach(function (x) { if (x && !x.error && x.signedUrl && x.path) URLS[x.path] = x.signedUrl; });
+    } catch (e) {}
+  }
+
+  /* ---------- pintar ---------- */
+  function pintaTabs() {
+    Object.keys(TABS).forEach(function (k) { var n = $('n-' + k); if (n) n.textContent = cuenta(TABS[k]); });
+    document.querySelectorAll('[data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-t') === TAB ? 'true' : 'false'); });
+  }
+  function pintaCias() {
+    var cs = DATOS.campanas || [];
+    $('cias').hidden = cs.length < 2;
+    $('cias').innerHTML = '<button type="button" data-c="" aria-pressed="' + (!CAMP) + '">Todas las campañas</button>'
+      + cs.map(function (c) { return '<button type="button" data-c="' + esc(c.id) + '" aria-pressed="' + (CAMP === c.id) + '">' + esc(c.nombre) + '</button>'; }).join('');
+    $('cias').querySelectorAll('[data-c]').forEach(function (b) { b.onclick = function () { CAMP = b.getAttribute('data-c'); pintaCias(); pinta(); }; });
+  }
+  function notas(p) {
+    var h = '';
+    if (p.estado === 'cambio_pedido') h += '<div class="msg ojo"><b>Pediste:</b> ' + esc(p.cambio) + (p.cambio_en ? ' <span class="mut">(' + esc(fechaHora(p.cambio_en)) + ')</span>' : '') + '<br>La tarea de Facebook la rehace y te la vuelve a enseñar aquí.</div>';
+    if (p.estado === 'no_publicar' && p.no_motivo) h += '<div class="msg">No se publica: ' + esc(p.no_motivo) + '</div>';
+    if (p.estado === 'autorizada' && p.previa) h += '<div class="msg az">' + esc(p.autorizada_nota || 'Autorizada antes del CRM') + '.</div>';
+    if (p.estado === 'autorizada' && p.entra && !p.error) h += '<div class="msg az">Autorizada. Entra sola a Facebook desde el ' + esc(fecha(p.entra)) + ' (Meta deja programar hasta 29 días antes).</div>';
+    else if (p.estado === 'autorizada' && !p.error) h += '<div class="msg az">Autorizada. Se está programando en Facebook (tarda un par de minutos).</div>';
+    if (p.estado === 'programada') h += '<div class="msg bien">Ya está programada en Facebook para el ' + esc(p.cuando) + '.' + (p.revisar ? ' Revisar: ' + esc(p.revisar) + '.' : '') + '</div>';
+    if (p.error && ['autorizada', 'programada', 'por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0) h += '<div class="msg mal">No se pudo en Facebook: ' + esc(p.error) + '. Se vuelve a intentar sola.</div>';
+    if (p.en_facebook && ['por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0) h += '<div class="msg ojo">Se está quitando de Facebook (un par de minutos).</div>';
+    if (p.estado === 'vencida') h += '<div class="msg mal">Pasó su hora sin publicarse: ya no sale.</div>';
+    if (p.version > 1 && p.estado === 'por_autorizar') h += '<div class="msg az">Versión ' + esc(p.version) + ': la tarea la corrigió.</div>';
+    if (p.editada_en) h += '<div class="mut">Corregiste el texto el ' + esc(fechaHora(p.editada_en)) + '.</div>';
+    return h ? '<div class="info">' + h + '</div>' : '';
+  }
+  function botones(p) {
+    if (CONSULTA) return '';
+    var b = [], vivo = !p.paso;
+    if (p.estado === 'por_autorizar' && vivo) b.push('<button class="btn bien chico" type="button" data-a="autoriza">Autorizar</button>');
+    if (['por_autorizar', 'autorizada', 'programada'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="cambio">Pedir cambio</button>');
+    if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="edita">Corregir texto</button>');
+    if (['no_publicar', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="regresa">Regresar a por autorizar</button>');
+    if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn peligro chico" type="button" data-a="no">No publicar</button>');
+    if (p.estado === 'publicada' && p.liga && /^https:\/\/(www\.)?facebook\.com\//.test(p.liga)) b.push('<a class="btn chico" href="' + esc(p.liga) + '" target="_blank" rel="noopener">Ver en Facebook</a>');
+    return b.length ? '<div class="acc">' + b.join('') + '</div>' : '';
+  }
+  function tarjeta(p) {
+    var e = ESTADOS[p.estado] || [p.estado, ''], u = URLS[p.imagen];
+    var largo = String(p.texto || '').length > 360 || String(p.texto || '').split('\n').length > 7;
+    return '<article class="pub' + (SEL === p.id ? ' sel' : '') + '" data-p="' + esc(p.id) + '">'
+      + '<div class="top"><span class="cuando">' + esc(p.cuando) + '</span>' + chip(e[0], e[1]) + '</div>'
+      + (p.tema ? '<div class="mut" style="padding:0 12px 8px;font-weight:600;color:var(--ink)">' + esc(p.tema) + '</div>' : '')
+      + '<div class="fbcab"><img src="img/logo.png" alt=""><div><b>Profase Fiscal</b><span>' + esc(p.cuando) + '</span></div></div>'
+      + '<div class="txt' + (largo ? ' corto' : '') + '">' + esc(p.texto) + '</div>'
+      + (largo ? '<button class="mas" type="button" data-a="mas">Ver todo el texto</button>' : '')
+      + '<button class="foto" type="button" data-a="foto" aria-label="Ver la imagen en grande">' + (u ? '<img src="' + esc(u) + '" alt="Imagen de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">' : '<span class="sin">Cargando la imagen…</span>') + '</button>'
+      + notas(p)
+      + (p.fuentes ? '<details><summary>Lo que cita y sus fuentes</summary><div class="cuerpo">' + esc(p.fuentes) + '</div></details>' : '')
+      + ((p.bitacora || []).length ? '<details><summary>Bitácora</summary><ul class="bit">' + p.bitacora.map(function (x) { return '<li><b>' + esc(x.que) + '</b> · ' + esc(x.quien) + ' · ' + esc(fechaHora(x.hora)) + (x.texto ? '<br>' + esc(x.texto) : '') + '</li>'; }).join('') + '</ul></details>' : '')
+      + botones(p) + '</article>';
+  }
+  function pinta() {
+    pintaTabs();
+    var est = TABS[TAB], hay = false, html = '';
+    (DATOS.campanas || []).forEach(function (c) {
+      if (CAMP && c.id !== CAMP) return;
+      var ps = (c.pubs || []).filter(function (p) { return !est || est.indexOf(p.estado) >= 0; });
+      if (!ps.length) return;
+      hay = true;
+      var por = (c.pubs || []).filter(function (p) { return p.estado === 'por_autorizar' && !p.paso; }).length, k = c.cuenta || {};
+      html += '<section class="camp" data-camp="' + esc(c.id) + '"><header><div style="min-width:0"><h2>' + esc(c.nombre) + '</h2>'
+        + '<div class="mut">' + esc(c.n) + (c.n === 1 ? ' publicación' : ' publicaciones') + (c.desde ? ', del ' + esc(fecha(c.desde)) + ' al ' + esc(fecha(c.hasta)) : '') + (c.documento ? ' · ' + esc(c.documento) : '') + '</div>'
+        + (c.resumen ? '<p class="res">' + esc(c.resumen) + '</p>' : '')
+        + '<div class="cuenta">' + Object.keys(ESTADOS).filter(function (s) { return k[s]; }).map(function (s) { return chip(ESTADOS[s][0] + ': ' + k[s], ESTADOS[s][1]); }).join('') + '</div></div>'
+        + (por && !CONSULTA ? '<div class="acciones"><button class="btn acento" type="button" data-todo="' + esc(c.id) + '">Autorizar ' + (por === 1 ? 'la que falta' : 'las ' + por + ' que faltan') + '</button></div>' : '')
+        + '</header><div class="pubs">' + ps.map(tarjeta).join('') + '</div></section>';
+    });
+    $('lista').innerHTML = hay ? html : '<div class="nota">' + ({ aut: 'No tienes nada por autorizar.', cam: 'No hay cambios pedidos.', pro: 'No hay publicaciones autorizadas ni programadas.', pub: 'Todavía no se publica nada.', tod: 'No hay publicaciones.' }[TAB]) + '</div>';
+    $('lista').querySelectorAll('[data-todo]').forEach(function (b) { b.onclick = function () { autorizaTodo(b.getAttribute('data-todo')); }; });
+    $('lista').querySelectorAll('.pub').forEach(function (el) {
+      var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0];
+      el.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { accion(b.getAttribute('data-a'), p, el, b); }; });
+    });
+    var faltan = []; $('lista').querySelectorAll('.pub').forEach(function (el) { var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0]; if (p && !URLS[p.imagen]) faltan.push(p.imagen); });
+    if (faltan.length) urls(faltan).then(function () {
+      $('lista').querySelectorAll('.pub').forEach(function (el) {
+        var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0], f = el.querySelector('.foto');
+        if (p && f && URLS[p.imagen] && !f.querySelector('img')) f.innerHTML = '<img src="' + esc(URLS[p.imagen]) + '" alt="Imagen de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">';
+        else if (p && f && !URLS[p.imagen] && !f.querySelector('img')) f.innerHTML = '<span class="sin">No se pudo cargar la imagen</span>';
+      });
+    });
+    vigila();
+  }
+
+  /* ---------- ventanas ---------- */
+  var antes = null;
+  function abre(html, foco) {
+    antes = document.activeElement;
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    try { (foco ? $(foco) : $('dlg-c').querySelector('button')).focus(); } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('campanas-facebook', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = '';
+    try { if (P.escribiendo) P.escribiendo('campanas-facebook', false); } catch (e) {}
+    try { if (antes) antes.focus(); } catch (e) {}
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) cierra(); });
+  $('visor').addEventListener('click', function (e) { if (e.target === $('visor')) $('visor').hidden = true; });
+  $('visor-cierra').onclick = function () { $('visor').hidden = true; };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('visor').hidden) { $('visor').hidden = true; return; }
+    if (!$('dlg').hidden) cierra();
+  });
+  function pregunta(titulo, texto, campo, boton, clase, fn, opc) {
+    opc = opc || {};
+    abre('<h3 id="dlg-t">' + esc(titulo) + '</h3>' + (texto ? '<p>' + texto + '</p>' : '')
+      + (campo ? '<label class="mut" for="dlg-x" style="display:block;margin:0 0 4px">' + esc(campo) + '</label><textarea id="dlg-x"' + (opc.largo ? ' class="largo"' : '') + (opc.max ? ' maxlength="' + opc.max + '"' : '') + '>' + esc(opc.valor || '') + '</textarea>' + (opc.max ? '<div class="cnt" id="dlg-n"></div>' : '') : '')
+      + '<div class="msg mal" id="dlg-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="dlg-no">Cancelar</button><button class="btn ' + (clase || 'acento') + '" type="button" id="dlg-si">' + esc(boton) + '</button></div>', campo ? 'dlg-x' : 'dlg-si');
+    var x = $('dlg-x');
+    if (x && opc.max) { var n = function () { $('dlg-n').textContent = x.value.length.toLocaleString('es-MX') + ' de ' + opc.max.toLocaleString('es-MX') + ' letras'; }; x.oninput = n; n(); }
+    $('dlg-no').onclick = cierra;
+    $('dlg-si').onclick = async function () {
+      var v = x ? x.value : '';
+      this.disabled = true;
+      try { await fn(v); cierra(); } catch (e) { $('dlg-e').textContent = falla(e); $('dlg-e').hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- lo que decide ---------- */
+  async function hecho(t) { avisa(t); await carga(); }
+  function autorizaTodo(cid) {
+    var c = (DATOS.campanas || []).filter(function (x) { return x.id === cid; })[0]; if (!c) return;
+    var ps = (c.pubs || []).filter(function (p) { return p.estado === 'por_autorizar' && !p.paso; });
+    pregunta('Autorizar «' + c.nombre + '»',
+      'Vas a autorizar <b>' + ps.length + (ps.length === 1 ? ' publicación' : ' publicaciones') + '</b>, del ' + esc(fecha(ps[0].fecha)) + ' al ' + esc(fecha(ps[ps.length - 1].fecha)) + '. Se programan solas en Facebook en cuanto caben; las demás de la campaña se quedan como están.',
+      '', 'Sí, autorizar', 'bien', async function () { var r = await rpc('fb_autoriza', { p_campana: cid, p_pubs: null }); await hecho('Listo: autorizaste ' + r.autorizadas + (r.autorizadas === 1 ? ' publicación' : ' publicaciones') + '. En un par de minutos quedan programadas en Facebook.'); });
+  }
+  async function accion(a, p, el, b) {
+    if (!p) return;
+    if (a === 'mas') { var t = el.querySelector('.txt'); var corto = t.classList.toggle('corto'); b.textContent = corto ? 'Ver todo el texto' : 'Ver menos'; return; }
+    if (a === 'foto') { if (!URLS[p.imagen]) return; $('visor-img').src = URLS[p.imagen]; $('visor-img').alt = 'Imagen de la publicación ' + (p.tema || p.id); $('visor').hidden = false; try { $('visor-cierra').focus(); } catch (e) {} return; }
+    if (a === 'autoriza') {
+      b.disabled = true;
+      try { await rpc('fb_autoriza', { p_campana: p.campana, p_pubs: [p.id] }); await hecho('Autorizada la del ' + p.cuando + '. ' + (p.entra ? 'Entra sola a Facebook cuando quepa.' : 'En un par de minutos queda programada en Facebook.')); }
+      catch (e) { error(falla(e)); b.disabled = false; }
+      return;
+    }
+    if (a === 'cambio') return pregunta('Pedir cambio · ' + p.cuando,
+      p.estado === 'programada' ? 'Ya está programada en Facebook: se quita de ahí hasta que autorices la versión corregida.' : 'La tarea de Facebook la rehace a las 11:10 y te la vuelve a enseñar aquí para tu visto bueno.',
+      '¿Qué quieres que cambie?', 'Pedir el cambio', 'acento', async function (v) { await rpc('fb_cambio', { p_pub: p.id, p_texto: v }); await hecho('Pediste el cambio. Te llega la versión nueva para tu visto bueno.'); }, { max: 2000 });
+    if (a === 'edita') return pregunta('Corregir el texto · ' + p.cuando,
+      (p.estado === 'autorizada' || p.estado === 'programada') ? 'Tu corrección cuenta como autorizada' + (p.estado === 'programada' ? ' y se corrige sola en Facebook.' : '.') : 'Después la autorizas como siempre.',
+      'Texto de la publicación (tal cual se publica)', 'Guardar el texto', 'acento', async function (v) { var r = await rpc('fb_edita', { p_pub: p.id, p_texto: v }); await hecho(r && r.igual ? 'El texto no cambió.' : 'Guardaste el texto corregido.'); }, { valor: p.texto, largo: true, max: 5000 });
+    if (a === 'no') return pregunta('No publicar · ' + p.cuando,
+      (p.en_facebook ? 'Se quita de Facebook. ' : '') + 'Si cambias de opinión, la puedes regresar a «Por autorizar» antes de su hora.',
+      'Motivo (opcional)', 'No publicar', 'peligro', async function (v) { await rpc('fb_no_publicar', { p_pub: p.id, p_motivo: v }); await hecho('Listo: esa publicación no sale.'); }, { max: 500 });
+    if (a === 'regresa') {
+      b.disabled = true;
+      try { await rpc('fb_regresa', { p_pub: p.id }); await hecho('Regresó a «Por autorizar».'); } catch (e) { error(falla(e)); b.disabled = false; }
+    }
+  }
+
+  /* ---------- traer ---------- */
+  async function carga() {
+    DATOS = await rpc('fb_lista');
+    var todas = pubs();
+    $('vacio').hidden = todas.length > 0; $('todo').hidden = !todas.length;
+    if (CAMP && !(DATOS.campanas || []).some(function (c) { return c.id === CAMP; })) CAMP = '';
+    if (todas.length) { pintaCias(); pinta(); }
+  }
+  // mientras algo autorizado entra a Facebook (o se quita), se vuelve a preguntar cada 30 s, hasta 6 minutos y solo si se ve
+  function vigila() {
+    var pendiente = pubs().some(function (p) {
+      return (p.estado === 'autorizada' && !p.entra && !p.error && !p.paso) || (p.en_facebook && ['por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0);
+    });
+    if (!pendiente) { clearInterval(VIGILA); VIGILA = null; return; }
+    if (VIGILA) return;
+    var desde = Date.now();
+    VIGILA = setInterval(function () {
+      if (Date.now() - desde > 6 * 60000) { clearInterval(VIGILA); VIGILA = null; return; }
+      var marco = window.frameElement;
+      if (document.hidden || (marco && !marco.offsetParent) || !$('dlg').hidden) return;
+      carga().catch(function () {});
+    }, 30000);
+  }
+  document.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { TAB = b.getAttribute('data-t'); pinta(); }; });
+  // un aviso de la campanita, el Inicio o el recorrido: abre la publicación (ver:<id>) o la campaña
+  window.__fbAbre = function (que) {
+    var id = String(que || '').replace(/^ver:/, ''), p = pubs().filter(function (x) { return x.id === id; })[0];
+    if (!p) return false;
+    SEL = p.id; CAMP = p.campana;
+    TAB = Object.keys(TABS).filter(function (k) { return TABS[k] && TABS[k].indexOf(p.estado) >= 0; })[0] || 'tod';
+    pintaCias(); pinta();
+    var el = document.querySelector('[data-p="' + CSS.escape(p.id) + '"]');
+    if (el) try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+    return true;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('fb_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para Héctor Daniel Nava.');
+      CONSULTA = !!P.consulta; $('consulta').hidden = !CONSULTA;
+      await carga();
+      if (!cuenta(TABS.aut)) TAB = cuenta(TABS.cam) ? 'cam' : cuenta(TABS.pro) ? 'pro' : 'tod';
+      if (pubs().length) pinta();
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) carga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>

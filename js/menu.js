@@ -140,6 +140,9 @@
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
+      // Campañas Facebook (Héctor Daniel, 3-nov-2026: «en administración, campañas facebook… que nadamás me salga a mi»):
+      // autoriza las campañas de la página Profase Fiscal; solo él (fb_estado(), 190_campanas_facebook.sql; bloque fbk_tab.js)
+      { k: 'campanas-facebook', v: 'fbk', t: 'Campañas Facebook', d: 'Las publicaciones de la página de Facebook: autoriza, pide cambios o no las publiques.' },
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
