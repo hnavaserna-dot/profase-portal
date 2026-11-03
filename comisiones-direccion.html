@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=3b23477961"></script><script src="js/marca.js?v=a743a9d941"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=3b23477961"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=aed1833b56"></script>
 <style>
 /* Portal PROFASE · Tesorería › Comisiones de dirección (antes Administración) (30-oct-2026): lo que hacía el Access de la dirección
    «Registro de Comisiones Grupo Profase», con sus mismas pantallas (Inicio, Facturas y comisiones, el módulo de la
@@ -247,6 +247,7 @@ tr.click:hover td{background:var(--navy-soft)}
         <button class="grande" type="button" id="ir-fac"><span id="tx-fac">&nbsp;</span><small>Facturas y comisiones</small></button>
         <button class="grande" type="button" id="ir-uti"><span id="tx-uti">&nbsp;</span><small>Nómina, gastos, reserva y utilidad</small></button>
         <button class="grande" type="button" id="ir-com"><span id="tx-com">&nbsp;</span><small>Pagos con comisión, reembolsos y deducciones</small></button>
+        <button class="grande" type="button" id="ir-dev"><span>DEVOLUCIONES DE IVA</span><small>Costo SV, utilidad, comisión y el pago SV de cada semana</small></button>
       </div>
     </div>
   </section>
@@ -359,6 +360,34 @@ tr.click:hover td{background:var(--navy-soft)}
       </section>
     </div>
   </section>
+<!-- Devoluciones de IVA (portal/sql/163_devolucion_dos_facturas.sql, 2-nov-2026) -->
+  <section id="s-dev" hidden>
+  <section class="card" aria-labelledby="h-dsem">
+    <header><div><h2 id="h-dsem">Pago SV de cada semana</h2><div class="sub" id="dsem-sub">Lo de las devoluciones que se terminaron de pagar de lunes a domingo se entrega el miércoles siguiente (o el siguiente día hábil).</div></div></header>
+    <div class="in filtros"><span class="grupo"><label for="d-sv">% SV (sobre el monto devuelto)</label><input class="pct" id="d-sv" inputmode="decimal" autocomplete="off"><button class="btn chico" type="button" id="d-sv-ok" hidden>Guardar %</button></span>
+      <span class="mut" id="d-sv-n"></span></div>
+    <div class="tabla"><table class="resp" id="t-dsem"><thead></thead><tbody></tbody></table></div>
+    <div class="vacio" id="dsem-vacia" hidden>Todavía no hay pagos SV.</div>
+  </section>
+  <section class="card" aria-labelledby="h-ddev">
+    <header><div><h2 id="h-ddev">Devoluciones con su factura</h2><div class="sub" id="ddev-sub">&nbsp;</div></div>
+      <div class="acciones"><span class="estado" id="dev-estado" aria-live="polite"></span><button class="btn" type="button" id="x-dev" data-excel>Excel</button></div></header>
+    <div class="tabla"><table class="resp" id="t-ddev"><thead></thead><tbody></tbody></table></div>
+    <div class="vacio" id="ddev-vacia" hidden>Todavía no hay devoluciones con su factura.</div>
+  </section>
+  <section class="card" aria-labelledby="h-dpor">
+    <header><div><h2 id="h-dpor">Depositadas, por facturar</h2><div class="sub">Ya le depositaron al cliente y falta su factura (la sube Elisa Mata en el Panel de trabajo).</div></div></header>
+    <div class="tabla"><table class="resp" id="t-dpor"><thead></thead><tbody></tbody></table></div>
+    <div class="vacio" id="dpor-vacia" hidden>Ninguna por facturar.</div>
+  </section>
+  <section class="card" aria-labelledby="h-dcon">
+    <header><div><h2 id="h-dcon">Lo que se cobra de cada cliente</h2><div class="sub">Si lleva factura, su porcentaje del monto devuelto (antes de IVA) y si lleva costo SV.</div></div>
+      <div class="acciones"><button class="btn acento" type="button" id="d-con-agrega" hidden>Agregar cliente</button></div></header>
+    <div class="tabla"><table class="resp" id="t-dcon"><thead></thead><tbody></tbody></table></div>
+    <div class="vacio" id="dcon-vacia" hidden>Todavía no hay clientes capturados.</div>
+  </section>
+  <p class="pie">Las facturas de las devoluciones entran solas a «Facturas y comisiones» como incluidas, con su costo SV: no se quitan ni se les cambia el costo a mano. El costo, la utilidad y la comisión los calcula el sistema.</p>
+  </section>
 </div>
 
 <div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
@@ -455,17 +484,18 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   function muestra(v) {
     VISTA = v; cierra();
-    ['inicio', 'fac', 'com', 'uti'].forEach(function (k) { $('s-' + k).hidden = k !== v; });
+    ['inicio', 'fac', 'com', 'uti', 'dev'].forEach(function (k) { $('s-' + k).hidden = k !== v; });
     $('b-inicio').hidden = v === 'inicio';
-    var tit = { inicio: 'Comisiones de dirección', fac: T.t_facturas, com: T.t_comisiones, uti: T.t_utilidad }[v] || 'Comisiones de dirección';
+    var tit = { inicio: 'Comisiones de dirección', fac: T.t_facturas, com: T.t_comisiones, uti: T.t_utilidad, dev: 'Devoluciones de IVA' }[v] || 'Comisiones de dirección';
     $('titulo').textContent = tit;
     $('subt').textContent = {
       inicio: 'Facturas con comisión, pagos, reembolsos y deducciones; nómina, gastos, reserva y utilidad del periodo. Los cálculos los hace el sistema.',
       fac: 'Incluye o descarta cada factura y captura sus costos y a quién va la comisión. La utilidad y la comisión las calcula el sistema.',
       com: 'Pagos del mes de las facturas incluidas, reembolsos y deducciones, y la comisión del periodo.',
-      uti: 'Nómina, gastos del personal, gastos extraordinarios y reserva del mes, y la utilidad del periodo con su reparto.'
+      uti: 'Nómina, gastos del personal, gastos extraordinarios y reserva del mes, y la utilidad del periodo con su reparto.',
+      dev: 'Cada devolución con su factura: el monto devuelto, si ya se pagó, el costo SV, la utilidad, la comisión y el pago SV de cada semana. Lo calcula el sistema.'
     }[v];
-    if (v === 'fac') cargaFac(); else if (v === 'com') cargaCom(); else if (v === 'uti') cargaUti();
+    if (v === 'fac') cargaFac(); else if (v === 'com') cargaCom(); else if (v === 'uti') cargaUti(); else if (v === 'dev') cargaDev();
     try { window.scrollTo(0, 0); } catch (e) {}
   }
 
@@ -514,8 +544,9 @@ tr.click:hover td{background:var(--navy-soft)}
     var contactos = catDe(2);
     $('t-fac').tBodies[0].innerHTML = L.map(function (f) {
       var h = '<tr data-f="' + esc(f.id) + '">'
-        + '<td class="chk" data-l="Incluir">' + chk(f.estado === 'incluida' ? 'quitar' : 'incluir', f.id, f.estado === 'incluida', 'Incluir ' + (f.folio || '')) + '</td>'
-        + '<td class="chk" data-l="Descartada">' + chk(f.estado === 'descartada' ? 'regresar' : 'descartar', f.id, f.estado === 'descartada', 'Descartar ' + (f.folio || '')) + '</td>'
+        + (f.devolucion ? '<td class="chk" data-l="Incluir"><input type="checkbox" checked disabled aria-label="Incluida (devolución de IVA)"></td><td class="chk" data-l="Descartada"><span class="chip az">Devolución</span></td>'
+          : '<td class="chk" data-l="Incluir">' + chk(f.estado === 'incluida' ? 'quitar' : 'incluir', f.id, f.estado === 'incluida', 'Incluir ' + (f.folio || '')) + '</td>'
+          + '<td class="chk" data-l="Descartada">' + chk(f.estado === 'descartada' ? 'regresar' : 'descartar', f.id, f.estado === 'descartada', 'Descartar ' + (f.folio || '')) + '</td>')
         + '<td data-l="Folio"><button class="lnk" type="button" data-ver="' + esc(f.id) + '">' + (esc(f.folio) || 'Sin folio') + '</button></td>'
         + '<td data-l="Efectivo">' + (f.efectivo ? 'Sí' : 'No') + '</td>'
         + '<td data-l="Fecha" style="white-space:nowrap">' + esc(fecha(f.fecha)) + '</td>'
@@ -523,7 +554,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td class="w" data-l="Concepto"><span class="mut">' + esc(f.conceptos) + '</span></td>'
         + '<td class="monto" data-l="Subtotal">' + esc(dinero(f.sub)) + '</td>';
       if (inc) {
-        h += '<td class="monto" data-l="Costos">' + (CAPTURA ? '<input class="cap m" data-campo="costos" data-id="' + esc(f.id) + '" inputmode="decimal" value="' + esc(Number(f.costos || 0).toFixed(2)) + '" aria-label="Costos">' : esc(dinero(f.costos))) + '</td>'
+        h += '<td class="monto" data-l="Costos">' + (CAPTURA && !f.devolucion ? '<input class="cap m" data-campo="costos" data-id="' + esc(f.id) + '" inputmode="decimal" value="' + esc(Number(f.costos || 0).toFixed(2)) + '" aria-label="Costos">' : esc(dinero(f.costos))) + '</td>'
           + '<td class="monto" data-l="Utilidad">' + dineroH(f.utilidad) + '</td>'
           + '<td class="monto" data-l="Coeficiente">' + esc(pct(f.coef)) + '</td>'
           + '<td class="monto" data-l="% comisión">' + (AJUSTES ? '<input class="cap p" data-campo="porcentaje" data-id="' + esc(f.id) + '" inputmode="decimal" value="' + esc((Number(f.porcentaje) * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })) + '" aria-label="% de comisión">' : esc(pct(f.porcentaje))) + '</td>'
@@ -836,6 +867,140 @@ tr.click:hover td{background:var(--navy-soft)}
     } catch (e) { msgEn(falla(e)); }
   }
 
+  /* ---------- Devoluciones de IVA (portal/sql/163_devolucion_dos_facturas.sql; petición de Fernando Cadengo autorizada por
+     Héctor Daniel Nava el 2-nov-2026). La factura de la otra compañía de cada devolución la sube Elisa Mata en el Panel de
+     trabajo y entra sola aquí, incluida, con su costo SV (el % SV sobre el monto devuelto, en los clientes que lo llevan).
+     Todo lo calcula la base (cdir_dev); aquí solo se capturan el % de cada cliente, si lleva SV, el % SV y «Entregado». ---------- */
+  var DEV = { d: null, pide: 0 };
+  function pctTxt(n) { return n == null ? '—' : Number(n).toLocaleString('es-MX', { maximumFractionDigits: 4 }) + ' %'; }
+  var DEV_EST = { por_cobrar: ['Por cobrar', 'ojo'], pagada: ['Pagada', 'az'], revisar: ['Revisar (nota de crédito)', 'ojo'] };
+  async function cargaDev() {
+    var n = ++DEV.pide; estado('dev-estado', 'Cargando…');
+    try { var d = await rpc('cdir_dev', { p: {} }); if (n !== DEV.pide) return; DEV.d = d; estado('dev-estado', ''); pintaDev(); }
+    catch (e) { if (n === DEV.pide) { estado('dev-estado', ''); error(falla(e)); } }
+  }
+  function pintaDev() {
+    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA;
+    $('d-sv').value = d.sv_pct == null ? '' : Number(d.sv_pct).toLocaleString('es-MX', { maximumFractionDigits: 4 });
+    $('d-sv').disabled = !cap; $('d-sv-ok').hidden = !cap;
+    $('d-sv-n').textContent = d.sv_pct == null ? 'Falta capturarlo: sin él no se calcula el costo SV.' : '';
+    $('d-con-agrega').hidden = !cap;
+    // pago SV por semana
+    var S = d.semanas || [];
+    $('t-dsem').tHead.innerHTML = '<tr><th>Se entrega</th><th>Semana (se terminaron de pagar)</th><th class="monto">Devoluciones</th><th class="monto">Costo SV</th><th>Entregado</th><th></th></tr>';
+    $('t-dsem').tBodies[0].innerHTML = S.map(function (x) {
+      return '<tr><td data-l="Se entrega" style="white-space:nowrap"><strong>' + esc(fecha(x.paga_el)) + '</strong></td>'
+        + '<td data-l="Semana">' + esc(fecha(x.semana)) + ' al ' + esc(fecha(sumaDias(x.semana, 6))) + '</td>'
+        + '<td class="monto" data-l="Devoluciones">' + esc(x.n) + '</td><td class="monto" data-l="Costo SV"><strong>' + esc(dinero(x.costo)) + '</strong></td>'
+        + '<td data-l="Entregado">' + (x.entregado_el ? '<span class="chip az">Entregado el ' + esc(fecha(x.entregado_el)) + '</span>' + (x.entregado_por ? ' <span class="mut">' + esc(x.entregado_por) + '</span>' : '') : x.toca ? '<span class="chip ojo">Toca entregar</span>' : '<span class="mut">Todavía no</span>') + '</td>'
+        + '<td data-l="">' + (cap && !x.entregado_el && x.toca ? '<button class="btn chico acento" type="button" data-dentrega="' + esc(x.paga_el) + '">Entregado</button>' : '')
+        + (d.regresa && x.entregado_el ? '<button class="btn chico" type="button" data-dregresa="' + esc(x.paga_el) + '">Regresar</button>' : '') + '</td></tr>';
+    }).join('');
+    $('dsem-vacia').hidden = S.length > 0;
+    // devoluciones con su factura
+    var L = d.devoluciones || [];
+    $('ddev-sub').textContent = (L.length === 1 ? '1 devolución' : L.length + ' devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre';
+    $('t-ddev').tHead.innerHTML = '<tr><th>Cliente</th><th>Devolución</th><th class="monto">Monto devuelto</th><th class="monto">%</th><th>Factura</th><th class="monto">Subtotal</th><th>Pago</th><th class="monto">Costo SV</th><th class="monto">Utilidad</th><th class="monto">Comisión</th><th>Pago SV</th></tr>';
+    $('t-ddev').tBodies[0].innerHTML = L.map(function (x) {
+      var e = DEV_EST[x.estado] || [x.estado, ''];
+      return '<tr><td class="w" data-l="Cliente"><div class="rs">' + esc(x.rs) + '</div><div class="mut">' + esc(x.grupo) + '</div></td>'
+        + '<td data-l="Devolución">' + esc(x.mes) + (x.subio ? '<div class="mut">la subió ' + esc(x.subio) + '</div>' : '') + '</td>'
+        + '<td class="monto" data-l="Monto devuelto">' + (x.monto_devuelto != null ? esc(dinero(x.monto_devuelto)) : '<span class="mut">Falta</span>') + '</td>'
+        + '<td class="monto" data-l="%">' + esc(pctTxt(x.pct)) + (x.sv ? '<div class="mut">SV ' + esc(pctTxt(x.sv_pct)) + '</div>' : '') + '</td>'
+        + '<td data-l="Factura">' + (esc(x.folio) || 'Sin folio') + '<div class="mut">' + esc(fecha(x.fecha)) + '</div></td>'
+        + '<td class="monto" data-l="Subtotal">' + esc(dinero(x.sub)) + '</td>'
+        + '<td data-l="Pago"><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span>' + (x.pagada_el ? '<div class="mut">el ' + esc(fecha(x.pagada_el)) + '</div>' : Number(x.pagado) > 0 ? '<div class="mut">abonado ' + esc(dinero(x.pagado)) + '</div>' : '') + '</td>'
+        + '<td class="monto" data-l="Costo SV">' + (x.sv ? esc(dinero(x.costo)) : '<span class="mut">No lleva</span>') + '</td>'
+        + '<td class="monto" data-l="Utilidad">' + dineroH(x.utilidad) + '</td>'
+        + '<td class="monto" data-l="Comisión"><strong>' + dineroH(x.comision) + '</strong></td>'
+        + '<td data-l="Pago SV">' + (!x.sv ? '' : x.entregado_el ? '<span class="chip az">Entregado</span>' : x.paga_el ? esc(fecha(x.paga_el)) : '<span class="mut">Cuando se pague</span>') + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</td></tr>';
+    }).join('');
+    $('ddev-vacia').hidden = L.length > 0;
+    // por facturar
+    var F = d.por_facturar || [];
+    $('t-dpor').tHead.innerHTML = '<tr><th>Cliente</th><th>Devolución</th><th>Depositada</th><th class="monto">Monto devuelto</th><th class="monto">A facturar</th></tr>';
+    $('t-dpor').tBodies[0].innerHTML = F.map(function (x) {
+      var s = x.sugerido || {};
+      return '<tr><td class="w" data-l="Cliente"><span class="rs">' + esc(x.rs) + '</span></td><td data-l="Devolución">' + esc(x.mes) + '</td><td data-l="Depositada">' + esc(fecha(x.pagado)) + '</td>'
+        + '<td class="monto" data-l="Monto devuelto">' + (x.monto_devuelto != null ? esc(dinero(x.monto_devuelto)) : '<span class="mut">Falta</span>') + '</td>'
+        + '<td class="monto" data-l="A facturar">' + (s.monto != null ? esc(dinero(s.monto)) + ' <span class="mut">más IVA</span>' : s.falta === 'cond' ? '<span class="chip ojo">Falta su %</span>' : '<span class="mut">Falta el monto</span>') + '</td></tr>';
+    }).join('');
+    $('dpor-vacia').hidden = F.length > 0;
+    // lo que se cobra de cada cliente
+    var C = d.condiciones || [];
+    $('t-dcon').tHead.innerHTML = '<tr><th>Cliente</th><th>Factura</th><th class="monto">%</th><th>Costo SV</th><th>Nota</th><th>Capturó</th></tr>';
+    $('t-dcon').tBodies[0].innerHTML = C.map(function (x) {
+      return '<tr' + (cap ? ' class="click" tabindex="0" data-dcon="' + esc(x.empresa_id) + '"' : '') + '><td class="w" data-l="Cliente"><div class="rs">' + esc(x.razon) + '</div><div class="mut">' + esc(x.grupo) + ' · ' + esc(x.rfc) + '</div></td>'
+        + '<td data-l="Factura">' + (x.lleva ? 'Lleva' : '<span class="mut">No lleva</span>') + '</td><td class="monto" data-l="%">' + (x.lleva ? esc(pctTxt(x.pct)) : '') + '</td>'
+        + '<td data-l="Costo SV">' + (x.sv ? 'Sí' : 'No') + '</td><td class="w" data-l="Nota"><span class="mut">' + esc(x.nota) + '</span></td>'
+        + '<td data-l="Capturó"><span class="mut">' + esc(x.por || '') + (x.actualizado ? ' · ' + esc(fechaHora(x.actualizado)) : '') + '</span></td></tr>';
+    }).join('');
+    $('dcon-vacia').hidden = C.length > 0;
+  }
+  function sumaDias(s, n) { var p = String(s || '').slice(0, 10).split('-'); if (p.length < 3) return s; var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return d.toISOString().slice(0, 10); }
+  function devConForma(id) {
+    var d = DEV.d || {}, x = (d.condiciones || []).filter(function (k) { return k.empresa_id === id; })[0] || null;
+    EDITA = { tipo: 'dcon', id: x ? x.empresa_id : null };
+    abre(cab('Devoluciones de IVA', x ? x.razon : 'Agregar cliente', x ? x.rfc : 'Lo que se cobra en cada una de sus devoluciones')
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + (x ? '' : '<div class="campo ancho"><label for="dc-emp">Razón social</label><div id="dc-empBox"></div></div>')
+      + campo('dc-lleva', 'Factura de esta compañía', '<select id="dc-lleva"><option value="1"' + (!x || x.lleva ? ' selected' : '') + '>Sí lleva</option><option value="0"' + (x && !x.lleva ? ' selected' : '') + '>No lleva</option></select>')
+      + campo('dc-pct', '% del monto devuelto (antes de IVA)', inp('dc-pct', x && x.pct != null ? x.pct : '', ' inputmode="decimal" autocomplete="off"'))
+      + campo('dc-sv', 'Costo SV', '<select id="dc-sv"><option value="1"' + (x && x.sv ? ' selected' : '') + '>Sí lleva</option><option value="0"' + (!x || !x.sv ? ' selected' : '') + '>No lleva</option></select>')
+      + campo('dc-nota', 'Nota (opcional)', '<textarea id="dc-nota" maxlength="300">' + esc(x ? x.nota : '') + '</textarea>', true)
+      + '</div></section><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="dc-guarda">Guardar</button>' + (x ? '<button class="btn peligro" type="button" id="dc-quita">Quitar</button>' : '') + '</div></div>');
+    if (!x) {
+      EDITA.busca = window.PROFASE_BUSCA.crea({ donde: $('dc-empBox'), id: 'dc-emp', marcador: 'Escribe parte del nombre o del RFC',
+        opciones: (d.empresas || []).filter(function (e) { return !(d.condiciones || []).some(function (k) { return k.empresa_id === e.id; }); })
+          .map(function (e) { return { v: String(e.id), t: e.razon, nota: e.rfc + (e.grupo ? ' · ' + e.grupo : '') }; }), valor: [] });
+    }
+  }
+  async function devConGuarda(b, quitar) {
+    var id = EDITA && (EDITA.id || (EDITA.busca && +EDITA.busca.valor()[0]));
+    if (!id) { msgEn('Escoge la razón social.'); return; }
+    var p = quitar ? { quitar: true } : { lleva: $('dc-lleva').value === '1', pct: num($('dc-pct').value), sv: $('dc-sv').value === '1', nota: $('dc-nota').value.trim() };
+    if (!quitar && p.lleva && !(p.pct > 0)) { msgEn('Escribe su porcentaje del monto devuelto.'); return; }
+    if (quitar && !(await pregunta('¿Quitar lo capturado de este cliente? Sus devoluciones se quedan como están.'))) return;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_dev_cond_guarda', { p_empresa_id: id, p: p }); cierra(); pintaDev(); avisa(quitar ? 'Se quitó.' : 'Guardado: el costo de sus devoluciones se volvió a calcular.'); }
+    catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  async function devSv(b) {
+    var v = num($('d-sv').value); if (!(v > 0)) { error('Escribe el % SV (por ejemplo 9).'); return; }
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_dev_sv', { p_pct: v }); pintaDev(); avisa('Guardado: el costo SV de lo que no se ha entregado se volvió a calcular.'); }
+    catch (e) { error(falla(e)); }
+    b.disabled = false;
+  }
+  async function devEntrega(b) {
+    var f = b.getAttribute('data-dentrega');
+    if (!(await pregunta('¿Ya se entregó el pago SV del ' + fecha(f) + '? A Héctor Daniel Nava le llega el aviso.'))) return;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_dev_entrega', { p_paga_el: f }); pintaDev(); avisa('Listo: quedó marcado «Entregado».'); }
+    catch (e) { error(falla(e)); b.disabled = false; }
+  }
+  function devRegresaForma(f) {
+    EDITA = { tipo: 'dreg', f: f };
+    abre(cab('Devoluciones de IVA', 'Regresar «Entregado»', 'Pago SV del ' + fecha(f))
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">' + campo('dr-mo', 'Por qué se regresa (queda anotado)', '<textarea id="dr-mo" maxlength="300"></textarea>', true)
+      + '</div></section><div class="msg" id="v-msg" hidden></div><div class="acciones"><button class="btn peligro" type="button" id="dr-ok">Regresar</button></div></div>');
+    try { $('dr-mo').focus(); } catch (e) {}
+  }
+  async function devRegresa(b) {
+    if (!EDITA || EDITA.tipo !== 'dreg') return;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_dev_regresa', { p_paga_el: EDITA.f, p_motivo: $('dr-mo').value }); cierra(); pintaDev(); avisa('Se regresó el «Entregado».'); }
+    catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  function excelDev(b) {
+    var L = (DEV.d || {}).devoluciones || [];
+    excel(b, 'Devoluciones de IVA PROFASE', 'Devoluciones de IVA', ['Comisiones de dirección', L.length + ' devoluciones'],
+      ['Cliente', 'Grupo', 'Devolución', 'Monto devuelto', '% de la factura', 'Folio', 'Fecha factura', 'Subtotal', 'Pago', 'Pagada el', 'Costo SV', 'Utilidad', 'Comisión', 'Pago SV', 'Entregado el'],
+      L.map(function (x) { return [x.rs || '', x.grupo || '', x.mes || '', x.monto_devuelto, pctTxt(x.pct), x.folio || '', fecha(x.fecha), x.sub, (DEV_EST[x.estado] || [x.estado])[0], fecha(x.pagada_el), x.sv ? x.costo : '', x.utilidad, x.comision, x.sv ? fecha(x.paga_el) : '', fecha(x.entregado_el)]; }),
+      [4, 8, 11, 12, 13], [34, 22, 16, 15, 11, 11, 13, 14, 14, 13, 14, 14, 14, 13, 13]);
+  }
+
   /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
   async function excel(b, nombre, titulo, lineas, head, filas, monedas, anchos, extra) {
     b.disabled = true;
@@ -912,6 +1077,11 @@ tr.click:hover td{background:var(--navy-soft)}
   $('ir-fac').onclick = function () { muestra('fac'); };
   $('ir-com').onclick = function () { muestra('com'); };
   $('ir-uti').onclick = function () { muestra('uti'); };
+  $('ir-dev').onclick = function () { muestra('dev'); };
+  $('x-dev').onclick = function () { excelDev(this); };
+  $('d-sv-ok').onclick = function () { devSv(this); };
+  $('d-sv').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !$('d-sv-ok').hidden) devSv($('d-sv-ok')); });
+  $('d-con-agrega').onclick = function () { devConForma(null); };
   $('f-quita').onclick = function () { FAC.mes = 0; FAC.desde = FAC.hasta = ''; rangoMes(); cargaFac(); };
   $('f-anio').onchange = function () { FAC.anio = +this.value; if (FAC.mes) rangoMes(); else { FAC.desde = FAC.anio + '-01-01'; FAC.hasta = FAC.anio + '-12-31'; rangoMes(); } cargaFac(); };
   $('f-desde').onchange = function () { FAC.mes = 0; FAC.desde = this.value; if (!FAC.desde) FAC.hasta = ''; else if (FAC.hasta && FAC.hasta < FAC.desde) FAC.hasta = FAC.desde; rangoMes(); cargaFac(); };
@@ -949,6 +1119,12 @@ tr.click:hover td{background:var(--navy-soft)}
     if (t.getAttribute && t.getAttribute('data-ver')) { verFactura(+t.getAttribute('data-ver')); return; }
     var ed = t.closest && t.closest('tr[data-edita]'); if (ed) { var k = ed.getAttribute('data-edita').split(':'); forma(k[0], +k[1]); return; }
     if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
+    var dc = t.closest && t.closest('tr[data-dcon]'); if (dc) { devConForma(+dc.getAttribute('data-dcon')); return; }
+    if (t.getAttribute && t.getAttribute('data-dentrega')) { devEntrega(t); return; }
+    if (t.getAttribute && t.getAttribute('data-dregresa')) { devRegresaForma(t.getAttribute('data-dregresa')); return; }
+    if (t.id === 'dr-ok') { devRegresa(t); return; }
+    if (t.id === 'dc-guarda') { devConGuarda(t, false); return; }
+    if (t.id === 'dc-quita') { devConGuarda(t, true); return; }
     if (t.id === 'b-reparto') { repartoForma(); return; }
     if (t.id === 'rp-guarda') { repartoGuarda(t); return; }
     if (t.id === 'e-guarda') { guardaForma(t); return; }

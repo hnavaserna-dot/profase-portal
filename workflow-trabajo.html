@@ -268,6 +268,17 @@ tr.fila:hover td{background:var(--navy-soft)}
 .dev-sat .btn{flex:1 1 140px}
 .dev-sat .btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
 .dev-nota{font-size:12.5px;color:var(--muted)}
+/* las dos facturas de la devolución (163): cada una con su XML */
+.dev-facs{border-top:1px solid var(--line)}
+.dev-fac{border-bottom:1px solid var(--line)}
+.dev-fac>.dev-paso{padding:10px 14px}
+.dev-fac .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.dev-fac .dev-nota{padding:0 14px 10px}
+.dev-fac .form{border-top:1px solid var(--line)}
+.dev-fac .botones{padding:0 14px 10px;display:flex;flex-wrap:wrap;gap:8px}
+.dev-fac .form .botones{padding:0}
+.dev-prev .dl{margin:0}
+.dev-ojo{background:var(--accent-soft);color:var(--accent-ink);border-radius:8px;padding:8px 10px;font-size:13px}
 .btn.nuevo{box-shadow:0 0 0 3px var(--accent);border-color:var(--accent)}
 .nuevo-nota{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin:16px 0 0;font-size:13.5px;font-weight:600}
 </style></head><body>
@@ -349,7 +360,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   // 2-nov-2026): una por solicitud, con las fechas de ley y los botones de la respuesta del SAT. La base decide quién.
   var DEV = { crea: false, factura: false }, DEVC = {}, DEVF = null;
   var DEV_EST = { espera_sat: ['Esperando al SAT', ''], requerimiento: ['Requerimiento por contestar', 'ojo'], autorizada: ['Autorizada · falta el depósito', 'ok'],
-                  pagada: ['Pagada · falta la factura', 'ok'], facturada: ['Terminada (facturada)', 'ok'], rechazada: ['Rechazada', 'mal'],
+                  pagada: ['Depositada · falta facturar', 'ok'], facturada: ['Terminada (facturada)', 'ok'], rechazada: ['Rechazada', 'mal'],
                   desistida: ['Desistida', 'mal'], cancelada: ['Cancelada', 'no'] };
   var DEV_SAT = { autorizada: ['Autorizada', 'Fecha de la autorización'], requerimiento: ['Requerimiento', 'Fecha en que lo notificaron'],
                   rechazada: ['Rechazada', 'Fecha del rechazo'], desistida: ['Desistida', 'Fecha del desistimiento'] };
@@ -662,13 +673,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (!a.dev_caso) return false;
     if (a.dev_paso === 'respuesta') return e === 2 || e === 3 || e === 6;
     if (e === 6) return true;
+    if (a.dev_paso === 'factura_eq') return e === 2 && !(ROL === 'director' && !CONSULTA);
     return a.dev_paso === 'factura' && e === 2 && !jefe();
   }
   function devNotaPaso(a) {
     if (a.dev_paso === 'respuesta') return 'Este paso se cierra abajo, con «¿Qué contestó el SAT?»: lo registra ' + (a.aut_nombre || 'quien autoriza') + ', un gerente o la dirección.';
     if (a.dev_paso === 'contestar') return 'Al terminarlo (con los papeles de trabajo y el acuse de solventación) nace solo la siguiente respuesta del SAT.';
-    if (a.dev_paso === 'deposito') return 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nace la factura de honorarios.';
-    if (a.dev_paso === 'factura') return 'Se termina sola cuando quien factura la confirma en Tesorería › Facturación («¿Es de la devolución de IVA de …?»).';
+    if (a.dev_paso === 'deposito') return 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nacen las facturas. El monto devuelto lo captura ' + (a.aut_nombre || 'el gerente que autoriza') + ' en la ficha de la devolución.';
+    if (a.dev_paso === 'factura') return 'Se termina sola al subir su XML aquí abajo, en la ficha de la devolución (o al confirmarla en Tesorería › Facturación, «¿Es de la devolución de IVA de …?»).';
+    if (a.dev_paso === 'factura_eq') return 'Se termina sola al subir su XML aquí abajo, en la ficha de la devolución: se da de alta sola en la Facturación de su compañía.';
     return 'Es parte de una devolución de IVA: abajo está todo el caso.';
   }
   function devChip(e) { var x = DEV_EST[e] || [e, '']; return '<span class="dev-est ' + x[1] + '">' + esc(x[0]) + '</span>'; }
@@ -679,6 +692,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ABIERTA !== a.id || !$('dev-in')) return;
     if (r.error || !r.data) { box.innerHTML = '<div class="vacio">' + esc(r.error ? falla(r.error) : 'No se pudo leer la devolución.') + '</div>'; return; }
     var c = r.data; DEVC[c.id] = c;
+    var pu = c.puede || {}, ops = [];
     $('dev-n').textContent = c.titulo.replace(/^Devolución de IVA · /, '');
     var h = '<div class="dev-res"><div class="grande">' + esc(c.rs) + '</div><div style="margin-top:4px">' + devChip(c.estado) + '</div></div>';
     h += '<div class="in"><dl class="dl">'
@@ -687,10 +701,15 @@ tr.fila:hover td{background:var(--navy-soft)}
       + (c.n_req ? '<dt>Requerimientos</dt><dd>' + esc(c.n_req) + (c.notificado ? ' <span class="rfc">· el último notificado el ' + esc(fecha(c.notificado)) + '</span>' : '') + '</dd>' : '')
       + (c.autorizado ? '<dt>Autorizada</dt><dd>' + esc(fecha(c.autorizado)) + '</dd>' : '')
       + (c.pagado ? '<dt>Depositada</dt><dd>' + esc(fecha(c.pagado)) + '</dd>' : '')
+      // el monto que devolvió el SAT (163): lo captura el gerente que autoriza; de ahí salen las facturas
+      + (c.monto_devuelto != null || pu.monto || c.estado === 'pagada' || c.estado === 'facturada' ? '<dt>Monto devuelto</dt><dd>'
+        + (c.monto_devuelto != null ? '<b>' + esc(pesos(c.monto_devuelto)) + '</b>' + (c.monto_por ? ' <span class="rfc">· lo capturó ' + esc(c.monto_por) + '</span>' : '')
+                                    : '<span class="no">Falta</span> <span class="rfc">(lo captura ' + esc(c.gerente || 'el gerente que autoriza') + ')</span>')
+        + (pu.monto && !CONSULTA ? ' <button class="link" type="button" id="dev-monto">' + (c.monto_devuelto != null ? 'Cambiar' : 'Capturar') + '</button>' : '') + '</dd>' : '')
       + '<dt>Contador</dt><dd>' + (esc(c.contador) || '<span class="no">—</span>') + '</dd>'
       + '<dt>Autoriza la respuesta</dt><dd>' + (esc(c.gerente) || '<span class="no">—</span>') + '</dd>'
-      + '<dt>Factura</dt><dd>' + (c.factura_folio ? 'Folio ' + esc(c.factura_folio) + (c.facturo ? ' · la hizo ' + esc(c.facturo) : '') : esc(c.factura) || '<span class="no">—</span>') + '</dd>'
-      + '</dl></div>';
+      + '<dt>Hace la factura</dt><dd>' + (esc(c.facturo || c.factura) || '<span class="no">—</span>') + '</dd>'
+      + '</dl><div id="dev-monto-f" hidden></div></div>';
     h += '<ul class="lista">' + (c.pasos || []).map(function (x) {
       var cerr = x.estatus === 2 || x.estatus === 3 || x.estatus === 6;
       var v = x.ven_pro || x.ven_sat, tarde = !cerr && v && v < HOY;
@@ -698,7 +717,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         + '<div class="d">' + (x.ven_pro ? '<span class="vence' + (tarde ? ' mal' : '') + '">Profase ' + esc(fecha(x.ven_pro)) + '</span> · ' : '') + (x.ven_sat ? 'SAT ' + esc(fecha(x.ven_sat)) : 'Sin fecha')
         + (x.terminado ? ' · terminada el ' + esc(fecha(diaMty(x.terminado))) : '') + (x.resp ? ' · ' + esc(x.resp) : '') + '</div></div>' + chipEst(x.estatus) + '</div></li>';
     }).join('') + '</ul>';
-    var pu = c.puede || {}, ops = [];
+    if ((c.facturas || []).length) h += '<div class="dev-facs">' + c.facturas.map(devFacHtml).join('') + '</div>';
     if (pu.responder) ops = ['autorizada', 'requerimiento', 'rechazada'];
     if (pu.desistir) ops.push('desistida');
     if (ops.length && !CONSULTA) {
@@ -715,16 +734,112 @@ tr.fila:hover td{background:var(--navy-soft)}
         + (pu.cancelar ? '<button class="btn peligro" type="button" id="dev-canc">Cancelar esta devolución</button>' : '') + '</div><div id="dev-canc-f" hidden></div></div>';
     }
     var ev = c.eventos || [];
-    var EVQ = { alta: 'Se dio de alta', contestado: 'Se contestó el requerimiento', pagada: 'Se depositó al cliente', factura: 'Se ligó la factura de honorarios',
+    var EVQ = { alta: 'Se dio de alta', contestado: 'Se contestó el requerimiento', pagada: 'Se depositó al cliente', factura: 'Se ligó la factura de honorarios', monto: 'Se capturó el monto devuelto',
                 'factura:quitada': 'Se quitó la liga de la factura', cancelada: 'Se canceló', deshacer: 'Se deshizo una respuesta del SAT' };
     if (ev.length) h += '<ul class="bit">' + ev.slice().reverse().map(function (x) {
-      var q = /^sat:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(4)] || [x.que])[0] : /^deshecha:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(9)] || [x.que])[0] + ' (deshecha)' : (EVQ[x.que] || x.que);
+      var q = /^sat:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(4)] || [x.que])[0] : /^deshecha:/.test(x.que) ? 'SAT: ' + (DEV_SAT[x.que.slice(9)] || [x.que])[0] + ' (deshecha)' : (x.texto || EVQ[x.que] || x.que);
       return '<li><span class="q">' + esc(q) + (x.fecha ? ' · ' + esc(fecha(x.fecha)) : '') + '</span><span class="c">' + esc(x.quien || '') + ' · ' + esc(fechaHora(x.cuando)) + '</span>' + (x.nota ? '<span class="c" style="flex-basis:100%">' + esc(x.nota) + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
     if (aviso) h = '<div class="msg ok" style="margin:10px 14px 0">' + esc(aviso) + '</div>' + h;
     box.innerHTML = h;
   }
   function devAbreFuera() { msg('Ese paso no está en tu lista: lo lleva otra persona.', false); }
+  /* ---- Las dos facturas (portal/sql/163_devolucion_dos_facturas.sql; petición de Fernando Cadengo autorizada por Héctor
+     Daniel Nava el 2-nov-2026): con el depósito nacen la factura de honorarios y la de la otra compañía del grupo. Cada una
+     se sube como su XML (el CFDI timbrado): la vista previa dice qué dice la factura y qué va a pasar, y con «Confirmar» se da
+     de alta sola en la Facturación de su compañía (o se liga, si ya estaba). La base decide quién sube cada una, quién ve sus
+     montos y cuánto toca facturar (nada de eso se calcula aquí). ---- */
+  var DEVX = {};
+  function pesos(n) { return n == null ? '' : '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function devFacHtml(f) {
+    var tit = 'Factura ' + (f.cia || ''), d = [], s = f.sugerido;
+    if (f.folio) d.push('Folio ' + esc(f.folio) + (f.fecha ? ' del ' + esc(fecha(f.fecha)) : ''));
+    if (f.total != null) d.push(esc(pesos(f.sub)) + ' más IVA: ' + esc(pesos(f.total)));
+    if (!f.lista && s) {
+      if (s.monto != null) d.push('Toca facturar <b>' + esc(pesos(s.monto)) + ' más IVA</b>' + (s.como === 'pct' && s.pct != null ? ' (' + esc(s.pct) + ' % del monto devuelto)' : s.como === 'fijo' ? ' (cantidad fija del cliente)' : ''));
+      else if (s.falta === 'monto') d.push('Cuánto facturar sale en cuanto se capture el monto devuelto');
+      else if (s.falta === 'cond') d.push('Falta capturar lo que se le cobra a este cliente en devoluciones');
+    }
+    var h = '<div class="dev-fac" data-dpaso="' + esc(f.paso) + '"><div class="dev-paso"><div class="q"><b>' + esc(tit) + '</b>'
+      + (d.length ? '<div class="d">' + d.join(' · ') + '</div>' : '') + '</div>'
+      + (f.lista ? '<span class="dev-est ok">Lista</span>' : '<span class="dev-est ojo">Falta</span>') + '</div>';
+    if (f.sube && !CONSULTA) h += '<div class="subir"><input type="file" accept=".xml,text/xml,application/xml" data-dfx="' + esc(f.paso) + '" aria-label="Escoger el XML de la ' + esc(tit) + '">'
+      + '<button class="btn" type="button" data-dfl="' + esc(f.paso) + '">Revisar el XML</button></div>'
+      + '<div class="dev-nota" style="padding-top:8px">Sube el XML timbrado (el .xml; el PDF no hace falta): se da de alta sola en la Facturación de ' + esc(f.cia || 'su compañía') + ' y queda por cobrar.</div>'
+      + '<div data-dfp="' + esc(f.paso) + '"></div>';
+    if (f.quita && !CONSULTA) h += '<div class="botones"><button class="btn peligro" type="button" data-dfq="' + esc(f.paso) + '">Quitar la factura</button></div><div data-dfqf="' + esc(f.paso) + '"></div>';
+    return h + '</div>';
+  }
+  function devZona(k, paso) { return document.querySelector('[data-' + k + '="' + paso + '"]'); }
+  function devFacMsg(z, t, ok) { var m = z && z.querySelector('.msg'); if (!m) return; m.hidden = !t; m.className = 'msg ' + (ok ? 'ok' : 'mal'); m.textContent = t || ''; }
+  async function devFacLee(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    var paso = b.getAttribute('data-dfl'), inp = devZona('dfx', paso), z = devZona('dfp', paso);
+    if (!z) return;
+    z.innerHTML = '<div class="form"><div class="msg" hidden></div></div>';
+    var f = inp && inp.files && inp.files[0];
+    if (!f) { devFacMsg(z, 'Escoge el XML de la factura.', false); return; }
+    if (f.size > 2000000) { devFacMsg(z, 'Ese archivo es muy grande para ser el XML de una factura.', false); return; }
+    b.disabled = true;
+    try {
+      var x = await f.text();
+      var r = await P.sb.rpc('wf_dev_fac_lee', { p_caso: a.dev_caso, p_paso: paso, p_xml: x });
+      if (r.error) throw r.error;
+      var v = r.data || {}; DEVX[paso] = x;
+      z.innerHTML = '<div class="form dev-prev"><dl class="dl">'
+        + '<dt>Factura</dt><dd>' + esc(v.cia || '') + ' · folio <b>' + esc(v.folio) + '</b> del ' + esc(fecha(v.fecha)) + '</dd>'
+        + '<dt>A nombre de</dt><dd>' + esc(v.receptor_razon || v.receptor_nombre || '') + ' <span class="rfc">(' + esc(v.receptor_rfc || '') + ')</span></dd>'
+        + '<dt>Subtotal</dt><dd>' + esc(pesos(v.subtotal)) + '</dd><dt>IVA</dt><dd>' + esc(pesos(v.iva)) + '</dd><dt>Total</dt><dd><b>' + esc(pesos(v.total)) + '</b></dd>'
+        + (v.concepto ? '<dt>Concepto</dt><dd>' + esc(v.concepto) + '</dd>' : '') + '</dl>'
+        + (v.diferencia ? '<div class="dev-ojo">No cuadra con lo que toca facturar (' + esc(pesos(v.sugerido)) + ' más IVA). Revísala antes de confirmar.</div>' : '')
+        + (v.emisor_nuevo ? '<div class="dev-ojo">Es la primera factura de ' + esc(v.cia || '') + ' que se sube aquí: el CRM va a recordar que la emite ' + esc(v.emisor_nombre || 'esta empresa') + ' (' + esc(v.emisor_rfc || '') + '). Revisa que sea la correcta.</div>' : '')
+        + '<div class="dev-nota">' + (v.existente ? 'Esta factura ya está en Facturación: se liga a la devolución (no se repite).' : 'Se da de alta sola en la Facturación de ' + esc(v.cia || '') + ', por cobrar, y su paso se termina.') + '</div>'
+        + '<div class="botones"><button class="btn acento" type="button" data-dfs="' + esc(paso) + '">Confirmar</button><button class="btn" type="button" data-dfc="' + esc(paso) + '">Cancelar</button></div>'
+        + '<div class="msg" hidden></div></div>';
+    } catch (e) { devFacMsg(z, falla(e), false); }
+    b.disabled = false;
+  }
+  async function devFacSube(b) {
+    var a = POR_ID[ABIERTA], paso = b.getAttribute('data-dfs'), z = devZona('dfp', paso); if (!a || !DEVX[paso]) return;
+    b.disabled = true; devFacMsg(z, '');
+    try {
+      var r = await P.sb.rpc('wf_dev_fac_sube', { p_caso: a.dev_caso, p_paso: paso, p_xml: DEVX[paso] }); if (r.error) throw r.error;
+      delete DEVX[paso];
+      await devRecarga(a, 'Listo: la factura quedó dada de alta en Facturación y su paso se terminó.');
+    } catch (e) { devFacMsg(z, falla(e), false); b.disabled = false; }
+  }
+  function devFacQuitaForm(b) {
+    var paso = b.getAttribute('data-dfq'), z = devZona('dfqf', paso); if (!z) return;
+    z.innerHTML = '<div class="form"><div><label for="dfq-mo-' + esc(paso) + '">Por qué se quita (queda anotado)</label><textarea id="dfq-mo-' + esc(paso) + '" maxlength="300" placeholder="Por ejemplo: subí la de otro mes"></textarea></div>'
+      + '<div class="dev-nota">Si la dio de alta el CRM, se borra también de Facturación; si ya estaba ahí, solo se desliga. Con pagos no se quita.</div>'
+      + '<div class="botones"><button class="btn peligro" type="button" data-dfqo="' + esc(paso) + '">Sí, quitarla</button><button class="btn" type="button" data-dfqx="' + esc(paso) + '">No</button></div><div class="msg" hidden></div></div>';
+    try { $('dfq-mo-' + paso).focus(); } catch (e) {}
+  }
+  async function devFacQuita(b) {
+    var a = POR_ID[ABIERTA], paso = b.getAttribute('data-dfqo'), z = devZona('dfqf', paso); if (!a) return;
+    b.disabled = true; devFacMsg(z, '');
+    try {
+      var r = await P.sb.rpc('wf_dev_fac_quita', { p_caso: a.dev_caso, p_paso: paso, p_motivo: $('dfq-mo-' + paso).value }); if (r.error) throw r.error;
+      await devRecarga(a, 'Listo: se quitó la factura y su paso volvió a quedar por hacer.');
+    } catch (e) { devFacMsg(z, falla(e), false); b.disabled = false; }
+  }
+  function devMontoForm() {
+    var a = POR_ID[ABIERTA], c = a && DEVC[a.dev_caso], f = $('dev-monto-f'); if (!f) return;
+    f.hidden = false;
+    f.innerHTML = '<div class="form" style="padding-left:0;padding-right:0"><div><label for="dev-monto-v">Monto que devolvió el SAT (en pesos)</label>'
+      + '<input type="text" id="dev-monto-v" inputmode="decimal" autocomplete="off" value="' + esc(c && c.monto_devuelto != null ? c.monto_devuelto : '') + '"></div>'
+      + '<div class="dev-nota">El del depósito al cliente. De ahí sale cuánto facturar.</div>'
+      + '<div class="botones"><button class="btn acento" type="button" id="dev-monto-ok">Guardar</button><button class="btn" type="button" id="dev-monto-x">Cancelar</button></div><div class="msg" id="dev-monto-m" hidden></div></div>';
+    try { $('dev-monto-v').focus(); } catch (e) {}
+  }
+  async function devMonto(b) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    var v = String($('dev-monto-v').value || '').replace(/[$,\s]/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(v)) { devMsg('dev-monto-m', 'Escribe el monto con números (por ejemplo 125000.50).', false); return; }
+    b.disabled = true; devMsg('dev-monto-m', '');
+    try { var r = await P.sb.rpc('wf_dev_monto', { p_caso: a.dev_caso, p_monto: Number(v) }); if (r.error) throw r.error; await devRecarga(a, 'Listo: se guardó el monto devuelto.'); }
+    catch (e) { devMsg('dev-monto-m', falla(e), false); b.disabled = false; }
+  }
   function devSatForm(k, b) {
     document.querySelectorAll('[data-dsat]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
     var f = $('dev-sat-f'); if (!f) return;
@@ -838,12 +953,14 @@ tr.fila:hover td{background:var(--navy-soft)}
   // Lo nuevo, desde su aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']; regla de Daniel del 2-nov-2026: lo que avisa
   // Claude lleva a lo nuevo): «devolucion-iva» ilumina «Nueva devolución de IVA» con una nota corta de qué es
   function verNuevo(t) {
-    if (t !== 'devolucion-iva') return;
+    if (t !== 'devolucion-iva' && t !== 'devolucion-facturas') return;
     if (!$('p-lista') || $('p-lista').hidden) { setTimeout(function () { verNuevo(t); }, 400); return; }
     var nota = document.getElementById('nuevo-dev');
     if (!nota) { nota = document.createElement('div'); nota.id = 'nuevo-dev'; nota.className = 'nuevo-nota'; nota.setAttribute('role', 'status'); $('p-lista').parentNode.insertBefore(nota, $('p-lista')); }
-    nota.textContent = 'Nuevo: las devoluciones de IVA van una por solicitud, con las fechas de ley de cada paso y los botones de «¿Qué contestó el SAT?» en la ficha.'
-      + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla («Devolución de IVA · …»).');
+    nota.textContent = t === 'devolucion-facturas'
+      ? 'Nuevo: en las devoluciones de IVA, al marcar el depósito nacen las dos facturas. Cada una se sube como su XML en la ficha de la devolución y se da de alta sola en Facturación; el gerente que autoriza captura ahí el monto devuelto.'
+      : 'Nuevo: las devoluciones de IVA van una por solicitud, con las fechas de ley de cada paso y los botones de «¿Qué contestó el SAT?» en la ficha.'
+        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla («Devolución de IVA · …»).');
     var b = $('dev-abre');
     if (b && !b.hidden) { b.classList.add('nuevo'); try { b.scrollIntoView({ block: 'center' }); } catch (e) {} setTimeout(function () { b.classList.remove('nuevo'); }, 12000); }
     else { try { nota.scrollIntoView({ block: 'center' }); } catch (e) {} }
@@ -1540,6 +1657,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'dev-canc') { devCancelaForm(); return; }
     if (ev.target.id === 'dev-canc-ok') { devCancela(ev.target); return; }
     if (ev.target.id === 'dev-canc-x') { var cf = $('dev-canc-f'); if (cf) { cf.hidden = true; cf.innerHTML = ''; } return; }
+    if (ev.target.id === 'dev-monto') { devMontoForm(); return; }
+    if (ev.target.id === 'dev-monto-ok') { devMonto(ev.target); return; }
+    if (ev.target.id === 'dev-monto-x') { var mf = $('dev-monto-f'); if (mf) { mf.hidden = true; mf.innerHTML = ''; } return; }
+    var dx = ev.target.closest('[data-dfl]'); if (dx) { devFacLee(dx); return; }
+    dx = ev.target.closest('[data-dfs]'); if (dx) { devFacSube(dx); return; }
+    dx = ev.target.closest('[data-dfc]'); if (dx) { var dz = devZona('dfp', dx.getAttribute('data-dfc')); if (dz) dz.innerHTML = ''; delete DEVX[dx.getAttribute('data-dfc')]; return; }
+    dx = ev.target.closest('[data-dfq]'); if (dx) { devFacQuitaForm(dx); return; }
+    dx = ev.target.closest('[data-dfqo]'); if (dx) { devFacQuita(dx); return; }
+    dx = ev.target.closest('[data-dfqx]'); if (dx) { var qz = devZona('dfqf', dx.getAttribute('data-dfqx')); if (qz) qz.innerHTML = ''; return; }
     var da = ev.target.closest('[data-dev-act]'); if (da) { var did = +da.getAttribute('data-dev-act'); if (POR_ID[did]) abre(did); else devAbreFuera(did); return; }
     if (ev.target.id === 'agr-abre') { abreAgregar(); return; }
     if (ev.target.id === 'at-abre') { abreATiempo(); return; }

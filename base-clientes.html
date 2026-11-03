@@ -509,6 +509,8 @@ tr.fila:hover td{background:var(--navy-soft)}
         + (ec ? '<div class="acciones" style="margin-top:6px">' + bt('edSrv', 'Editar', { id: s.id }) + bt('nuevoPre', 'Nuevo precio', { srv: s.id }) + bt('borra', 'Borrar', { t: 'cli_servicios', id: s.id, q: 'el servicio y su historial de precios' }, 'peligro') + '</div>' : '')
         + '</div><div class="monto">' + (pv ? esc(dinero(pv.precio)) + '<div class="rfc">desde ' + esc(fecha(pv.fecha)) + '</div>' : '<span class="no">Sin precio</span>') + '</div></li>';
     }).join('') + '</ul>' : '<div class="vacio">Sin servicios contratados (o de compañías que no te toca ver).</div>', String(S.length), algunaCia ? bt('nuevoSrv', 'Agregar servicio', { emp: id }) : '');
+    // lo que se cobra en las devoluciones de IVA (163): solo a quien la base deja (quienes editan o ven los precios de esa compañía)
+    h += '<div id="dev-cond"></div>';
     // régimen, actividades y obligaciones
     var RG = I.regDe[id] || [];
     h += sec('Régimen fiscal', RG.length ? '<ul class="mini" style="padding:6px 14px">' + RG.map(function (r) {
@@ -529,12 +531,51 @@ tr.fila:hover td{background:var(--navy-soft)}
     h += '</div>';
     abre(h, quieto);
     historia(id);
+    devCond(id);
+  }
+  /* ---------- Devoluciones de IVA: lo que se le cobra al cliente en cada una (portal/sql/163_devolucion_dos_facturas.sql;
+     petición de Fernando Cadengo autorizada por Héctor Daniel Nava el 2-nov-2026): una cantidad fija o un porcentaje del monto
+     que devolvió el SAT. De ahí sale cuánto facturar en la ficha de cada devolución. Lo ven y lo capturan quienes la base deja
+     (cli_dev_cond); a los demás no les sale. ---------- */
+  var DEVC = null;
+  async function devCond(id) {
+    var z = $('dev-cond'); if (!z) return;
+    var r = null;
+    try { r = await rpc('cli_dev_cond', { p_empresa_id: id }); } catch (e) { r = null; }
+    if (!$('dev-cond') || !ABIERTA || ABIERTA.id !== id) return;
+    DEVC = r ? Object.assign({ id: id }, r) : null;
+    if (!r) { z.innerHTML = ''; return; }
+    var txt = !r.tipo ? '<div class="vacio">Sin capturar: al depositarle una devolución, a quien factura le llega el aviso de que falta.</div>'
+      : '<dl class="datos">' + dato('Se cobra', r.tipo === 'fijo' ? dinero(r.valor) + ' más IVA por devolución (cantidad fija)' : r.valor + ' % del monto devuelto, más IVA')
+        + (r.nota ? dato('Nota', r.nota) : '') + dato('Lo capturó', (r.por || '') + (r.actualizado ? ' · ' + fechaHora(r.actualizado) : '')) + '</dl>';
+    z.innerHTML = sec('Devoluciones de IVA', txt + '<div id="dev-cond-f" style="padding:0 14px"></div>', 'lo que se cobra de ' + (r.cia || cia(1)),
+      r.edita && !CONSULTA ? bt('devEdita', r.tipo ? 'Cambiar' : 'Capturar', { id: id }) : '');
+  }
+  function devForma() {
+    var r = DEVC || {}, f = $('dev-cond-f'); if (!f) return;
+    f.innerHTML = '<div class="campos" style="margin-top:10px">'
+      + campo({ k: 'dtipo', l: 'Cómo se cobra', t: 'sel', op: [['pct', 'Porcentaje del monto devuelto'], ['fijo', 'Cantidad fija por devolución']] }, r.tipo || 'pct')
+      + campo({ k: 'dvalor', l: 'Porcentaje (5 = 5 %) o cantidad en pesos, sin IVA', t: 'num', max: 20 }, r.valor)
+      + campo({ k: 'dnota', l: 'Nota (opcional)', t: 'area', ancho: true, max: 300 }, r.nota) + '</div>'
+      + '<div class="msg" id="dev-msg" hidden></div><div class="acciones" style="margin-top:10px">' + bt('devGuarda', 'Guardar', {}, 'acento')
+      + (r.tipo ? bt('devQuita', 'Quitar', {}, 'peligro') : '') + bt('devCancela', 'Cancelar', {}) + '</div><div style="height:12px"></div>';
+    try { $('z-dvalor').focus(); } catch (e) {}
+  }
+  function devMsg(clase, t) { var el = $('dev-msg'); if (!el) return; el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; }
+  async function devGuarda(quitar) {
+    var r = DEVC; if (!r) return;
+    var p = quitar ? { quitar: true } : { tipo: $('z-dtipo').value, valor: Number(String($('z-dvalor').value).replace(/[$,%\s]/g, '')), nota: $('z-dnota').value.trim() };
+    if (!quitar && !(p.valor > 0)) { devMsg('mal', 'Escribe un número mayor que cero.'); return; }
+    if (quitar && !window.confirm('¿Quitar lo que se le cobra a este cliente en devoluciones?')) return;
+    devMsg('ojo', 'Guardando…');
+    try { await rpc('cli_dev_cond_guarda', { p_empresa_id: r.id, p: p }); avisa('Guardado.'); devCond(r.id); historia(r.id); }
+    catch (e) { devMsg('mal', falla(e)); }
   }
   async function historia(id) {
     try {
       var L = await rpc('cli_historia', { p_empresa_id: id }) || [];
       var NOM = { cli_empresas: 'Datos de la empresa', cli_registros: 'Compañía que la atiende', cli_contadores: 'Contador', cli_contacto_reg: 'Contacto', cli_servicios: 'Servicio', cli_precios: 'Precio',
-                  cli_regimenes: 'Régimen', cli_actividades: 'Actividad', cli_obligaciones: 'Obligación' };
+                  cli_regimenes: 'Régimen', cli_actividades: 'Actividad', cli_obligaciones: 'Obligación', cli_dev_cond: 'Devoluciones de IVA' };
       if ($('historia')) $('historia').innerHTML = L.length ? '<ul class="lista">' + L.slice(0, 60).map(function (x) {
         return '<li><div class="t">' + esc((NOM[x.tabla] || x.tabla) + ': ' + x.accion) + '</div><div class="d">' + esc(x.nombre || x.usuario) + ' · ' + esc(fechaHora(x.cuando)) + '</div></li>';
       }).join('') + '</ul>' : '<div class="vacio">Sin cambios en el portal (lo de antes viene del Access).</div>';
@@ -683,6 +724,10 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   /* ---------- acciones ---------- */
   var ACC = {
+    devEdita: function () { devForma(); },
+    devGuarda: function () { devGuarda(false); },
+    devQuita: function () { devGuarda(true); },
+    devCancela: function () { var f = $('dev-cond-f'); if (f) f.innerHTML = ''; },
     emp: function (d) { abreEmpresa(+d.id); },
     grupo: function (d) { abreGrupo(+d.id); },
     zCancela: function () { Z = null; if ($('zona')) $('zona').innerHTML = ''; },
