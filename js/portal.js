@@ -873,6 +873,25 @@
   // «No molestar» cuenta como «a medio escribir»: todo lo que espera a que nadie escriba (ventanas, recorridos, avisos,
   // la versión nueva, el cierre temporal) también espera a que se quite
   P.estaEscribiendo = function () { return P.noMolestar() || escribeDe(); };
+  // ¿Se escribe con teclado de verdad? (Héctor Daniel, 3-nov-2026: «quiero picarle enter y que se mande en el chat crm
+  // desde mi magic keyboard»). Sí en la computadora (puntero fino) y en el iPad con Magic Keyboard, trackpad o mouse
+  // (any-pointer:fine), o con un teclado sin trackpad mientras se escribe (el teclado de la pantalla no está abierto).
+  // En el celular no: ahí Enter hace otro renglón. Se pregunta cada vez (el teclado se pone y se quita). Una sola versión:
+  // la usan el chat y SuperConta para «Enter manda» y para poner el cursor solo en el cuadro de texto.
+  P.conTeclado = function () {
+    try {
+      if (!window.matchMedia) return true;
+      if (!matchMedia('(pointer:coarse)').matches || matchMedia('(any-pointer:fine)').matches) return true;
+      var ua = navigator.userAgent || '', ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+      var a = document.activeElement;
+      if (ipad && a && /^(TEXTAREA|INPUT)$/.test(a.tagName)) {
+        var w = window; try { if (window.top.visualViewport) w = window.top; } catch (e) { /* otro origen: esta ventana */ }
+        var vv = w.visualViewport;
+        if (vv) return (w.innerHeight - vv.height * vv.scale) < 150;
+      }
+    } catch (e) { /* sin saber: como pantalla táctil */ }
+    return false;
+  };
   // ocupado(true): sin contar «No molestar» (jalar para actualizar sigue funcionando mientras está prendido)
   P.ocupado = function (sinNoMolestar) {
     var a = arriba(); if (a && a.ocupado) { try { return a.ocupado(sinNoMolestar); } catch (e) { /* sigue aquí */ } }
