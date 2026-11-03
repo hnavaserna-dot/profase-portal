@@ -160,6 +160,7 @@ tr.click:hover td{background:var(--navy-soft)}
 .msg.mal{background:var(--red-soft);color:var(--red)}
 .msg.bien{background:var(--ok-soft);color:var(--ok)}
 .msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.msg.az{background:var(--navy-soft);color:var(--ink)}
 .dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
 .dl>span:nth-child(odd){color:var(--muted)}
 .dl>span:nth-child(even){overflow-wrap:anywhere}
@@ -364,6 +365,17 @@ tr.click:hover td{background:var(--navy-soft)}
   function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
   function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
   function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  /* 184: el sábado (medio día) que cae dentro de unas vacaciones nunca se descuenta y va como permiso con goce si se da */
+  function sabTxt(L) {
+    var s = (L || []).map(function (d) { var p = String(d).slice(0, 10).split('-'); return (+p[2]) + ' de ' + MESES_L[+p[1] - 1]; });
+    return !s.length ? '' : s.length === 1 ? 'El sábado ' + s[0] : 'Los sábados ' + s.slice(0, -1).join(', ') + ' y ' + s[s.length - 1];
+  }
+  function sabVa(L, si) { var uno = (L || []).length === 1; return si ? (uno ? 'va como permiso con goce (no se descuenta)' : 'van como permiso con goce (no se descuentan)') : (uno ? 'no va como permiso' : 'no van como permiso'); }
+  function alCorriente(e) {
+    if (!e) return '<span class="mut">Sin datos del WorkFlow.</span>';
+    return e.vencidas ? chip(e.vencidas + (Number(e.vencidas) === 1 ? ' actividad vencida' : ' actividades vencidas'), 'mal') + ' <span class="mut">en el WorkFlow</span>'
+                      : chip('Al corriente', 'ok') + ' <span class="mut">sin actividades vencidas en el WorkFlow</span>';
+  }
   function aviseAlPortal() { try { window.parent.postMessage({ tipo: 'rh-sol-cambio' }, location.origin); } catch (e) {} }
 
   function abre(titulo, sub, cuerpo) {
@@ -406,7 +418,8 @@ tr.click:hover td{background:var(--navy-soft)}
     $('b-nueva').hidden = CONSULTA;
     $('m-lista').innerHTML = L.length ? L.map(function (x, i) {
       return '<tr class="click" data-i="' + i + '"><td class="w" data-l="Qué pediste"><div class="rs">' + esc(TIPO_CORTO[x.tipo] || x.tipo) + '</div><div class="mut">'
-        + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : rango(x.desde, x.hasta)) + '</div></td>'
+        + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : rango(x.desde, x.hasta)) + '</div>'
+        + ((x.sabados || []).length && x.sabado === 'si' ? '<div class="mut">' + esc(sabTxt(x.sabados)) + ': permiso</div>' : '') + '</td>'
         + '<td data-l="Días">' + (x.tipo === 'prestamo' ? '<span class="mut">—</span>' : esc(dias(x.dias))) + '</td>'
         + '<td data-l="La pediste">' + esc(dia(x.creado)) + '</td>'
         + '<td data-l="Cómo va">' + chip(x.estado, EST_CHIP[x.estado]) + '</td>'
@@ -443,10 +456,20 @@ tr.click:hover td{background:var(--navy-soft)}
       + (x.tipo === 'prestamo'
         ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
         : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>'
-          + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : ''))
+          + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : '')
+          + sabMia(x))
       + (x.nota ? '<span>Lo que escribiste</span><span>' + esc(x.nota) + '</span>' : '')
       + '<span>Cómo va</span><span>' + chip(x.estado, EST_CHIP[x.estado]) + '</span></div></div></div>'
       + '<p class="mut" style="margin:0">' + (x.estado === 'En revisión' ? 'Te llega un aviso a la campanita en cuanto se resuelva.' : x.estado === 'No autorizada' ? 'Cualquier duda, platícala con Alex Luna.' : '') + '</p>');
+  }
+  // 184: el sábado de unas vacaciones, para quien pidió (solo el resultado al final; nunca quién ni qué dijo cada uno)
+  function sabMia(x) {
+    var L = x.sabados || [];
+    if (!L.length || x.estado === 'Cancelada' || x.estado === 'No autorizada') return '';
+    var t = x.sabado === 'si' ? sabTxt(L) + ' ' + sabVa(L, true) + '.'
+          : x.sabado === 'no' ? sabTxt(L) + ' ' + sabVa(L, false) + '. Cualquier duda, platícala con Alex Luna.'
+          : sabTxt(L) + ' (medio día) no se descuenta: ' + (L.length === 1 ? 'va' : 'van') + ' como permiso con goce si tienes tus actividades al corriente. ' + ((MIAS && MIAS.con_gerentes) ? 'Lo decide tu gerente.' : 'Lo decide RH.');
+    return '<span>Sábado</span><span>' + esc(t) + '</span>';
   }
   function fichaPrestamo(p) {
     abre('Mi préstamo', dinero(p.monto) + ' en ' + pagos(p),
@@ -464,6 +487,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<div class="campo"><label for="n-desde">Desde</label><input type="date" id="n-desde" min="' + hoyISO() + '"></div>'
         + '<div class="campo"><label for="n-hasta">Hasta (tu último día fuera)</label><input type="date" id="n-hasta" min="' + hoyISO() + '"></div>'
         + '<div class="campo ancho"><span class="mut" id="n-dias">&nbsp;</span></div>'
+        + '<div class="campo ancho"><div class="msg az" id="n-sab" hidden></div></div>'
         + '<div class="campo ancho"><label for="n-cubre">Mientras, ¿a quién buscar?</label><input id="n-cubre" maxlength="200" autocomplete="off" placeholder="Opcional"></div>'
       + '</div></div>'
       + '<div id="n-pre" hidden><div class="campos" style="margin-top:10px">'
@@ -491,14 +515,19 @@ tr.click:hover td{background:var(--navy-soft)}
     }
     var tc = 0;
     async function revisa() {
-      var t = T(); $('n-ojo').hidden = true;
+      var t = T(); $('n-ojo').hidden = true; $('n-sab').hidden = true;
       if (t && t !== 'prestamo') {
         var a = $('n-desde').value, b = $('n-hasta').value || a;
         if (a && !$('n-hasta').value) $('n-hasta').value = a;
         if (a && b && b >= a) {
-          var mi = ++tc, n = null;
-          try { n = await rpc('rh_sol_dias', { p_desde: a, p_hasta: b }); } catch (e) {}
+          var mi = ++tc, n = null, sab = [];
+          try { var rd = await rpc('rh_sol_dias', { p_desde: a, p_hasta: b, p_detalle: true }); n = rd ? rd.dias : null; sab = (rd && rd.sabados) || []; } catch (e) {}
           if (mi !== tc) return;
+          if (t === 'vacaciones' && sab.length) {
+            $('n-sab').textContent = sabTxt(sab) + ' (medio día) no se descuenta de tus vacaciones: ' + (sab.length === 1 ? 'va' : 'van') + ' como permiso con goce si tienes tus actividades al corriente. '
+              + ((MIAS && MIAS.con_gerentes) ? 'Lo decide tu gerente.' : 'Lo decide RH.');
+            $('n-sab').hidden = false;
+          }
           $('n-dias').textContent = n == null ? ' ' : n + (n === 1 ? ' día hábil' : ' días hábiles') + ' (de lunes a viernes, sin los días de descanso obligatorio)';
           if (t === 'vacaciones' && n != null && !v.pendiente && n > Number(v.disponibles || 0)) {
             $('n-ojo').textContent = 'Te quedan ' + dias(v.disponibles) + '. Puedes pedirlas, pero RH lo va a revisar.'; $('n-ojo').hidden = false;
@@ -555,9 +584,13 @@ tr.click:hover td{background:var(--navy-soft)}
         h += '<div class="det"><b>' + esc(TIPOS[x.tipo] || x.tipo) + '</b>, ' + esc(rango(x.desde, x.hasta)) + ' · ' + esc(dias(x.dias)) + (x.cubre ? '<br><span class="mut">Mientras, buscar a: ' + esc(x.cubre) + '</span>' : '') + (x.nota ? '<br><span class="mut">Nota: ' + esc(x.nota) + '</span>' : '') + '</div>'
           + '<div class="ctx"><div><b>Esos días también estarán fuera</b>' + (f.length ? f.map(function (o) { return esc(o.nombre) + ' · ' + esc(o.tipo) + ', ' + esc(fecha(o.desde)) + (o.hasta !== o.desde ? ' al ' + esc(fecha(o.hasta)) : '') + (o.estado === 'En revisión' ? ' <span class="mut">(en revisión)</span>' : ''); }).join('<br>') : 'Nadie más de tu equipo.') + '</div>'
           + '<div><b>Sus entregas del WorkFlow</b>' + (e ? esc(e.abiertas) + ' abiertas · ' + '<span' + (e.vencidas ? ' class="neg"' : '') + '>' + esc(e.vencidas) + ' vencidas</span> · ' + esc(e.en_fechas) + ' vencen esos días' : 'Sin datos del WorkFlow.') + '</div>'
-          + ((x.otros || []).length ? '<div><b>También la decide</b>' + x.otros.map(function (o) { return esc(o.nombre) + ': ' + esc(o.estado); }).join('<br>') + '</div>' : '') + '</div>';
+          + ((x.otros || []).length ? '<div><b>También la decide</b>' + x.otros.map(function (o) { return esc(o.nombre) + ': ' + esc(o.estado); }).join('<br>') + '</div>' : '') + '</div>'
+          + ((x.sabados || []).length && x.pendiente ? '<div class="msg az sab" style="margin-top:8px"><b>' + esc(sabTxt(x.sabados)) + ' (medio día)</b> no se descuenta de sus vacaciones: '
+              + (x.sabados.length === 1 ? 'va' : 'van') + ' como permiso con goce si tiene sus actividades al corriente. Tú decides al autorizar.<div style="margin-top:6px">' + alCorriente(e) + '</div></div>' : '');
         if (x.pendiente) h += CONSULTA ? '' : '<div class="decide"><button class="btn bien" type="button" data-si="' + i + '">Sí, autorizo</button><button class="btn peligro" type="button" data-no="' + i + '">No autorizo</button></div>';
-        else h += '<div class="det">Tú: ' + chip(x.decision === 'si' ? 'Sí' : 'No', x.decision === 'si' ? 'ok' : 'mal') + ' <span class="mut">' + esc(x.motivo) + (x.comentario ? ' · «' + esc(x.comentario) + '»' : '') + ' · ' + esc(cuando(x.en)) + '</span><br>Quedó: ' + esc(x.final) + '</div>';
+        else h += '<div class="det">Tú: ' + chip(x.decision === 'si' ? 'Sí' : 'No', x.decision === 'si' ? 'ok' : 'mal') + ' <span class="mut">' + esc(x.motivo) + (x.comentario ? ' · «' + esc(x.comentario) + '»' : '') + ' · ' + esc(cuando(x.en)) + '</span>'
+          + ((x.sabados || []).length && x.sabado_mio ? '<br>El sábado: ' + chip(x.sabado_mio === 'si' ? 'Como permiso' : 'No', x.sabado_mio === 'si' ? 'ok' : 'mal') : '')
+          + '<br>Quedó: ' + esc(x.final) + ((x.sabados || []).length && x.sabado ? ' · ' + esc(sabTxt(x.sabados)) + ' ' + esc(sabVa(x.sabados, x.sabado === 'si')) : '') + '</div>';
       }
       return h + '</div>';
     }).join('');
@@ -573,6 +606,9 @@ tr.click:hover td{background:var(--navy-soft)}
     abre(si ? 'Autorizar' : 'No autorizar', x.nombre + ' · ' + (TIPO_CORTO[x.tipo] || x.tipo) + ', ' + rango(x.desde, x.hasta),
       '<div class="sec"><h3>' + (si ? '¿Por qué sí?' : '¿Por qué no?') + '</h3><div class="in"><div class="campos">'
       + '<div class="campo ancho"><label for="d-mot">Motivo</label><select id="d-mot">' + motivosSel(AUT.motivos, si) + '</select></div>'
+      + (si && (x.sabados || []).length ? '<div class="campo ancho"><label for="d-sab">' + esc(sabTxt(x.sabados)) + ' (medio día), ¿se lo das como permiso con goce?</label>'
+          + '<select id="d-sab"><option value="">Escoge…</option><option value="si">Sí, como permiso (no se descuenta)</option><option value="no">No</option></select>'
+          + '<div style="margin-top:6px">' + alCorriente(x.entregas) + '</div></div>' : '')
       + '<div class="campo ancho"><label for="d-com">Comentario para RH (opcional)</label><textarea id="d-com" maxlength="500"></textarea></div></div>'
       + (si ? '' : '<div class="msg ojo" style="margin-top:10px">A ' + esc(x.nombre) + ' no le llega tu «no»: le llega a RH, que platica con él o ella.</div>')
       + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
@@ -580,9 +616,11 @@ tr.click:hover td{background:var(--navy-soft)}
     $('d-x').onclick = cierra;
     $('d-ok').onclick = async function () {
       var b = this; if (!$('d-mot').value) { msgEn('Escoge el motivo de la lista.'); return; }
+      if ($('d-sab') && !$('d-sab').value) { msgEn('Escoge si le das el sábado como permiso.'); return; }
       b.disabled = true;
       try {
-        var r = await rpc('rh_sol_decide_gerente', { p_id: x.id, p_si: si, p_motivo: $('d-mot').value, p_comentario: $('d-com').value });
+        var r = await rpc('rh_sol_decide_gerente', { p_id: x.id, p_si: si, p_motivo: $('d-mot').value, p_comentario: $('d-com').value,
+                                                     p_sabado: $('d-sab') ? $('d-sab').value === 'si' : null });
         cierra(); avisa(!si ? 'Listo: le llegó a RH, que va a platicar con ' + x.nombre + '.' : r && r.estado === 'gerentes' ? 'Listo. Falta que la decida el otro gerente.' : 'Listo: ahora la decide RH.');
         aviseAlPortal(); await cargaAut();
       } catch (e) { msgEn(falla(e)); b.disabled = false; }
@@ -677,11 +715,23 @@ tr.click:hover td{background:var(--navy-soft)}
       + (x.tipo === 'prestamo' ? '<span>Sueldo mensual</span><span>' + (e.sueldo != null ? dinero(e.sueldo) : 'Sin capturar') + '</span>' : '')
       + '<span>Solicitudes antes</span><span>' + esc((e.antes || {}).autorizadas || 0) + ' autorizadas · ' + esc((e.antes || {}).no || 0) + ' no</span></div>';
   }
+  // 184: el sábado de unas vacaciones en la bandeja de RH
+  function sabRh(x) {
+    var L = x.sabados || [];
+    if (!L.length) return '';
+    var ps = (x.sab_pasos || []).map(function (p) { return esc(p.gerente) + ': ' + (p.sabado === 'si' ? 'lo dio' : p.sabado === 'no' ? 'no lo dio' : 'no lo dijo'); }).join(' · ');
+    var t = x.sabado === 'si' ? esc(sabTxt(L)) + ' ' + esc(sabVa(L, true))
+          : x.sabado === 'no' ? esc(sabTxt(L)) + ' ' + esc(sabVa(L, false))
+          : esc(sabTxt(L)) + ' (medio día): ' + (x.decido ? 'te toca decidir si va como permiso con goce' : 'lo decide RH al autorizar');
+    return '<span>Sábado</span><span>' + t + (ps ? '<br><span class="mut">' + ps + '</span>' : '') + '</span>'
+      + '<span>Sus entregas</span><span>' + alCorriente(x.entregas) + '</span>';
+  }
   function fichaRh(x) {
     var c = '<div class="sec"><h3>Lo que pidió</h3><div class="in"><div class="dl">'
       + (x.tipo === 'prestamo'
         ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
-        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>' + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : ''))
+        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>' + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : '')
+          + sabRh(x))
       + '<span>Dónde va</span><span>' + dondeVa(x) + '</span></div></div></div>'
       + '<div class="sec"><h3>Cómo ha ido</h3><div class="in">' + linea(x) + '</div></div>'
       + '<div class="sec"><h3>Su expediente de RH</h3><div class="in">' + expediente(x) + '</div></div>';
@@ -693,6 +743,8 @@ tr.click:hover td{background:var(--navy-soft)}
             + '<div class="campo"><label for="d-pri">Desde la nómina del</label><input type="date" id="d-pri" value="' + esc(x.primer_pago || '') + '"></div>'
           : (x.tipo !== 'incapacidad' ? '<div class="campo"><label for="d-dias">Días que cuentan</label><input id="d-dias" inputmode="decimal" value="' + esc(x.dias) + '"></div>' : ''))
         + '<div class="campo ancho"><label for="d-si">Decisión</label><select id="d-si"><option value="">Escoge…</option><option value="si">' + (x.tipo === 'prestamo' ? 'Sí: pedirlo a la dirección' : x.tipo === 'incapacidad' ? 'Sí: registrarla' : 'Sí: autorizar') + '</option><option value="no">No</option></select></div>'
+        + ((x.sabados || []).length && x.sabado === 'pendiente' ? '<div class="campo ancho" id="d-sab-box" hidden><label for="d-sab">' + esc(sabTxt(x.sabados)) + ' (medio día), ¿va como permiso con goce?</label>'
+            + '<select id="d-sab"><option value="">Escoge…</option><option value="si">Sí, como permiso (no se descuenta)</option><option value="no">No</option></select></div>' : '')
         + '<div class="campo ancho"><label for="d-mot">Motivo</label><select id="d-mot"><option value="">Primero escoge sí o no</option></select></div>'
         + '<div class="campo ancho"><label for="d-com">Comentario (opcional; no le llega a la persona)</label><textarea id="d-com" maxlength="500"></textarea></div></div>'
         + '<div class="msg" id="v-msg" hidden style="margin-top:10px"></div>'
@@ -701,12 +753,15 @@ tr.click:hover td{background:var(--navy-soft)}
     if (x.hablo_yo) c += '<div class="acciones"><button class="btn acento" type="button" id="d-hab">Ya hablé con ' + esc(x.nombre) + '</button></div>';
     abre(x.nombre, (TIPOS[x.tipo] || x.tipo) + ' · la pidió el ' + dia(x.creado), c);
     if (x.decido) {
-      $('d-si').onchange = function () { $('d-mot').innerHTML = this.value ? motivosSel(BJ.motivos, this.value === 'si') : '<option value="">Primero escoge sí o no</option>'; };
+      $('d-si').onchange = function () { $('d-mot').innerHTML = this.value ? motivosSel(BJ.motivos, this.value === 'si') : '<option value="">Primero escoge sí o no</option>';
+        if ($('d-sab-box')) $('d-sab-box').hidden = this.value !== 'si'; };
       $('d-ok').onclick = async function () {
         var b = this, s = $('d-si').value; msgEn('');
         if (!s) { msgEn('Escoge sí o no.'); return; }
         if (!$('d-mot').value) { msgEn('Escoge el motivo de la lista.'); return; }
+        if (s === 'si' && $('d-sab') && !$('d-sab').value) { msgEn('Escoge si el sábado va como permiso.'); return; }
         var aj = {};
+        if (s === 'si' && $('d-sab')) aj.sabado = $('d-sab').value;
         if (x.tipo === 'prestamo') { aj.pagos = String($('d-pag').value).trim(); aj.periodicidad = $('d-per').value; aj.primer_pago = $('d-pri').value; }
         else if ($('d-dias')) aj.dias = String($('d-dias').value).trim();
         b.disabled = true;
