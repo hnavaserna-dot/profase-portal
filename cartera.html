@@ -2633,7 +2633,9 @@ const IVA_MODS=[0,1,4,5];
 const IVA_COLS=['Grupo','Cliente','RFC','Contador asignado','IVA trasladado (por cobrar a clientes)','IVA retenido por clientes',
   'IVA acreditable (por pagar a proveedores)','IVA retenido a terceros (por enterar)','IVA notas de crédito proveedores',
   'IVA notas de crédito clientes','Saldo a favor periodos anteriores','Saldo IVA antes de estrategia','Estrategia fiscal',
-  'Resultado IVA','IVA a cargo (en contra)','IVA a favor','Estatus','Observaciones'];
+  'Resultado IVA','IVA a cargo (en contra)','IVA a favor','Estatus','Observaciones',
+  // el ISR retenido del saldo (3-nov-2026, pedido de Fernando): al final y solo informa; no entra en ninguna cuenta del IVA
+  'ISR retenido por clientes (informativo)','ISR por retener a terceros (informativo)'];
 const ivaEstatus=n=>n>0?'A CARGO':n<0?'A FAVOR':'SIN SALDO';
 function filasIva(docs){
   const por=new Map();
@@ -2644,7 +2646,7 @@ function filasIva(docs){
     const est=cent(l.reduce((a,r)=>a+(r.st==='estrategia'?ivaNeto(r):0),0));
     const v=[o.tras,o.retC,o.acr,o.retP,o.ntcP,o.ntcC].map(cent);
     const antes=cent(v[0]-v[1]-v[2]+v[3]+v[4]-v[5]), res=cent(antes-est);
-    return {g:c[3]||'Sin grupo',nom:c[1],rfc:c[2],cont:contDe(c),v,antes,est,res};
+    return {g:c[3]||'Sin grupo',nom:c[1],rfc:c[2],cont:contDe(c),v,antes,est,res,isr:[cent(o.isrC),cent(o.isrP)]};
   });
 }
 function hojaIva(wb,docs,corte,op){
@@ -2654,7 +2656,7 @@ function hojaIva(wb,docs,corte,op){
   const MK=window.PROFASE_MARCA, ws=wb.addWorksheet('Saldos de IVA');
   const azul=MK.colores.azul, gris='FFE7EBF0', fuente=MK.fuente, AMA='FFFFF2CC', NAR='FFFCE4D6', VER='FFE2EFDA';
   const nc=IVA_COLS.length;
-  [24,44,16,30,17,16,17,17,16,16,17,17,16,17,17,16,12,44].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  [24,44,16,30,17,16,17,17,16,16,17,17,16,17,17,16,12,44,17,17].forEach((w,i)=>ws.getColumn(i+1).width=w);
   const o=MK.encabezado(wb,ws,nc)-1, R=n=>n+o;
   ws.mergeCells('A'+R(1)+':D'+R(1));
   const t=ws.getCell('A'+R(1)); t.value='SALDOS DE IVA'; t.font={name:fuente,bold:true,size:14,color:{argb:azul}};
@@ -2681,7 +2683,8 @@ function hojaIva(wb,docs,corte,op){
     'Estrategia fiscal (naranja): el IVA de lo marcado «Estrategia fiscal», que no se considera y se resta. '+
     'Resultado positivo = a cargo (en contra); negativo = a favor; cada uno va en su columna como monto positivo.');
   nota(R(7),'Saldo antes de estrategia = Trasladado − Retenido por clientes − Acreditable + Retenido a terceros + '+
-    'Notas de crédito proveedores − Notas de crédito clientes − Saldo a favor anterior · Resultado = Saldo antes de estrategia − Estrategia fiscal.');
+    'Notas de crédito proveedores − Notas de crédito clientes − Saldo a favor anterior · Resultado = Saldo antes de estrategia − Estrategia fiscal. '+
+    'Las dos columnas de ISR retenido (al final) solo informan: no entran en el IVA.');
   const encab=(fila,cols)=>{ const h=ws.getRow(fila); h.height=40;
     cols.forEach((n,i)=>{ const x=h.getCell(i+1); x.value=n;
       x.font={name:fuente,bold:true,color:{argb:'FFFFFFFF'}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:azul}};
@@ -2697,9 +2700,9 @@ function hojaIva(wb,docs,corte,op){
     const val=[x.g,x.nom,x.rfc,x.cont].concat(x.v,[null,
       {formula:'E'+n+'-F'+n+'-G'+n+'+H'+n+'+I'+n+'-J'+n+'-K'+n,result:x.antes},x.est,
       {formula:'L'+n+'-M'+n,result:x.res},{formula:'MAX(N'+n+',0)',result:Math.max(x.res,0)},
-      {formula:'MAX(-N'+n+',0)',result:Math.max(-x.res,0)},{formula:st(n,'N'),result:ivaEstatus(x.res)},null]);
+      {formula:'MAX(-N'+n+',0)',result:Math.max(-x.res,0)},{formula:st(n,'N'),result:ivaEstatus(x.res)},null].concat(x.isr));
     val.forEach((v,i)=>{ const c=row.getCell(i+1); c.value=v; c.font={name:fuente,size:10};
-      if(i>=4&&i<=15) c.numFmt=RCX_MON; });
+      if((i>=4&&i<=15)||i>=18) c.numFmt=RCX_MON; });
     pinta(row.getCell(11),AMA); pinta(row.getCell(18),AMA); pinta(row.getCell(13),NAR); pinta(row.getCell(14),VER);
     row.getCell(17).alignment={horizontal:'center'};
   });
@@ -2707,14 +2710,16 @@ function hojaIva(wb,docs,corte,op){
   const rt=ws.getRow(ft); rt.getCell(1).value='TOTAL (respeta filtros)';
   for(let i=4;i<=15;i++) rt.getCell(i+1).value={formula:'SUBTOTAL(109,'+colL(i)+p1+':'+colL(i)+p2+')',result:tot(i)};
   rt.getCell(17).value={formula:st(ft,'N'),result:ivaEstatus(tot(13))};
+  [18,19].forEach((i,j)=>{ rt.getCell(i+1).value={formula:'SUBTOTAL(109,'+colL(i)+p1+':'+colL(i)+p2+')',
+    result:cent(lista.reduce((a,x)=>a+x.isr[j],0))}; });
   for(let i=1;i<=nc;i++){ const c=rt.getCell(i); c.font={name:fuente,size:10,bold:true,color:{argb:azul}};
-    c.border={top:{style:'thin',color:{argb:azul}}}; if(i>=5&&i<=16) c.numFmt=RCX_MON; if(i===17) c.alignment={horizontal:'center'}; }
+    c.border={top:{style:'thin',color:{argb:azul}}}; if((i>=5&&i<=16)||i>=19) c.numFmt=RCX_MON; if(i===17) c.alignment={horizontal:'center'}; }
   ws.autoFilter={from:{row:hdr,column:1},to:{row:p2,column:nc}};
   // por grupo (solo en el Excel general): sale de la tabla de clientes, así que el saldo a favor capturado también suma
   if(op.grupos){
     const grupos=[]; lista.forEach(x=>{ if(!grupos.includes(x.g)) grupos.push(x.g); });
     const gl=ws.getCell('A'+(ft+3)); gl.value='Por grupo'; gl.font={name:fuente,bold:true,size:12,color:{argb:azul}};
-    const gh=ft+4, gcols=['Grupo','Clientes'].concat(IVA_COLS.slice(4,17)), rng=c=>'$'+c+'$'+p1+':$'+c+'$'+p2;
+    const gh=ft+4, gcols=['Grupo','Clientes'].concat(IVA_COLS.slice(4,17),IVA_COLS.slice(18)), rng=c=>'$'+c+'$'+p1+':$'+c+'$'+p2;
     encab(gh,gcols);
     grupos.forEach((g,k)=>{
       const n=gh+1+k, row=ws.getRow(n), mio=lista.filter(x=>x.g===g);
@@ -2723,16 +2728,20 @@ function hojaIva(wb,docs,corte,op){
       row.getCell(2).value={formula:'COUNTIF('+rng('A')+',A'+n+')',result:mio.length};
       for(let i=4;i<=15;i++) row.getCell(i-1).value={formula:'SUMIF('+rng('A')+',$A'+n+','+rng(colL(i))+')',result:s(i)};
       row.getCell(15).value={formula:st(n,'L'),result:ivaEstatus(s(13))};
+      [18,19].forEach((i,j)=>{ row.getCell(i-2).value={formula:'SUMIF('+rng('A')+',$A'+n+','+rng(colL(i))+')',
+        result:cent(mio.reduce((a,x)=>a+x.isr[j],0))}; });
       for(let i=1;i<=gcols.length;i++){ const c=row.getCell(i); c.font={name:fuente,size:10};
-        if(i>=3&&i<=14) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0'; if(i===15) c.alignment={horizontal:'center'}; }
+        if((i>=3&&i<=14)||i>=16) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0'; if(i===15) c.alignment={horizontal:'center'}; }
     });
     const gf=gh+grupos.length+1, rg=ws.getRow(gf), g1=gh+1, g2=gh+grupos.length;
     rg.getCell(1).value='TOTAL';
     rg.getCell(2).value={formula:'SUM(B'+g1+':B'+g2+')',result:lista.length};
     for(let i=4;i<=15;i++) rg.getCell(i-1).value={formula:'SUM('+colL(i-2)+g1+':'+colL(i-2)+g2+')',result:tot(i)};
     rg.getCell(15).value={formula:st(gf,'L'),result:ivaEstatus(tot(13))};
+    [16,17].forEach((i,j)=>{ rg.getCell(i).value={formula:'SUM('+colL(i-1)+g1+':'+colL(i-1)+g2+')',
+      result:cent(lista.reduce((a,x)=>a+x.isr[j],0))}; });
     for(let i=1;i<=gcols.length;i++){ const c=rg.getCell(i); c.font={name:fuente,size:10,bold:true,color:{argb:azul}};
-      c.border={top:{style:'thin',color:{argb:azul}}}; if(i>=3&&i<=14) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0';
+      c.border={top:{style:'thin',color:{argb:azul}}}; if((i>=3&&i<=14)||i>=16) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0';
       if(i===15) c.alignment={horizontal:'center'}; }
   }
   ws.views=[{state:'frozen',ySplit:hdr,xSplit:2}];
