@@ -201,6 +201,14 @@ tr.click:hover td{background:var(--navy-soft)}
 .cli[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .cli .t{font-weight:700;overflow-wrap:anywhere}
 .cli .n{display:flex;flex-wrap:wrap;gap:6px}
+/* 203: cómo va la carga de todos los clientes, año por año */
+.avance{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}
+.av{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:5px;min-width:0}
+.av b{font-family:var(--f-display);font-size:16px}
+.av .bar{height:6px;background:var(--line);border-radius:3px}
+.av .bar i{display:block;height:6px;border-radius:3px;background:var(--ok)}
+.av.ojo .bar i{background:var(--accent)}
+.clibusca{padding:12px 14px 0;max-width:520px}
 .lados{display:flex;gap:4px;flex-wrap:wrap}
 .lados button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--muted)}
 .lados button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
@@ -243,7 +251,8 @@ tr.click:hover td{background:var(--navy-soft)}
   <section id="s-boveda" hidden>
     <div class="nota info" id="b-prueba"></div>
     <div class="card">
-      <header><div><h2>Clientes en la bóveda</h2><div class="sub">Pica uno para ver solo sus XML; pícale otra vez para ver todos.</div></div></header>
+      <header><div><h2>Clientes en la bóveda</h2><div class="sub" id="b-clisub">Pica uno para ver solo sus XML; pícale otra vez para ver todos.</div></div></header>
+      <div class="clibusca busca" id="b-cliBox" hidden></div>
       <div class="clis" id="b-clis"></div>
     </div>
     <div class="card">
@@ -395,8 +404,15 @@ tr.click:hover td{background:var(--navy-soft)}
   function filtroB() {
     return { rfc: B.cli, lado: B.lado, tipo: $('b-tipo').value, desde: $('b-desde').value, hasta: $('b-hasta').value, q: $('b-q').value.trim() };
   }
+  var ANIO_K = { hecho: ['ok', 'ya está', ' ✓'], bajando: ['ojo', 'bajándose', ' …'], falta: ['', 'todavía no empieza', ''],
+                 sin: ['mal', 'no se pudo (se vuelve a intentar cada semana)', ' ✕'] };
   function estadoDescarga(c) {
     var d = c.descarga || [];
+    if ((c.anios || []).length) {
+      return c.anios.map(function (a) { var k = ANIO_K[a.k] || ['', '', '']; return '<span class="chip ' + k[0] + '" title="' + esc(a.anio + ': ' + k[1]) + '">' + esc(a.anio + k[2]) + '</span>'; }).join('')
+        + (c.dia ? chip('Al día al ' + fecha(c.dia), 'ok') : '')
+        + (c.efirma && c.efirma !== 'Se usa la e.firma' ? chip(c.efirma, 'mal') : '');
+    }
     if (!d.length) return c.efirma && c.efirma !== 'Se usa la e.firma' ? chip(c.efirma, 'mal') : chip('Sin pedir todavía', '');
     return d.slice(0, 2).map(function (s) {
       var l = s.lado === 'emitida' ? 'Emitidas' : 'Recibidas';
@@ -407,8 +423,15 @@ tr.click:hover td{background:var(--navy-soft)}
       return chip(l + ': ' + (s.estado === 'vencida' ? 'el SAT no la terminó' : 'falló'), 'mal');
     }).join(' ');
   }
+  var MUCHOS = 12, bB = null;
   function pintaClientes() {
-    var h = B.clis.map(function (c) {
+    var muchos = B.clis.length > MUCHOS;
+    $('b-cliBox').hidden = !muchos;
+    $('b-clisub').textContent = muchos ? 'Escoge un cliente para ver solo sus XML y cómo va cada año; sin cliente se ven todos.'
+      : 'Pica uno para ver solo sus XML; pícale otra vez para ver todos.';
+    if (muchos && !bB) bB = buscaCliente($('b-cliBox'), 'b-cli', B.clis, function (v) { B.cli = v; pintaClientes(); listaB(true); });
+    var lista = muchos ? B.clis.filter(function (c) { return c.rfc === B.cli; }) : B.clis;
+    var h = lista.map(function (c) {
       return '<button type="button" class="cli" data-rfc="' + esc(c.rfc) + '" aria-pressed="' + (B.cli === c.rfc) + '">'
         + '<span class="t">' + esc(c.cliente) + '</span><span class="mut">' + esc(c.rfc) + (c.primera ? ' · del ' + esc(fecha(c.primera)) + ' al ' + esc(fecha(c.ultima)) : '') + '</span>'
         + '<span class="n">' + chip(cuenta(c.emitidas, 'emitida', 'emitidas'), 'az') + chip(cuenta(c.recibidas, 'recibida', 'recibidas'), 'az')
@@ -416,9 +439,10 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<span class="n">' + estadoDescarga(c) + '</span>'
         + (c.efirma && c.efirma !== 'Se usa la e.firma' && (c.descarga || []).length ? '<span class="mut">' + esc(c.efirma) + '</span>' : '') + '</button>';
     }).join('');
-    $('b-clis').innerHTML = h || '<div class="vacio">Todavía no hay clientes en la bóveda.</div>';
+    $('b-clis').innerHTML = h || (muchos ? '' : '<div class="vacio">Todavía no hay clientes en la bóveda.</div>');
+    $('b-clis').hidden = muchos && !h;
     $('b-clis').querySelectorAll('[data-rfc]').forEach(function (b) {
-      b.onclick = function () { var r = b.getAttribute('data-rfc'); B.cli = B.cli === r ? '' : r; pintaClientes(); listaB(true); };
+      b.onclick = function () { if (muchos) return; var r = b.getAttribute('data-rfc'); B.cli = B.cli === r ? '' : r; pintaClientes(); listaB(true); };
     });
   }
   function filaB(f) {
@@ -439,7 +463,7 @@ tr.click:hover td{background:var(--navy-soft)}
     if (reset) { B.filas = []; }
     try {
       var r = await rpc('cen_xml_lista', { p: Object.assign(filtroB(), { max: 300, desde_n: B.filas.length }) });
-      B.total = r.total || 0; B.mxn = r.mxn || 0; B.filas = B.filas.concat(r.filas || []);
+      B.total = r.total || 0; B.mas = !!r.mas; B.filas = B.filas.concat(r.filas || []);
       var tb = $('b-lista');
       if (!B.filas.length) vacio(tb, 7, B.clis.length ? 'No hay XML con estos filtros.' : 'Todavía no hay XML en la bóveda.');
       else tb.innerHTML = B.filas.map(filaB).join('');
@@ -448,18 +472,33 @@ tr.click:hover td{background:var(--navy-soft)}
         tr.querySelector('[data-ver]').onclick = function (ev) { verXml(f, ev.currentTarget); };
         tr.querySelector('[data-baja]').onclick = function (ev) { bajaXml(f, ev.currentTarget); };
       });
-      $('b-tot').innerHTML = '<span><b>' + B.total.toLocaleString('es-MX') + '</b> ' + (B.total === 1 ? 'XML' : 'XML') + (B.cli ? ' de ' + esc(clienteDe(B.cli)) : '') + '</span>'
+      $('b-tot').innerHTML = '<span>' + (B.mas ? 'Más de ' : '') + '<b>' + B.total.toLocaleString('es-MX') + '</b> XML' + (B.cli ? ' de ' + esc(clienteDe(B.cli)) : '') + '</span>'
         + (B.filas.length < B.total ? '<span>Se ven ' + B.filas.length.toLocaleString('es-MX') + '</span>' : '');
-      $('b-mas').hidden = B.filas.length >= B.total;
+      $('b-mas').hidden = B.filas.length >= B.total && !B.mas;
       $('b-sub').textContent = B.cli ? clienteDe(B.cli) : 'Todos los clientes';
+      $('b-q').placeholder = B.cli ? 'Buscar UUID, RFC, nombre o folio' : 'Buscar UUID, RFC o nombre (por folio, escoge el cliente)';
     } catch (e) { error(falla(e)); }
   }
   async function cargaBoveda() {
     B.clis = await rpc('cen_xml_clientes') || [];
-    var pruebas = EST.modo === 'piloto';
-    $('b-prueba').hidden = !pruebas;
-    $('b-prueba').innerHTML = '<strong>Prueba con ' + cuenta(B.clis.length, 'cliente', 'clientes') + ':</strong> el CRM le pide al SAT sus XML desde el ' + esc(fecha(EST.desde))
-      + ' (los emitidos, todos; los recibidos, los vigentes, que es lo que entrega el SAT). Cuando terminemos de medir cuánto pesan y cuánto tardan, se decide pasar a todos los clientes y la descarga de cada día.';
+    var pruebas = EST.modo === 'piloto', todos = EST.modo === 'todos';
+    $('b-prueba').hidden = !pruebas && !todos;
+    if (pruebas) {
+      $('b-prueba').innerHTML = '<strong>Prueba con ' + cuenta(B.clis.length, 'cliente', 'clientes') + ':</strong> el CRM le pide al SAT sus XML desde el ' + esc(fecha(EST.desde))
+        + ' (los emitidos, todos; los recibidos, los vigentes, que es lo que entrega el SAT).';
+    } else if (todos) {
+      var av = EST.avance || [], falta = av.filter(function (a) { return a.en_camino > 0 || a.por_pedir > 0; }).length;
+      $('b-prueba').innerHTML = '<strong>' + (falta ? 'Bajando los XML de todos los clientes' : 'Los XML de todos los clientes') + ':</strong> '
+        + (falta ? 'primero todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día lo nuevo. Los emitidos, todos; los recibidos, los vigentes (es lo que entrega el SAT).'
+                 : 'ya está la historia; cada día se baja lo nuevo' + (EST.dia ? ' (lo último, el ' + esc(fecha(EST.dia)) + ')' : '') + '.')
+        + (EST.detenida ? ' <strong>Este mes ya se usó el tiempo que se le dio a la descarga; sigue donde se quedó el primer día del mes que entra.</strong>' : '')
+        + (av.length ? '<div class="avance">' + av.map(function (a) {
+            var pct = a.clientes ? Math.round(100 * a.listos / a.clientes) : 0;
+            var est = a.en_camino ? a.en_camino + ' bajándose' : a.por_pedir && !a.listos ? 'todavía no empieza' : a.por_pedir ? a.por_pedir + ' por pedir' : '';
+            return '<div class="av' + (a.en_camino ? ' ojo' : '') + '"><b>' + esc(a.anio) + '</b><span class="mut">' + esc(cuenta(a.listos, 'cliente listo', 'clientes listos') + ' de ' + a.clientes)
+              + (est ? ' · ' + est : '') + '</span><span class="bar"><i style="width:' + pct + '%"></i></span></div>';
+          }).join('') + '</div>' : '');
+    }
     pintaClientes();
     await listaB(true);
   }
