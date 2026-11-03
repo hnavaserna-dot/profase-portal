@@ -373,6 +373,13 @@ tr.click:hover td{background:var(--navy-soft)}
   /* 189: un permiso de solo un sábado (o sábados) va de medio día cada uno (la base lo manda en solo_sabados) */
   function durTxt(x) { var L = x.solo_sabados || []; return L.length ? (L.length === 1 ? 'Medio día (sábado)' : L.length + ' sábados, medio día cada uno') : dias(x.dias); }
   function durEtq(x) { return (x.solo_sabados || []).length ? 'Duración' : 'Días hábiles'; }
+  /* «Al corriente» no se mide con una regla: el gerente (o RH, si no pasó por gerentes) da o niega el sábado viendo sus
+     entregas; si no se lo da, ese sábado se trabaja como siempre (Héctor Daniel, 3-nov-2026, 12:59) */
+  function sabDecide(L, ger) {
+    var uno = (L || []).length === 1;
+    return (uno ? 'va' : 'van') + ' como permiso con goce si ' + (ger ? 'tu gerente te lo da' : 'RH te lo da') + '; si no, '
+      + (uno ? 'ese sábado se trabaja' : 'esos sábados se trabajan') + ' como siempre.';
+  }
   function sabVa(L, si) { var uno = (L || []).length === 1; return si ? (uno ? 'va como permiso con goce (no se descuenta)' : 'van como permiso con goce (no se descuentan)') : (uno ? 'no va como permiso' : 'no van como permiso'); }
   function alCorriente(e) {
     if (!e) return '<span class="mut">Sin datos del WorkFlow.</span>';
@@ -470,8 +477,8 @@ tr.click:hover td{background:var(--navy-soft)}
     var L = x.sabados || [];
     if (!L.length || x.estado === 'Cancelada' || x.estado === 'No autorizada') return '';
     var t = x.sabado === 'si' ? sabTxt(L) + ' ' + sabVa(L, true) + '.'
-          : x.sabado === 'no' ? sabTxt(L) + ' ' + sabVa(L, false) + '. Cualquier duda, platícala con Alex Luna.'
-          : sabTxt(L) + ' (medio día) no se descuenta: ' + (L.length === 1 ? 'va' : 'van') + ' como permiso con goce si tienes tus actividades al corriente. ' + ((MIAS && MIAS.con_gerentes) ? 'Lo decide tu gerente.' : 'Lo decide RH.');
+          : x.sabado === 'no' ? sabTxt(L) + ' ' + sabVa(L, false) + ': ' + (L.length === 1 ? 'ese sábado se trabaja' : 'esos sábados se trabajan') + ' como siempre (medio día). Cualquier duda, platícala con Alex Luna.'
+          : sabTxt(L) + ' (medio día) no se descuenta de tus vacaciones: ' + sabDecide(L, MIAS && MIAS.con_gerentes);
     return '<span>Sábado</span><span>' + esc(t) + '</span>';
   }
   function fichaPrestamo(p) {
@@ -527,8 +534,7 @@ tr.click:hover td{background:var(--navy-soft)}
           try { var rd = await rpc('rh_sol_dias', { p_desde: a, p_hasta: b, p_detalle: true }); n = rd ? rd.dias : null; sab = (rd && rd.sabados) || []; } catch (e) {}
           if (mi !== tc) return;
           if (t === 'vacaciones' && sab.length && n > 0) {
-            $('n-sab').textContent = sabTxt(sab) + ' (medio día) no se descuenta de tus vacaciones: ' + (sab.length === 1 ? 'va' : 'van') + ' como permiso con goce si tienes tus actividades al corriente. '
-              + ((MIAS && MIAS.con_gerentes) ? 'Lo decide tu gerente.' : 'Lo decide RH.');
+            $('n-sab').textContent = sabTxt(sab) + ' (medio día) no se descuenta de tus vacaciones: ' + sabDecide(sab, MIAS && MIAS.con_gerentes);
             $('n-sab').hidden = false;
           }
           // 189: un permiso de solo un sábado (o sábados) va de medio día cada uno; unas vacaciones nunca descuentan el sábado
@@ -593,8 +599,8 @@ tr.click:hover td{background:var(--navy-soft)}
           + '<div class="ctx"><div><b>Esos días también estarán fuera</b>' + (f.length ? f.map(function (o) { return esc(o.nombre) + ' · ' + esc(o.tipo) + ', ' + esc(fecha(o.desde)) + (o.hasta !== o.desde ? ' al ' + esc(fecha(o.hasta)) : '') + (o.estado === 'En revisión' ? ' <span class="mut">(en revisión)</span>' : ''); }).join('<br>') : 'Nadie más de tu equipo.') + '</div>'
           + '<div><b>Sus entregas del WorkFlow</b>' + (e ? esc(e.abiertas) + ' abiertas · ' + '<span' + (e.vencidas ? ' class="neg"' : '') + '>' + esc(e.vencidas) + ' vencidas</span> · ' + esc(e.en_fechas) + ' vencen esos días' : 'Sin datos del WorkFlow.') + '</div>'
           + ((x.otros || []).length ? '<div><b>También la decide</b>' + x.otros.map(function (o) { return esc(o.nombre) + ': ' + esc(o.estado); }).join('<br>') + '</div>' : '') + '</div>'
-          + ((x.sabados || []).length && x.pendiente ? '<div class="msg az sab" style="margin-top:8px"><b>' + esc(sabTxt(x.sabados)) + ' (medio día)</b> no se descuenta de sus vacaciones: '
-              + (x.sabados.length === 1 ? 'va' : 'van') + ' como permiso con goce si tiene sus actividades al corriente. Tú decides al autorizar.<div style="margin-top:6px">' + alCorriente(e) + '</div></div>' : '');
+          + ((x.sabados || []).length && x.pendiente ? '<div class="msg az sab" style="margin-top:8px"><b>' + esc(sabTxt(x.sabados)) + ' (medio día)</b> no se descuenta de sus vacaciones. '
+              + 'Tú decides al autorizar si se lo das como permiso con goce; si no, ' + (x.sabados.length === 1 ? 'ese sábado se trabaja' : 'esos sábados se trabajan') + ' como siempre. Fíjate si está al corriente:<div style="margin-top:6px">' + alCorriente(e) + '</div></div>' : '');
         if (x.pendiente) h += CONSULTA ? '' : '<div class="decide"><button class="btn bien" type="button" data-si="' + i + '">Sí, autorizo</button><button class="btn peligro" type="button" data-no="' + i + '">No autorizo</button></div>';
         else h += '<div class="det">Tú: ' + chip(x.decision === 'si' ? 'Sí' : 'No', x.decision === 'si' ? 'ok' : 'mal') + ' <span class="mut">' + esc(x.motivo) + (x.comentario ? ' · «' + esc(x.comentario) + '»' : '') + ' · ' + esc(cuando(x.en)) + '</span>'
           + ((x.sabados || []).length && x.sabado_mio ? '<br>El sábado: ' + chip(x.sabado_mio === 'si' ? 'Como permiso' : 'No', x.sabado_mio === 'si' ? 'ok' : 'mal') : '')
