@@ -1,0 +1,652 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Reportes › Carga de Quo</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=aed1833b56"></script>
+<style>
+/* Portal PROFASE · Reportes › Carga de Quo (2-nov-2026, pedido de Fernando Cadengo: «quiero hacer un panel para tener
+   el control de esto… tipo el historial que tenía la página anterior»). El control de lo que se carga de Quo
+   Contabilita: el semáforo, el historial de cargas, el tablero de cada cliente por mes con sus 5 reportes, las alertas
+   y los botones «Volver a cargar» y «Probar con Quo directo». Solo conteos, fechas y estados; nunca valores de los
+   reportes. Quién ve y quién pide lo decide la base (portal/sql/171_quo_carga.sql); la página solo llama sus funciones
+   qc_* y no lee tablas. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:220px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.neg{color:var(--red);font-weight:700}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.campo.chk{flex-direction:row;align-items:center;gap:8px}
+.campo.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.campo.chk label{font-size:13.5px;color:var(--ink);font-weight:500}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600}
+.pregunta textarea{width:100%;min-height:70px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:0 0 12px}
+.pregunta .acciones{justify-content:flex-end}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.campo textarea,.pregunta textarea{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+
+.semaforo{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:16px 0 0}
+.semaforo .kpi{border-left:4px solid var(--line-strong)}
+.semaforo .kpi.ok{border-left-color:var(--ok)}
+.semaforo .kpi.ojo{border-left-color:var(--amber)}
+.semaforo .kpi.mal{border-left-color:var(--red)}
+.semaforo .kpi .v{font-size:20px}
+.leyenda{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 14px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.leyenda span{display:inline-flex;align-items:center;gap:5px}
+.pt{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--line-strong);flex:none}
+.pt.cuadra{background:var(--ok)}.pt.diferencia{background:var(--amber)}.pt.bajo{background:var(--accent)}.pt.fallo{background:var(--red)}
+.mapa{border-collapse:separate;border-spacing:0;width:auto;min-width:100%}
+.mapa th,.mapa td{border-top:1px solid var(--line);padding:6px 8px}
+.mapa th.cli,.mapa td.cli{position:sticky;left:0;background:var(--surface);z-index:1;min-width:180px;max-width:260px;box-shadow:1px 0 0 var(--line)}
+.mapa th.cli{background:var(--surface-2)}
+.mapa td.cli .rs{font-size:13px}
+.mapa td.m{text-align:center;white-space:nowrap}
+.celda{display:inline-flex;gap:3px;align-items:center;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 6px;cursor:pointer}
+.celda:hover,.celda:focus-visible{border-color:var(--navy);outline:none;box-shadow:0 0 0 2px var(--navy-soft)}
+.celda .pt{width:12px;height:12px}
+.celda.vacia{cursor:default;color:var(--muted);border-style:dashed;padding:5px 10px;font-size:12px}
+.rep5{display:grid;gap:8px}
+.rep5 .fila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--surface)}
+.rep5 .fila b{font-family:var(--f-display);font-stretch:85%;font-size:14.5px}
+.rep5 .fila .mut{grid-column:1/-1}
+.alertas{display:grid;gap:12px}
+.alertas .card{margin:0}
+.lista-a{margin:0;padding:0;list-style:none}
+.lista-a li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+.lista-a li:first-child{border-top:0}
+.lista-a li>div{min-width:0}
+.pide-tipo{display:grid;gap:8px}
+.pide-tipo label{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;background:var(--surface)}
+.pide-tipo input{margin-top:3px;width:18px;height:18px;accent-color:var(--navy);flex:none}
+.pide-tipo label:has(input:checked){border-color:var(--navy);background:var(--navy-soft)}
+.pide-tipo b{display:block}
+.ped{display:grid;gap:6px;padding:10px 14px}
+.ped .fila{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface)}
+.ped .fila>div{min-width:0}
+.pie{margin:0 0 24px}
+@media (max-width:700px){
+  .mapa th.cli,.mapa td.cli{min-width:140px;max-width:170px}
+  .semaforo{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Reportes</div>
+      <h1>Carga de Quo</h1>
+      <p>Lo que se carga de Quo Contabilita, cliente por cliente y mes por mes: cuándo se cargó, si lo que trajo Quo cuadra con lo guardado y qué hay que atender. De aquí salen Cartera y Variaciones.</p>
+    </div>
+  </div>
+  <div class="acts"><button class="btn acento" type="button" id="b-pide" hidden>Probar o volver a cargar</button></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no pedir cargas.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <section id="todo" hidden>
+    <section class="semaforo" id="semaforo" aria-label="Cómo va la carga">
+      <div class="kpi" id="k-ult"><div class="l">Última carga</div><div class="v" id="k-ult-v">—</div><div class="s" id="k-ult-s">&nbsp;</div></div>
+      <div class="kpi" id="k-vie"><div class="l">Carga de los viernes</div><div class="v" id="k-vie-v">—</div><div class="s" id="k-vie-s">&nbsp;</div></div>
+      <div class="kpi" id="k-bien"><div class="l">Clientes y meses al día</div><div class="v" id="k-bien-v">0</div><div class="s" id="k-bien-s">&nbsp;</div></div>
+      <div class="kpi" id="k-dif"><div class="l">Con diferencias o bajas</div><div class="v" id="k-dif-v">0</div><div class="s">reportes por revisar</div></div>
+      <div class="kpi" id="k-fal"><div class="l">Con fallas</div><div class="v" id="k-fal-v">0</div><div class="s">reportes que no se cargaron</div></div>
+      <div class="kpi" id="k-vpn"><div class="l">Quo directo</div><div class="v" id="k-vpn-v">—</div><div class="s" id="k-vpn-s">&nbsp;</div></div>
+    </section>
+
+    <div class="card" id="c-ped" style="margin-top:16px" hidden>
+      <header><div><h2>Lo que se pidió</h2><div class="sub" id="ped-sub">&nbsp;</div></div></header>
+      <div class="ped" id="ped"></div>
+    </div>
+
+    <div class="tabs" role="tablist" id="tabs">
+      <button type="button" role="tab" data-t="his" aria-selected="true">Historial</button>
+      <button type="button" role="tab" data-t="tab" aria-selected="false">Por cliente y mes</button>
+      <button type="button" role="tab" data-t="ale" aria-selected="false">Alertas<span class="cta" id="n-ale">0</span></button>
+    </div>
+
+    <div class="card" id="p-his">
+      <header><div><h2>Historial de cargas</h2><div class="sub" id="his-sub">Cada carga y cada prueba: cuándo, quién la pidió y cómo salió.</div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-his">Excel</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cuándo</th><th>Qué</th><th>Quién</th><th class="monto">Clientes y meses</th><th class="monto">Cuadran</th><th class="monto">Diferencias</th><th class="monto">Bajaron</th><th class="monto">Fallas</th><th>Tardó</th><th>Resultado</th></tr></thead><tbody id="his"></tbody></table></div>
+    </div>
+
+    <div class="card" id="p-tab" hidden>
+      <header><div><h2>Por cliente y mes</h2><div class="sub" id="tab-sub">&nbsp;</div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-tab">Excel</button></div></header>
+      <div class="filtros">
+        <input type="search" id="q" placeholder="Buscar cliente o RFC" aria-label="Buscar cliente o RFC">
+        <select id="f-per" aria-label="De quién" hidden><option value="">De todos</option></select>
+        <select id="f-est" aria-label="Estado"><option value="">Todos los estados</option><option value="mal">Con algo por revisar</option><option value="fallo">Con fallas</option><option value="diferencia">Con diferencias o bajas</option><option value="sin">Sin cargar</option><option value="bien">Todo cuadra</option></select>
+        <select id="f-desde" aria-label="Desde"></select>
+        <select id="f-hasta" aria-label="Hasta"></select>
+      </div>
+      <div class="leyenda" aria-label="Qué quiere decir cada color">
+        <span><i class="pt cuadra"></i>Cuadra</span><span><i class="pt diferencia"></i>Diferencia</span><span><i class="pt bajo"></i>Bajó</span><span><i class="pt fallo"></i>Falló</span><span><i class="pt"></i>Sin cargar</span>
+        <span>Cada cuadro: Movimientos bancarios, DIOT, Tablero QUO, Sincronizados y Balanza.</span>
+      </div>
+      <div class="tabla" id="mapa-box"><table class="mapa"><thead id="mapa-h"></thead><tbody id="mapa"></tbody></table></div>
+    </div>
+
+    <div id="p-ale" class="alertas" hidden>
+      <div class="card"><header><div><h2>Alertas</h2><div class="sub">Lo que hay que atender, lo más nuevo primero.</div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-ale">Excel</button></div></header></div>
+      <div id="ale"></div>
+    </div>
+
+    <p class="pie mut" id="pie">«Cuadra»: lo que trajo Quo es lo mismo que quedó guardado. «Diferencia»: no son iguales. «Bajó»: Quo trajo menos de la mitad de lo que había (o nada). «Falló»: no se pudo cargar. La carga de los viernes pasa el mes actual y el anterior de todos los clientes, más dos meses en rotación. «Volver a cargar» pasa otra vez un cliente y un mes por la página de Quo; «Probar con Quo directo» lo lee por la conexión directa y lo compara con lo guardado, sin cambiar nada. Solo se guardan conteos, nunca los datos de la contabilidad.</p>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var REP = [['bancario', 'Movimientos bancarios'], ['diot', 'DIOT'], ['tablero_quo', 'Tablero QUO'], ['sincronizados', 'Sincronizados'], ['balanza', 'Balanza']];
+  var REPN = {}; REP.forEach(function (r) { REPN[r[0]] = r[1]; });
+  var TIPO = { viernes: 'Carga de los viernes', recarga: 'Volver a cargar', prueba: 'Prueba con Quo directo' };
+  var EST = { bien: ['Bien', 'ok'], diferencias: ['Con diferencias', 'ojo'], fallas: ['Con fallas', 'mal'], fallo: ['No terminó', 'mal'], corriendo: ['Corriendo', 'az'] };
+  var CEL = { cuadra: ['Cuadra', 'ok'], diferencia: ['Diferencia', 'ojo'], bajo: ['Bajó', 'na'], fallo: ['Falló', 'mal'] };
+  var PED = { pendiente: ['Esperando', 'az'], corriendo: ['Cargando', 'az'], hecho: ['Listo', 'ok'], fallo: ['No se pudo', 'mal'], cancelado: ['Cancelado', ''] };
+  var MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var YO = null, RES = null, HIS = [], TAB = null, ALE = null, T = 'his', CONSULTA = false, PIDE = null;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function num(n) { return n == null ? '—' : Number(n).toLocaleString('es-MX'); }
+  function fh(s, anio) { return s ? window.PROFASE_HORA.fechaHora(s, anio) : ''; }
+  function mesTxt(m) { return m ? MES[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) : ''; }
+  function dura(min) { if (min == null) return ''; var m = Math.round(+min); return m < 1 ? 'menos de 1 min' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; }
+  function hoyMes() { return window.PROFASE_HORA.dia(new Date()).slice(0, 7); }
+  function mesMas(m, n) { var a = +m.slice(0, 4), x = +m.slice(5, 7) - 1 + n; a += Math.floor(x / 12); x = ((x % 12) + 12) % 12; return a + '-' + String(x + 1).padStart(2, '0'); }
+  function meses() { var out = [], m = '2025-01', h = hoyMes(); while (m <= h) { out.push(m); m = mesMas(m, 1); } return out; }
+
+  /* ---------- ventana ---------- */
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('velo').hidden) cierra(); });
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  async function excel(b, nombre, titulo, lineas, head, filas, anchos) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\\/?*\[\]:]/g, ' '));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, nombre + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+  function exportado() { return 'Exportado el ' + fh(new Date()); }
+
+  /* ---------- semáforo y lo que se pidió ---------- */
+  function kpi(id, v, s, clase) {
+    $(id + '-v').textContent = v; if (s != null && $(id + '-s')) $(id + '-s').textContent = s;
+    $(id).className = 'kpi' + (clase ? ' ' + clase : '');
+  }
+  function pintaRes() {
+    var r = RES || {}, c = r.celdas || {}, u = r.ultima, v = r.viernes || {};
+    if (u) { var e = EST[u.estado] || [u.estado, '']; kpi('k-ult', e[0], (TIPO[u.tipo] || '') + ', ' + fh(u.fin || u.inicio), e[1] === 'az' ? '' : e[1]); }
+    else kpi('k-ult', 'Todavía no hay', 'la primera carga sale aquí', '');
+    if (v.corriendo) kpi('k-vie', 'Corriendo', 'desde ' + fh(v.desde) + '; «Volver a cargar» espera a que termine', 'ojo');
+    else {
+      var ue = v.ultima ? (EST[v.ultima.estado] || [v.ultima.estado, ''])[0].toLowerCase() : '';
+      kpi('k-vie', 'Siguiente: ' + fh(v.siguiente, false), v.ultima ? 'La última: ' + ue + ' (' + fh(v.ultima.fin || v.ultima.inicio, false) + ')' : '', v.ultima ? (EST[v.ultima.estado] || [])[1] : '');
+    }
+    kpi('k-bien', num(c.clientes_mes_bien || 0), 'de ' + num(c.clientes_mes || 0) + ' con algo cargado', (c.clientes_mes && c.clientes_mes_bien === c.clientes_mes) ? 'ok' : '');
+    kpi('k-dif', num((c.diferencia || 0) + (c.bajo || 0)), null, (c.diferencia || c.bajo) ? 'ojo' : 'ok');
+    kpi('k-fal', num(c.fallo || 0), null, c.fallo ? 'mal' : 'ok');
+    if (r.vpn) kpi('k-vpn', r.vpn.estado === 'conectada' ? 'Conectó' : 'No conectó', 'la última prueba: ' + fh(r.vpn.hora, false), r.vpn.estado === 'conectada' ? 'ok' : 'mal');
+    else kpi('k-vpn', 'Sin probar', 'todavía no hay pruebas', '');
+    var L = r.pedidos || [];
+    $('c-ped').hidden = !L.length;
+    var vivos = L.filter(function (p) { return p.estado === 'pendiente' || p.estado === 'corriendo'; }).length;
+    $('ped-sub').textContent = vivos ? vivos + ' en camino: te llega el aviso a la campanita cuando quede.' : 'Lo de los últimos días.';
+    $('ped').innerHTML = L.map(function (p) {
+      var e = PED[p.estado] || [p.estado, ''];
+      return '<div class="fila"><div><div class="rs">' + esc(p.cliente) + ' · ' + esc(mesTxt(p.mes)) + '</div><div class="mut">'
+        + esc(p.tipo === 'recarga' ? 'Volver a cargar' : 'Probar con Quo directo') + (p.mio ? '' : ' · lo pidió ' + esc(p.quien)) + ' · ' + esc(fh(p.pedido, false))
+        + (p.nota ? ' · ' + esc(p.nota) : '') + '</div></div><div class="acciones">' + chip(e[0], e[1])
+        + (p.corrida ? '<button class="btn chico" type="button" data-cor="' + p.corrida + '">Ver</button>' : '')
+        + (p.mio && p.estado === 'pendiente' && !CONSULTA ? '<button class="btn chico" type="button" data-can="' + p.id + '">Cancelar</button>' : '') + '</div></div>';
+    }).join('');
+    $('ped').querySelectorAll('[data-cor]').forEach(function (b) { b.onclick = function () { abreCorrida(+b.dataset.cor); }; });
+    $('ped').querySelectorAll('[data-can]').forEach(function (b) {
+      b.onclick = async function () { b.disabled = true; try { await rpc('qc_cancela', { p_id: +b.dataset.can }); avisa('Listo: se canceló.'); await cargaRes(); } catch (e) { error(falla(e)); b.disabled = false; } };
+    });
+  }
+  async function cargaRes() { RES = await rpc('qc_resumen'); pintaRes(); }
+
+  /* ---------- historial ---------- */
+  function pintaHis() {
+    $('his').innerHTML = HIS.length ? HIS.map(function (h, i) {
+      var e = EST[h.estado] || [h.estado, ''];
+      return '<tr' + (h.detalle ? ' class="click" data-h="' + i + '"' : '') + '>'
+        + '<td data-l="Cuándo" class="w"><div class="rs">' + esc(fh(h.inicio)) + '</div>' + (h.nota ? '<div class="mut">' + esc(h.nota) + '</div>' : '') + '</td>'
+        + '<td data-l="Qué">' + esc(TIPO[h.tipo] || h.tipo) + '</td>'
+        + '<td data-l="Quién">' + esc(h.quien || '') + '</td>'
+        + '<td data-l="Clientes y meses" class="monto">' + num(h.clientes_mes != null ? h.clientes_mes : h.clientes) + '</td>'
+        + '<td data-l="Cuadran" class="monto">' + num(h.cuadran) + '</td>'
+        + '<td data-l="Diferencias" class="monto">' + (h.diferencias ? '<b>' + num(h.diferencias) + '</b>' : num(h.diferencias)) + '</td>'
+        + '<td data-l="Bajaron" class="monto">' + (h.bajaron ? '<b>' + num(h.bajaron) + '</b>' : num(h.bajaron)) + '</td>'
+        + '<td data-l="Fallas" class="monto">' + (h.fallas ? '<b class="neg">' + num(h.fallas) + '</b>' : num(h.fallas)) + '</td>'
+        + '<td data-l="Tardó">' + esc(dura(h.minutos)) + '</td>'
+        + '<td data-l="Resultado">' + chip(e[0], e[1]) + (h.detalle ? '' : '<div class="mut">Sin detalle por cliente</div>') + (h.error ? '<div class="mut">' + esc(h.error) + '</div>' : '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="vacio">Todavía no hay cargas registradas.</td></tr>';
+    $('his').querySelectorAll('[data-h]').forEach(function (tr) { tr.onclick = function () { abreCorrida(HIS[+tr.dataset.h].id); }; });
+  }
+  async function cargaHis() { HIS = await rpc('qc_historial', { p_limite: 80 }) || []; pintaHis(); }
+
+  async function abreCorrida(id) {
+    try {
+      var c = await rpc('qc_corrida', { p_id: id }); if (!c) return;
+      var e = EST[c.estado] || [c.estado, ''], todo = c.celdas || [], solo = todo.length > 150;
+      var filas = function (soloMal) {
+        var L = soloMal ? todo.filter(function (x) { return x[7] !== 'cuadra'; }) : todo;
+        return L.length ? L.map(function (x) {
+          var ce = CEL[x[7]] || [x[7], ''];
+          return '<tr><td data-l="Cliente" class="w"><div class="rs">' + esc(x[1]) + '</div><div class="mut">' + esc(x[0]) + '</div></td><td data-l="Mes">' + esc(mesTxt(x[2])) + '</td>'
+            + '<td data-l="Reporte">' + esc(REPN[x[3]] || x[3]) + '</td><td data-l="Quo" class="monto">' + num(x[4]) + '</td><td data-l="Guardado" class="monto">' + num(x[5]) + '</td>'
+            + '<td data-l="Estado">' + chip(ce[0], ce[1]) + (x[7] === 'bajo' && x[6] != null ? '<div class="mut">había ' + num(x[6]) + '</div>' : '') + (x[8] ? '<div class="mut">' + esc(x[8]) + '</div>' : '') + '</td></tr>';
+        }).join('') : '<tr><td colspan="6" class="vacio">' + (soloMal ? 'Todo cuadra.' : 'Sin reportes de tus clientes en esta carga.') + '</td></tr>';
+      };
+      abre(TIPO[c.tipo] || 'Carga', fh(c.inicio) + ' · ' + c.quien,
+        '<div class="sec"><h3>Cómo salió</h3><div class="in"><div class="dl"><span>Resultado</span><span>' + chip(e[0], e[1]) + '</span>'
+          + '<span>Empezó</span><span>' + esc(fh(c.inicio)) + '</span>' + (c.fin ? '<span>Terminó</span><span>' + esc(fh(c.fin)) + '</span>' : '')
+          + (c.minutos != null ? '<span>Tardó</span><span>' + esc(dura(c.minutos)) + '</span>' : '') + (c.vpn ? '<span>VPN de Quo</span><span>' + esc(c.vpn === 'conectada' ? 'Conectó' : 'No conectó') + '</span>' : '')
+          + (c.nota ? '<span>Qué cargó</span><span>' + esc(c.nota) + '</span>' : '') + (c.error ? '<span>Lo que pasó</span><span>' + esc(c.error) + '</span>' : '') + '</div></div></div>'
+        + '<div class="sec"><h3>Cliente por cliente</h3>' + (solo ? '<div class="in" style="padding-bottom:0"><label class="mut"><input type="checkbox" id="c-solo" checked> Solo lo que no cuadra (son ' + num(todo.length) + ' reportes)</label></div>' : '')
+        + '<div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Mes</th><th>Reporte</th><th class="monto">Quo</th><th class="monto">Guardado</th><th>Estado</th></tr></thead><tbody id="c-lista">' + filas(solo) + '</tbody></table></div></div>');
+      if (solo) $('c-solo').onchange = function () { $('c-lista').innerHTML = filas(this.checked); };
+    } catch (e) { error(falla(e)); }
+  }
+
+  /* ---------- por cliente y mes ---------- */
+  var IDX = {};
+  function rangoMeses() { var out = [], m = $('f-hasta').value; while (m >= $('f-desde').value) { out.push(m); m = mesMas(m, -1); } return out; }
+  async function cargaTab() {
+    if ($('f-desde').value > $('f-hasta').value) { var t = $('f-desde').value; $('f-desde').value = $('f-hasta').value; $('f-hasta').value = t; }
+    TAB = await rpc('qc_tablero', { p_desde: $('f-desde').value, p_hasta: $('f-hasta').value });
+    IDX = {};
+    (TAB.celdas || []).forEach(function (x) { var k = x[0] + '|' + x[1]; (IDX[k] = IDX[k] || {})[x[2]] = x; });
+    var per = TAB.personas || {}, ks = Object.keys(per).sort(function (a, b) { return norm(per[a]) < norm(per[b]) ? -1 : 1; });
+    $('f-per').hidden = !ks.length;
+    var sel = $('f-per').value;
+    $('f-per').innerHTML = '<option value="">De todos</option>' + ks.map(function (k) { return '<option value="' + esc(k) + '">' + esc(per[k]) + '</option>'; }).join('');
+    $('f-per').value = ks.indexOf(sel) >= 0 ? sel : '';
+    pintaTab();
+  }
+  function estadoMes(rfc, m) {
+    var c = IDX[rfc + '|' + m]; if (!c) return 'sin';
+    var es = REP.map(function (r) { return c[r[0]] ? c[r[0]][6] : 'sin'; });
+    if (es.indexOf('fallo') >= 0) return 'fallo';
+    if (es.indexOf('diferencia') >= 0 || es.indexOf('bajo') >= 0) return 'diferencia';
+    if (es.indexOf('sin') >= 0) return 'sin';
+    return 'bien';
+  }
+  function filtrados() {
+    var q = norm($('q').value), per = $('f-per').value, fe = $('f-est').value, ms = rangoMeses();
+    return (TAB.clientes || []).filter(function (c) {
+      if (q && norm(c.nombre + ' ' + c.rfc).indexOf(q) < 0) return false;
+      if (per && (c.quien || []).indexOf(per) < 0) return false;
+      if (!fe) return true;
+      var es = ms.map(function (m) { return estadoMes(c.rfc, m); });
+      if (fe === 'mal') return es.indexOf('fallo') >= 0 || es.indexOf('diferencia') >= 0;
+      if (fe === 'bien') return es.every(function (e) { return e === 'bien'; });
+      return es.indexOf(fe) >= 0;
+    });
+  }
+  function pintaTab() {
+    var ms = rangoMeses(), L = filtrados();
+    $('tab-sub').textContent = L.length + ' de ' + (TAB.clientes || []).length + ' clientes · ' + mesTxt(ms[ms.length - 1]) + ' a ' + mesTxt(ms[0]) + '. Pica un cuadro para ver sus 5 reportes.';
+    $('mapa-h').innerHTML = '<tr><th class="cli">Cliente</th>' + ms.map(function (m) { return '<th class="m">' + esc(mesTxt(m)) + '</th>'; }).join('') + '</tr>';
+    if (!L.length) { $('mapa').innerHTML = '<tr><td class="vacio" colspan="' + (ms.length + 1) + '">' + ((TAB.clientes || []).length ? 'Ningún cliente con esa búsqueda.' : 'Todavía no hay nada cargado de tus clientes en esos meses.') + '</td></tr>'; return; }
+    $('mapa').innerHTML = L.map(function (c, i) {
+      return '<tr><td class="cli"><div class="rs">' + esc(c.nombre) + '</div><div class="mut">' + esc(c.rfc) + (c.cuenta ? '' : ' · sin cuenta de Quo') + '</div></td>'
+        + ms.map(function (m) {
+          var x = IDX[c.rfc + '|' + m];
+          if (!x) return '<td class="m"><button type="button" class="celda vacia" data-c="' + i + '" data-m="' + m + '" aria-label="' + esc(c.nombre + ', ' + mesTxt(m) + ': sin cargar') + '">Sin cargar</button></td>';
+          var pts = REP.map(function (r) { var y = x[r[0]]; return '<i class="pt ' + (y ? y[6] : '') + '" title="' + esc(r[1] + ': ' + (y ? CEL[y[6]][0] : 'sin cargar')) + '"></i>'; }).join('');
+          return '<td class="m"><button type="button" class="celda" data-c="' + i + '" data-m="' + m + '" aria-label="' + esc(c.nombre + ', ' + mesTxt(m)) + '">' + pts + '</button></td>';
+        }).join('') + '</tr>';
+    }).join('');
+    $('mapa').querySelectorAll('[data-c]').forEach(function (b) { b.onclick = function () { abreCelda(L[+b.dataset.c], b.dataset.m); }; });
+  }
+  ['q'].forEach(function (k) { $(k).addEventListener('input', function () { if (TAB) pintaTab(); }); });
+  ['f-per', 'f-est'].forEach(function (k) { $(k).addEventListener('change', function () { if (TAB) pintaTab(); }); });
+  ['f-desde', 'f-hasta'].forEach(function (k) { $(k).addEventListener('change', function () { cargaTab().catch(function (e) { error(falla(e)); }); }); });
+
+  function botonesPide(c, m) {
+    if (!c || !c.pide || CONSULTA) return '';
+    if (!c.cuenta) return '<p class="mut" style="margin:0">Para cargarlo, primero pon su cuenta de Quo en su ficha (Clientes › Base de clientes).</p>';
+    return '<div class="acciones"><button class="btn acento" type="button" data-pide="recarga" data-r="' + esc(c.rfc) + '" data-mm="' + esc(m) + '">Volver a cargar</button>'
+      + '<button class="btn" type="button" data-pide="prueba" data-r="' + esc(c.rfc) + '" data-mm="' + esc(m) + '">Probar con Quo directo</button></div>';
+  }
+  function engancha(raiz) {
+    raiz.querySelectorAll('[data-pide]').forEach(function (b) { b.onclick = function () { pide(b.dataset.pide, b.dataset.r, b.dataset.mm, b); }; });
+  }
+  function abreCelda(c, m) {
+    var x = IDX[c.rfc + '|' + m] || {};
+    var filas = REP.map(function (r) {
+      var y = x[r[0]];
+      if (!y) return '<div class="fila"><b>' + esc(r[1]) + '</b>' + chip('Sin cargar') + '</div>';
+      var e = CEL[y[6]] || [y[6], ''];
+      return '<div class="fila"><b>' + esc(r[1]) + '</b>' + chip(e[0], e[1])
+        + '<div class="mut">' + (y[6] === 'fallo' ? esc(y[9] || 'No se pudo cargar') : 'Quo trajo ' + num(y[3]) + ' · quedaron guardados ' + num(y[4]) + (y[6] === 'bajo' && y[5] != null ? ' · antes había ' + num(y[5]) : ''))
+        + ' · ' + esc(TIPO[y[8]] || '') + ', ' + esc(fh(y[7])) + '</div></div>';
+    }).join('');
+    abre(c.nombre, c.rfc + ' · ' + mesTxt(m), '<div class="sec"><h3>Sus 5 reportes</h3><div class="in rep5">' + filas + '</div></div>'
+      + (c.pide && !CONSULTA ? '<div class="sec"><h3>Cargarlo otra vez</h3><div class="in"><p class="mut" style="margin:0 0 10px">«Volver a cargar» lo pasa otra vez por la página de Quo y actualiza Cartera y Variaciones. «Probar con Quo directo» lo lee por la conexión directa y lo compara con lo guardado, sin cambiar nada. En unos minutos queda y te llega el aviso.</p>' + botonesPide(c, m) + '</div></div>' : ''));
+    engancha($('ficha'));
+  }
+
+  /* ---------- pedir ---------- */
+  async function pide(tipo, rfc, mes, b) {
+    if (b) b.disabled = true;
+    try {
+      var r = await rpc('qc_pide', { p_tipo: tipo, p_rfc: rfc, p_mes: mes });
+      cierra(); avisa(r && r.mensaje || 'Pedido.');
+      await Promise.all([cargaRes(), rpc('qc_yo').then(function (y) { YO = y; })]);
+    } catch (e) { if (b) b.disabled = false; error(falla(e)); }
+  }
+  async function ventanaPide() {
+    try {
+      if (!TAB) await cargaTab();
+      var ops = (TAB.clientes || []).filter(function (c) { return c.pide && c.cuenta; });
+      var quedan = Math.max(0, (YO.limite || 0) - (YO.hoy || 0));
+      var ms = meses().slice().reverse();
+      abre('Probar o volver a cargar', quedan + ' de ' + (YO.limite || 0) + ' pedidos te quedan hoy',
+        '<div class="sec"><h3>¿Qué cliente y qué mes?</h3><div class="in"><div class="campos">'
+          + '<div class="campo ancho"><label for="p-cli">Cliente</label><div id="p-cliBox"></div></div>'
+          + '<div class="campo"><label for="p-mes">Mes</label><select id="p-mes">' + ms.map(function (m) { return '<option value="' + m + '">' + esc(mesTxt(m)) + '</option>'; }).join('') + '</select></div>'
+          + '</div></div></div>'
+        + '<div class="sec"><h3>¿Qué hago?</h3><div class="in pide-tipo">'
+          + '<label><input type="radio" name="p-tipo" value="recarga" checked><span><b>Volver a cargar</b><span class="mut">Lo pasa otra vez por la página de Quo, lo compara con lo guardado y actualiza Cartera y Variaciones. Si la carga de los viernes está corriendo, se hace en cuanto termine.</span></span></label>'
+          + '<label><input type="radio" name="p-tipo" value="prueba"><span><b>Probar con Quo directo</b><span class="mut">Lo lee por la conexión directa a Quo y lo compara con lo guardado. No cambia nada.</span></span></label>'
+        + '</div></div>'
+        + '<div class="msg" id="p-msg" hidden></div><div class="acciones"><button class="btn acento" type="button" id="p-ok">Pedir</button><button class="btn" type="button" id="p-no">Cancelar</button></div>'
+        + '<p class="mut" style="margin:0">En unos minutos queda y te llega el aviso a la campanita. ' + (PIDE === 'todo' ? 'Puedes pedir cualquier cliente.' : 'Solo salen tus clientes.') + '</p>');
+      var bus = window.PROFASE_BUSCA.crea({ donde: $('p-cliBox'), id: 'p-cli', opciones: ops.map(function (c) { return { v: c.rfc, t: c.nombre, nota: c.rfc }; }), valor: [],
+        marcador: 'Escribe parte del nombre o el RFC', vacio: 'Ningún cliente coincide', sinOpciones: 'No tienes clientes con cuenta de Quo' });
+      $('p-no').onclick = cierra;
+      $('p-ok').onclick = function () {
+        var v = bus.valor()[0];
+        if (!v) { $('p-msg').className = 'msg mal'; $('p-msg').textContent = 'Escoge un cliente.'; $('p-msg').hidden = false; return; }
+        pide(document.querySelector('[name="p-tipo"]:checked').value, v, $('p-mes').value, this);
+      };
+    } catch (e) { error(falla(e)); }
+  }
+  $('b-pide').onclick = ventanaPide;
+
+  /* ---------- alertas ---------- */
+  function seccionAle(titulo, sub, L, fila) {
+    return '<div class="card"><header><div><h2>' + esc(titulo) + ' (' + L.length + ')</h2><div class="sub">' + esc(sub) + '</div></div></header>'
+      + '<ul class="lista-a">' + L.map(fila).join('') + '</ul></div>';
+  }
+  function filaAle(detalle) {
+    return function (x) {
+      return '<li><div><div class="rs">' + esc(x.nombre) + (x.mes ? ' · ' + esc(mesTxt(x.mes)) : '') + '</div><div class="mut">' + esc(x.rfc) + (x.reporte ? ' · ' + esc(REPN[x.reporte] || x.reporte) : '') + ' · ' + esc(detalle(x)) + '</div></div>'
+        + (x.pide && !CONSULTA && x.mes ? '<div class="acciones"><button class="btn chico acento" type="button" data-pide="recarga" data-r="' + esc(x.rfc) + '" data-mm="' + esc(x.mes) + '">Volver a cargar</button>'
+          + '<button class="btn chico" type="button" data-pide="prueba" data-r="' + esc(x.rfc) + '" data-mm="' + esc(x.mes) + '">Probar</button></div>' : '') + '</li>';
+    };
+  }
+  function cuantasAle(a) { return a ? (a.fallas || []).length + (a.diferencias || []).length + (a.bajaron || []).length + (a.sin_cuenta || []).length + (a.varias_cuentas || []).length : 0; }
+  function pintaAle() {
+    var a = ALE || {}, h = '';
+    var dos = {}; (a.fallas_seguidas || []).forEach(function (x) { dos[x.rfc + x.mes + x.reporte] = 1; });
+    if ((a.fallas || []).length) h += seccionAle('Fallaron', 'Lo último que se intentó cargar y no se pudo. «Dos veces seguidas» ya falló también la vez anterior.', a.fallas,
+      filaAle(function (x) { return (dos[x.rfc + x.mes + x.reporte] ? 'dos veces seguidas · ' : '') + (x.error || 'no se pudo') + ' · ' + fh(x.hora, false); }));
+    if ((a.diferencias || []).length) h += seccionAle('Con diferencias', 'Lo que trajo Quo no es igual a lo que quedó guardado.', a.diferencias,
+      filaAle(function (x) { return 'Quo ' + num(x.quo) + ' · guardado ' + num(x.base) + ' · ' + fh(x.hora, false); }));
+    if ((a.bajaron || []).length) h += seccionAle('Bajaron', 'Quo trajo menos de la mitad de lo que había (o nada). Revisa en Quo si algo se borró.', a.bajaron,
+      filaAle(function (x) { return 'había ' + num(x.antes) + ' · ahora ' + num(x.quo) + ' · ' + fh(x.hora, false); }));
+    if ((a.sin_cuenta || []).length) h += seccionAle('Sin cuenta de Quo', 'Tienen trabajo en el WorkFlow pero su ficha no trae la cuenta de Quo: ponla en Clientes › Base de clientes para poder cargarlos.', a.sin_cuenta,
+      filaAle(function () { return 'sin cuenta de Quo en su ficha'; }));
+    if ((a.varias_cuentas || []).length) h += seccionAle('Con más de una cuenta de Quo', 'El mismo RFC trae más de una cuenta de Quo en sus fichas: deja solo la buena para que la prueba con Quo directo sepa cuál usar.', a.varias_cuentas,
+      filaAle(function (x) { return x.cuentas + ' cuentas de Quo'; }));
+    $('ale').innerHTML = h || '<div class="card"><div class="vacio">Nada que atender por ahora.</div></div>';
+    $('n-ale').textContent = cuantasAle(a);
+    engancha($('ale'));
+  }
+  async function cargaAle() { ALE = await rpc('qc_alertas'); pintaAle(); }
+
+  /* ---------- pestañas ---------- */
+  function ponTab(t) {
+    T = t;
+    document.querySelectorAll('#tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === t ? 'true' : 'false'); });
+    $('p-his').hidden = t !== 'his'; $('p-tab').hidden = t !== 'tab'; $('p-ale').hidden = t !== 'ale';
+    if (t === 'tab' && !TAB) cargaTab().catch(function (e) { error(falla(e)); });
+  }
+  document.querySelectorAll('#tabs [data-t]').forEach(function (b) { b.onclick = function () { ponTab(b.dataset.t); }; });
+
+  /* ---------- Excel ---------- */
+  $('x-his').onclick = function () {
+    excel(this, 'Carga de Quo historial ' + window.PROFASE_HORA.dia(new Date()), 'Historial de cargas de Quo', ['Reportes › Carga de Quo', exportado()],
+      ['Cuándo', 'Qué', 'Quién', 'Clientes y meses', 'Cuadran', 'Diferencias', 'Bajaron', 'Fallas', 'Tardó', 'Resultado', 'Qué cargó'],
+      HIS.map(function (h) { return [window.PROFASE_HORA.excel(h.inicio), TIPO[h.tipo] || h.tipo, h.quien || '', h.clientes_mes != null ? h.clientes_mes : h.clientes, h.cuadran, h.diferencias, h.bajaron, h.fallas, dura(h.minutos), (EST[h.estado] || [h.estado])[0], h.nota || '']; }),
+      [18, 22, 22, 14, 10, 12, 10, 10, 12, 16, 50]);
+  };
+  $('x-tab').onclick = function () {
+    if (!TAB) return;
+    var ms = rangoMeses(), filas = [];
+    filtrados().forEach(function (c) {
+      ms.forEach(function (m) {
+        var x = IDX[c.rfc + '|' + m] || {};
+        REP.forEach(function (r) { var y = x[r[0]]; filas.push([c.nombre, c.rfc, mesTxt(m), r[1], y ? y[3] : null, y ? y[4] : null, y ? CEL[y[6]][0] : 'Sin cargar', y ? (y[9] || '') : '', y ? window.PROFASE_HORA.excel(y[7]) : null]); });
+      });
+    });
+    excel(this, 'Carga de Quo por cliente ' + window.PROFASE_HORA.dia(new Date()), 'Carga de Quo por cliente y mes', ['Reportes › Carga de Quo', mesTxt(ms[ms.length - 1]) + ' a ' + mesTxt(ms[0]), exportado()],
+      ['Cliente', 'RFC', 'Mes', 'Reporte', 'Quo', 'Guardado', 'Estado', 'Nota', 'Cargado'], filas, [40, 16, 10, 22, 10, 10, 12, 30, 18]);
+  };
+  $('x-ale').onclick = function () {
+    var a = ALE || {}, filas = [];
+    (a.fallas || []).forEach(function (x) { filas.push(['Falló', x.nombre, x.rfc, mesTxt(x.mes), REPN[x.reporte], x.error || '']); });
+    (a.diferencias || []).forEach(function (x) { filas.push(['Diferencia', x.nombre, x.rfc, mesTxt(x.mes), REPN[x.reporte], 'Quo ' + x.quo + ' · guardado ' + x.base]); });
+    (a.bajaron || []).forEach(function (x) { filas.push(['Bajó', x.nombre, x.rfc, mesTxt(x.mes), REPN[x.reporte], 'había ' + x.antes + ' · ahora ' + x.quo]); });
+    (a.sin_cuenta || []).forEach(function (x) { filas.push(['Sin cuenta de Quo', x.nombre, x.rfc, '', '', 'Ponla en Clientes › Base de clientes']); });
+    (a.varias_cuentas || []).forEach(function (x) { filas.push(['Más de una cuenta de Quo', x.nombre, x.rfc, '', '', x.cuentas + ' cuentas']); });
+    excel(this, 'Carga de Quo alertas ' + window.PROFASE_HORA.dia(new Date()), 'Alertas de la carga de Quo', ['Reportes › Carga de Quo', exportado()],
+      ['Alerta', 'Cliente', 'RFC', 'Mes', 'Reporte', 'Detalle'], filas, [22, 40, 16, 10, 22, 40]);
+  };
+
+  /* ---------- se pone al día solo mientras algo va en camino (y solo si la pantalla se ve) ---------- */
+  function seVe() { try { return !document.hidden && (!window.frameElement || !!window.frameElement.offsetParent); } catch (e) { return !document.hidden; } }
+  setInterval(function () {
+    if (!RES || !seVe()) return;
+    var vivo = (RES.pedidos || []).some(function (p) { return p.estado === 'pendiente' || p.estado === 'corriendo'; }) || (RES.viernes && RES.viernes.corriendo);
+    if (!vivo) return;
+    Promise.all([cargaRes(), cargaHis(), T === 'tab' && TAB ? cargaTab() : null, cargaAle()]).catch(function () {});
+  }, 45000);
+
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      YO = await rpc('qc_yo');
+      if (!YO || !YO.ve) throw new Error('Aquí salen los clientes que trabajas en el WorkFlow; todavía no tienes ninguno.');
+      CONSULTA = !!YO.consulta || !!P.consulta;
+      PIDE = CONSULTA ? null : YO.pide;
+      $('consulta').hidden = !CONSULTA;
+      $('b-pide').hidden = !PIDE;
+      var ms = meses(), h = hoyMes();
+      var opc = function (pre) { return ms.slice().reverse().map(function (m) { return '<option value="' + m + '">' + pre + esc(mesTxt(m)) + '</option>'; }).join(''); };
+      $('f-desde').innerHTML = opc('Desde '); $('f-hasta').innerHTML = opc('Hasta ');
+      $('f-hasta').value = h; $('f-desde').value = ms.indexOf(mesMas(h, -3)) >= 0 ? mesMas(h, -3) : ms[0];
+      await Promise.all([cargaRes(), cargaHis(), cargaAle()]);
+      $('todo').hidden = false; $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>

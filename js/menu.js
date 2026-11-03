@@ -117,7 +117,9 @@
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
       { k: 'cartera', v: 'car', t: 'Cartera', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo.' },
       { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
-      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección.' }] },
+      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección.' },
+      // Carga de Quo (2-nov-2026, pedido de Fernando Cadengo): el control de lo que se carga de Quo; la base decide quién (qc_yo, 171)
+      { k: 'quo-carga', v: 'qcar', t: 'Carga de Quo', d: 'Qué se cargó de Quo, cliente por cliente y mes por mes, si cuadra y qué hay que atender.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
