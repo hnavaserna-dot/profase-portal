@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Activo fijo</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/filtros.js"></script><script src="js/bitacora.js?v=4ce45e3af8"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Activo fijo</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/filtros.js"></script><script src="js/bitacora.js?v=4ce45e3af8"></script><script src="js/buscador.js?v=aed1833b56"></script><script src="js/ocultos.js?v=df79ec94dd"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -411,6 +411,7 @@ label.mot{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text
         </span>
       </div>
       <div id="railGrid" style="padding:10px 14px 2px"></div>
+      <div id="ocNota" hidden style="margin:0 14px 12px"></div>
     </div>
 
     <div id="fichaHost"></div>
@@ -1405,6 +1406,7 @@ function abreBitacora(nota){
       var q=await P.sb.rpc("rep_bitacora",{p_reporte:"af",p_desde:desde}); if(q.error) throw q.error;
       var ls=((q.data&&q.data.filas)||[]).map(filaBitAf);
       if(MIOS) ls=ls.filter(function(f){ return MIOS.has(f.rfc) });
+      ls=ls.filter(function(f){ return !OCU(f.rfc) });
       return {filas:ls,mas:!!(q.data&&q.data.mas)};
     }});
   else BIT.recarga();
@@ -1457,17 +1459,22 @@ function pinta(){
   });
 }
 function fallo(e){ if(e&&e.code==="not_granted") return; console.warn(e) }
-var VIGS=[];
+var VIGS=[], AF_SNAP=null;
+/* «Mis clientes ocultos» (js/ocultos.js, 172_clientes_ocultos.sql): los que ocultó quien entró no salen (solo a él) */
+function OCU(rfc){ return !!(window.PROFASE_OCULTOS&&window.PROFASE_OCULTOS.es(rfc)) }
+function armaAF(){
+  var c={}, o=[];
+  if(AF_SNAP) AF_SNAP.docs.forEach(function(d){ if(!d.exists||d.id.indexOf("c|")!==0) return; var x=d.data()||{}, rfc=d.id.slice(2);
+    if(MIOS&&!MIOS.has(rfc)) return;
+    if(OCU(rfc)) return;
+    c[rfc]=Object.assign({rfc:rfc},x.cli||{}); (x.obs||[]).forEach(function(ob){ o.push(prep(ob)) }) });
+  CLI=c; OBS=o;
+  if(window.PROFASE_OCULTOS) window.PROFASE_OCULTOS.nota($("#ocNota"));
+}
 function recarga(){ VIGS.forEach(function(f){ try{f()}catch(e){} }); VIGS=[]; vigila() }
 function vigila(){
   VIGS.push(db.doc("af/meta").onSnapshot(function(s){ META=s.exists?s.data():null; updateSub(); if(CUR==="guia"){ guiaDone=false; renderGuia() } },fallo));
-  VIGS.push(db.collection("af").onSnapshot(function(snap){
-    var c={}, o=[];
-    snap.docs.forEach(function(d){ if(!d.exists||d.id.indexOf("c|")!==0) return; var x=d.data()||{}, rfc=d.id.slice(2);
-      if(MIOS&&!MIOS.has(rfc)) return;
-      c[rfc]=Object.assign({rfc:rfc},x.cli||{}); (x.obs||[]).forEach(function(ob){ o.push(prep(ob)) }) });
-    CLI=c; OBS=o; LISTO.af=true; pinta();
-  },fallo));
+  VIGS.push(db.collection("af").onSnapshot(function(snap){ AF_SNAP=snap; armaAF(); LISTO.af=true; pinta() },fallo));
   VIGS.push(db.collection("af_est").onSnapshot(function(snap){
     var m={}; snap.docs.forEach(function(d){ if(d.exists) m[d.id]=d.data() }); EST=m; LISTO.est=true; pinta();
   },fallo));
@@ -1496,6 +1503,7 @@ function vigila(){
   $("#btnUpdate").hidden=!R.carga;
   var chip=$("#roleChip"), rol=R.confirma?"Gerencia Contable":R.marca?"Mis clientes":"";
   if(rol){ chip.textContent=rol; chip.hidden=false }
+  if(window.PROFASE_OCULTOS){ await window.PROFASE_OCULTOS.carga(); window.PROFASE_OCULTOS.alCambiar(function(){ SEL={}; armaAF(); if(LISTO.af) pinta() }) }
   var h=location.hash.slice(1); CUR=(h==="control"||h==="guia"||h==="bitacora")?h:(ui.tab||"ficha");
   vigila();
 })();
