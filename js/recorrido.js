@@ -15,8 +15,9 @@
    menu: 'rh' (y sub: 'rh-vacaciones', opcional): el paso abre ese módulo donde esté el menú de quien lo ve (riel, menú
    arriba o el ☰ del celular, con PORTAL_MENU.ensena) e ilumina su tarjeta u opción; al pasar a otro paso o al terminar,
    el menú se vuelve a cerrar solo.
-   obligatorio: true (regla de Daniel, 30-oct-2026, para los cambios del chat: «que a todos nos obligues a verlo»):
-   sin «Saltar» ni Esc; solo se sale llegando al final.
+   obligatorio: true: sin «Saltar» ni Esc; solo se sale llegando al final. Hoy solo lo usa el recorrido general del
+   portal (bienvenida_tab.js; Daniel: «Obligatorio»). El del chat ya no es obligatorio (Héctor Daniel, 3-nov-2026,
+   15:57: «quita la regla del recorrido obligatorio en chat»): se puede saltar, como los de las demás pantallas.
    Último paso de todos (regla de Daniel, 31-oct-2026, 5:04): dónde está SuperConta (IA) para sus dudas. Lo registra
    PROFASE_RECORRIDO.alFinal(() => paso) (portal/guia_tab.js) y se agrega solo; sinCierre: true lo apaga (los de SuperConta). */
 (function () {
