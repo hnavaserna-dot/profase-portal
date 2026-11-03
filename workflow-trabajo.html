@@ -896,7 +896,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   /* ---------- documentos (la base decide cuáles ve cada quien) ---------- */
   async function pintaDocs(a) {
     var r;
-    try { r = await P.sb.from('wf_docs').select('id,nombre,descripcion,comentario,enviado,fecha_envio,subio,subio_usuario,origen,fecha,bytes,ruta_sp,en_portal').eq('wfra', a.id).order('id'); } catch (er) { r = { error: er }; }
+    try { r = await P.sb.from('wf_docs').select('id,nombre,descripcion,comentario,enviado,fecha_envio,subio,subio_usuario,origen,fecha,bytes,ruta_sp,en_portal,sp_intentos,sp_error').eq('wfra', a.id).order('id'); } catch (er) { r = { error: er }; }
     if (ENVIABLES[a.actividad_id]) { try { var ev = await P.sb.rpc('env_docs_enviados', { p_wfra: a.id }); (ev.data || []).forEach(function (x) { ENVD[x.doc] = x.fecha; }); } catch (er) {} }
     if (ABIERTA !== a.id || !$('docs-in')) return;
     if (r.error) { $('docs-in').innerHTML = '<div class="vacio">No se pudo leer la lista. Cierra la ficha y vuelve a abrirla.</div>'; return; }
@@ -909,7 +909,10 @@ tr.fila:hover td{background:var(--navy-soft)}
       var info = [d.subio ? 'Lo subió ' + d.subio : '', d.fecha ? fechaHora(d.fecha) : '', d.bytes ? tamano(d.bytes) : '', d.origen === 'access' ? 'del Access' : ''].filter(Boolean).join(' · ');
       var acc;
       if (d.bytes && d.en_portal) acc = (esPdf(d) ? '<button class="btn" type="button" data-dver="' + esc(d.id) + '">Ver</button>' : '') + '<button class="btn" type="button" data-dbaja="' + esc(d.id) + '">Bajar</button>';
-      else if (/^https:\/\//i.test(d.ruta_sp || '')) acc = '<a class="btn" href="' + esc(d.ruta_sp) + '" target="_blank" rel="noopener noreferrer">Abrir en SharePoint</a>';
+      // los de jun-dic 2025 que el Access dejó en SharePoint se están pasando al CRM (portal/sql/159_wfdocs_sharepoint.sql;
+      // Daniel, 2-nov-2026: «Copiarlos al CRM»): la liga del sitio no la abre el equipo, así que ya no se ofrece
+      else if (/^https:\/\//i.test(d.ruta_sp || '')) acc = (d.sp_intentos >= 5 && /no est/i.test(d.sp_error || ''))
+        ? '<span class="no">No se encontró en SharePoint</span>' : '<span class="no">Se está pasando al CRM</span>';
       else if (d.bytes) acc = '<span class="no">Todavía subiendo</span>';
       else acc = '<span class="no">Sin archivo</span>';
       if (!CONSULTA && d.origen === 'portal' && (d.subio_usuario === YO || jefe())) acc += '<button class="btn peligro" type="button" data-dborra="' + esc(d.id) + '">Borrar</button>';
