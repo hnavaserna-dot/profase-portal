@@ -250,7 +250,7 @@ tr.click:hover td{background:var(--navy-soft)}
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  var EST = null, CONSULTA = false, DATOS = null, PES = 'avisos', KPI = '', FILAS = [], VISTAS = 50, SEL = {}, ABIERTO = null, V = null, DOCS = {};
+  var FECHAS = {}, EST = null, CONSULTA = false, DATOS = null, PES = 'avisos', KPI = '', FILAS = [], VISTAS = 50, SEL = {}, ABIERTO = null, V = null, DOCS = {};
   var ESTADOS = { nuevo: ['Nuevo', 'na'], asignado: ['Asignado', 'az'], proceso: ['En proceso', 'ojo'], cerrado: ['Cerrado', 'ok'],
                   informativo: ['Informativo', ''], historico: ['Histórico', ''] };
   var TIPO = { mensaje: 'Mensaje', acto: 'Acto administrativo' };
@@ -270,6 +270,8 @@ tr.click:hover td{background:var(--navy-soft)}
     var e = ESTADOS[f.estado] || [f.estado, '']; return chip(e[0], e[1]);
   }
   function cliente(f) { return f.razon || f.rfc; }
+  // en la lista, solo quién pide cancelar (el Excel trae el mensaje completo del SAT; completo se ve en la ficha)
+  function deQuien(f) { return String(f.detalle || '').split(/\s+solicita\s/i)[0].trim(); }
   var HOY = hoyISO();
 
   /* ---------- ventanas ---------- */
@@ -375,7 +377,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td><div class="rs">' + esc(cliente(f)) + '</div>' + (f.grupo ? '<div class="mut">' + esc(f.grupo) + '</div>' : (f.en_ficha ? '' : '<div class="mut">No está en la ficha del CRM</div>')) + '</td>'
         + '<td class="nowrap" data-l="RFC">' + esc(f.rfc) + '</td>'
         + (PES === 'cancel'
-          ? '<td data-l="De quién">' + esc(f.detalle || '') + '</td><td data-l="Plazo">' + estChip(f) + '</td>'
+          ? '<td data-l="De quién">' + esc(deQuien(f)) + '</td><td data-l="Plazo">' + estChip(f) + '</td>'
           : '<td data-l="Concepto">' + (f.concepto_n ? esc(f.concepto_n) : '<span class="mut">Sin concepto</span>') + (f.tipo ? '<div class="mut">' + esc(TIPO[f.tipo] || '') + '</div>' : '') + '</td>'
             + '<td data-l="Asignado a">' + (f.asignado_n ? esc(f.asignado_n) : '<span class="mut">Sin asignar</span>') + '</td>'
             + '<td data-l="Estado">' + estChip(f) + (f.docs ? ' <span class="mut">· ' + f.docs + (f.docs === 1 ? ' documento' : ' documentos') + '</span>' : '') + '</td>')
@@ -409,7 +411,9 @@ tr.click:hover td{background:var(--navy-soft)}
   document.querySelectorAll('[data-pes]').forEach(function (b) {
     b.onclick = function () {
       document.querySelectorAll('[data-pes]').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+      FECHAS[PES] = [$('f-desde').value, $('f-hasta').value];   // cada pestaña con su periodo
       PES = b.dataset.pes; KPI = ''; SEL = {}; VISTAS = 50; $('f-estado').value = '';
+      $('f-desde').value = FECHAS[PES][0]; $('f-hasta').value = FECHAS[PES][1];
       carga().catch(function (e) { error(falla(e)); });
     };
   });
@@ -612,20 +616,22 @@ tr.click:hover td{background:var(--navy-soft)}
     m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     return m ? m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0') : '';
   }
+  // cada columna por su encabezado, la primera que coincide (3-nov-2026: el Excel de Liliana trae también «FECHA DE
+  // RECEPCIÓN» y «FECHA DE RESPUESTA», y la fecha del aviso es solo la que dice «FECHA»)
+  var COLS = [['i', /^indice$/], ['fecha', /^fecha$/], ['consulta', /^fecha de consulta/], ['detalle', /^asunto del buzon/],
+    ['asunto', /^asunto$/], ['concepto', /^concepto/], ['rfc', /^rfc$/], ['razon', /^razon/], ['folio', /folio|oficio/],
+    ['obs', /^observ/], ['acuse_rec', /^acuse de recepcion/], ['fecha_rec', /^fecha de recepcion/],
+    ['acuse_res', /^acuse de respuesta/], ['fecha_res', /^fecha de respuesta/], ['estatus', /^estatus/]];
+  function vale(v) { var t = String(v == null ? '' : v).trim(); return t && !/^(n\/?a|no aplica|-)$/i.test(t) ? t : ''; }
   async function leeExcel(file) {
     var X = await lectorExcel(), wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
     var ws = wb.Sheets[wb.SheetNames[0]], T = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
     var h = -1, col = {};
     for (var i = 0; i < Math.min(T.length, 15) && h < 0; i++) {
-      var r = T[i].map(function (c) { return norm(c).trim(); });
-      if (r.indexOf('rfc') >= 0 && r.some(function (c) { return /^indice/.test(c); })) {
+      var r = T[i].map(function (c) { return norm(c).replace(/\s+/g, ' ').trim(); });
+      if (r.indexOf('rfc') >= 0 && r.indexOf('indice') >= 0) {
         h = i;
-        r.forEach(function (c, j) {
-          if (/^indice/.test(c)) col.i = j; else if (/^fecha de consulta/.test(c)) col.consulta = j; else if (/^fecha/.test(c)) col.fecha = j;
-          else if (/^asunto del buzon/.test(c)) col.detalle = j; else if (/^asunto/.test(c)) col.asunto = j; else if (/^concepto/.test(c)) col.concepto = j;
-          else if (c === 'rfc') col.rfc = j; else if (/^razon/.test(c)) col.razon = j; else if (/folio|oficio/.test(c)) col.folio = j;
-          else if (/^observ/.test(c)) col.obs = j;
-        });
+        r.forEach(function (c, j) { COLS.forEach(function (x) { if (col[x[0]] == null && x[1].test(c)) col[x[0]] = j; }); });
       }
     }
     if (h < 0 || col.i == null || col.fecha == null || col.rfc == null) throw new Error('No encontré las columnas del Excel (ÍNDICE, FECHA y RFC en el primer renglón).');
@@ -633,11 +639,23 @@ tr.click:hover td{background:var(--navy-soft)}
     for (var k = h + 1; k < T.length; k++) {
       var R = T[k], g = function (n) { return col[n] == null ? '' : R[col[n]]; };
       if (!String(g('i')).trim() && !String(g('rfc')).trim()) continue;
+      // lo que lleva el Excel de su respuesta (acuses, fechas y estatus) se guarda con sus observaciones: nada se pierde
+      var ext = [['Acuse de recepción', vale(g('acuse_rec'))], ['Recibido', iso(g('fecha_rec')) ? fecha(iso(g('fecha_rec'))) : vale(g('fecha_rec'))],
+                 ['Acuse de respuesta', vale(g('acuse_res'))], ['Respondido', iso(g('fecha_res')) ? fecha(iso(g('fecha_res'))) : vale(g('fecha_res'))],
+                 ['Estatus', vale(g('estatus'))]].filter(function (x) { return x[1]; }).map(function (x) { return x[0] + ': ' + x[1]; }).join(' · ');
+      var obs = String(g('obs')).trim();
       filas.push({ i: String(g('i')).trim(), fecha: iso(g('fecha')), asunto: String(g('asunto')).trim(), concepto: String(g('concepto')).trim(),
-        rfc: String(g('rfc')).trim(), razon: String(g('razon')).trim(), folio: String(g('folio')).trim(), detalle: String(g('detalle')).replace(/\s+/g, ' ').trim(),
-        consulta: iso(g('consulta')), obs: String(g('obs')).trim() });
+        rfc: String(g('rfc')).trim(), razon: String(g('razon')).trim(), folio: vale(g('folio')), detalle: String(g('detalle')).replace(/\s+/g, ' ').trim(),
+        consulta: iso(g('consulta')), obs: obs + (obs && ext ? '\n' : '') + ext });
     }
     return filas;
+  }
+  // los renglones que no se pueden leer (sin índice, fecha o RFC válido), contados aquí mismo y completos
+  function noSeLeen(filas) {
+    return filas.filter(function (f) {
+      var r = String(f.rfc || '').toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
+      return !/^\d{1,9}$/.test(f.i) || !f.fecha || !/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(r);
+    }).map(function (f) { return f.i || '?'; });
   }
   async function porPartes(filas, probar, avance) {
     var t = { nuevos: 0, cambian: 0, iguales: 0, ligados: 0, malos: [] };
@@ -661,10 +679,12 @@ tr.click:hover td{background:var(--navy-soft)}
       $('m-res').innerHTML = '<div class="msg ojo">Revisando el archivo…</div>';
       try {
         FILAS_X = await leeExcel(f);
+        var malos = noSeLeen(FILAS_X), muchos = malos.length > FILAS_X.length * 0.1;   // más de 1 de cada 10: algo anda mal con el archivo
         var t = await porPartes(FILAS_X, true, function (a, b) { $('m-res').innerHTML = '<div class="msg ojo">Revisando ' + a + ' de ' + b + '…</div>'; });
         $('m-res').innerHTML = '<div class="cuenta"><div><b>' + t.nuevos + '</b>entran nuevos</div><div><b>' + t.cambian + '</b>se ponen al día</div><div><b>' + t.ligados + '</b>se juntan con su correo</div><div><b>' + t.iguales + '</b>ya estaban igual</div></div>'
-          + (t.malos.length ? '<div class="msg ojo">No se pudieron leer ' + t.malos.length + (t.malos.length >= 30 ? ' o más' : '') + ' renglones (índice ' + esc(t.malos.slice(0, 10).join(', ')) + '…): les falta la fecha o el RFC.</div>' : '');
-        $('m-ok').disabled = t.nuevos + t.cambian + t.ligados === 0;
+          + (malos.length ? '<div class="msg ' + (muchos ? 'mal' : 'ojo') + '">De ' + FILAS_X.length + ' renglones, ' + malos.length + ' no se pueden leer (índice ' + esc(malos.slice(0, 10).join(', ')) + (malos.length > 10 ? '…' : '') + '): les falta la fecha o el RFC está mal escrito.'
+              + (muchos ? ' Son demasiados: revisa que el archivo sea el de siempre (ÍNDICE, FECHA, RFC en el primer renglón) antes de cargarlo.' : ' Los demás sí entran.') + '</div>' : '');
+        $('m-ok').disabled = muchos || t.nuevos + t.cambian + t.ligados === 0;
       } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
     };
     $('m-ok').onclick = async function () {
@@ -687,7 +707,7 @@ tr.click:hover td{background:var(--navy-soft)}
       var titulo = cancel ? 'Cancelaciones de factura' : 'Buzón tributario';
       var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado'];
       var filas = L.map(function (f) {
-        return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, f.detalle || '', f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
+        return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, deQuien(f), f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
           : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', f.asignado_n || 'Sin asignar', (ESTADOS[f.estado] || [f.estado])[0]];
       });
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
@@ -717,6 +737,9 @@ tr.click:hover td{background:var(--navy-soft)}
       $('sin-correo').hidden = !(EST.asigna || EST.carga) || EST.correo === 'prendido';
       var q = new URLSearchParams(location.search);
       $('f-hasta').value = HOY; $('f-desde').value = HOY.slice(0, 4) + '-01-01';
+      // las cancelaciones (3 de cada 4 avisos, solo para consultar) abren con el último mes
+      var d30 = new Date(HOY + 'T12:00:00Z'); d30.setUTCDate(d30.getUTCDate() - 30);
+      FECHAS = { avisos: [$('f-desde').value, HOY], cancel: [d30.toISOString().slice(0, 10), HOY] };
       if (q.get('ver') === 'nuevos') $('f-estado').value = 'nuevo';
       await carga();
       if (q.get('ver') === 'nuevos') { $('f-estado').value = 'nuevo'; pinta(); }
