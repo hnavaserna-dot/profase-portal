@@ -8,9 +8,13 @@
      salen sus sub módulos. Se recuerda en el navegador de cada quien.
    - Celular (900 px o menos): el menú se esconde completo y ☰ lo abre encima de la página.
    - La dirección de la página lleva la sección (#panel, #cartera…): al recargar se queda donde estaba.
-   - Menú arriba (29-oct-2026, propuesta de Gabriel): cada quien puede cambiar a una tira de íconos grandes arriba al
-     centro, con «Inicio» en medio y los módulos repartidos a los lados; al picar un ícono se abre la descripción del
-     módulo y sus sub módulos. Por omisión sigue el menú de la izquierda; se recuerda en el navegador de cada quien.
+   - Un solo menú, el de la izquierda (Héctor Daniel, 2-nov-2026, 14:25: «quiero quitar la opción del menú arriba…
+     el menú de arriba los que lo tenga, quitaselos y oblígalos a actualizar para que solo usen el menú lateral»). El
+     «Menú arriba» (tira de íconos arriba al centro, propuesta de Gabriel del 29-oct-2026) se quitó: ya no hay botón
+     para escogerlo y quien lo tenía (guardado en su navegador, o el celular que arrancaba con él) pasa solo al menú de
+     la izquierda (☰ en el celular). A esas personas les sale una vez un recorrido corto (portal/menu_rec_tab.js, con
+     la marca «portal.menu.venia_arriba» que deja quitaArriba(), abajo). No lo regreses sin que Daniel lo diga
+     (construir.py, exige_sin_menu_arriba()).
    - El signo PROFASE es siempre el logo oficial, con sus colores (regla de Daniel, 29-oct-2026). En temporadas se le
      pone al lado un adorno aparte (js/temporada.js: arañita en Halloween y Día de Muertos, Santa en Navidad, corazón el
      14 de febrero, banderita en las fiestas patrias) que nunca tapa ni cambia el signo. Esto reemplazó el «signo de temporada» de un
@@ -20,10 +24,10 @@
      js/portal.js (P.alInicio, P.signoInicio); aquí, PORTAL_MENU.alInicio().
    - Riel de íconos (29-oct-2026, propuesta de Gabriel): en computadora el menú arranca como una tira de íconos grandes
      con su nombre corto e «Inicio» arriba; al picar o pasar el mouse sale la tarjeta del módulo, como en el celular
-     (qué es y cada opción con su explicación). En el celular arranca con el menú arriba. Cada quien puede cambiarlo
-     («Mostrar menú», «Menú arriba») y su navegador lo recuerda.
+     (qué es y cada opción con su explicación). En el celular, el menú se abre con ☰. Cada quien puede abrir el riel
+     al menú completo («Mostrar menú» / «Ocultar menú») y su navegador lo recuerda.
    - Submenús siempre completos (pedido de Daniel, 30-oct-2026: «no alcanzo a ver todo el sub menú … siempre se tiene
-     que ver bien»): la tarjeta de cada módulo (en el riel y en el menú arriba) sale junto a su ícono y, si no cabe
+     que ver bien»): la tarjeta de cada módulo (en el riel) sale junto a su ícono y, si no cabe
      hacia abajo, sube lo necesario; si es más alta que la pantalla, sus opciones se deslizan dentro de la tarjeta con
      el título fijo arriba. El riel y el menú se deslizan solos si la pantalla es baja. Los módulos no llevan el
      globito del navegador («title»), que tapaba la tarjeta, y el menú abierto queda encima de los avisos flotantes.
@@ -217,34 +221,6 @@
     + '.pm-pie{border-top:1px solid rgba(255,255,255,.12);padding:8px}'
     + '.pm-pie button{width:100%;display:flex;align-items:center;gap:12px;border:0;background:none;color:#A9BBD8;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;text-align:left}'
     + '.pm-pie button:hover{background:rgba(255,255,255,.1);color:#fff}'
-    // menú arriba: tira de íconos al centro, debajo del encabezado
-    + '.pm-top{display:none}'
-    + 'body.pm-arriba .pm-side,body.pm-arriba .pm-ham,body.pm-arriba .pm-scrim{display:none!important}'
-    + 'body.pm-arriba .pm-top{display:flex;justify-content:center;justify-content:safe center;position:relative;flex:none;background:var(--surface,#fff);border-bottom:1px solid var(--line,#DCE2EB);padding:8px 12px;z-index:30;font-family:var(--f-body,inherit)}'
-    // los íconos se encogen un poco si no caben (en el teléfono, con 8 módulos, la tira se salía por los dos lados)
-    + '.pm-tira{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.pm-lado{display:flex;gap:4px;min-width:0}'
-    + '.pm-tb{position:relative;min-width:0;width:52px;height:52px;border:0;border-radius:14px;background:none;color:var(--navy,#1F3864);display:grid;place-items:center;cursor:pointer;padding:0}'
-    + ':root[data-theme="dark"] .pm-tb{color:var(--ink,#E5EAF2)}'
-    + '.pm-tb svg{width:28px;height:28px;max-width:calc(100% - 4px);display:block}'
-    + '.pm-tb:hover,.pm-tb[aria-expanded="true"]{background:var(--navy-soft,#E6ECF6)}'
-    + '.pm-tb.on{color:var(--accent,#F07A1E)!important;box-shadow:inset 0 -3px 0 var(--accent,#F07A1E)}'
-    + '.pm-tb.pm-home{flex:none;width:60px;height:60px;border-radius:50%;margin:0 10px;background:var(--navy,#1F3864);color:#fff!important;box-shadow:0 4px 14px rgba(19,32,54,.25)}'
-    + ':root[data-theme="dark"] .pm-tb.pm-home{background:var(--accent,#F07A1E);color:#0D1320!important}'
-    + '.pm-tb.pm-home svg{width:30px;height:30px}.pm-tb.pm-home:hover{filter:brightness(1.12)}'
-    + '.pm-tb:focus-visible,.pm-pop a:focus-visible,.pm-pop button:focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}'
-    + '.pm-tb.con-aviso::after{content:"";position:absolute;right:9px;top:9px;width:9px;height:9px;border-radius:50%;background:var(--accent,#F07A1E);box-shadow:0 0 0 2px var(--surface,#fff)}'
-    // la tarjeta del menú arriba: debajo de la tira y siempre completa en la pantalla (popArriba() le da su lugar y su alto)
-    + '.pm-pop{position:fixed;top:var(--pm-py,120px);left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 24px));box-sizing:border-box;' + SOMBRAS + ',var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-top:3px solid var(--accent,#F07A1E);border-radius:12px;box-shadow:0 16px 40px rgba(10,18,32,.22);padding:14px 14px 10px;text-align:left;max-height:var(--pm-ph,calc(100vh - 16px));overflow:auto;overscroll-behavior:contain}'
-    + 'body.pm-arriba .pm-top.pm-con-pop{z-index:85}'   // abierta, encima de los avisos flotantes
-    + '.pm-pop[hidden]{display:none}'
-    + '.pm-pcab{position:sticky;top:-14px;z-index:1;margin:-14px -14px 10px;padding:12px 14px 10px;background:var(--navy-soft,#E6ECF6);border-bottom:1px solid var(--line,#DCE2EB);border-radius:11px 11px 0 0/9px 9px 0 0}'   // encabezado sombreado (30-oct-2026)
-    + '.pm-pop h2{margin:0 0 2px;font-size:16px;font-weight:700}.pm-pcab p{margin:0;color:var(--muted,#5A6577);font-size:13px}'
-    + '.pm-pop ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}'
-    + '.pm-pop a{display:block;text-decoration:none;color:var(--ink,#132036);padding:9px 10px;border-radius:8px}'
-    + '.pm-pop a:hover{background:var(--navy-soft,#E6ECF6)}'
-    + '.pm-pop a b{display:block;font-size:14px;font-weight:600}.pm-pop a span.pm-d{display:block;font-size:12.5px;color:var(--muted,#5A6577)}'
-    + '.pm-pop a[aria-current="page"]{box-shadow:inset 3px 0 0 var(--accent,#F07A1E);background:var(--accent-soft,#FDEBDC)}'
-    + '.pm-pop .pm-cambia{display:block;width:100%;margin-top:8px;border:0;border-top:1px solid var(--line,#DCE2EB);background:none;color:var(--muted,#5A6577);font:inherit;font-size:12.5px;padding:10px 4px 4px;text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:2px}'
     + '.pm-pmini svg{transition:transform .18s}'
     + '.pm-scrim{display:none}'
     + '@media (min-width:901px){'
@@ -288,13 +264,13 @@
     + 'body.pm-abierto .pm-side{transform:none;box-shadow:8px 0 30px rgba(0,0,0,.3)}'
     + 'body.pm-abierto .pm-scrim{display:block;position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:85}'
     + '.pm-cab{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) 10px 10px 16px;border-bottom:1px solid rgba(255,255,255,.12)}'
-    + '.pm-pie{padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}'
+    + '.pm-lista{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}'
     + '.pm-mod[data-open="true"]>.pm-mb:not(.pm-inicio){background:rgba(255,255,255,.09)}'
     + '.pm-cab img{width:30px;height:30px;object-fit:contain;display:block;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box}'
     + '.pm-cab span{flex:1;font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;font-weight:700;letter-spacing:.16em;color:#fff;font-size:15px}'
     + '.pm-cab button{border:0;background:none;color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;display:grid;place-items:center}'
     + '.pm-cab button:hover{background:rgba(255,255,255,.1)}.pm-cab svg{width:20px;height:20px;display:block}'
-    + '.pm-pie .pm-pmini{display:none}'
+    + '.pm-pie{display:none}'   // en el celular el pie se quedó vacío («Ocultar menú» no aplica ahí)
     + '}'
     // en el celular la sección se ve COMPLETA (Daniel, 30-oct-2026, con una captura: salía «Altas …»): nunca se corta con
     // «…» ni se parte a media palabra; si no cabe en un renglón, pasa entera al segundo dentro de su lugar, y el
@@ -309,12 +285,9 @@
     + 'header.band.pm-sin-chicos .pt-chicos,header.band.pm-sin-lema .brandtxt,header.band.pm-sin-modulo .pm-crumb{display:none!important}'
     + 'header.band.pm-apretado .wrap{flex-wrap:nowrap}header.band.pm-apretado .pm-tit{flex:1 1 auto;min-width:0}'
     + 'header.band.pm-apretado .pm-tit h1{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;word-break:normal;line-height:1.15}'
-    + '@media (min-width:901px){body.pm.pm-arriba{padding-left:0!important}body.pm.pm-arriba header.band{margin-left:0}}'
-    + '@media (max-width:420px){.pm-tira,.pm-lado{gap:2px}.pm-tb{width:46px;height:46px}.pm-tb svg{width:26px;height:26px}.pm-tb.pm-home{width:54px;height:54px;margin:0 6px}}'
-    + '@media (max-width:370px){.pm-tb{width:44px;height:44px}.pm-tb.pm-home{margin:0 3px}}'   // 360 px: la tira de íconos cabía 3 px de más
     + '@media (prefers-reduced-motion:reduce){.pm-side,.pm-car,.pm-pie svg{transition:none}}';
 
-  var sw, side, lista, hdr, titulo, crumb, top, pendiente = 0, listo = false, quoObs = null, popAbierto = '', popHecho = '', hecho = '', hechoArriba = '', cerrarAlPintar = false;
+  var sw, side, lista, hdr, titulo, crumb, pendiente = 0, listo = false, quoObs = null, hecho = '', cerrarAlPintar = false;
   // Mientras el recorrido general (bienvenida_tab.js) explica un módulo, su tarjeta se queda abierta aunque el mouse
   // salga del menú o se pique «Siguiente» (ver ensena() y suelta(), abajo)
   var retiene = false;
@@ -398,7 +371,6 @@
     b.click();
     listo = true;
     if (movil()) abre(false);
-    popAbierto = '';
     cierraFly(); cerrarAlPintar = true;   // escogida la opción, su tarjeta se cierra
     pinta();
     return true;
@@ -443,7 +415,6 @@
       } else { side.classList.remove('pm-fly-on'); recoloca(); }
     }
     cerrarAlPintar = false;
-    pintaArriba(act);
     if (act) {
       crumb.textContent = act.m.t;
       var t = nombre(act);
@@ -454,49 +425,14 @@
   }
   function luego() { if (!pendiente) pendiente = requestAnimationFrame(pinta); }
 
-  // Menú arriba: «Inicio» en medio, la primera mitad de los módulos a la izquierda y el resto a la derecha
+  // Inicio: la casita del menú; si la persona no tiene Inicio, la primera opción de su menú
   function inicio() { if (aLaVista(boton(INI.v))) return INI; var m = modulos()[0]; return m ? m.subs[0] : null; }
-  function pintaArriba(act) {
-    if (!top) return;
-    var ms = modulos(), mitad = Math.ceil(ms.length / 2), ini = inicio();
-    // con una tarjeta abierta, sin el globito del navegador (taparía la tarjeta); cerrada, sí, para saber qué es cada ícono
-    function tb(x) {
-      var m = x.m, on = !!act && x.subs.indexOf(act) >= 0, ab = popAbierto === m.k;
-      var av = x.subs.some(function (s) { var b = boton(s.v); return b && +b.dataset.aviso > 0; });
-      return '<button type="button" class="pm-tb' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" aria-expanded="' + ab + '" aria-controls="pm-pop" aria-label="' + esc(m.t) + '"' + (popAbierto ? '' : ' title="' + esc(m.t) + '"') + '>' + svg(IC[m.k] || IC.mas, '') + '</button>';
-    }
-    var h = '<div class="pm-tira"><div class="pm-lado">' + ms.slice(0, mitad).map(tb).join('') + '</div>'
-      + '<button type="button" class="pm-tb pm-home' + (act === INI ? ' on' : '') + '" data-m="home" aria-expanded="' + (popAbierto === 'home') + '" aria-controls="pm-pop" aria-label="Inicio"' + (popAbierto ? '' : ' title="Inicio"') + '>' + svg(IC.home, '') + '</button>'
-      + '<div class="pm-lado">' + ms.slice(mitad).map(tb).join('') + '</div></div>';
-    var pop = '';
-    var x = popAbierto === 'home' ? null : ms.filter(function (y) { return y.m.k === popAbierto; })[0];
-    if (popAbierto === 'home' && ini) {
-      pop = '<div class="pm-pcab"><h2>Inicio</h2><p>Regresa al principio del portal.</p></div><ul><li><a href="#' + esc(ini.k) + '" data-k="' + esc(ini.k) + '"><b>' + esc(nombre(ini)) + '</b><span class="pm-d">' + esc(ini.d || '') + '</span></a></li></ul>';
-    } else if (x) {
-      pop = '<div class="pm-pcab"><h2>' + esc(x.m.t) + '</h2><p>' + esc(x.m.d || '') + '</p></div><ul>' + x.subs.map(function (s) {
-        var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
-        return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '><b>' + esc(nombre(s))
-          + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + '</b><span class="pm-d">' + esc(s.d || '') + '</span></a></li>';
-      }).join('') + '</ul>';
-    }
-    if (pop) pop += '<button type="button" class="pm-cambia">Usar el menú de la izquierda</button>';
-    h += '<div class="pm-pop" id="pm-pop" role="dialog" aria-label="Opciones del menú"' + (pop ? '' : ' hidden') + '>' + pop + '</div>';
-    if (h !== hechoArriba) {
-      // la misma tarjeta abierta que se vuelve a pintar sola conserva hasta dónde se deslizó
-      var p0 = top.querySelector('.pm-pop'), st = p0 && popHecho === popAbierto ? p0.scrollTop : 0;
-      top.innerHTML = h; hechoArriba = h;
-      var p1 = top.querySelector('.pm-pop'); if (p1 && st) p1.scrollTop = st;
-    }
-    popHecho = popAbierto;
-    top.classList.toggle('pm-con-pop', !!pop);
-    if (pop) popArriba();
-  }
 
   // Submenús siempre completos en la pantalla (pedido de Daniel, 30-oct-2026). Los lugares van en variables del riel
-  // (--pm-fx, --pm-fy, --pm-fh) y de la tira de arriba (--pm-py, --pm-ph), fuera de lo que se vuelve a pintar.
+  // (--pm-fx, --pm-fy, --pm-fh), fuera de lo que se vuelve a pintar.
   var MARGEN = 8, sobre = null;
   function altoPantalla() { return window.innerHeight || document.documentElement.clientHeight; }
-  function enRiel() { var c = document.body.classList; return c.contains('pm-mini') && !c.contains('pm-arriba') && !movil(); }
+  function enRiel() { return document.body.classList.contains('pm-mini') && !movil(); }
   // La tarjeta del módulo en el riel: a la altura de su ícono; si no cabe hacia abajo, sube lo necesario; si es más
   // alta que la pantalla, ocupa la pantalla y sus opciones se deslizan dentro (el título se queda arriba).
   function colocaTarjeta(mod) {
@@ -521,39 +457,21 @@
     lista.querySelectorAll('.pm-mod.fly').forEach(function (m) { if (m !== salvo) m.classList.remove('fly'); });
     side.classList.toggle('pm-fly-on', !!lista.querySelector('.pm-mod.fly'));
   }
-  // La tarjeta del menú arriba: debajo de la tira; si no cabe, sube lo necesario (puede tapar la tira, como una
-  // ventana) y, si es más alta que la pantalla, se desliza por dentro
-  function popArriba() {
-    if (!top) return;
-    var p = top.querySelector('.pm-pop');
-    if (!p || p.hidden) return;
-    var H = altoPantalla(), y = top.getBoundingClientRect().bottom + 6, abajo = H - y - MARGEN;
-    // Si abajo de la tira hay espacio (celular parado, tableta, computadora), la tarjeta sale ahí y, si es más alta, sus
-    // opciones se deslizan dentro: así nunca tapa la tira de íconos (31-oct-2026; con el Workflow de 7 opciones, en un
-    // celular de 640 px de alto subía y tapaba los íconos). Si no hay espacio (celular acostado), sube como antes.
-    if (abajo >= 260) {
-      top.style.setProperty('--pm-ph', Math.max(120, abajo) + 'px');
-      top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, y)) + 'px');
-      return;
-    }
-    top.style.setProperty('--pm-ph', Math.max(120, H - 2 * MARGEN) + 'px');
-    var h = p.offsetHeight;
-    top.style.setProperty('--pm-py', Math.round(Math.max(MARGEN, Math.min(y, H - MARGEN - h))) + 'px');
-  }
-  function abrePop(k) { popAbierto = k; if (k) avisaMenu('pm-pop'); pintaArriba(activo()); var a = top.querySelector('.pm-pop a'); if (a && k) a.focus(); }
-  // Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026: «que no se entrelapen»): al abrir la tarjeta del menú
-  // arriba, la del riel o el ☰ del celular se avisa (js/portal.js, PORTAL.abreMenu) y se cierran los demás menús
+  // Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026: «que no se entrelapen»): al abrir la tarjeta del riel
+  // o el ☰ del celular se avisa (js/portal.js, PORTAL.abreMenu) y se cierran los demás menús
   function avisaMenu(q) { try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu(q); } catch (e) { /* sin aviso */ } }
-  function arriba(v) {
-    if (v !== undefined) store.set('portal.menu.modo', v ? 'arriba' : 'lado');
+  /* Sin «Menú arriba» (Héctor Daniel, 2-nov-2026, 14:25: «el menú de arriba los que lo tenga, quitaselos… para que solo
+     usen el menú lateral»). Quien lo traía en este navegador (lo escogió, o es un celular que nunca escogió nada, que
+     arrancaba con él) queda con el menú de la izquierda y con la marca «portal.menu.venia_arriba», para que
+     portal/menu_rec_tab.js le enseñe una sola vez dónde quedó su menú. «portal.menu.modo» queda en «lado» para que la
+     marca no se vuelva a poner en ese navegador. */
+  function quitaArriba() {
     var m = store.get('portal.menu.modo');
-    var on = m ? m === 'arriba' : movil();   // sin escoger: en el celular, arriba; en computadora, el riel
-    document.body.classList.toggle('pm-arriba', on);
-    if (on) abre(false);
-    popAbierto = '';
-    pinta();
-    setTimeout(alto, 50);
+    if (m === 'lado') return;
+    if (m === 'arriba' || (!m && movil())) store.set('portal.menu.venia_arriba', '1');
+    store.set('portal.menu.modo', 'lado');
   }
+  quitaArriba();   // al cargar, antes que las pestañas (menu_rec_tab.js lee la marca en cuanto arranca)
 
   function estaMini() { return store.get('portal.menu.mini') !== '0'; }   // sin escoger: el riel de íconos
   function mini(v) {
@@ -563,7 +481,6 @@
     var l = side.querySelector('.pm-pmini .pm-lbl');
     if (l) l.textContent = on ? 'Mostrar menú' : 'Ocultar menú';
     side.querySelector('.pm-pmini').setAttribute('aria-label', on ? 'Mostrar menú' : 'Ocultar menú');
-    side.querySelector('.pm-parr').setAttribute('aria-label', 'Menú arriba');
     setTimeout(alto, 200);
   }
   function abre(v) { document.body.classList.toggle('pm-abierto', v); if (v) avisaMenu('pm-cajon'); }
@@ -571,7 +488,7 @@
   function alto() {
     var r = hdr.getBoundingClientRect();
     document.documentElement.style.setProperty('--pm-top', Math.max(0, r.bottom) + 'px');
-    recoloca(); popArriba();   // si el encabezado cambia de alto, las tarjetas abiertas se vuelven a acomodar
+    recoloca();   // si el encabezado cambia de alto, la tarjeta abierta se vuelve a acomodar
   }
   /* Celular, 600 px o menos (Daniel, 30-oct-2026: «que todo sea responsive y que se vea bien y todo quepa»): el
      encabezado se queda pegado arriba (pantallas.css; así el iPhone y el iPad no lo difuminan) y lleva solo lo de
@@ -684,8 +601,7 @@
     side.innerHTML = '<div class="pm-cab">' + (logo ? '<img alt="" src="' + esc(logo.getAttribute('src')) + '">' : '') + '<span>PROFASE</span>'
       + '<button type="button" aria-label="Cerrar el menú">' + svg('<path d="M6 6l12 12M18 6 6 18"/>', '') + '</button></div>'
       + '<div class="pm-lista"></div>'
-      + '<div class="pm-pie"><button type="button" class="pm-parr">' + svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>', 'pm-ic') + '<span class="pm-lbl">Menú arriba</span></button>'
-      + '<button type="button" class="pm-pmini">' + svg('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'pm-ic') + '<span class="pm-lbl">Ocultar menú</span></button></div>';
+      + '<div class="pm-pie"><button type="button" class="pm-pmini">' + svg('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'pm-ic') + '<span class="pm-lbl">Ocultar menú</span></button></div>';
     document.body.appendChild(side);
     var scrim = document.createElement('div'); scrim.className = 'pm-scrim';
     document.body.appendChild(scrim);
@@ -693,21 +609,7 @@
 
     ham.onclick = function () { if (movil()) abre(!document.body.classList.contains('pm-abierto')); else mini(!estaMini()); };
     side.querySelector('.pm-pmini').onclick = function () { mini(!estaMini()); };
-    side.querySelector('.pm-parr').onclick = function () { arriba(true); };
 
-    top = document.createElement('nav');
-    top.className = 'pm-top'; top.setAttribute('aria-label', 'Menú del portal (arriba)');
-    hdr.parentNode.insertBefore(top, hdr.nextSibling);
-    top.addEventListener('click', function (e) {
-      var a = e.target.closest('a[data-k]');
-      if (a) { e.preventDefault(); ir(a.dataset.k); return; }
-      if (e.target.closest('.pm-cambia')) { arriba(false); return; }
-      var b = e.target.closest('.pm-tb');
-      if (b && b.dataset.m === 'home' && inicio() === INI) { abrePop(''); ir(INI.k); return; }
-      if (b) abrePop(popAbierto === b.dataset.m ? '' : b.dataset.m);
-    });
-    // el ícono picado se vuelve a pintar (ya no está en la página): ese clic no cuenta como «afuera»
-    document.addEventListener('click', function (e) { if (popAbierto && !retiene && e.target.isConnected && !top.contains(e.target)) abrePop(''); });
     side.querySelector('.pm-cab button').onclick = function () { abre(false); };
     if (window.PROFASE_TEMPORADA) window.PROFASE_TEMPORADA.pon(logo);   // js/temporada.js
     // el signo del ☰ también lleva al Inicio (el del encabezado ya lo marcó js/portal.js; Daniel, 31-oct-2026)
@@ -716,7 +618,6 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (document.body.classList.contains('pm-abierto')) abre(false);
-      if (popAbierto) { var k = popAbierto; abrePop(''); var b = top.querySelector('.pm-tb[data-m="' + k + '"]'); if (b) b.focus(); }
     });
 
     lista.addEventListener('click', function (e) {
@@ -757,7 +658,6 @@
     document.addEventListener('profase-menu', function (e) {
       if (retiene) return;   // el recorrido general deja abierta la tarjeta que está enseñando
       var q = e.detail;
-      if (q !== 'pm-pop' && popAbierto) abrePop('');
       if (q !== 'pm-fly' && lista.querySelector('.pm-mod.fly')) cierraFly();
       if (q !== 'pm-cajon' && document.body.classList.contains('pm-abierto')) abre(false);
     });
@@ -772,7 +672,6 @@
     vigilaQuo();
 
     mini();
-    arriba();
     // la franja de abajo del encabezado en el celular: lo que llegue después al encabezado (la foto la pone js/portal.js)
     // y lo que otra pestaña ponga junto a él (el aviso del Calendario) no la separan del encabezado
     // y que todo vaya en un solo renglón: al cambiar el ancho, la letra o lo que trae el encabezado (los adornos de la
@@ -793,7 +692,7 @@
       mo = new MutationObserver(pideAcomodo); mo.observe(crumb, { childList: true, characterData: true, subtree: true }); cabObs.push(mo);
     }
     alto();
-    addEventListener('resize', function () { alto(); if (!movil()) abre(false); recoloca(); popArriba(); });
+    addEventListener('resize', function () { alto(); if (!movil()) abre(false); recoloca(); });
     addEventListener('scroll', alto, { passive: true });
     if (window.ResizeObserver) new ResizeObserver(alto).observe(hdr);
     addEventListener('hashchange', function () { var k = location.hash.slice(1); var a = activo(); if (k && (!a || a.k !== k)) ir(k); });
@@ -819,7 +718,7 @@
   }
   // Recorrido general del portal (bienvenida_tab.js; Daniel, 30-oct-2026: «hagas un recorrido de todo a cada usuario para
   // que sepan»): qué módulos y opciones ve esta persona, y abrir la tarjeta de un módulo donde esté su menú (riel, menú
-  // completo, menú arriba o ☰ del celular) para iluminarla. No cambia de pantalla ni de sección.
+  // completo o ☰ del celular) para iluminarla. No cambia de pantalla ni de sección.
   function datosModulos() {
     return modulos().map(function (x) {
       return { k: x.m.k, t: x.m.t, d: x.m.d || '', subs: x.subs.map(function (s) { return { k: s.k, t: nombre(s), d: s.d || '', v: s.v }; }) };
@@ -828,11 +727,6 @@
   function ensena(k) {
     if (!sw || !lista) return null;
     retiene = true;
-    if (document.body.classList.contains('pm-arriba')) {
-      abrePop(k);
-      var p = top.querySelector('.pm-pop');
-      return p && !p.hidden ? p : null;
-    }
     var m = lista.querySelector('.pm-mod[data-m="' + k + '"]');
     if (!m) return null;
     if (enRiel()) {
@@ -852,10 +746,13 @@
     retiene = false;
     if (!sw || !lista) return;
     cierraFly();
-    if (popAbierto) abrePop('');
     if (movil()) abre(false);
     pinta();
   }
+  function forma() { return movil() ? 'cel' : (estaMini() ? 'riel' : 'lado'); }
+  var COMO = { riel: 'Cada ícono es un módulo. Pásale el mouse o pícale y sale su tarjeta con sus opciones, cada una con su explicación.',
+    lado: 'Aquí están tus módulos; pica uno y se abren sus opciones.',
+    cel: 'Pica ☰ para abrir tu menú con todos tus módulos y sus opciones.' };
   window.PORTAL_MENU = {
     ir: function (k) { return !!sw && ir(k); },
     // el signo PROFASE lleva al Inicio de quien entró (js/portal.js, P.alInicio; Daniel, 31-oct-2026): cierra el ☰ y
@@ -865,7 +762,6 @@
       var i = inicio();
       if (!i) return false;
       if (document.body.classList.contains('pm-abierto')) abre(false);
-      if (popAbierto) abrePop('');
       cierraFly();
       if (!ir(i.k)) return false;
       try { window.scrollTo(0, 0); var m = document.scrollingElement; if (m) m.scrollTop = 0; } catch (e) { /* sin página */ }
@@ -878,7 +774,13 @@
     // la sección abierta (para el botón «?» de ayuda, portal/guia_tab.js): su clave, su nombre y su módulo
     actual: function () { var a = sw ? activo() : null; return a ? { k: a.k, t: nombre(a), v: a.v, m: a.m.k, mt: a.m.t } : null; },
     ensena: ensena,
-    suelta: suelta
+    suelta: suelta,
+    // En qué forma está el menú y cómo se usa, en palabras (una sola versión: la usan el recorrido general,
+    // bienvenida_tab.js, y el aviso de que se quitó el menú arriba, menu_rec_tab.js)
+    forma: forma,
+    comoSeUsa: function () { return COMO[forma()]; },
+    // el menú tal como se ve ahora (el ☰ en el celular), para iluminarlo en un recorrido
+    donde: function () { return movil() ? document.querySelector('.pm-ham') : side; }
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca);
   else arranca();
