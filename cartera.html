@@ -580,6 +580,12 @@ td.ab{width:40px;padding-left:4px}
 .ivas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
 @container main (max-width:900px){.ivas{grid-template-columns:repeat(2,minmax(0,1fr))}.ivac.neto{grid-column:1/-1}}
 @container main (max-width:560px){.ivas{grid-template-columns:1fr}}
+/* ISR retenido del saldo: una franja delgada debajo de las cajas de IVA, con sus dos renglones lado a lado */
+.ivac.isrc{display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap;margin:-2px 0 14px;padding:9px 15px}
+.ivac.isrc h3{margin-bottom:0}
+.ivac.isrc .isrl{display:flex;gap:4px 28px;flex-wrap:wrap;flex:1 1 320px;min-width:0}
+.ivac.isrc .ivr{border-bottom:none;padding:2px 0;flex:1 1 230px;min-width:0}
+.ivac.isrc .ivr span{display:inline-flex;align-items:center;gap:7px}
 .ivac h3{font-family:var(--f-ui);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
 .ivac.neto{display:flex;flex-direction:column;justify-content:center;gap:10px}
 .ivac.neto h3{margin-bottom:0}
@@ -701,15 +707,18 @@ const rubroDe=k=>RUBROS.find(x=>x.k===k)||null;
 const propSaldo=r=>{ if(!r.total) return 0; const p=r.saldo/r.total; return Math.abs(p)>1?Math.sign(p):p; };
 const ivaSaldo=r=>(r.mod===0||r.mod===1)?(r.iva||0)*propSaldo(r):0;
 const retSaldo=r=>(r.mod===0||r.mod===1)?(r.ivaret||0)*propSaldo(r):0;
+/* el ISR retenido del saldo (3-nov-2026, pedido de Fernando): la misma cuenta que el IVA retenido. Es informativo: no es
+   IVA y no resta en las cajas de IVA ni en el IVA neto */
+const isrSaldo=r=>(r.mod===0||r.mod===1)?(r.isrret||0)*propSaldo(r):0;
 /* el IVA del saldo de una nota de crédito, con la misma cuenta (3-nov-2026). La cartera solo trae las notas de crédito
    que todavía tienen saldo en el Tablero QUO (satTQ_Saldo <> 0, nube/cartera_nube.py) y la cuenta va en proporción a ese
    saldo: solo cuenta la parte que falta por aplicar; lo ya aplicado no entra (no se resta dos veces). */
 const ivaNtc=r=>(r.mod===4||r.mod===5)?Math.abs((r.iva||0)*propSaldo(r)):0;
 const ivaDoc=r=>(r.mod===4||r.mod===5)?ivaNtc(r):ivaSaldo(r);
 function sumaIva(rows){
-  const o={tras:0,retC:0,acr:0,retP:0,ntcC:0,ntcP:0,nC:0,nP:0};
-  rows.forEach(r=>{ if(r.mod===0){o.tras+=ivaSaldo(r); o.retC+=retSaldo(r); o.nC++;}
-    else if(r.mod===1){o.acr+=ivaSaldo(r); o.retP+=retSaldo(r); o.nP++;}
+  const o={tras:0,retC:0,acr:0,retP:0,ntcC:0,ntcP:0,nC:0,nP:0,isrC:0,isrP:0};
+  rows.forEach(r=>{ if(r.mod===0){o.tras+=ivaSaldo(r); o.retC+=retSaldo(r); o.isrC+=isrSaldo(r); o.nC++;}
+    else if(r.mod===1){o.acr+=ivaSaldo(r); o.retP+=retSaldo(r); o.isrP+=isrSaldo(r); o.nP++;}
     else if(r.mod===4) o.ntcC+=ivaNtc(r); else if(r.mod===5) o.ntcP+=ivaNtc(r); });
   o.causar=o.tras-o.retC-o.ntcC; o.acreditar=o.acr-o.retP-o.ntcP; o.neto=o.causar-o.acreditar;
   return o;
@@ -1205,7 +1214,7 @@ function render(){
   const ex=document.getElementById('exslot'); if(ex){ ex.innerHTML=''; if(ESTC.ok){ ex.appendChild(botonExcluidos()); ex.appendChild(botonBitacora()); } }
   if(FB) FB.pinta();
   const v=document.getElementById('vista'); v.innerHTML='';
-  v.appendChild(cajasIva(sumaIva(rows)));
+  const so=sumaIva(rows); v.appendChild(cajasIva(so)); v.appendChild(cajaIsr(so));
   v.appendChild(modulos(base));
   v.appendChild(antig(ROWS.filter(r=>pasa(r,{sinAge:true}))));
   v.appendChild(tablaEmpresas(rows));
@@ -1222,9 +1231,9 @@ function cajasIva(o){
     return c;
   };
   const menos=x=>Math.abs(x)<0.5?F.mxn.format(0):'− '+F.mxn.format(Math.abs(x));
-  w.appendChild(caja('IVA emitidas','--cli',[['Trasladado',F.mxn.format(o.tras)],['Retenido',menos(o.retC)],
+  w.appendChild(caja('IVA emitidas','--cli',[['Trasladado',F.mxn.format(o.tras)],['IVA retenido',menos(o.retC)],
     ['Notas de crédito',menos(o.ntcC)],['Por causar',F.mxn.format(o.causar),1]]));
-  w.appendChild(caja('IVA recibidas','--prov',[['Acreditable',F.mxn.format(o.acr)],['Retenido',menos(o.retP)],
+  w.appendChild(caja('IVA recibidas','--prov',[['Acreditable',F.mxn.format(o.acr)],['IVA retenido',menos(o.retP)],
     ['Notas de crédito',menos(o.ntcP)],['Por acreditar',F.mxn.format(o.acreditar),1]]));
   const n=el('section','ivac neto'); n.appendChild(el('h3',null,'IVA neto'));
   const cero=Math.abs(o.neto)<0.5, favor=o.neto<0;
@@ -1232,6 +1241,21 @@ function cajasIva(o){
   n.appendChild(el('span','pn '+(cero?'cero':favor?'favor':'contra'),cero?'En cero':favor?'A favor':'En contra'));
   w.appendChild(n);
   return w;
+}
+/* ISR retenido del saldo (3-nov-2026, pedido de Fernando): solo informa, no toca el IVA de arriba. En las emitidas, el que
+   los clientes le van a retener al pagar (lo podrá acreditar); en las recibidas, el que tendrá que retener al pagarles a sus
+   proveedores (por enterar). La retención se hace al pago, por eso solo cuenta lo que falta pagar. */
+function cajaIsr(o){
+  const c=el('section','ivac isrc');
+  const h=el('h3'); h.appendChild(document.createTextNode('ISR retenido del saldo')); h.appendChild(el('small',null,'informativo'));
+  c.appendChild(h);
+  const ls=el('div','isrl');
+  [['Emitidas · te retendrán',o.isrC,'--cli'],['Recibidas · por retener',o.isrP,'--prov']].forEach(([t,v,dot])=>{
+    const r=el('div','ivr'); const k=el('span'); const d=el('span','dot'); d.style.background=`var(${dot})`;
+    k.appendChild(d); k.appendChild(document.createTextNode(t)); r.appendChild(k);
+    r.appendChild(el('b',null,F.mxn.format(Math.abs(v)<0.5?0:Math.abs(v)))); ls.appendChild(r); });
+  c.appendChild(ls);
+  return c;
 }
 /* tarjetas por rubro: su total y cuántos hay; al picar una, se filtra ese rubro (otra vez, regresa a todos) */
 function modulos(base){
@@ -1658,7 +1682,7 @@ function totalDocs(docs,cols,conSel,suelto){
     cols.forEach(k=>{
       const x=el('div',claseCol(k)); if(DCOL[k].w) x.style.setProperty('--w',DCOL[k].w+'px');
       if(k==='cp'){ x.classList.add('k'); x.appendChild(document.createTextNode(lab+' · '+plural(g.length,nom[0],nom[1]))); }
-      else { const f=k==='tot'||k==='mto'?(d=>d.total||0):k==='sal'||k==='xap'?(d=>d.saldo||0):k==='iva'?ivaDoc:null;
+      else { const f=k==='tot'||k==='mto'?(d=>d.total||0):k==='sal'||k==='xap'?(d=>d.saldo||0):k==='iva'?ivaDoc:k==='ivr'?retSaldo:k==='isr'?isrSaldo:null;
         if(f){ x.classList.add('mo'); x.textContent=F.mxn.format(g.reduce((a,d)=>a+f(d),0)); } }
       r.appendChild(x);
     });
@@ -1684,11 +1708,14 @@ const DCOL={
   sal:{lab:'Saldo',w:110,p:1,r:1,v:r=>Math.abs(r.saldo)},
   xap:{lab:'Por aplicar',w:110,p:1,r:1,v:r=>Math.abs(r.saldo)},
   iva:{lab:'IVA del saldo',w:104,p:2,r:1,v:r=>Math.abs(ivaDoc(r))},
+  // retenciones de lo que falta pagar (3-nov-2026, pedido de Fernando): con la misma prioridad que el IVA del saldo
+  ivr:{lab:'IVA retenido',w:104,p:2,r:1,v:r=>Math.abs(retSaldo(r))},
+  isr:{lab:'ISR retenido',w:104,p:2,r:1,v:r=>Math.abs(isrSaldo(r))},
   est:{lab:'Estatus',w:130,p:2,r:1,v:r=>r.est==='Cancelada'?1e9:(r.dias==null?-1:r.dias)},
   apc:{lab:'Aplicación',w:124,p:2,txt:1,v:r=>aplicacion(r)}
 };
 const TABCOLS={todos:['cp','tip','fec','dia','sal','tot','est'],ntc:['cp','tip','fec','dia','sal','iva','tot','est'],
-  fac:['cp','fol','fec','pl','tot','sal','iva','est'],ant:['cp','fol','fec','pl','mto','xap','apc'],
+  fac:['cp','fol','fec','pl','tot','sal','iva','ivr','isr','est'],ant:['cp','fol','fec','pl','mto','xap','apc'],
   ter:['cp','pl','rol','cta','nat','fec','mto','sal']};
 const claseCol=k=>{ const c=DCOL[k]; return 'dc'+(c.g?' g':'')+(c.r?' r':'')+(c.p>1?' p'+c.p:''); };
 const ordenDocs=()=>S.dsort&&(TABCOLS[S.tab]||TABCOLS.todos).includes(S.dsort.k)?S.dsort:{k:'sal',dir:-1};
@@ -1728,6 +1755,8 @@ function celdaDoc(k,d){
     case 'tot': case 'mto': din(d.total); x.style.color='var(--ink-2)'; return x;
     case 'sal': case 'xap': din(d.saldo); x.classList.add('b'); return x;
     case 'iva': return din(ivaDoc(d));
+    case 'ivr': return din(retSaldo(d));
+    case 'isr': return din(isrSaldo(d));
     case 'est': x.classList.add('c-est'); x.appendChild(pillEstatus(d)); if(d.alerta) x.appendChild(el('span','pill p-can','Saldo > total'));
       if(d.st&&d.st!=='normal') x.appendChild(el('span','pill '+ST_CLS[d.st],ST_LAB[d.st])); return x;
     case 'apc': { const p=aplicacion(d)==='Sin aplicar'; x.appendChild(el('span','pill '+(p?'p-ppd':'p-pue'),aplicacion(d))); return x; }
@@ -1799,8 +1828,11 @@ function panelDoc(){
       w.textContent='Saldo > total · '+F.mxn.format(Math.abs(d.saldo)-Math.abs(d.total)); tot.parentNode.appendChild(w); }
     campo(d.mod===2||d.mod===3?'Por aplicar':'Saldo',F.mxn2.format(d.saldo),'num');
     if(d.mod===0||d.mod===1||d.mod===4||d.mod===5) campo('IVA del saldo',F.mxn2.format(ivaDoc(d)),'num');
-    if(d.ivaret) campo('IVA retenido',F.mxn2.format(d.ivaret),'num');
-    if(d.isrret) campo('ISR retenido',F.mxn2.format(d.isrret),'num');
+    // retenciones (3-nov-2026, pedido de Fernando): en facturas, de lo que falta pagar y siempre (aunque sea $0)
+    if(d.mod===0||d.mod===1){ campo('IVA retenido del saldo',F.mxn2.format(retSaldo(d)),'num');
+      campo('ISR retenido del saldo',F.mxn2.format(isrSaldo(d)),'num'); }
+    else { if(d.ivaret) campo('IVA retenido',F.mxn2.format(d.ivaret),'num');
+      if(d.isrret) campo('ISR retenido',F.mxn2.format(d.isrret),'num'); }
     if(d.ieps) campo('IEPS',F.mxn2.format(d.ieps),'num');
     if(d.dsc) campo('Descuento',F.mxn2.format(d.dsc),'num');
     sep();
@@ -2326,10 +2358,12 @@ function cargaExcelJS(){
 const RCX_FAC=['CLIENTE RFC','QUO ID','RFC','RAZON SOCIAL','Tercero','TIPO','TOTAL CFDI','SALDO CFDI','FECHA CFDI',
   'DIAS DE ATRASO','MÉTODO DE PAGO','Estatus','FechaCancelacion','UUID','Nombre del mes','Año',
   // el IVA de cada factura (2-nov-2026, pedido de Fernando): al final, para no mover las columnas del formato de siempre
-  'SUBTOTAL CFDI','IVA CFDI','IVA RETENIDO CFDI','IVA DEL SALDO','IVA RETENIDO DEL SALDO'];
+  'SUBTOTAL CFDI','IVA CFDI','IVA RETENIDO CFDI','IVA DEL SALDO','IVA RETENIDO DEL SALDO',
+  // el ISR retenido (3-nov-2026, pedido de Fernando): también al final
+  'ISR RETENIDO CFDI','ISR RETENIDO DEL SALDO'];
 /* columnas que suman en la fila TOTAL de cada hoja (SUBTOTAL de Excel: si se filtra en Excel, suma solo lo visible) */
 const RCX_SUMA=new Set(['TOTAL CFDI','SALDO CFDI','Saldo','Total','Monto','SUBTOTAL CFDI','IVA CFDI','IVA RETENIDO CFDI',
-  'IVA DEL SALDO','IVA RETENIDO DEL SALDO']);
+  'IVA DEL SALDO','IVA RETENIDO DEL SALDO','ISR RETENIDO CFDI','ISR RETENIDO DEL SALDO']);
 const cent=v=>Math.round((v||0)*100)/100;
 const RCX_ANT=['Cliente RFC','Id','Version xml','Fecha','Días de Atraso','Tipo de Comprobante','Tipo','RFC','Nombre',
   'Saldo','Total','Plantilla Poliza','uuid','Rol Tercer'];
@@ -2338,9 +2372,9 @@ const RCX_NTC=['Cliente RFC','Id','Version xml','Fecha','Días de Atraso','Tipo 
 const RCX_TER=['Cliente RFC','Contraparte RFC','Contraparte','Plantilla','Rol','Cuenta contable','Naturaleza','Fecha','Monto','Saldo'];
 const RCX_HOJAS=[
   {mods:[1],nombre:'Cuentas por Pagar',titulo:'CUENTAS POR PAGAR',tabla:'Tabla2',cols:RCX_FAC,etq:'CXP',
-   ancho:[48.9,20.3,15.4,98.9,27.3,9,14.1,14.1,15.4,18,19.7,10.4,19.6,39.9,18,6.6,15.4,15.4,15.4,15.4,15.4]},
+   ancho:[48.9,20.3,15.4,98.9,27.3,9,14.1,14.1,15.4,18,19.7,10.4,19.6,39.9,18,6.6,15.4,15.4,15.4,15.4,15.4,15.4,15.4]},
   {mods:[0],nombre:'Cuentas por Cobrar',titulo:'CUENTAS POR COBRAR',tabla:'Tabla5',cols:RCX_FAC,etq:'CXC',rs:'RAZÓN SOCIAL',
-   ancho:[45.4,14.6,16.3,81.9,10,8.1,14.1,14.1,15.4,18,19.7,10.4,19.6,39.3,18,6.6,15.4,15.4,15.4,15.4,15.4]},
+   ancho:[45.4,14.6,16.3,81.9,10,8.1,14.1,14.1,15.4,18,19.7,10.4,19.6,39.3,18,6.6,15.4,15.4,15.4,15.4,15.4,15.4,15.4]},
   {mods:[2,3],nombre:'Anticipos por Aplicar',titulo:'Anticipos por Aplicar',tabla:'Tabla3',cols:RCX_ANT,etq:'Anticipos',
    ancho:[24.7,13,13.7,15.4,16,22.6,10,15.7,98.9,14.1,14.1,21.3,39.9,16]},
   {mods:[4,5],nombre:'Notas de Credito',titulo:'Notas de Crédito',tabla:'Tabla4',cols:RCX_NTC,etq:'Notas de Credito',
@@ -2368,7 +2402,8 @@ function filaRCX(cols,r,c,n){
     'Contraparte RFC':cp[0],'Contraparte':cp[1],'Plantilla':r.pl||'','Rol':r.rol||'','Cuenta contable':r.cta||'',
     'Naturaleza':r.mod===TER?naturaleza(r):'','Monto':r.total,
     'SUBTOTAL CFDI':r.sub==null?null:r.sub,'IVA CFDI':r.iva==null?null:r.iva,'IVA RETENIDO CFDI':r.ivaret==null?null:r.ivaret,
-    'IVA DEL SALDO':cent(ivaSaldo(r)),'IVA RETENIDO DEL SALDO':cent(retSaldo(r))};
+    'IVA DEL SALDO':cent(ivaSaldo(r)),'IVA RETENIDO DEL SALDO':cent(retSaldo(r)),
+    'ISR RETENIDO CFDI':r.isrret==null?null:r.isrret,'ISR RETENIDO DEL SALDO':cent(isrSaldo(r))};
   return cols.map(k=>v[k]);
 }
 /* el reporte general (todos los clientes) lleva al inicio el grupo y el cliente de cada renglón */
@@ -2415,7 +2450,7 @@ function hojaRCX(wb,h,c,docs,corte,gen){
     x.font={name:fuente,bold:true,color:{argb:'FFFFFFFF'}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:azul}};
     x.alignment={horizontal:'center',vertical:'middle',wrapText:true}; }
   const fmt={'TOTAL CFDI':RCX_MON,'SALDO CFDI':RCX_MON,'Saldo':RCX_MON,'Total':RCX_MON,'Monto':RCX_MON,
-    'SUBTOTAL CFDI':RCX_MON,'IVA CFDI':RCX_MON,'IVA RETENIDO CFDI':RCX_MON,'IVA DEL SALDO':RCX_MON,'IVA RETENIDO DEL SALDO':RCX_MON,
+    'SUBTOTAL CFDI':RCX_MON,'IVA CFDI':RCX_MON,'IVA RETENIDO CFDI':RCX_MON,'IVA DEL SALDO':RCX_MON,'IVA RETENIDO DEL SALDO':RCX_MON,'ISR RETENIDO CFDI':RCX_MON,'ISR RETENIDO DEL SALDO':RCX_MON,
     'FECHA CFDI':'dd/mm/yyyy hh:mm','FechaCancelacion':'dd/mm/yyyy hh:mm','Fecha':'dd/mm/yyyy hh:mm','satTQ_MiFecha':'dd/mm/yyyy',
     'DIAS DE ATRASO':'0','Días de Atraso':'0'};
   const centro=new Set(['QUO ID','Id','Version xml','FECHA CFDI','Fecha','DIAS DE ATRASO','Días de Atraso','MÉTODO DE PAGO',
