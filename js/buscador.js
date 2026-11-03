@@ -68,9 +68,10 @@
     + '.pb-vacio{padding:10px 12px;font-size:13px;color:var(--pb-mu)}'
     + '.pb-chips{display:flex;flex-wrap:wrap;gap:6px}'
     + '.pb-chips:empty{display:none}'
-    + '.pb-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid var(--pb-ac);background:var(--pb-acs);color:var(--pb-aci);border-radius:999px;padding:3px 3px 3px 11px;font-size:13px;line-height:1.3}'
+    + '.pb-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid var(--pb-ac);background:var(--pb-acs);color:var(--pb-aci);border-radius:16px;padding:3px 3px 3px 11px;font-size:13px;line-height:1.3}'
+    + '.pb-chip .pb-tx{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:6px;min-width:0}'
     + '.pb-chip .pb-t{overflow-wrap:anywhere}'
-    + '.pb-chip small{font-size:11px;opacity:.85;white-space:nowrap}'
+    + '.pb-chip small{font-size:11px;opacity:.85}'
     + '.pb-chip.otro{border-color:var(--pb-ln);background:var(--pb-sf2);color:var(--pb-ink)}'
     + '.pb-chip button{flex:none;width:24px;height:24px;border-radius:50%;border:0;background:rgba(127,127,127,.18);color:inherit;font:inherit;font-size:15px;line-height:1;cursor:pointer;display:grid;place-items:center}'
     + '.pb-res{font-size:12.5px;color:var(--pb-mu)}'
@@ -144,7 +145,8 @@
       if (!chips) return;
       chips.innerHTML = sel.map(function (v) {
         var o = deOp(v) || { v: v, t: v };
-        return '<span class="pb-chip' + (o.otro ? ' otro' : '') + '"><span class="pb-t">' + esc(o.t) + '</span>' + (o.nota ? '<small>' + esc(o.nota) + '</small>' : '')
+        // nombre y nota juntos si caben; si no, la nota baja completa debajo del nombre (el nombre nunca se aplasta)
+        return '<span class="pb-chip' + (o.otro ? ' otro' : '') + '"><span class="pb-tx"><span class="pb-t">' + esc(o.t) + '</span>' + (o.nota ? '<small>' + esc(o.nota) + '</small>' : '') + '</span>'
           + (off ? '' : '<button type="button" data-q="' + esc(v) + '" aria-label="Quitar a ' + esc(o.t) + '">×</button>') + '</span>';
       }).join('');
     }

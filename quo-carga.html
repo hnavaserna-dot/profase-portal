@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=aed1833b56"></script><script src="js/ocultos.js?v=df79ec94dd"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/ocultos.js?v=df79ec94dd"></script>
 <style>
 /* Portal PROFASE · Reportes › Carga de Quo (2-nov-2026, pedido de Fernando Cadengo: «quiero hacer un panel para tener
    el control de esto… tipo el historial que tenía la página anterior»). El control de lo que se carga de Quo
@@ -245,6 +245,9 @@ tr.click:hover td{background:var(--navy-soft)}
 @media (prefers-reduced-motion:reduce){.gira{animation:none}}
 .camino{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--accent-ink);margin-top:2px}
 .pide-cli .msg{margin-top:6px}
+.cuenta{margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink)}
+.cuenta.mut{font-weight:400;color:var(--muted)}
+.cuenta.mal{color:var(--red)}
 @media (max-width:700px){
   .mapa th.cli,.mapa td.cli{min-width:140px;max-width:170px}
   .semaforo{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -586,11 +589,11 @@ tr.click:hover td{background:var(--navy-soft)}
   }
 
   /* ---------- pedir: uno o varios clientes a la vez (Daniel, 3-nov-2026: «Varios a la vez») ---------- */
-  function pide(tipo, rfc, mes, b) { return pideVarios(tipo, [rfc], mes, b, null); }
-  async function pideVarios(tipo, rfcs, mes, b, msg) {
+  function pide(tipo, rfc, mes, b) { return pideVarios(tipo, [rfc], [mes], b, null); }
+  async function pideVarios(tipo, rfcs, meses, b, msg) {
     if (b) b.disabled = true;
     try {
-      var r = await rpc('qc_pide_varios', { p_tipo: tipo, p_rfcs: rfcs, p_mes: mes });
+      var r = await rpc('qc_pide_varios', { p_tipo: tipo, p_rfcs: rfcs, p_meses: meses });
       cierra();
       if (r && r.lote) abreLote(r.lote, true);
       await Promise.all([cargaRes(), rpc('qc_yo').then(function (y) { YO = y; })]);
@@ -600,6 +603,10 @@ tr.click:hover td{background:var(--navy-soft)}
       if (msg) { msg.className = 'msg mal'; msg.textContent = falla(e); msg.hidden = false; } else error(falla(e));
     }
   }
+  /* «2 clientes × 3 meses = 6 pedidos» (Fernando, 3-nov-2026: varios meses a la vez; cada cliente con cada mes cuenta uno) */
+  function cuantos(nc, nm) {
+    return nc + (nc === 1 ? ' cliente' : ' clientes') + ' × ' + nm + (nm === 1 ? ' mes' : ' meses') + ' = ' + (nc * nm) + (nc * nm === 1 ? ' pedido' : ' pedidos');
+  }
   async function ventanaPide() {
     try {
       if (!TAB) await cargaTab();
@@ -607,31 +614,45 @@ tr.click:hover td{background:var(--navy-soft)}
       var quedan = Math.max(0, (YO.limite || 0) - (YO.hoy || 0));
       var tope = Math.min(10, quedan);
       var ms = meses().slice().reverse();
-      abre('Traer de Quo ahora', quedan + ' de ' + (YO.limite || 0) + ' pedidos te quedan hoy (cada cliente cuenta uno)',
-        '<div class="sec"><h3>¿Qué clientes y qué mes?</h3><div class="in"><div class="campos">'
-          + '<div class="campo ancho pide-cli"><label for="p-cli">Clientes (hasta ' + tope + ' a la vez)</label><div id="p-cliBox"></div></div>'
-          + '<div class="campo"><label for="p-mes">Mes</label><select id="p-mes">' + ms.map(function (m) { return '<option value="' + m + '">' + esc(mesTxt(m)) + '</option>'; }).join('') + '</select></div>'
-          + '</div></div></div>'
+      abre('Traer de Quo ahora', quedan + ' de ' + (YO.limite || 0) + ' pedidos te quedan hoy (cada cliente con cada mes cuenta uno)',
+        '<div class="sec"><h3>¿Qué clientes y qué meses?</h3><div class="in"><div class="campos">'
+          + '<div class="campo ancho pide-cli"><label for="p-cli">Clientes</label><div id="p-cliBox"></div></div>'
+          + '<div class="campo ancho pide-cli"><label for="p-mes">Meses</label><div id="p-mesBox"></div></div>'
+          + '</div><p class="cuenta" id="p-cue" aria-live="polite"></p></div></div>'
         + '<div class="sec"><h3>¿Qué hago?</h3><div class="in pide-tipo">'
-          + '<label><input type="radio" name="p-tipo" value="recarga" checked><span><b>Traer de Quo ahora</b><span class="mut">Trae otra vez sus 5 reportes de ese mes y lo que tienen pendiente directo de Quo, y pone al día Cartera y Variaciones. No hace falta esperar a la siguiente hora.</span></span></label>'
+          + '<label><input type="radio" name="p-tipo" value="recarga" checked><span><b>Traer de Quo ahora</b><span class="mut">Trae otra vez sus 5 reportes de cada mes y lo que tienen pendiente directo de Quo, y pone al día Cartera y Variaciones. No hace falta esperar a la siguiente hora.</span></span></label>'
           + '<label><input type="radio" name="p-tipo" value="prueba"><span><b>Comparar con los viernes</b><span class="mut">Lo lee de Quo y lo compara con lo que guardó la carga de los viernes. No cambia nada.</span></span></label>'
         + '</div></div>'
         + '<div class="msg" id="p-msg" hidden></div><div class="acciones"><button class="btn acento" type="button" id="p-ok">Pedir</button><button class="btn" type="button" id="p-no">Cancelar</button></div>'
-        + '<p class="mut" style="margin:0">Se abre una ventana con el avance de cada cliente, reporte por reporte (suele tardar de 2 a 4 minutos). Si te vas a otra pantalla, al terminar te sale el aviso abajo. ' + (PIDE === 'todo' ? 'Puedes pedir cualquier cliente.' : 'Solo salen tus clientes.') + '</p>');
+        + '<p class="mut" style="margin:0">Cada cliente con cada mes es un pedido; hasta ' + tope + ' a la vez' + (tope < 10 ? ' (son los que te quedan hoy)' : '') + '. Se abre una ventana con el avance de cada uno, reporte por reporte (suele tardar de 2 a 4 minutos por cada mes). Si te vas a otra pantalla, al terminar te sale el aviso abajo. ' + (PIDE === 'todo' ? 'Puedes pedir cualquier cliente.' : 'Solo salen tus clientes.') + '</p>');
+      function cuenta() {
+        if (!bus || !bm) return;
+        var nc = bus.valor().length, nm = bm.valor().length, n = nc * nm, c = $('p-cue');
+        $('p-msg').hidden = true;
+        if (!nc || !nm) { c.className = 'cuenta mut'; c.textContent = 'Escoge al menos un cliente y un mes.'; $('p-ok').disabled = true; return; }
+        var mas = n > tope;
+        c.className = 'cuenta' + (mas ? ' mal' : '');
+        c.textContent = cuantos(nc, nm) + (mas ? ': son más de ' + tope + '; quita clientes o meses' + (tope < 10 ? ' (hoy te quedan ' + tope + ').' : '.') : '');
+        $('p-ok').disabled = mas || CONSULTA;
+      }
       var bus = window.PROFASE_BUSCA.crea({ donde: $('p-cliBox'), id: 'p-cli', varios: true,
         opciones: ops.map(function (c) { var ya = enCamino(c.rfc); return { v: c.rfc, t: c.nombre, nota: c.rfc + (ya ? ' · trayéndose ' + mesTxt(ya.mes) : '') }; }), valor: [],
         marcador: 'Escribe parte del nombre o el RFC', vacio: 'Ningún cliente coincide', sinOpciones: 'No tienes clientes con cuenta de Quo',
-        cambio: function (v) {
-          if (v.length > tope) { bus.pon(v.slice(0, tope)); $('p-msg').className = 'msg ojo'; $('p-msg').textContent = 'Hasta ' + tope + ' clientes a la vez' + (tope < 10 ? ' (son los pedidos que te quedan hoy).' : '.'); $('p-msg').hidden = false; }
-          else $('p-msg').hidden = true;
-        } });
+        cambio: cuenta });
+      var bm = window.PROFASE_BUSCA.crea({ donde: $('p-mesBox'), id: 'p-mes', varios: true,
+        opciones: ms.map(function (m) { return { v: m, t: mesTxt(m) }; }), valor: [ms[0]],
+        marcador: 'Escribe el mes o el año (sep, 2026…)', vacio: 'Ningún mes coincide', sinOpciones: 'Sin meses',
+        cambio: cuenta });
+      cuenta();
       $('p-no').onclick = cierra;
       $('p-ok').onclick = function () {
-        var v = bus.valor(), mes = $('p-mes').value, tipo = document.querySelector('[name="p-tipo"]:checked').value;
-        var ya = v.map(function (r) { return enCamino(r, mes); }).filter(function (x) { return x && x.tipo === tipo; })[0];
-        if (!v.length) { $('p-msg').className = 'msg mal'; $('p-msg').textContent = 'Escoge al menos un cliente.'; $('p-msg').hidden = false; return; }
-        if (ya) { $('p-msg').className = 'msg mal'; $('p-msg').textContent = 'Uno de esos ya se está trayendo de ' + mesTxt(mes) + (ya.mio ? ' (lo pediste tú).' : ' (lo pidió ' + ya.quien + ').'); $('p-msg').hidden = false; return; }
-        pideVarios(tipo, v, mes, this, $('p-msg'));
+        var v = bus.valor(), mm = bm.valor().slice().sort(), tipo = document.querySelector('[name="p-tipo"]:checked').value;
+        var ya = null;
+        v.forEach(function (r) { mm.forEach(function (m) { var x = enCamino(r, m); if (!ya && x && x.tipo === tipo) ya = x; }); });
+        if (!v.length || !mm.length) { $('p-msg').className = 'msg mal'; $('p-msg').textContent = 'Escoge al menos un cliente y un mes.'; $('p-msg').hidden = false; return; }
+        if (v.length * mm.length > tope) { cuenta(); return; }
+        if (ya) { $('p-msg').className = 'msg mal'; $('p-msg').textContent = 'Uno de esos ya se está trayendo de ' + mesTxt(ya.mes) + (ya.mio ? ' (lo pediste tú).' : ' (lo pidió ' + ya.quien + ').'); $('p-msg').hidden = false; return; }
+        pideVarios(tipo, v, mm, this, $('p-msg'));
       };
     } catch (e) { error(falla(e)); }
   }
@@ -683,13 +704,16 @@ tr.click:hover td{background:var(--navy-soft)}
   function pintaLote() {
     var d = LOTE.datos || {}, ps = d.pedidos || [], v = d.vuelta;
     if (!ps.length) { $('b-sub').textContent = 'No se encontró ese pedido.'; $('b-cue').innerHTML = ''; $('b-pie').innerHTML = '<button class="btn acento" type="button" id="b-ok">Cerrar</button>'; $('b-ok').onclick = cierraLote; return; }
-    var vivos = ps.filter(vivoP).length, tipo = ps[0].tipo, mes = ps[0].mes;
+    var vivos = ps.filter(vivoP).length, tipo = ps[0].tipo;
+    var losMeses = ps.map(function (p) { return p.mes; }).filter(function (m, i, a) { return a.indexOf(m) === i; }).sort();
+    var losCli = ps.map(function (p) { return p.rfc; }).filter(function (r, i, a) { return a.indexOf(r) === i; });
     var avance = ps.reduce(function (a, p) { return a + pasoDe(p, v)[2]; }, 0) / ps.length;
     $('b-barra').style.width = Math.round(avance * 100) + '%';
     var ok = ps.filter(function (p) { return p.estado === 'hecho'; }).length, mal = ps.filter(function (p) { return p.estado === 'fallo'; }).length;
     $('b-tit').textContent = vivos ? (tipo === 'prueba' ? 'Comparando con los viernes' : 'Trayendo de Quo') : (mal ? (ok ? 'Quedó, con algo que no se pudo' : 'No se pudo') : '¡Listo!');
     var lleva = Math.max(0, Math.round((Date.now() - new Date(ps[0].pedido).getTime()) / 60000));
-    $('b-sub').textContent = ps.length + (ps.length === 1 ? ' cliente' : ' clientes') + ' de ' + mesTxt(mes) + ' · '
+    $('b-sub').textContent = (losMeses.length === 1 ? losCli.length + (losCli.length === 1 ? ' cliente' : ' clientes') + ' de ' + mesTxt(losMeses[0])
+                              : cuantos(losCli.length, losMeses.length)) + ' · '
       + (vivos ? (lleva < 1 ? 'acaba de empezar' : 'lleva ' + lleva + ' min') + '; suele tardar de 2 a 4 minutos'
                : ok + (ok === 1 ? ' listo' : ' listos') + (mal ? ', ' + mal + ' no se pudo' + (mal === 1 ? '' : 'ieron') : ''));
     var h = '';
@@ -840,8 +864,10 @@ tr.click:hover td{background:var(--navy-soft)}
       $('b-oc').onclick = function () { if (window.PROFASE_OCULTOS) window.PROFASE_OCULTOS.ventana(); };
       // desde su aviso de «Nuevos cambios» (qcar_tab.js, PROFASE_ABRE['quo-carga']('ver:ocultos'))
       // y desde el aviso de «Traer de Quo ahora» (notif_tab.js: qc|lote|<lote> → PROFASE_ABRE['quo-carga']('lote:<lote>'))
+      // y desde su pila del Inicio (186_inicio_pilas_modulos.sql: PROFASE_ABRE['quo-carga']('alertas')): la pestaña Alertas
       window.__qcAbre = function (k) {
         if (k === 'ocultos' && window.PROFASE_OCULTOS) window.PROFASE_OCULTOS.ventana();
+        if (k === 'alertas') { ponTab('ale'); try { $('p-ale').scrollIntoView({ block: 'start' }); } catch (e) { /* se queda */ } }
         var m = /^lote:([0-9a-f-]{36})$/i.exec(String(k || ''));
         if (m) { cierra(); abreLote(m[1]); }
       };
