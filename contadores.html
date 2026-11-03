@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="1656bb81c483"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="1c5dbb850182"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -3731,6 +3731,7 @@ initDB=async function(){await initDB0();oirJust()};
     if(l==='cartera'&&(m=/^car-marca-(\d{1,12})(?:-|$)/.exec(c)))return m[1];   // un estatus de la Cartera: por aprobar, aprobado o regresado (146)
     if(l==='buzon'&&(m=/^bzt\|(\d{1,12})\|/.exec(c)))return m[1];   // un aviso del Buzón tributario: asignado o cerrado (195)
     if(l==='buzon'&&/^bzt\|nuevos\|\d{1,12}$/.test(c))return 'ver:nuevos';   // los nuevos por asignar (195)
+    if(l==='buzon'&&/^bzt\|confirmar\|\d{4}-\d{2}-\d{2}$/.test(c))return 'ver:confirmar';   // los de plazo por confirmar (202)
     if(l==='quo-carga'&&(m=/^qc\|lote\|([0-9a-f-]{36})$/i.exec(c))&&CITA.test(m[1]))return 'lote:'+m[1];   // ya acabó «Traer de Quo ahora»: su ventana con el resultado (180)
     return null;
   }
@@ -9109,7 +9110,8 @@ initDB=async function(){await initDB0();oirJust()};
    la dirección y los gerentes; Liliana Lechuga y Francisco Rivera (asignan); cada contador con sus clientes o con algo
    asignado. Sin montos.
    - window.PROFASE_ABRE['buzon']: el aviso de la campanita (clave bzt|<número>|…) o el Inicio abren ese aviso; «ver:nuevos»
-     abre los nuevos por asignar.
+     abre los nuevos por asignar; y (202) «ver:confirmar», «ver:porvencer», «ver:abiertos» y «ver:cerrados», esos de la lista
+     (la pila de la dirección y la de Liliana y Frank, y la campanita «bzt|confirmar|…»).
    - Al volver a la pestaña, la pantalla trae lo último (un aviso a su marco; sin relojes).
    - Recorrido de lo nuevo «buzon-tributario-1» (regla de Daniel, 30-oct-2026, 13:48: pantalla y menú nuevos): a todos los
      que la ven, una sola vez (PROFASE_RECORRIDO.unaVez), con las partes de la pantalla del «?» (GUIAS.bzt de guia_tab.js,
@@ -9175,11 +9177,12 @@ initDB=async function(){await initDB0();oirJust()};
     let k=String(x||'');
     const m=k.match(/^bzt\|(\d{1,12})\|/);if(m)k=m[1];   // la clave del aviso trae su número
     if(k==='ver:nuevos'||/^bzt\|nuevos\|/.test(String(x||'')))k='ver:nuevos';
-    const ok=/^\d{1,12}$/.test(k)||k==='ver:nuevos';
+    if(/^bzt\|confirmar\|/.test(String(x||'')))k='ver:confirmar';   // (202) los de plazo por confirmar
+    const ok=/^\d{1,12}$/.test(k)||/^ver:(nuevos|confirmar|porvencer|abiertos|cerrados)$/.test(k);
     setView(X.v);
     if(!ok)return true;
     const fr=M.firstElementChild;
-    const q=k==='ver:nuevos'?'ver=nuevos':'id='+k;
+    const q=/^ver:/.test(k)?'ver='+k.slice(4):'id='+k;
     try{if(fr.contentWindow&&fr.contentWindow.__bztAbre){fr.contentWindow.__bztAbre(k);return true}}catch(e){}
     fr.setAttribute('src',X.src+'?'+q);
     return true;
@@ -9208,10 +9211,44 @@ initDB=async function(){await initDB0();oirJust()};
     if(!g.length)return p.concat([{antes:a,el:()=>visible(M),etiqueta:'La pantalla',titulo:X.t,texto:'Los avisos, sus filtros y la pestaña de cancelaciones de factura.'}]);
     return p.concat([Object.assign({},g[0],{antes:a})],g.slice(1));   // el «antes» corre aunque su paso se brinque
   }
-  const REC={id:'buzon-tributario-1',liga:X.k,laVe:async()=>{const e=await listo;return !!(e&&e.ve)},pasos:pasos};
+  /* (202) Lo nuevo del 3-nov-2026 (Héctor Daniel Nava, 16:16 a 16:41): el plazo (el CRM propone la fecha en que queda
+     notificado y Liliana o Frank lo confirman), los dos caminos (con su pendiente), la pila «Buzón SAT» del expediente y, a
+     la dirección, la pila del Inicio. Un paso nuevo en la forma de trabajar: lleva recorrido («buzon-tributario-2») para
+     quien ya vio el primero; quien todavía no ve el primero lo ve todo junto en él (y el segundo ya no le sale). */
+  function pasosNuevo(conIntro){
+    const e=EST||{},G=window.PROFASE_GUIA,dir=e.rol==='director';
+    const g=(G&&G.pasos)?G.pasos(X.v):[];
+    const kpi=g.filter(z=>z.titulo==='Plazo por confirmar');
+    const p=[];
+    if(conIntro)p.push({etiqueta:'Nuevo',icono:'listo',titulo:'El plazo de cada aviso',
+      texto:e.asigna?'Ahora cada aviso abierto trae la fecha en que queda notificado: el CRM la propone (el 4.º día hábil después del aviso, si nadie lo abre antes). Tú o Frank la confirman y dicen si lleva plazo para contestar: con los días hábiles, el CRM calcula la fecha límite.'
+        :'Ahora cada aviso abierto trae la fecha en que queda notificado (la propone el CRM) y su plazo para contestar, que confirman Liliana Lechuga o Francisco Rivera. Así sabes cuándo vence cada uno.'});
+    if(kpi.length)p.push(Object.assign({},kpi[0],{antes:()=>aSeccion()}));
+    p.push({etiqueta:'Nuevo',icono:'listo',titulo:'Dos caminos',
+      texto:'Cada aviso asignado va por uno de dos caminos: «Se resuelve contestando» (se queda aquí) o «Lleva trabajo»: le crea un pendiente a quien lo tiene, en su Agenda y en el expediente del cliente, con la fecha límite. Al darlo por hecho, el aviso se cierra solo.'
+        +(e.asigna?' Lo escoges al asignarlo (o después, en el aviso).':' Quien lo tiene también lo puede cambiar.')});
+    p.push({menu:'clis',sub:'expedientes',etiqueta:'Dónde está',titulo:'También en el expediente',
+      texto:'En Clientes › Expedientes, cada cliente trae la pila «Buzón SAT»: cuántos avisos le llegan, de qué tratan, cuáles siguen sin contestar y cuándo vencen. Al picar uno, se abre aquí.'});
+    if(dir)p.push({etiqueta:'En tu Inicio',icono:'listo',titulo:'Buzón tributario en «Tu agenda»',
+      texto:'En tu Inicio te sale cómo van los avisos del SAT: cuántos siguen sin contestar, los que vencen en 7 días o ya vencieron, los que faltan de confirmar su plazo y los que se contestaron esta semana.'});
+    return p;
+  }
+  function pasosUno(){
+    // el primero, con lo nuevo al final; al llegar ahí, el segundo ya cuenta como visto
+    const p=pasos(),n=pasosNuevo(false).filter(z=>z.titulo!=='Plazo por confirmar');
+    if(n.length)n[0]=Object.assign({},n[0],{antes:async()=>{try{await window.PORTAL.sb.rpc('recorrido_visto',{p_recorrido:'buzon-tributario-2'})}catch(err){}}});
+    return p.concat(n);
+  }
+  const REC={id:'buzon-tributario-1',liga:X.k,laVe:async()=>{const e=await listo;return !!(e&&e.ve)},pasos:pasosUno};
   if(R()&&R().unaVez)R().unaVez(REC);
-  listo.then(e=>{if(e&&e.ve)(window.PROFASE_NOVEDADES=window.PROFASE_NOVEDADES||[]).push({titulo:'Buzón tributario',
-    texto:'Los avisos del SAT del buzón de cada cliente: quién lo tiene, en qué va y quién lo cerró.',corre:()=>R()&&R().corre({pasos:pasos(),fin:'¡Listo!'})})});
+  const REC2={id:'buzon-tributario-2',liga:X.k,pasos:()=>pasosNuevo(true),
+    laVe:async P=>{const e=await listo;if(!(e&&e.ve))return false;
+      try{const r=await P.sb.rpc('recorridos_mios');return !r.error&&Array.isArray(r.data)&&r.data.indexOf('buzon-tributario-1')>=0}catch(err){return false}}};
+  if(R()&&R().unaVez)R().unaVez(REC2);
+  listo.then(e=>{if(e&&e.ve){(window.PROFASE_NOVEDADES=window.PROFASE_NOVEDADES||[]).push({titulo:'Buzón tributario',
+    texto:'Los avisos del SAT del buzón de cada cliente: quién lo tiene, en qué va y quién lo cerró.',corre:()=>R()&&R().corre({pasos:pasos(),fin:'¡Listo!'})});
+    window.PROFASE_NOVEDADES.push({titulo:'El plazo de los avisos del SAT',texto:'La fecha de notificación, el plazo, los dos caminos y el Buzón SAT del expediente',
+      corre:()=>R()&&R().corre({pasos:pasosNuevo(true),fin:'¡Listo!'})})}});
 })();
 
 /* ===== Portal PROFASE · menú «Centauro» (3-nov-2026; Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde
@@ -12081,7 +12118,7 @@ initDB=async function(){await initDB0();oirJust()};
         {el:en('exp','#exp-l'),etiqueta:'Aquí le picas',titulo:'El expediente',texto:'Pica un grupo para abrir su expediente. «Agendar reunión» te lleva al Calendario con el cliente ya escogido.'},
         {el:en('exp','#pros-card'),titulo:'Prospectos',texto:'Las personas con quienes hay citas y todavía no son clientes, con sus reuniones y notas.'},
         {antes:abre,el:en('exp','#e-rs'),titulo:'La razón social',texto:'Escribe parte del nombre o el RFC y escógela: todo el expediente se queda con esa razón social (y lo de todo el grupo). La ✕ de arriba regresa a todo el grupo.'},
-        {el:en('exp','#e-pilas'),titulo:'Las pilas',texto:'Cada una resume una parte: cómo vamos (el WorkFlow por mes), lo que nos deben (a quien le toca), pendientes, reuniones, notas y minutas, documentos y razones sociales. Pica una y abajo sale solo esa parte.'},
+        {el:en('exp','#e-pilas'),titulo:'Las pilas',texto:'Cada una resume una parte: cómo vamos (el WorkFlow por mes), lo que nos deben (a quien le toca), pendientes, los avisos del SAT de su buzón tributario («Buzón SAT»: cuántos le llegan, de qué tratan y cuándo vencen), reuniones, notas y minutas, documentos y razones sociales. Pica una y abajo sale solo esa parte.'},
         {el:en('exp','#e-nuevo'),titulo:'+ Nuevo',texto:'Una nota, un pendiente, una reunión, un documento o una carpeta.'},
         {el:en('exp','#e-cliente'),etiqueta:'Aquí le picas',titulo:'Ver con el cliente',texto:'Una pantalla limpia para enseñársela al cliente en la reunión: lo que ya hicimos, lo que sigue, lo que necesitamos de su parte, nuestros acuerdos (los pendientes que no son privados) y, si te toca, su saldo, que puedes ocultar. No enseña notas, minutas ni nada interno.'},
         {antes:pila('doc'),el:en('exp','#xp'),titulo:'Documentos',texto:'Como un explorador: carpetas (una dentro de otra), «Documentos › …» arriba para regresar y el encabezado de cada columna para ordenar (otra vez, al revés). Con la casilla escoges varios.'},
@@ -12313,11 +12350,13 @@ initDB=async function(){await initDB0();oirJust()};
       {el:en('bzt','[data-pes="cancel"]'),titulo:'Cancelaciones de factura',
        texto:'Las solicitudes de cancelación de facturas, aparte y solo para consultar: cada una con su plazo de 3 días hábiles (si el cliente no contesta, se considera aceptada).'},
       {el:en('bzt','#kpis'),etiqueta:'Aquí le picas',titulo:'Cómo va',
-       texto:'Nuevos, asignados a ti, en proceso, cerrados, informativos y lo histórico. Pícale a uno para ver solo esos.'},
+       texto:'Nuevos, con plazo por confirmar, los que vencen en 7 días, asignados a ti, en proceso, cerrados, informativos y lo histórico. Pícale a uno para ver solo esos.'},
+      {el:en('bzt','[data-kpi="confirmar"]'),etiqueta:'Aquí le picas',titulo:'Plazo por confirmar',
+       texto:'Los avisos abiertos a los que todavía no se les confirma la fecha en que quedan notificados (la propone el CRM: el 4.º día hábil después del aviso) ni si llevan plazo. Los confirman Liliana Lechuga o Francisco Rivera; en la lista, cada aviso dice cuándo vence.'},
       {el:en('bzt','.filtros'),titulo:'Buscar y filtrar',
        texto:'Escoge el periodo, el estado, el concepto o a quién se asignó, o busca por cliente, RFC o folio. El Excel y el PDF salen con lo que estás viendo.'},
       {el:en('bzt',d=>{const t=d.getElementById('tbody');return t&&t.closest('.tabla')}),etiqueta:'Aquí le picas',titulo:'Cada aviso',
-       texto:'Pícale a un aviso para ver su ficha: el correo del SAT, su concepto, a quién se asignó, el seguimiento, los documentos (el oficio, el acuse de lo que se contestó) y su bitácora. Quien lo tiene asignado lo cierra con una nota de qué se hizo.'},
+       texto:'Pícale a un aviso para ver su ficha: el correo del SAT, su concepto, cuándo queda notificado y su plazo, a quién se asignó, su camino («Se resuelve contestando» o «Lleva trabajo», con su pendiente), el seguimiento, los documentos (el oficio, el acuse de lo que se contestó) y su bitácora. Quien lo tiene asignado lo cierra con una nota de qué se hizo.'},
       {el:en('bzt',d=>{const c=d.querySelector('#tbody [data-sel]');return c&&c.closest('td')}),etiqueta:'Aquí le picas',titulo:'Varios a la vez',
        texto:'Palomea varios y asígnalos de una vez (a esa persona le llega un solo aviso), márcalos «Solo informativo» (se cierran sin asignar) o cámbiales el concepto.'},
       {el:en('bzt','#b-excel'),etiqueta:'Aquí le picas',titulo:'Cargar mi Excel',

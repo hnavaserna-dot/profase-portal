@@ -172,6 +172,16 @@ tr.click:hover td{background:var(--navy-soft)}
 .cuenta{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 .cuenta div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .cuenta b{display:block;font-family:var(--f-display);font-size:22px}
+/* (202) el plazo y los dos caminos */
+.opciones{display:flex;flex-wrap:wrap;gap:6px 16px}
+.campo .opciones label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;color:var(--ink);cursor:pointer}
+.campo .opciones input{width:auto;padding:0;margin:0;accent-color:var(--navy)}
+.bloque{border-top:1px dashed var(--line);padding-top:10px;display:grid;gap:10px}
+.bloque:first-child{border-top:0;padding-top:0}
+.bloque>.t{font-weight:700;font-size:13.5px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
 @media (max-width:600px){
   .band h1{font-size:22px}
   .campos{grid-template-columns:1fr}
@@ -271,6 +281,28 @@ tr.click:hover td{background:var(--navy-soft)}
     var e = ESTADOS[f.estado] || [f.estado, '']; return chip(e[0], e[1]);
   }
   function cliente(f) { return f.razon || f.rfc; }
+  // (202) el plazo de un aviso abierto: confirmado (con su fecha límite o sin plazo) o por confirmar
+  function abierto(f) { return f.concepto !== 'cancelacion' && ['nuevo', 'asignado', 'proceso'].indexOf(f.estado) >= 0; }
+  function masDias(iso, n) { var d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function fechaCorta(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1]; }
+  function porVencer(f) { return abierto(f) && f.plazo === 'con' && f.vence && f.vence <= masDias(DATOS.hoy, 7); }
+  function plazoChip(f) {
+    if (!abierto(f)) return '';
+    if (f.plazo === 'sin') return chip('Sin plazo');
+    if (f.plazo === 'con' && f.vence) return f.vence < DATOS.hoy ? chip('Venció el ' + fechaCorta(f.vence), 'mal') : chip('Vence el ' + fechaCorta(f.vence), porVencer(f) ? 'ojo' : 'az');
+    return chip('Plazo por confirmar', 'na');
+  }
+  var CAMINOS = { contestar: 'Se resuelve contestando', trabajo: 'Lleva trabajo' };
+  // lo que abre el Inicio o la campanita («ver:<qué>», bzt_pila de 202): el estado de la lista
+  var VER = { nuevos: 'nuevo', confirmar: 'confirmar', porvencer: 'porvencer', abiertos: 'abiertos', cerrados: 'cerrado' };
+  function opcionesCamino(nombre, sel, opcional) {
+    return '<div class="opciones" role="radiogroup">' + (opcional ? '<label><input type="radio" name="' + nombre + '" value=""' + (!sel ? ' checked' : '') + '> Lo decide después</label>' : '')
+      + '<label><input type="radio" name="' + nombre + '" value="contestar"' + (sel === 'contestar' ? ' checked' : '') + '> Se resuelve contestando</label>'
+      + '<label><input type="radio" name="' + nombre + '" value="trabajo"' + (sel === 'trabajo' ? ' checked' : '') + '> Lleva trabajo (le crea un pendiente a quien lo tiene)</label></div>';
+  }
+  function radio(nombre) { var r = document.querySelector('input[name="' + nombre + '"]:checked'); return r ? r.value : ''; }
+  // abrir otro módulo del portal desde este marco (el pendiente en la Agenda)
+  function abreEnPortal(liga, x) { try { var A = window.top.PROFASE_ABRE; if (A && A[liga]) return !!A[liga](x); } catch (e) {} return false; }
   // en la lista, solo quién pide cancelar (el Excel trae el mensaje completo del SAT; completo se ve en la ficha)
   function deQuien(f) { return String(f.detalle || '').split(/\s+solicita\s/i)[0].trim(); }
   var HOY = hoyISO();
@@ -307,7 +339,8 @@ tr.click:hover td{background:var(--navy-soft)}
   /* ---------- la lista ---------- */
   function opcionesFiltros() {
     var est = PES === 'cancel' ? [['', 'Todas'], ['plazo', 'En plazo'], ['vencido', 'Plazo vencido']]
-      : [['', 'Todos los estados'], ['nuevo', 'Nuevos'], ['mios', 'Asignados a mí'], ['asignado', 'Asignados'], ['proceso', 'En proceso'],
+      : [['', 'Todos los estados'], ['abiertos', 'Sin contestar (abiertos)'], ['nuevo', 'Nuevos'], ['confirmar', 'Plazo por confirmar'], ['porvencer', 'Vencen en 7 días o vencidos'],
+         ['mios', 'Asignados a mí'], ['asignado', 'Asignados'], ['proceso', 'En proceso'],
          ['cerrado', 'Cerrados'], ['informativo', 'Informativos'], ['historico', 'Histórico']];
     var v = $('f-estado').value;
     $('f-estado').innerHTML = est.map(function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; }).join('');
@@ -331,7 +364,9 @@ tr.click:hover td{background:var(--navy-soft)}
     var c = DATOS.cuentas || {};
     var L = PES === 'cancel'
       ? [['plazo', 'En plazo', c.cancel_plazo, 'ojo'], ['vencido', 'Plazo vencido', (c.cancel || 0) - (c.cancel_plazo || 0), '']]
-      : [['nuevo', 'Nuevos', c.nuevos, c.nuevos ? 'ojo' : ''], ['mios', 'Asignados a mí', c.mios, ''], ['asignado', 'Asignados', c.asignados, ''],
+      : [['nuevo', 'Nuevos', c.nuevos, c.nuevos ? 'ojo' : ''], ['confirmar', 'Plazo por confirmar', c.confirmar, c.confirmar ? 'ojo' : ''],
+         ['porvencer', 'Vencen en 7 días', c.porvencer, c.porvencer ? 'ojo' : ''],
+         ['mios', 'Asignados a mí', c.mios, ''], ['asignado', 'Asignados', c.asignados, ''],
          ['proceso', 'En proceso', c.proceso, ''], ['cerrado', 'Cerrados', c.cerrados, ''], ['informativo', 'Informativos', c.informativos, ''],
          ['historico', 'Histórico', c.historico, '']];
     $('kpis').innerHTML = L.map(function (k) {
@@ -352,6 +387,9 @@ tr.click:hover td{background:var(--navy-soft)}
         if (est === 'vencido' && f.limite && f.limite >= DATOS.hoy) return false;
       } else {
         if (est === 'mios') { if (f.asignado !== EST.yo || ['asignado', 'proceso'].indexOf(f.estado) < 0) return false; }
+        else if (est === 'confirmar') { if (!abierto(f) || f.plazo) return false; }
+        else if (est === 'abiertos') { if (!abierto(f)) return false; }
+        else if (est === 'porvencer') { if (!porVencer(f)) return false; }
         else if (est && f.estado !== est) return false;
         if (con === '-' && f.concepto) return false;
         if (con && con !== '-' && f.concepto !== con) return false;
@@ -381,7 +419,8 @@ tr.click:hover td{background:var(--navy-soft)}
           ? '<td data-l="De quién">' + esc(deQuien(f)) + '</td><td data-l="Plazo">' + estChip(f) + '</td>'
           : '<td data-l="Concepto">' + (f.concepto_n ? esc(f.concepto_n) : '<span class="mut">Sin concepto</span>') + (f.tipo ? '<div class="mut">' + esc(TIPO[f.tipo] || '') + '</div>' : '') + '</td>'
             + '<td data-l="Asignado a">' + (f.asignado_n ? esc(f.asignado_n) : '<span class="mut">Sin asignar</span>') + '</td>'
-            + '<td data-l="Estado">' + estChip(f) + (f.docs ? ' <span class="mut">· ' + f.docs + (f.docs === 1 ? ' documento' : ' documentos') + '</span>' : '') + '</td>')
+            + '<td data-l="Estado">' + estChip(f) + (f.docs ? ' <span class="mut">· ' + f.docs + (f.docs === 1 ? ' documento' : ' documentos') + '</span>' : '')
+            + (abierto(f) ? '<div style="margin-top:4px">' + plazoChip(f) + (f.camino === 'trabajo' ? ' ' + chip('Lleva trabajo', 'az') : '') + '</div>' : '') + '</td>')
         + '</tr>';
     }).join('');
     $('vacio').hidden = L.length > 0;
@@ -470,6 +509,13 @@ tr.click:hover td{background:var(--navy-soft)}
       + (a.detalle ? '<dt>Del buzón</dt><dd>' + esc(a.detalle) + '</dd>' : '')
       + (a.consulta ? '<dt>Se consultó en el SAT</dt><dd>' + esc(fecha(a.consulta)) + '</dd>' : '')
       + (a.limite ? '<dt>Plazo para contestar</dt><dd>' + esc(fecha(a.limite)) + '</dd>' : '')
+      + (a.concepto !== 'cancelacion' && a.notificado ? '<dt>Queda notificado</dt><dd>' + esc(fecha(a.notificado))
+          + (a.notif_prop ? ' ' + chip('Lo propone el CRM · por confirmar', 'na') + '<div class="mut">El 4.º día hábil después del aviso, si nadie lo abre antes (art. 134-I del CFF).</div>'
+                          : (a.plazo_por ? ' <span class="mut">(lo confirmó ' + esc(a.plazo_por) + ', ' + esc(fh(a.plazo_en)) + ')</span>' : '')) + '</dd>' : '')
+      + (a.concepto !== 'cancelacion' && (a.plazo || abierto(a)) ? '<dt>Plazo</dt><dd>' + (a.plazo === 'con' ? esc('Vence el ' + fecha(a.vence)) + (a.plazo_dias ? ' <span class="mut">(' + a.plazo_dias + ' días hábiles)</span>' : '') + (abierto(a) ? ' ' + plazoChip(a) : '')
+          : a.plazo === 'sin' ? 'Sin plazo' : chip('Por confirmar', 'na')) + '</dd>' : '')
+      + (a.camino ? '<dt>Camino</dt><dd>' + esc(CAMINOS[a.camino] || a.camino)
+          + (a.pendiente && a.pendiente.ve ? ' · <button class="lnk" type="button" id="a-pend">Ver su pendiente</button> <span class="mut">(' + esc({ abierto: 'abierto', proceso: 'en proceso', revision: 'en revisión', hecho: 'hecho', cancelado: 'cancelado' }[a.pendiente.estatus] || a.pendiente.estatus) + ')</span>' : '') + '</dd>' : '')
       + '<dt>Asignado a</dt><dd>' + (a.asignado_n ? esc(a.asignado_n) + (a.asignado_por ? ' <span class="mut">(lo asignó ' + esc(a.asignado_por) + ', ' + esc(fh(a.asignado_en)) + ')</span>' : '') : '<span class="mut">Sin asignar</span>') + '</dd>'
       + (a.cerrado_por ? '<dt>' + (a.estado === 'informativo' ? 'Marcado informativo' : 'Lo cerró') + '</dt><dd>' + esc(a.cerrado_por) + ' · ' + esc(fh(a.cerrado_en)) + (a.nota_cierre ? '<div>' + esc(a.nota_cierre) + '</div>' : '') + '</dd>' : '')
       + (a.observaciones ? '<dt>Observaciones</dt><dd>' + esc(a.observaciones) + '</dd>' : '')
@@ -477,12 +523,28 @@ tr.click:hover td{background:var(--navy-soft)}
     if (a.asunto || a.cuerpo) h.push('<div class="sec"><h3>El correo del SAT</h3><div class="in">' + (a.asunto ? '<div class="t"><b>' + esc(a.asunto) + '</b></div>' : '')
       + (a.cuerpo ? '<div class="correo">' + esc(a.cuerpo) + '</div>' : '') + '<div class="mut">Lo que dice el mensaje se lee en el Buzón Tributario del SAT del cliente.</div></div></div>');
     var acc = [];
-    if (pu.asignar) acc.push('<div class="campo"><label for="a-quien">' + (a.asignado ? 'Reasignar a' : 'Asignar a') + '</label><div id="a-quienBox"></div></div>'
+    if (pu.asignar) acc.push('<div class="bloque"><div class="campo"><label for="a-quien">' + (a.asignado ? 'Reasignar a' : 'Asignar a') + '</label><div id="a-quienBox"></div></div>'
       + '<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
+      + (!a.asignado && a.concepto !== 'cancelacion' ? '<div class="campo"><label>Camino</label>' + opcionesCamino('a-cam0', a.camino, true) + '</div>' : '')
       + '<div class="acciones"><button class="btn acento" type="button" id="a-asigna">' + (a.asignado ? 'Reasignar' : 'Asignar') + '</button>'
-      + (pu.informativo ? '<button class="btn" type="button" id="a-info">Solo informativo (sin asignar)</button>' : '') + '</div>');
+      + (pu.informativo ? '<button class="btn" type="button" id="a-info">Solo informativo (sin asignar)</button>' : '') + '</div></div>');
     else if (pu.clasificar) acc.push('<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
       + '<div class="acciones"><button class="btn" type="button" id="a-guarda-con">Guardar concepto</button></div>');
+    // (202) el plazo: el CRM propone la fecha de notificación; Liliana o Frank la confirman y dicen si lleva plazo
+    if (pu.plazo) acc.push('<div class="bloque" id="a-plazo-box"><div class="t">El plazo</div>'
+      + '<div class="campo"><label for="a-not">Queda notificado el</label><input type="date" id="a-not" value="' + esc(String(a.notificado || a.propuesta || '').slice(0, 10)) + '">'
+      + '<div class="mut">El CRM propone el ' + esc(fecha(a.propuesta)) + ': el 4.º día hábil después del aviso (tres días para abrirlo; si no se abre, se tiene por notificado al cuarto, art. 134-I del CFF). Si se abrió antes, pon ese día.</div></div>'
+      + '<div class="campo"><label>¿Lleva plazo para contestar?</label><div class="opciones" role="radiogroup">'
+      + '<label><input type="radio" name="a-pla" value="con"' + (a.plazo === 'con' ? ' checked' : '') + '> Con plazo</label>'
+      + '<label><input type="radio" name="a-pla" value="sin"' + (a.plazo === 'sin' ? ' checked' : '') + '> Sin plazo</label></div></div>'
+      + '<div class="campos" id="a-conbox"' + (a.plazo === 'con' ? '' : ' hidden') + '>'
+      + '<div class="campo"><label for="a-dias">Días hábiles para contestar</label><input type="number" id="a-dias" min="1" max="120" inputmode="numeric" value="' + (a.plazo_dias || '') + '"></div>'
+      + '<div class="campo"><label for="a-ven">Vence el</label><input type="date" id="a-ven" value="' + esc(String(a.vence || '').slice(0, 10)) + '"></div>'
+      + '<div class="campo ancho mut">Con los días, el CRM calcula la fecha: la notificación surte efectos el día hábil siguiente (art. 135) y el plazo corre desde el que sigue. También puedes poner la fecha tú.</div></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="a-plazo">' + (a.plazo ? 'Guardar el plazo' : 'Confirmar el plazo') + '</button></div></div>');
+    // (202) los dos caminos (ya asignado): Liliana, Frank o quien lo tiene
+    if (pu.camino) acc.push('<div class="bloque"><div class="t">Camino</div><div class="campo">' + opcionesCamino('a-cam', a.camino, false) + '</div>'
+      + '<div class="acciones"><button class="btn" type="button" id="a-camino">Guardar el camino</button></div></div>');
     if (pu.cerrar) acc.push('<div class="campo"><label for="a-cierre">Qué se hizo (para cerrarlo)</label><textarea id="a-cierre" maxlength="2000" placeholder="Por ejemplo: se contestó el requerimiento y se subió el acuse"></textarea></div>'
       + '<div class="acciones"><button class="btn bien" type="button" id="a-cierra">Cerrar el aviso</button></div>');
     if (pu.reabrir) acc.push('<div class="acciones"><button class="btn" type="button" id="a-reabre">Reabrir</button></div>');
@@ -514,9 +576,34 @@ tr.click:hover td{background:var(--navy-soft)}
     function boton(id, fn) { var b = $(id); if (!b) return; b.onclick = async function () { b.disabled = true; try { await fn(); } catch (e) { error(falla(e)); } b.disabled = false; }; }
     boton('a-asigna', async function () {
       var u = bq && bq.valor()[0]; if (!u) throw new Error('Escoge a quién se lo asignas');
-      await rpc('bzt_asigna', { p_ids: [a.id], p_usuario: u, p_concepto: $('a-con').value || null });
-      avisa('Listo: se le avisó a quien se lo asignaste.'); await ficha(a.id); await carga();
+      var cam = $('a-quienBox') && document.querySelector('input[name="a-cam0"]') ? radio('a-cam0') : '';
+      var r = await rpc('bzt_asigna', { p_ids: [a.id], p_usuario: u, p_concepto: $('a-con').value || null, p_camino: cam || null });
+      avisa('Listo: se le avisó a quien se lo asignaste.' + (r && r.pendientes ? ' Lleva trabajo: también quedó en sus Pendientes.' : '')); await ficha(a.id); await carga();
     });
+    // el plazo: con los días, la fecha límite la calcula la base (una sola regla); si alguien la escribe a mano, manda la suya
+    var venceMano = false;
+    function verCon() { var b = $('a-conbox'); if (b) b.hidden = radio('a-pla') !== 'con'; }
+    document.querySelectorAll('input[name="a-pla"]').forEach(function (x) { x.onchange = verCon; });
+    async function calculaVence() {
+      if (!$('a-dias') || venceMano) return;
+      var d = +$('a-dias').value, n = $('a-not').value;
+      if (!n || !(d >= 1 && d <= 120)) return;
+      try { var v = await rpc('bzt_vence_de', { p_notificado: n, p_dias: d }); if (v && !venceMano) $('a-ven').value = String(v).slice(0, 10); } catch (e) {}
+    }
+    if ($('a-dias')) { $('a-dias').oninput = function () { clearTimeout(calculaVence.t); calculaVence.t = setTimeout(calculaVence, 250); }; $('a-not').onchange = function () { venceMano = false; calculaVence(); }; $('a-ven').oninput = function () { venceMano = true; }; }
+    boton('a-plazo', async function () {
+      var pla = radio('a-pla'); if (!pla) throw new Error('Escoge si tiene plazo o no');
+      var d = $('a-dias') ? $('a-dias').value : '';
+      var r = await rpc('bzt_plazo', { p_id: a.id, p: { notificado: $('a-not').value, plazo: pla, dias: pla === 'con' && d ? +d : null,
+                                                       vence: pla === 'con' && venceMano ? $('a-ven').value : (pla === 'con' && !d ? $('a-ven').value : null) } });
+      avisa(pla === 'con' ? 'Listo: vence el ' + fecha(r.vence) + '.' : 'Listo: quedó sin plazo.'); pintaFicha(r); await carga();
+    });
+    boton('a-camino', async function () {
+      var cam = radio('a-cam'); if (!cam) throw new Error('Escoge el camino');
+      await rpc('bzt_camino', { p_ids: [a.id], p_camino: cam });
+      avisa(cam === 'trabajo' ? 'Listo: lleva trabajo y quedó en los Pendientes de quien lo tiene.' : 'Listo: se resuelve contestando.'); await ficha(a.id); await carga();
+    });
+    if ($('a-pend')) $('a-pend').onclick = function () { if (!abreEnPortal('pendientes', String(a.pendiente.id))) error('Abre Agenda › Pendientes para verlo.'); else cierra(); };
     boton('a-info', async function () { await rpc('bzt_informativo', { p_ids: [a.id], p_nota: '' }); avisa('Quedó como informativo.'); await ficha(a.id); await carga(); });
     boton('a-guarda-con', async function () { if (!$('a-con').value) throw new Error('Escoge el concepto'); await rpc('bzt_clasifica', { p_ids: [a.id], p_concepto: $('a-con').value }); await ficha(a.id); await carga(); });
     boton('a-cierra', async function () { var r = await rpc('bzt_cierra', { p_id: a.id, p_nota: $('a-cierre').value }); avisa('Aviso cerrado.'); pintaFicha(r); await carga(); });
@@ -560,6 +647,7 @@ tr.click:hover td{background:var(--navy-soft)}
     pregunta('<h2 id="pq-t">Asignar ' + (n === 1 ? '1 aviso' : n + ' avisos') + '</h2>'
       + '<div class="campo"><label for="m-quien">A quién</label><div id="m-quienBox"></div></div>'
       + '<div class="campo"><label for="m-con">Concepto (opcional)</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
+      + '<div class="campo"><label>Camino</label>' + opcionesCamino('m-cam', '', true) + '</div>'
       + '<div class="mut">A esa persona le llega un solo aviso con todos.</div>'
       + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Asignar</button></div>');
     var bq = window.PROFASE_BUSCA.crea({ donde: $('m-quienBox'), id: 'm-quien', opciones: opcionesPersonas(), valor: [], marcador: 'Escribe parte del nombre', vacio: 'Nadie coincide', sinOpciones: 'Sin personas' });
@@ -568,7 +656,8 @@ tr.click:hover td{background:var(--navy-soft)}
     $('m-ok').onclick = async function () {
       var u = bq.valor()[0]; if (!u) return error('Escoge a quién se los asignas');
       this.disabled = true;
-      try { var r = await rpc('bzt_asigna', { p_ids: ids(), p_usuario: u, p_concepto: $('m-con').value || null }); noPregunta(); SEL = {}; avisa((r.asignados || 0) + ' asignados.'); await carga(); }
+      try { var r = await rpc('bzt_asigna', { p_ids: ids(), p_usuario: u, p_concepto: $('m-con').value || null, p_camino: radio('m-cam') || null }); noPregunta(); SEL = {};
+            avisa((r.asignados || 0) + ' asignados.' + (r.pendientes ? ' ' + r.pendientes + ' llevan trabajo: quedaron en sus Pendientes.' : '')); await carga(); }
       catch (e) { error(falla(e)); this.disabled = false; }
     };
   };
@@ -716,13 +805,16 @@ tr.click:hover td{background:var(--navy-soft)}
     try {
       var L = filtradas(), cancel = PES === 'cancel';
       var titulo = cancel ? 'Cancelaciones de factura' : 'Buzón tributario';
-      var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado'];
+      var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado', 'Queda notificado', 'Plazo', 'Camino'];
       var filas = L.map(function (f) {
         return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, deQuien(f), f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
-          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', f.asignado_n || 'Sin asignar', (ESTADOS[f.estado] || [f.estado])[0]];
+          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', f.asignado_n || 'Sin asignar', (ESTADOS[f.estado] || [f.estado])[0],
+             f.notificado ? fecha(f.notificado) + (f.notif_prop ? ' (propuesta)' : '') : '',
+             f.plazo === 'con' ? 'Vence el ' + fecha(f.vence) : f.plazo === 'sin' ? 'Sin plazo' : abierto(f) ? 'Por confirmar' : '',
+             CAMINOS[f.camino] || ''];
       });
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
-      ws.columns = (cancel ? [13, 40, 26, 16, 36, 22] : [13, 40, 26, 16, 18, 30, 18, 26, 14]).map(function (w) { return { width: w }; });
+      ws.columns = (cancel ? [13, 40, 26, 16, 36, 22] : [13, 40, 26, 16, 18, 30, 18, 26, 14, 20, 20, 24]).map(function (w) { return { width: w }; });
       var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Del ' + fecha(DATOS.desde) + ' al ' + fecha(DATOS.hasta) + ' · ' + L.length + ' avisos', 'Exportado el ' + fh(new Date())] });
       ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
       filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
@@ -751,9 +843,10 @@ tr.click:hover td{background:var(--navy-soft)}
       // las cancelaciones (3 de cada 4 avisos, solo para consultar) abren con el último mes
       var d30 = new Date(HOY + 'T12:00:00Z'); d30.setUTCDate(d30.getUTCDate() - 30);
       FECHAS = { avisos: [$('f-desde').value, HOY], cancel: [d30.toISOString().slice(0, 10), HOY] };
-      if (q.get('ver') === 'nuevos') $('f-estado').value = 'nuevo';
+      var verQ = VER[q.get('ver')] || '';
+      if (verQ) $('f-estado').value = verQ;
       await carga();
-      if (q.get('ver') === 'nuevos') { $('f-estado').value = 'nuevo'; pinta(); }
+      if (verQ) { $('f-estado').value = verQ; pinta(); }
       $('cargando').hidden = true; $('principal').hidden = false;
       var id = +(q.get('id') || 0);
       if (id > 0) ficha(id);
@@ -761,7 +854,12 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
   window.__bztAbre = function (x) {
-    if (x === 'ver:nuevos') { $('f-estado').value = 'nuevo'; document.querySelector('[data-pes="avisos"]').click(); return; }
+    var v = VER[String(x || '').replace(/^ver:/, '')];
+    if (/^ver:/.test(String(x || '')) && v) {
+      document.querySelector('[data-pes="avisos"]').click();
+      var t = 0, espera = function () { if (PES === 'avisos' && DATOS && $('f-estado').querySelector('option[value="' + v + '"]')) { $('f-estado').value = v; VISTAS = 50; pinta(); } else if (t++ < 40) setTimeout(espera, 100); };
+      espera(); return;
+    }
     var n = +x; if (n > 0) ficha(n);
   };
   // al volver a la pestaña, lo último (bzt_tab.js manda el aviso; sin relojes)

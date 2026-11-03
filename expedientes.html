@@ -263,6 +263,9 @@ details.cv-det[open]>summary::before{content:"▾ "}
 .cx-tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:12px 14px}
 .cx-tot .kpi{padding:8px 12px}
 .cx-tot .kpi .v{font-size:20px}
+.bz-de{padding:0 14px 6px}
+.bz-de .cx-cia{padding:10px 0 0}
+.bz-de .linea{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .cx-cia{font-family:var(--f-display);font-size:15px;font-weight:700;padding:10px 14px 0}
 .chip.r2{background:var(--amber-soft);color:var(--amber)}
 .chip.r3{background:var(--red-soft);color:var(--red)}
@@ -664,6 +667,7 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       + '<span>Estatus</span><span>' + estChip(x.estatus) + (x.terminado ? ' <span class="mut">' + esc(x.terminado_n) + ', ' + esc(cuandoTs(x.terminado)) + '</span>' : '') + '</span>'
       + (x.nota ? '<span>Salió de</span><span><button class="lnk" type="button" id="p-nota">La nota «' + esc(x.nota.titulo || 'sin título') + '» del ' + esc(fecha(x.nota.fecha)) + '</button></span>' : '')
       + (x.origen === 'access' ? '<span>Salió de</span><span>Tareas y proyectos del Access</span>' : '')
+      + (x.origen === 'oficio' && x.origen_id ? '<span>Salió de</span><span><button class="lnk" type="button" id="p-aviso">Un aviso del Buzón tributario</button> <span class="mut">(al darlo por hecho, el aviso se cierra)</span></span>' : '')
       + (x.privado ? '<span>Quién lo ve</span><span>Solo los involucrados y la dirección</span>' : '')
       + '</div>' + (x.detalle ? '<div class="texto" style="margin-top:10px">' + esc(x.detalle) + '</div>' : '') + '</div></div>'
       + (acc ? '<div class="acciones">' + acc + '</div>' : '')
@@ -686,6 +690,7 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
     });
     if ($('p-edit')) $('p-edit').onclick = function () { formPend(x); };
     if ($('p-nota')) $('p-nota').onclick = function () { abreExp(x.g, null, x.pr); cierra(); };
+    if ($('p-aviso')) $('p-aviso').onclick = function () { cierra(); abreBz(x.origen_id); };
     $('p-comenta').onclick = async function () {
       var t = $('p-com').value.trim(); if (!t) { $('p-com').focus(); return; }
       this.disabled = true;
@@ -1187,9 +1192,11 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       var r = await Promise.all([
         rpc('pend_lista', { p: ACT.pr ? { vista: 'prospecto', prospecto: ACT.pr, estatus: ACT.verHechos ? 'todos' : 'abiertos' } : { vista: 'cliente', grupo: ACT.g, empresa: ACT.e, estatus: ACT.verHechos ? 'todos' : 'abiertos' } }),
         ACT.pr ? null : rpc('expc_avance', { p_grupo: ACT.g, p_empresa: ACT.e }).catch(function () { return { falla: true }; }),
-        ACT.pr ? null : rpc('expc_cobro', { p_grupo: ACT.g, p_empresa: ACT.e }).catch(function () { return { ve: false }; })
+        ACT.pr ? null : rpc('expc_cobro', { p_grupo: ACT.g, p_empresa: ACT.e }).catch(function () { return { ve: false }; }),
+        // (202) los avisos del SAT de este cliente (el espejo del Buzón tributario): solo lo que esa persona ya ve
+        ACT.pr ? null : rpc('bzt_expediente', { p_grupo: ACT.g, p_empresa: ACT.e }).catch(function () { return { ve: false }; })
       ]);
-      ACT.av = r[1]; ACT.cx = r[2];
+      ACT.av = r[1]; ACT.cx = r[2]; ACT.bz = r[3];
       if (ACT.av && !ACT.av.falla && (!ACT.mes || !(ACT.av.meses || []).some(function (m) { return m.p === ACT.mes; }))) ACT.mes = ((ACT.av.meses || [])[0] || {}).p || null;
       // lo escogido que ya no esté (se movió, se quitó o es de otra razón social) se suelta
       Object.keys(XP.sel).forEach(function (k) { if (!xpObj(k)) delete XP.sel[k]; });
@@ -1242,12 +1249,13 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
   }
 
   /* ---------- Las pilas: cada una resume su sección; al picarla, abajo sale solo esa sección ---------- */
-  var SECS = [['av', 'Cómo vamos'], ['cx', 'Por cobrar'], ['pe', 'Pendientes'], ['re', 'Reuniones'], ['no', 'Notas y minutas'], ['doc', 'Documentos'], ['rs', 'Razones sociales']];
+  var SECS = [['av', 'Cómo vamos'], ['cx', 'Por cobrar'], ['pe', 'Pendientes'], ['bz', 'Buzón SAT'], ['re', 'Reuniones'], ['no', 'Notas y minutas'], ['doc', 'Documentos'], ['rs', 'Razones sociales']];
   function secsDe(f) {
     var pr = ACT.pr;
     return SECS.filter(function (s) {
       if (pr) return ['pe', 're', 'no', 'doc'].indexOf(s[0]) >= 0;
       if (s[0] === 'cx') return !!(ACT.cx && ACT.cx.ve);
+      if (s[0] === 'bz') return !!(ACT.bz && ACT.bz.ve);   // (202) a quien ve el Buzón tributario
       return true;
     });
   }
@@ -1270,6 +1278,14 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
     if (k === 'pe') {
       var ab = abiertosDe(pe), venc = ab.filter(function (x) { return x.vence && dias(x.vence) < 0 && x.estatus !== 'revision'; }).length;
       return { v: String(ab.length), s: venc ? plural(venc, 'vencido', 'vencidos') : ab.length ? 'Ninguno vencido' : 'Sin pendientes abiertos', c: venc ? 'mal' : '' };
+    }
+    if (k === 'bz') {   // (202) cuántos avisos del SAT le llegan y cómo van
+      var bc = ACT.bz.cuentas || {};
+      return { v: String(bc.anio || 0), s: bc.vencidos ? plural(bc.vencidos, 'vencido sin cerrar', 'vencidos sin cerrar')
+                 : bc.porvencer ? plural(bc.porvencer, 'vence en 7 días', 'vencen en 7 días')
+                 : bc.abiertos ? plural(bc.abiertos, 'sin contestar', 'sin contestar')
+                 : (bc.anio ? 'Este año · todos contestados' : 'Ningún aviso este año'),
+               c: bc.vencidos ? 'mal' : (bc.porvencer || bc.confirmar) ? 'ojo' : '' };
     }
     if (k === 're') {
       var prox = f.reuniones.filter(function (r) { return !r.paso && r.estado !== 'cancelada'; }).reverse()[0];
@@ -1383,6 +1399,7 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       if ($('e-pend')) $('e-pend').onclick = function () { formPend(null, ctx); };
       ligaPends(el); return;
     }
+    if (k === 'bz') { el.innerHTML = bzTarjeta(ACT.bz); ligaBz(el); return; }
     if (k === 're') {
       var prox = f.reuniones.filter(function (r) { return !r.paso && r.estado !== 'cancelada'; }).reverse(), pas = f.reuniones.filter(function (r) { return r.paso || r.estado === 'cancelada'; });
       var rc = f.reu_cuenta || {};
@@ -1985,6 +2002,50 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
     return h + '</div>';
   }
   function cxNombre(cx, c) { var x = (cx.companias || []).filter(function (k) { return k.id === c; })[0]; return x ? x.nombre : ''; }
+  /* ---------- (202) Buzón SAT: el espejo del Buzón tributario en el expediente (Héctor Daniel Nava, 3-nov-2026: «quiero que
+     esto lo "espejees" en expediente cliente, es importante también ver cuántos avisos le llegan y de qué se trata»).
+     Cuántos le llegan (este año, en 12 meses y las cancelaciones de factura aparte), de qué tratan y los abiertos con su
+     plazo; al picar uno, se abre en Clientes › Buzón tributario. Solo lo que esa persona ya ve (bzt_expediente). */
+  var BZ_EST = { nuevo: ['Nuevo', 'na'], asignado: ['Asignado', 'az'], proceso: ['En proceso', 'ojo'], cerrado: ['Contestado', 'ok'],
+                 informativo: ['Informativo', ''], historico: ['Histórico', ''] };
+  function bzAbierto(x) { return ['nuevo', 'asignado', 'proceso'].indexOf(x.estado) >= 0; }
+  function bzPlazo(x) {
+    if (!bzAbierto(x)) return '';
+    if (x.plazo === 'sin') return chip('Sin plazo');
+    if (x.plazo === 'con' && x.vence) { var d = dias(x.vence); return d < 0 ? chip('Venció el ' + fecha(x.vence), 'mal') : chip('Vence el ' + fecha(x.vence), d <= 7 ? 'ojo' : 'az'); }
+    return chip('Plazo por confirmar', 'na');
+  }
+  function bzTarjeta(bz) {
+    var c = bz.cuentas || {}, F = bz.filas || [];
+    var k = function (l, v, s, cl) { return '<div class="kpi"><div class="l">' + esc(l) + '</div><div class="v' + (cl ? ' ' + cl : '') + '">' + esc(String(v || 0)) + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>'; };
+    return '<div class="card" id="bz-card"><header><div><h2>Buzón SAT</h2><div class="sub">Los avisos que manda el SAT al buzón tributario de este cliente, como en Clientes › Buzón tributario.</div></div>'
+      + '<div class="acciones"><button class="btn chico" type="button" id="bz-abre">Abrir el Buzón tributario</button></div></header>'
+      + '<div class="cx-tot">' + k('Este año', c.anio, 'Avisos (sin las cancelaciones)') + k('Sin contestar', c.abiertos, c.confirmar ? plural(c.confirmar, 'con plazo por confirmar', 'con plazo por confirmar') : 'Abiertos')
+      + k('Vencen en 7 días', c.porvencer, c.vencidos ? plural(c.vencidos, 'ya venció', 'ya vencieron') : 'Con plazo', c.vencidos ? 'neg' : '')
+      + k('Cancelaciones de factura', c.cancel, 'En los últimos 12 meses') + '</div>'
+      + ((bz.conceptos || []).length ? '<div class="bz-de"><div class="cx-cia">De qué tratan · últimos 12 meses</div><div class="linea">'
+          + bz.conceptos.map(function (x) { return chip(x.t + ' · ' + x.n, 'az'); }).join(' ') + '</div></div>' : '')
+      + '<div class="cx-cia">Los avisos · los abiertos y los de los últimos 12 meses</div>'
+      + '<ul class="lista" id="bz-lista">' + (F.map(function (x) {
+          var e = BZ_EST[x.estado] || [x.estado, ''];
+          return '<li class="click" tabindex="0" data-bz="' + x.id + '"><div class="t">' + esc(x.concepto_n || 'Aviso del SAT') + (bz.varias ? ' <span class="mut">· ' + esc(x.razon || x.rfc) + '</span>' : '') + '</div>'
+            + '<div class="linea"><span class="mut">' + esc(fecha(x.fecha)) + '</span>' + chip(e[0], e[1]) + bzPlazo(x)
+            + (x.camino === 'trabajo' && bzAbierto(x) ? chip('Lleva trabajo', 'az') : '')
+            + (x.asignado_n ? '<span class="mut">' + esc((bzAbierto(x) ? 'Lo tiene ' : 'Lo tuvo ') + x.asignado_n) + '</span>' : bzAbierto(x) ? '<span class="mut">Sin asignar</span>' : '')
+            + (x.docs ? '<span class="mut">· ' + plural(x.docs, 'documento', 'documentos') + '</span>' : '') + '</div></li>';
+        }).join('') || '<li class="vacio">No le ha llegado ningún aviso en los últimos 12 meses.</li>') + '</ul></div>';
+  }
+  function abreBz(id) {
+    try { var A = window.top.PROFASE_ABRE; if (A && A.buzon && A.buzon(id ? String(id) : '')) return; } catch (e) {}
+    error('Abre Clientes › Buzón tributario para verlo.');
+  }
+  function ligaBz(el) {
+    if ($('bz-abre')) $('bz-abre').onclick = function () { abreBz(null); };
+    el.querySelectorAll('[data-bz]').forEach(function (li) {
+      li.onclick = function () { abreBz(li.getAttribute('data-bz')); };
+      li.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abreBz(li.getAttribute('data-bz')); } };
+    });
+  }
   function cxTotales(cx) {
     var dos = (cx.companias || []).length > 1;
     return (cx.companias || []).map(function (c) {
