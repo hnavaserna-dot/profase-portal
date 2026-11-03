@@ -154,6 +154,8 @@
     try { if (window.PORTAL && PORTAL.escribiendo) PORTAL.escribiendo('vista-previa', true); } catch (e) {}
     f.src = MOTOR + '?t=' + token();
     area.appendChild(f);
+    // si el motor no contesta (sin internet, o la dirección no abre), lo dice en lugar de quedarse cargando
+    setTimeout(function () { if (abierta && !hola && w.parentNode) estado('No se pudo abrir la vista previa (no contestó). Revisa tu conexión y vuelve a intentarlo.', true); }, 45000);
     w.querySelector('[data-vp="cierra"]').focus();
     paquete(sb, v.ruta).then(function (b) { buf = b; estado('Abriendo la vista previa (la primera vez tarda unos segundos)…'); manda(); },
       function (err) { estado(err && err.message ? err.message : 'No se pudo bajar la vista previa.', true); });
