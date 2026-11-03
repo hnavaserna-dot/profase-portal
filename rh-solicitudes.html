@@ -370,6 +370,9 @@ tr.click:hover td{background:var(--navy-soft)}
     var s = (L || []).map(function (d) { var p = String(d).slice(0, 10).split('-'); return (+p[2]) + ' de ' + MESES_L[+p[1] - 1]; });
     return !s.length ? '' : s.length === 1 ? 'El sábado ' + s[0] : 'Los sábados ' + s.slice(0, -1).join(', ') + ' y ' + s[s.length - 1];
   }
+  /* 189: un permiso de solo un sábado (o sábados) va de medio día cada uno (la base lo manda en solo_sabados) */
+  function durTxt(x) { var L = x.solo_sabados || []; return L.length ? (L.length === 1 ? 'Medio día (sábado)' : L.length + ' sábados, medio día cada uno') : dias(x.dias); }
+  function durEtq(x) { return (x.solo_sabados || []).length ? 'Duración' : 'Días hábiles'; }
   function sabVa(L, si) { var uno = (L || []).length === 1; return si ? (uno ? 'va como permiso con goce (no se descuenta)' : 'van como permiso con goce (no se descuentan)') : (uno ? 'no va como permiso' : 'no van como permiso'); }
   function alCorriente(e) {
     if (!e) return '<span class="mut">Sin datos del WorkFlow.</span>';
@@ -420,7 +423,7 @@ tr.click:hover td{background:var(--navy-soft)}
       return '<tr class="click" data-i="' + i + '"><td class="w" data-l="Qué pediste"><div class="rs">' + esc(TIPO_CORTO[x.tipo] || x.tipo) + '</div><div class="mut">'
         + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : rango(x.desde, x.hasta)) + '</div>'
         + ((x.sabados || []).length && x.sabado === 'si' ? '<div class="mut">' + esc(sabTxt(x.sabados)) + ': permiso</div>' : '') + '</td>'
-        + '<td data-l="Días">' + (x.tipo === 'prestamo' ? '<span class="mut">—</span>' : esc(dias(x.dias))) + '</td>'
+        + '<td data-l="Días">' + (x.tipo === 'prestamo' ? '<span class="mut">—</span>' : esc(durTxt(x))) + '</td>'
         + '<td data-l="La pediste">' + esc(dia(x.creado)) + '</td>'
         + '<td data-l="Cómo va">' + chip(x.estado, EST_CHIP[x.estado]) + '</td>'
         + '<td data-l="">' + (x.cancelable && !CONSULTA ? '<button class="btn chico peligro" type="button" data-can="' + i + '">Cancelar</button>' : '') + '</td></tr>';
@@ -455,7 +458,7 @@ tr.click:hover td{background:var(--navy-soft)}
       '<div class="sec"><h3>Tu solicitud</h3><div class="in"><div class="dl">'
       + (x.tipo === 'prestamo'
         ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
-        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>'
+        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>' + esc(durEtq(x)) + '</span><span>' + esc(durTxt(x)) + '</span>'
           + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : '')
           + sabMia(x))
       + (x.nota ? '<span>Lo que escribiste</span><span>' + esc(x.nota) + '</span>' : '')
@@ -523,12 +526,17 @@ tr.click:hover td{background:var(--navy-soft)}
           var mi = ++tc, n = null, sab = [];
           try { var rd = await rpc('rh_sol_dias', { p_desde: a, p_hasta: b, p_detalle: true }); n = rd ? rd.dias : null; sab = (rd && rd.sabados) || []; } catch (e) {}
           if (mi !== tc) return;
-          if (t === 'vacaciones' && sab.length) {
+          if (t === 'vacaciones' && sab.length && n > 0) {
             $('n-sab').textContent = sabTxt(sab) + ' (medio día) no se descuenta de tus vacaciones: ' + (sab.length === 1 ? 'va' : 'van') + ' como permiso con goce si tienes tus actividades al corriente. '
               + ((MIAS && MIAS.con_gerentes) ? 'Lo decide tu gerente.' : 'Lo decide RH.');
             $('n-sab').hidden = false;
           }
-          $('n-dias').textContent = n == null ? ' ' : n + (n === 1 ? ' día hábil' : ' días hábiles') + ' (de lunes a viernes, sin los días de descanso obligatorio)';
+          // 189: un permiso de solo un sábado (o sábados) va de medio día cada uno; unas vacaciones nunca descuentan el sábado
+          var solo = n === 0 ? sab.filter(function (d) { return String(d).slice(0, 10) <= b; }) : [];
+          if (solo.length && (t === 'permiso_goce' || t === 'permiso_sin'))
+            $('n-dias').textContent = solo.length === 1 ? 'Medio día: ' + sabTxt(solo).replace(/^El/, 'el') : solo.length + ' sábados, medio día cada uno';
+          else $('n-dias').textContent = n == null ? ' ' : n + (n === 1 ? ' día hábil' : ' días hábiles') + ' (de lunes a viernes, sin los días de descanso obligatorio)';
+          if (solo.length && t === 'vacaciones') { $('n-ojo').textContent = 'El sábado no se descuenta de tus vacaciones: si solo necesitas el sábado, pídelo como permiso.'; $('n-ojo').hidden = false; }
           if (t === 'vacaciones' && n != null && !v.pendiente && n > Number(v.disponibles || 0)) {
             $('n-ojo').textContent = 'Te quedan ' + dias(v.disponibles) + '. Puedes pedirlas, pero RH lo va a revisar.'; $('n-ojo').hidden = false;
           }
@@ -581,7 +589,7 @@ tr.click:hover td{background:var(--navy-soft)}
           + (CONSULTA ? '' : '<div class="acc">' + (x.pendiente ? '<button class="btn" type="button" data-ent="' + i + '">Enterado</button>' : '') + '<button class="btn" type="button" data-com="' + i + '">Dejar comentario a RH</button></div>');
       } else {
         var e = x.entregas || null, f = x.fuera || [];
-        h += '<div class="det"><b>' + esc(TIPOS[x.tipo] || x.tipo) + '</b>, ' + esc(rango(x.desde, x.hasta)) + ' · ' + esc(dias(x.dias)) + (x.cubre ? '<br><span class="mut">Mientras, buscar a: ' + esc(x.cubre) + '</span>' : '') + (x.nota ? '<br><span class="mut">Nota: ' + esc(x.nota) + '</span>' : '') + '</div>'
+        h += '<div class="det"><b>' + esc(TIPOS[x.tipo] || x.tipo) + '</b>, ' + esc(rango(x.desde, x.hasta)) + ' · ' + esc(durTxt(x)) + (x.cubre ? '<br><span class="mut">Mientras, buscar a: ' + esc(x.cubre) + '</span>' : '') + (x.nota ? '<br><span class="mut">Nota: ' + esc(x.nota) + '</span>' : '') + '</div>'
           + '<div class="ctx"><div><b>Esos días también estarán fuera</b>' + (f.length ? f.map(function (o) { return esc(o.nombre) + ' · ' + esc(o.tipo) + ', ' + esc(fecha(o.desde)) + (o.hasta !== o.desde ? ' al ' + esc(fecha(o.hasta)) : '') + (o.estado === 'En revisión' ? ' <span class="mut">(en revisión)</span>' : ''); }).join('<br>') : 'Nadie más de tu equipo.') + '</div>'
           + '<div><b>Sus entregas del WorkFlow</b>' + (e ? esc(e.abiertas) + ' abiertas · ' + '<span' + (e.vencidas ? ' class="neg"' : '') + '>' + esc(e.vencidas) + ' vencidas</span> · ' + esc(e.en_fechas) + ' vencen esos días' : 'Sin datos del WorkFlow.') + '</div>'
           + ((x.otros || []).length ? '<div><b>También la decide</b>' + x.otros.map(function (o) { return esc(o.nombre) + ': ' + esc(o.estado); }).join('<br>') + '</div>' : '') + '</div>'
@@ -684,7 +692,7 @@ tr.click:hover td{background:var(--navy-soft)}
     $('r-lista').innerHTML = V.length ? V.map(function (x) {
       return '<tr class="click" data-i="' + L.indexOf(x) + '"><td class="w" data-l="Quién"><div class="rs">' + esc(x.nombre) + '</div></td>'
         + '<td data-l="Qué pidió">' + esc(TIPO_CORTO[x.tipo] || x.tipo) + (x.tipo === 'prestamo' ? '' : '<div class="mut">' + esc(rango(x.desde, x.hasta)) + '</div>') + '</td>'
-        + '<td data-l="Días o monto">' + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : dias(x.dias)) + '</td>'
+        + '<td data-l="Días o monto">' + esc(x.tipo === 'prestamo' ? dinero(x.monto) + ' en ' + pagos(x) : durTxt(x)) + '</td>'
         + '<td data-l="La pidió">' + esc(dia(x.creado)) + '</td><td data-l="Dónde va">' + dondeVa(x) + '</td>'
         + '<td data-l=""><button class="btn chico" type="button">' + (x.decido ? 'Decidir' : x.hablo_yo ? 'Ya hablé' : 'Ver') + '</button></td></tr>';
     }).join('') : '<tr><td class="vacio" colspan="6">' + (RT === 'dec' ? 'No hay nada por decidir.' : RT === 'hab' ? 'No hay pláticas pendientes.' : 'Nada por aquí.') + '</td></tr>';
@@ -730,7 +738,7 @@ tr.click:hover td{background:var(--navy-soft)}
     var c = '<div class="sec"><h3>Lo que pidió</h3><div class="in"><div class="dl">'
       + (x.tipo === 'prestamo'
         ? '<span>Monto</span><span>' + dinero(x.monto) + '</span><span>Descuentos</span><span>' + esc(pagos(x)) + ', desde la nómina del ' + esc(fecha(x.primer_pago)) + '</span>'
-        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>Días hábiles</span><span>' + esc(dias(x.dias)) + '</span>' + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : '')
+        : '<span>Fechas</span><span>' + esc(rango(x.desde, x.hasta)) + '</span><span>' + esc(durEtq(x)) + '</span><span>' + esc(durTxt(x)) + '</span>' + (x.cubre ? '<span>Mientras, buscar a</span><span>' + esc(x.cubre) + '</span>' : '')
           + sabRh(x))
       + '<span>Dónde va</span><span>' + dondeVa(x) + '</span></div></div></div>'
       + '<div class="sec"><h3>Cómo ha ido</h3><div class="in">' + linea(x) + '</div></div>'
