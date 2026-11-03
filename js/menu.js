@@ -90,10 +90,11 @@
       { k: 'eventos', v: 'evt', t: 'Eventos PROFASE', d: 'La posada y los festejos del despacho: confirma tu asistencia, en lista o en calendario.' },
       { k: 'notificaciones', v: 'ntf', t: 'Notificaciones', d: 'Avisos para ti y para todos.' }] },   // las de cada quien y las de todos (29-oct-2026, pedido de Daniel)
     // Clientes (31-oct-2026): la ficha de cada cliente y lo del SAT, juntos
-    { k: 'clis', t: 'Clientes', d: 'El expediente y la ficha de cada cliente, sus claves del SAT y la renovación de e.firma y sellos.', subs: [
+    { k: 'clis', t: 'Clientes', d: 'El expediente y la ficha de cada cliente, sus claves del SAT, la renovación de e.firma y sellos y los avisos de su buzón tributario.', subs: [
       { k: 'expedientes', v: 'exp', t: 'Expedientes', d: 'Cada cliente por grupo y razón social: cómo vamos, pendientes, reuniones, notas y documentos en carpetas.' },   // 31-oct-2026, pedido de Daniel (112_expedientes.sql); 3-nov-2026, carpetas (188)
       { k: 'base-clientes', v: 'bcli', t: 'Base de clientes', d: 'La ficha de cada cliente: datos, contactos, servicios y precios.' },   // etapa 4 del Access (29-oct-2026); antes en Administración
-      { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' }] },   // antes Access › Clientes
+      { k: 'access-clientes', v: 'axcli', t: 'Claves SAT y renovaciones', d: 'Contraseñas y archivos del SAT de tus clientes y la e.firma y sellos por vencer.' },   // antes Access › Clientes
+      { k: 'buzon', v: 'bzt', t: 'Buzón tributario', d: 'Los avisos del SAT del buzón de cada cliente: quién lo tiene, en qué va y quién lo cerró.' }] },   // 3-nov-2026, pedido de Fernando Cadengo (195_buzon_tributario.sql)
     // Chat interno (30-oct-2026, pedido de Daniel): cada quien ve solo sus conversaciones
     { k: 'msj', t: 'Chat', d: 'Mensajes y archivos con el equipo, 1 a 1 y en grupos.', subs: [
       { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' },

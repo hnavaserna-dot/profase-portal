@@ -1,0 +1,743 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Buzón tributario</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=dc0b49b86b"></script><script src="js/buscador.js?v=3399471b0c"></script>
+<style>
+/* Portal PROFASE · Clientes › Buzón tributario (3-nov-2026, pedido de Fernando Cadengo; portal/sql/195_buzon_tributario.sql).
+   El concentrado de los avisos que manda el SAT a sat@profase.com.mx («Nuevo mensaje en el Buzón Tributario de <RFC>»):
+     - Liliana Lechuga recibe el aviso de lo nuevo y, con Francisco Rivera, asigna cada aviso a quien corresponde (uno o
+       varios a la vez) o lo cierra como «Solo informativo». Quien lo tiene asignado le da seguimiento (notas, documentos)
+       y lo cierra con nota de qué se hizo.
+     - Quién ve qué lo decide la base (bzt_lista, bzt_ficha): la dirección y los gerentes, todo; Liliana y Frank, todo;
+       cada contador, los de sus clientes y lo que le asignen. Los clientes que atiende solo la otra compañía, solo la
+       dirección, Frank y Liliana (y a quien se le asigna, solo ese aviso).
+     - «Cancelaciones de factura» van en su pestaña, solo para consultar, con su plazo de 3 días hábiles.
+     - «Cargar mi Excel» (Liliana y Frank): su Excel de siempre entra como «Histórico», sin repetir (por su índice).
+   Todo por las funciones bzt_*; la página nunca lee las tablas. Los documentos van a la cubeta privada «buzon». */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .logo{height:40px;width:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabs button:focus-visible,.kpi:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:0 0 14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.kpi:hover{border-color:var(--navy)}
+.kpi[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.kpi .l{display:block;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{display:block;font-family:var(--f-display);font-size:24px;font-weight:750}
+.kpi.ojo .v{color:var(--accent-ink)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros label{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:240px}
+.seleccion{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;background:var(--navy-soft);border-bottom:1px solid var(--line);font-size:13px}
+.tabla{overflow-x:auto;position:relative}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:top}
+td.chk,th.chk{width:34px;padding-right:0}
+td.chk input,th.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.nowrap{white-space:nowrap}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:center;border-top:1px solid var(--line)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(680px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px;display:grid;gap:10px}
+.dl{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:6px 12px;font-size:13.5px}
+.dl dt{color:var(--muted);font-weight:600;font-size:12.5px}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.correo{white-space:pre-wrap;font-size:13px;background:var(--surface-2);border-radius:8px;padding:10px 12px;max-height:280px;overflow:auto;overflow-wrap:anywhere}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.lista{list-style:none;margin:0;padding:0}
+.lista li{padding:8px 0;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600;overflow-wrap:anywhere}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h2{font-size:20px;font-weight:750}
+.pregunta .pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.cuenta{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.cuenta div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.cuenta b{display:block;font-family:var(--f-display);font-size:22px}
+@media (max-width:600px){
+  .band h1{font-size:22px}
+  .campos{grid-template-columns:1fr}
+  .dl{grid-template-columns:1fr}
+  .filtros input[type="search"]{width:100%}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .kpi{padding:8px 10px}
+  .kpi .l{font-size:10.5px;letter-spacing:.02em}
+  .kpi .v{font-size:20px}
+  .campo input,.campo select,.campo textarea,.filtros select,.filtros input{font-size:16px}
+}
+/* la lista como tarjetas en el celular y el iPad parado (así no se corta el estado a la derecha) */
+@media (max-width:820px){
+  table.resp thead{display:none}
+  table.resp,table.resp tbody,table.resp tr,table.resp td{display:block;width:100%}
+  table.resp tr{border-top:1px solid var(--line);padding:8px 44px 8px 10px;position:relative}
+  table.resp td{border:0;padding:2px 0}
+  table.resp td.chk{position:absolute;right:10px;top:10px;width:auto}
+  table.resp td[data-l]::before{content:attr(data-l) " · ";color:var(--muted);font-size:12px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Clientes</div>
+      <h1>Buzón tributario</h1>
+      <p>Los avisos del SAT que llegan al buzón de cada cliente: quién lo tiene, en qué va y quién lo cerró.</p>
+    </div>
+  </div>
+  <div class="acts"><button class="btn" type="button" id="b-excel" hidden>Cargar mi Excel</button></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota info" id="sin-correo" hidden>Los correos de sat@ todavía no entran solos al CRM: se está terminando de conectar el buzón. Mientras, lo de antes entra con «Cargar mi Excel».</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <section id="principal" hidden>
+    <div class="tabs" role="tablist" aria-label="Buzón tributario">
+      <button type="button" role="tab" data-pes="avisos" aria-selected="true">Avisos del SAT <span class="cta" id="n-avisos">0</span></button>
+      <button type="button" role="tab" data-pes="cancel" aria-selected="false">Cancelaciones de factura <span class="cta" id="n-cancel">0</span></button>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <header><div><h2 id="h-lista">Avisos del SAT</h2><div class="sub" id="lista-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-lista">Excel</button></div></header>
+      <div class="filtros">
+        <label>Del <input type="date" id="f-desde"></label>
+        <label>al <input type="date" id="f-hasta"></label>
+        <select id="f-estado" aria-label="Estado"></select>
+        <select id="f-concepto" aria-label="Concepto"></select>
+        <select id="f-asignado" aria-label="Asignado a"></select>
+        <input type="search" id="f-texto" placeholder="Buscar cliente, RFC o folio" aria-label="Buscar">
+      </div>
+      <div class="seleccion" id="seleccion" hidden>
+        <span id="sel-n">0 seleccionados</span>
+        <button class="btn chico acento" type="button" id="sel-asigna">Asignar</button>
+        <button class="btn chico" type="button" id="sel-info">Solo informativo</button>
+        <button class="btn chico" type="button" id="sel-concepto">Cambiar concepto</button>
+        <button class="btn chico" type="button" id="sel-limpia">Quitar selección</button>
+      </div>
+      <div class="tabla"><table class="resp"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+      <div class="vacio" id="vacio" hidden>No hay avisos con estos filtros.</div>
+      <div class="mas" id="mas" hidden><span class="mut" id="mas-t"></span><button class="btn chico" type="button" id="b-mas">Ver más</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div id="pq"></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var EST = null, CONSULTA = false, DATOS = null, PES = 'avisos', KPI = '', FILAS = [], VISTAS = 50, SEL = {}, ABIERTO = null, V = null, DOCS = {};
+  var ESTADOS = { nuevo: ['Nuevo', 'na'], asignado: ['Asignado', 'az'], proceso: ['En proceso', 'ojo'], cerrado: ['Cerrado', 'ok'],
+                  informativo: ['Informativo', ''], historico: ['Histórico', ''] };
+  var TIPO = { mensaje: 'Mensaje', acto: 'Acto administrativo' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fh(s) { return s ? window.PROFASE_HORA.fechaHora(s) : ''; }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function estChip(f) {
+    if (f.concepto === 'cancelacion') return f.limite && f.limite >= DATOS.hoy ? chip('Vence ' + fecha(f.limite), 'ojo') : chip('Plazo vencido (se considera aceptada)', '');
+    var e = ESTADOS[f.estado] || [f.estado, '']; return chip(e[0], e[1]);
+  }
+  function cliente(f) { return f.razon || f.rfc; }
+  var HOY = hoyISO();
+
+  /* ---------- ventanas ---------- */
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo" id="v-cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { $('v-cierra').focus(); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; ABIERTO = null; }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  function pregunta(html) { $('pq').innerHTML = html; $('pregunta').hidden = false; var f = $('pq').querySelector('select,input,textarea,button'); try { f && f.focus(); } catch (e) {} }
+  function noPregunta() { $('pregunta').hidden = true; $('pq').innerHTML = ''; }
+  // pide un motivo en una ventana (en lugar del cuadro del navegador)
+  function motivo(titulo, texto, boton, hacer) {
+    pregunta('<h2 id="pq-t">' + esc(titulo) + '</h2><div>' + esc(texto) + '</div>'
+      + '<div class="campo"><label for="m-mot">Motivo</label><textarea id="m-mot" maxlength="300"></textarea></div>'
+      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">' + esc(boton) + '</button></div>');
+    $('m-no').onclick = noPregunta;
+    $('m-ok').onclick = async function () {
+      this.disabled = true;
+      try { await hacer($('m-mot').value); noPregunta(); } catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  }
+  $('pregunta').addEventListener('click', function (e) { if (e.target === $('pregunta') && !$('pregunta').dataset.fija) noPregunta(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('pregunta').hidden) { if (!$('pregunta').dataset.fija) noPregunta(); }
+    else if (!$('velo').hidden) cierra();
+  });
+
+  /* ---------- la lista ---------- */
+  function opcionesFiltros() {
+    var est = PES === 'cancel' ? [['', 'Todas'], ['plazo', 'En plazo'], ['vencido', 'Plazo vencido']]
+      : [['', 'Todos los estados'], ['nuevo', 'Nuevos'], ['mios', 'Asignados a mí'], ['asignado', 'Asignados'], ['proceso', 'En proceso'],
+         ['cerrado', 'Cerrados'], ['informativo', 'Informativos'], ['historico', 'Histórico']];
+    var v = $('f-estado').value;
+    $('f-estado').innerHTML = est.map(function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; }).join('');
+    if (est.some(function (o) { return o[0] === v; })) $('f-estado').value = v;
+    $('f-concepto').hidden = PES === 'cancel';
+    var cs = (EST.conceptos || []).filter(function (c) { return c.k !== 'cancelacion'; });
+    var vc = $('f-concepto').value;
+    $('f-concepto').innerHTML = '<option value="">Todos los conceptos</option><option value="-">Sin concepto</option>'
+      + cs.map(function (c) { return '<option value="' + esc(c.k) + '">' + esc(c.t) + '</option>'; }).join('');
+    $('f-concepto').value = vc || '';
+    var personas = {};
+    FILAS.forEach(function (f) { if (f.asignado) personas[f.asignado] = f.asignado_n; });
+    var va = $('f-asignado').value;
+    $('f-asignado').innerHTML = '<option value="">Asignado a cualquiera</option><option value="-">Sin asignar</option>'
+      + Object.keys(personas).sort(function (a, b) { return personas[a].localeCompare(personas[b]); })
+          .map(function (u) { return '<option value="' + esc(u) + '">' + esc(personas[u]) + '</option>'; }).join('');
+    $('f-asignado').value = personas[va] || va === '-' ? va : '';
+    $('f-asignado').hidden = PES === 'cancel';
+  }
+  function kpis() {
+    var c = DATOS.cuentas || {};
+    var L = PES === 'cancel'
+      ? [['plazo', 'En plazo', c.cancel_plazo, 'ojo'], ['vencido', 'Plazo vencido', (c.cancel || 0) - (c.cancel_plazo || 0), '']]
+      : [['nuevo', 'Nuevos', c.nuevos, c.nuevos ? 'ojo' : ''], ['mios', 'Asignados a mí', c.mios, ''], ['asignado', 'Asignados', c.asignados, ''],
+         ['proceso', 'En proceso', c.proceso, ''], ['cerrado', 'Cerrados', c.cerrados, ''], ['informativo', 'Informativos', c.informativos, ''],
+         ['historico', 'Histórico', c.historico, '']];
+    $('kpis').innerHTML = L.map(function (k) {
+      return '<button type="button" class="kpi ' + k[3] + '" data-kpi="' + k[0] + '" aria-pressed="' + (KPI === k[0]) + '"><span class="l">' + esc(k[1]) + '</span><span class="v">' + (k[2] || 0) + '</span></button>';
+    }).join('');
+    $('n-avisos').textContent = c.nuevos || 0; $('n-cancel').textContent = c.cancel_plazo || 0;
+  }
+  $('kpis').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-kpi]'); if (!b) return;
+    KPI = KPI === b.dataset.kpi ? '' : b.dataset.kpi;
+    $('f-estado').value = KPI; VISTAS = 50; pinta();
+  });
+  function filtradas() {
+    var est = $('f-estado').value, con = $('f-concepto').value, asg = $('f-asignado').value, t = norm($('f-texto').value).trim();
+    return FILAS.filter(function (f) {
+      if (PES === 'cancel') {
+        if (est === 'plazo' && !(f.limite && f.limite >= DATOS.hoy)) return false;
+        if (est === 'vencido' && f.limite && f.limite >= DATOS.hoy) return false;
+      } else {
+        if (est === 'mios') { if (f.asignado !== EST.yo || ['asignado', 'proceso'].indexOf(f.estado) < 0) return false; }
+        else if (est && f.estado !== est) return false;
+        if (con === '-' && f.concepto) return false;
+        if (con && con !== '-' && f.concepto !== con) return false;
+        if (asg === '-' && f.asignado) return false;
+        if (asg && asg !== '-' && f.asignado !== asg) return false;
+      }
+      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].join(' ')).indexOf(t) < 0) return false;
+      return true;
+    });
+  }
+  function puedeSel() { return EST.asigna && !CONSULTA && PES === 'avisos'; }
+  function pinta() {
+    KPI = $('f-estado').value || '';
+    kpis();
+    var L = filtradas(), ver = L.slice(0, VISTAS), sel = puedeSel();
+    $('h-lista').textContent = PES === 'cancel' ? 'Cancelaciones de factura' : 'Avisos del SAT';
+    $('lista-sub').textContent = (PES === 'cancel' ? 'Solo para consultar. Si el cliente no contesta en 3 días hábiles, se considera aceptada (art. 29-A del CFF). · ' : '')
+      + L.length + (L.length === 1 ? ' aviso' : ' avisos') + ' del ' + fecha(DATOS.desde) + ' al ' + fecha(DATOS.hasta);
+    $('thead').innerHTML = '<tr>' + (sel ? '<th class="chk"><input type="checkbox" id="sel-todos" aria-label="Seleccionar los de la página"></th>' : '')
+      + '<th>Fecha</th><th>Cliente</th><th>RFC</th>' + (PES === 'cancel' ? '<th>De quién</th><th>Plazo</th>' : '<th>Concepto</th><th>Asignado a</th><th>Estado</th>') + '</tr>';
+    $('tbody').innerHTML = ver.map(function (f) {
+      return '<tr class="click" data-id="' + f.id + '">' + (sel ? '<td class="chk"><input type="checkbox" data-sel="' + f.id + '"' + (SEL[f.id] ? ' checked' : '') + ' aria-label="Seleccionar"></td>' : '')
+        + '<td class="nowrap" data-l="Fecha">' + esc(fecha(f.fecha)) + (f.hora ? ' <span class="mut">' + esc(f.hora) + '</span>' : '') + '</td>'
+        + '<td><div class="rs">' + esc(cliente(f)) + '</div>' + (f.grupo ? '<div class="mut">' + esc(f.grupo) + '</div>' : (f.en_ficha ? '' : '<div class="mut">No está en la ficha del CRM</div>')) + '</td>'
+        + '<td class="nowrap" data-l="RFC">' + esc(f.rfc) + '</td>'
+        + (PES === 'cancel'
+          ? '<td data-l="De quién">' + esc(f.detalle || '') + '</td><td data-l="Plazo">' + estChip(f) + '</td>'
+          : '<td data-l="Concepto">' + (f.concepto_n ? esc(f.concepto_n) : '<span class="mut">Sin concepto</span>') + (f.tipo ? '<div class="mut">' + esc(TIPO[f.tipo] || '') + '</div>' : '') + '</td>'
+            + '<td data-l="Asignado a">' + (f.asignado_n ? esc(f.asignado_n) : '<span class="mut">Sin asignar</span>') + '</td>'
+            + '<td data-l="Estado">' + estChip(f) + (f.docs ? ' <span class="mut">· ' + f.docs + (f.docs === 1 ? ' documento' : ' documentos') + '</span>' : '') + '</td>')
+        + '</tr>';
+    }).join('');
+    $('vacio').hidden = L.length > 0;
+    $('mas').hidden = L.length <= VISTAS; $('mas-t').textContent = 'Viendo ' + ver.length + ' de ' + L.length;
+    pintaSel();
+  }
+  function pintaSel() {
+    var n = Object.keys(SEL).length;
+    $('seleccion').hidden = !puedeSel() || n === 0;
+    $('sel-n').textContent = n === 1 ? '1 seleccionado' : n + ' seleccionados';
+    var t = $('sel-todos'); if (t) { var cb = $('tbody').querySelectorAll('[data-sel]'); t.checked = cb.length > 0 && [].every.call(cb, function (x) { return x.checked; }); }
+  }
+  $('tbody').addEventListener('click', function (e) {
+    var c = e.target.closest('[data-sel]');
+    if (c) { if (c.checked) SEL[c.dataset.sel] = true; else delete SEL[c.dataset.sel]; pintaSel(); return; }
+    if (e.target.closest('td.chk')) return;
+    var tr = e.target.closest('tr[data-id]'); if (tr) ficha(+tr.dataset.id);
+  });
+  $('thead').addEventListener('change', function (e) {
+    if (e.target.id !== 'sel-todos') return;
+    $('tbody').querySelectorAll('[data-sel]').forEach(function (x) { x.checked = e.target.checked; if (x.checked) SEL[x.dataset.sel] = true; else delete SEL[x.dataset.sel]; });
+    pintaSel();
+  });
+  $('b-mas').onclick = function () { VISTAS += 100; pinta(); };
+  ['f-estado', 'f-concepto', 'f-asignado'].forEach(function (id) { $(id).onchange = function () { VISTAS = 50; pinta(); }; });
+  $('f-texto').oninput = function () { VISTAS = 50; clearTimeout(pinta.t); pinta.t = setTimeout(pinta, 150); };
+  $('f-desde').onchange = $('f-hasta').onchange = function () { carga().catch(function (e) { error(falla(e)); }); };
+  document.querySelectorAll('[data-pes]').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('[data-pes]').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+      PES = b.dataset.pes; KPI = ''; SEL = {}; VISTAS = 50; $('f-estado').value = '';
+      carga().catch(function (e) { error(falla(e)); });
+    };
+  });
+  async function carga() {
+    DATOS = await rpc('bzt_lista', { p: { pestana: PES, desde: $('f-desde').value, hasta: $('f-hasta').value } });
+    FILAS = DATOS.filas || [];
+    var ids = {}; FILAS.forEach(function (f) { ids[f.id] = 1; });
+    Object.keys(SEL).forEach(function (k) { if (!ids[k]) delete SEL[k]; });
+    opcionesFiltros(); pinta();
+  }
+
+  /* ---------- la ficha de un aviso ---------- */
+  function esPdf(d) { return /\.pdf$/i.test(d.nombre || '') || d.tipo === 'application/pdf'; }
+  async function bytesDoc(d) {
+    var r = await P.sb.storage.from('buzon').download(d.ruta);
+    if (r.error || !r.data) throw new Error('No se pudo traer el archivo');
+    var b = new Uint8Array(await r.data.arrayBuffer());
+    // los PDF se ven con la marca PROFASE; al bajarlos, cada quien escoge con marca u original (petición 20261103-1342)
+    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: d.nombre }); if (m) b = m; }
+    return b;
+  }
+  function visor() {
+    if (V) return V;
+    V = window.PROFASE_VISOR.nuevo({ trae: bytesDoc, esPdf: esPdf, originalTodos: true,   // «Con marca» / «Original» a todos (Daniel, 3-nov-2026, 14:05: «sí»)
+      nombre: function (d) { return String(d.nombre || 'documento').replace(/[\\/:*?"<>|]/g, '_'); },
+      alVer: function (d) { try { P.registrar('vista', 'Buzón tributario · ' + d.nombre); } catch (e) {} },
+      alBajar: function (d) { try { P.registrar('descarga', 'Buzón tributario · ' + d.nombre); } catch (e) {} } });
+    return V;
+  }
+  async function ficha(id) {
+    try {
+      var a = await rpc('bzt_ficha', { p_id: id });
+      ABIERTO = id; pintaFicha(a);
+    } catch (e) { error(falla(e)); }
+  }
+  function opcionesConcepto(sel, conCancel) {
+    return '<option value="">Escoge…</option>' + (EST.conceptos || []).filter(function (c) { return conCancel || c.k !== 'cancelacion'; })
+      .map(function (c) { return '<option value="' + esc(c.k) + '"' + (c.k === sel ? ' selected' : '') + '>' + esc(c.t) + '</option>'; }).join('');
+  }
+  function opcionesPersonas() {
+    return (EST.personas || []).map(function (p) { return { v: p.u, t: p.n }; });
+  }
+  function pintaFicha(a) {
+    var pu = a.puedo || {}, h = [];
+    h.push('<div class="sec"><h3>El aviso</h3><div class="in"><dl class="dl">'
+      + '<dt>Estado</dt><dd>' + estChip(a) + '</dd>'
+      + '<dt>Llegó</dt><dd>' + esc(fecha(a.fecha)) + (a.hora ? ' · ' + esc(a.hora) : '') + (a.origen === 'excel' ? ' <span class="mut">(del Excel)</span>' : '') + '</dd>'
+      + '<dt>Cliente</dt><dd>' + esc(cliente(a)) + (a.grupo ? '<div class="mut">' + esc(a.grupo) + '</div>' : '') + '</dd>'
+      + '<dt>RFC</dt><dd>' + esc(a.rfc) + '</dd>'
+      + '<dt>Tipo</dt><dd>' + esc(TIPO[a.tipo] || 'Sin tipo') + '</dd>'
+      + '<dt>Concepto</dt><dd>' + esc(a.concepto_n || 'Sin concepto') + (a.concepto_texto && a.concepto_texto !== a.concepto_n ? ' <span class="mut">(en el Excel: ' + esc(a.concepto_texto) + ')</span>' : '') + '</dd>'
+      + (a.folio ? '<dt>Folio u oficio</dt><dd>' + esc(a.folio) + '</dd>' : '')
+      + (a.detalle ? '<dt>Del buzón</dt><dd>' + esc(a.detalle) + '</dd>' : '')
+      + (a.consulta ? '<dt>Se consultó en el SAT</dt><dd>' + esc(fecha(a.consulta)) + '</dd>' : '')
+      + (a.limite ? '<dt>Plazo para contestar</dt><dd>' + esc(fecha(a.limite)) + '</dd>' : '')
+      + '<dt>Asignado a</dt><dd>' + (a.asignado_n ? esc(a.asignado_n) + (a.asignado_por ? ' <span class="mut">(lo asignó ' + esc(a.asignado_por) + ', ' + esc(fh(a.asignado_en)) + ')</span>' : '') : '<span class="mut">Sin asignar</span>') + '</dd>'
+      + (a.cerrado_por ? '<dt>' + (a.estado === 'informativo' ? 'Marcado informativo' : 'Lo cerró') + '</dt><dd>' + esc(a.cerrado_por) + ' · ' + esc(fh(a.cerrado_en)) + (a.nota_cierre ? '<div>' + esc(a.nota_cierre) + '</div>' : '') + '</dd>' : '')
+      + (a.observaciones ? '<dt>Observaciones</dt><dd>' + esc(a.observaciones) + '</dd>' : '')
+      + '</dl></div></div>');
+    if (a.asunto || a.cuerpo) h.push('<div class="sec"><h3>El correo del SAT</h3><div class="in">' + (a.asunto ? '<div class="t"><b>' + esc(a.asunto) + '</b></div>' : '')
+      + (a.cuerpo ? '<div class="correo">' + esc(a.cuerpo) + '</div>' : '') + '<div class="mut">Lo que dice el mensaje se lee en el Buzón Tributario del SAT del cliente.</div></div></div>');
+    var acc = [];
+    if (pu.asignar) acc.push('<div class="campo"><label for="a-quien">' + (a.asignado ? 'Reasignar a' : 'Asignar a') + '</label><div id="a-quienBox"></div></div>'
+      + '<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="a-asigna">' + (a.asignado ? 'Reasignar' : 'Asignar') + '</button>'
+      + (pu.informativo ? '<button class="btn" type="button" id="a-info">Solo informativo (sin asignar)</button>' : '') + '</div>');
+    else if (pu.clasificar) acc.push('<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="a-guarda-con">Guardar concepto</button></div>');
+    if (pu.cerrar) acc.push('<div class="campo"><label for="a-cierre">Qué se hizo (para cerrarlo)</label><textarea id="a-cierre" maxlength="2000" placeholder="Por ejemplo: se contestó el requerimiento y se subió el acuse"></textarea></div>'
+      + '<div class="acciones"><button class="btn bien" type="button" id="a-cierra">Cerrar el aviso</button></div>');
+    if (pu.reabrir) acc.push('<div class="acciones"><button class="btn" type="button" id="a-reabre">Reabrir</button></div>');
+    if (acc.length) h.push('<div class="sec"><h3>Qué sigue</h3><div class="in">' + acc.join('') + '</div></div>');
+    h.push('<div class="sec"><h3>Seguimiento</h3><div class="in">' + ((a.notas || []).length
+        ? '<ul class="lista">' + a.notas.map(function (n) { return '<li><div>' + esc(n.texto) + '</div><div class="mut">' + esc(n.quien) + ' · ' + esc(fh(n.en)) + '</div></li>'; }).join('') + '</ul>'
+        : '<div class="mut">Todavía no hay notas.</div>')
+      + (pu.nota ? '<div class="campo"><label for="a-nota">Agregar una nota</label><textarea id="a-nota" maxlength="4000"></textarea></div><div class="acciones"><button class="btn" type="button" id="a-guarda-nota">Guardar nota</button></div>' : '')
+      + '</div></div>');
+    DOCS = {};
+    h.push('<div class="sec"><h3>Documentos</h3><div class="in">' + ((a.documentos || []).length
+        ? '<ul class="lista">' + a.documentos.map(function (d) {
+            DOCS[d.id] = d;
+            return '<li><div class="t">' + esc(d.nombre) + '</div><div class="mut">' + esc(d.subio) + ' · ' + esc(fh(d.en)) + '</div><div class="acciones" style="margin-top:6px">'
+              + (esPdf(d) ? '<button class="btn chico" type="button" data-dver="' + d.id + '">Ver</button>' : '')
+              + '<button class="btn chico" type="button" data-dbaja="' + d.id + '">Bajar</button>'
+              + (d.quita ? '<button class="btn chico peligro" type="button" data-dquita="' + d.id + '">Quitar</button>' : '') + '</div></li>';
+          }).join('') + '</ul>'
+        : '<div class="mut">Todavía no hay documentos (el oficio que se baja del SAT, el acuse de lo que se contestó…).</div>')
+      + (pu.documento ? '<div class="acciones"><label class="btn" for="a-doc">Subir documento</label><input type="file" id="a-doc" hidden multiple></div>' : '')
+      + '</div></div>');
+    if ((a.bitacora || []).length) h.push('<div class="sec"><h3>Bitácora</h3><div class="in"><ul class="lista">' + a.bitacora.map(function (b) {
+      return '<li><div><b>' + esc(b.que.charAt(0).toUpperCase() + b.que.slice(1)) + '</b>' + (b.texto ? ' · ' + esc(b.texto) : '') + '</div><div class="mut">' + esc(b.quien) + ' · ' + esc(fh(b.en)) + '</div></li>';
+    }).join('') + '</ul></div></div>');
+    abre(cliente(a), a.rfc + ' · ' + fecha(a.fecha) + (a.concepto_n ? ' · ' + a.concepto_n : ''), h.join(''));
+    var bq = null;
+    if ($('a-quienBox')) bq = window.PROFASE_BUSCA.crea({ donde: $('a-quienBox'), id: 'a-quien', opciones: opcionesPersonas(), valor: a.asignado ? [a.asignado] : [],
+      marcador: 'Escribe parte del nombre', vacio: 'Nadie coincide', sinOpciones: 'Sin personas' });
+    function boton(id, fn) { var b = $(id); if (!b) return; b.onclick = async function () { b.disabled = true; try { await fn(); } catch (e) { error(falla(e)); } b.disabled = false; }; }
+    boton('a-asigna', async function () {
+      var u = bq && bq.valor()[0]; if (!u) throw new Error('Escoge a quién se lo asignas');
+      await rpc('bzt_asigna', { p_ids: [a.id], p_usuario: u, p_concepto: $('a-con').value || null });
+      avisa('Listo: se le avisó a quien se lo asignaste.'); await ficha(a.id); await carga();
+    });
+    boton('a-info', async function () { await rpc('bzt_informativo', { p_ids: [a.id], p_nota: '' }); avisa('Quedó como informativo.'); await ficha(a.id); await carga(); });
+    boton('a-guarda-con', async function () { if (!$('a-con').value) throw new Error('Escoge el concepto'); await rpc('bzt_clasifica', { p_ids: [a.id], p_concepto: $('a-con').value }); await ficha(a.id); await carga(); });
+    boton('a-cierra', async function () { var r = await rpc('bzt_cierra', { p_id: a.id, p_nota: $('a-cierre').value }); avisa('Aviso cerrado.'); pintaFicha(r); await carga(); });
+    boton('a-reabre', async function () {
+      motivo('Reabrir el aviso', 'Vuelve a quedar abierto con quien lo tenía (o como nuevo, si no tenía a nadie).', 'Reabrir', async function (m) {
+        var r = await rpc('bzt_reabre', { p_id: a.id, p_motivo: m }); pintaFicha(r); await carga();
+      });
+    });
+    boton('a-guarda-nota', async function () { var r = await rpc('bzt_nota', { p_id: a.id, p_texto: $('a-nota').value }); pintaFicha(r); await carga(); });
+    if ($('a-doc')) $('a-doc').onchange = async function () {
+      var fs = [].slice.call(this.files || []); this.value = ''; if (!fs.length) return;
+      for (var i = 0; i < fs.length; i++) {
+        var f = fs[i];
+        if (f.size > 25 * 1048576) { error('«' + f.name + '» pesa más de 25 MB.'); continue; }
+        try {
+          var ruta = a.id + '/' + (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now()) + Math.random().toString(36).slice(2, 10));
+          var up = await P.sb.storage.from('buzon').upload(ruta, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+          if (up.error) throw up.error;
+          var r = await rpc('bzt_doc_listo', { p_aviso: a.id, p_ruta: ruta, p_nombre: f.name, p_tamano: f.size, p_tipo: f.type || '' });
+          pintaFicha(r);
+        } catch (e) { error('No se pudo subir «' + f.name + '»: ' + falla(e)); }
+      }
+      carga().catch(function () {});
+    };
+    $('v-cuerpo').addEventListener('click', async function (e) {
+      var b = e.target.closest('[data-dver],[data-dbaja],[data-dquita]'); if (!b) return;
+      if (b.dataset.dver) return visor().ver(DOCS[b.dataset.dver], b);
+      if (b.dataset.dbaja) return visor().baja(DOCS[b.dataset.dbaja], b);
+      var d = DOCS[b.dataset.dquita];
+      motivo('Quitar «' + d.nombre + '»', 'No se borra: deja de verse en el aviso y queda en la bitácora.', 'Quitar', async function (m) {
+        pintaFicha(await rpc('bzt_doc_quita', { p_doc: d.id, p_motivo: m })); carga().catch(function () {});
+      });
+    });
+  }
+
+  /* ---------- varios a la vez (Liliana y Frank) ---------- */
+  function ids() { return Object.keys(SEL).map(Number); }
+  $('sel-limpia').onclick = function () { SEL = {}; pinta(); };
+  $('sel-asigna').onclick = function () {
+    var n = ids().length;
+    pregunta('<h2 id="pq-t">Asignar ' + (n === 1 ? '1 aviso' : n + ' avisos') + '</h2>'
+      + '<div class="campo"><label for="m-quien">A quién</label><div id="m-quienBox"></div></div>'
+      + '<div class="campo"><label for="m-con">Concepto (opcional)</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
+      + '<div class="mut">A esa persona le llega un solo aviso con todos.</div>'
+      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Asignar</button></div>');
+    var bq = window.PROFASE_BUSCA.crea({ donde: $('m-quienBox'), id: 'm-quien', opciones: opcionesPersonas(), valor: [], marcador: 'Escribe parte del nombre', vacio: 'Nadie coincide', sinOpciones: 'Sin personas' });
+    try { bq.foco(); } catch (e) {}
+    $('m-no').onclick = noPregunta;
+    $('m-ok').onclick = async function () {
+      var u = bq.valor()[0]; if (!u) return error('Escoge a quién se los asignas');
+      this.disabled = true;
+      try { var r = await rpc('bzt_asigna', { p_ids: ids(), p_usuario: u, p_concepto: $('m-con').value || null }); noPregunta(); SEL = {}; avisa((r.asignados || 0) + ' asignados.'); await carga(); }
+      catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  };
+  $('sel-info').onclick = function () {
+    var n = ids().length;
+    pregunta('<h2 id="pq-t">Solo informativo</h2><div>' + (n === 1 ? 'El aviso' : 'Los ' + n + ' avisos') + ' se cierran sin asignar a nadie. Solo cambian los nuevos o del histórico.</div>'
+      + '<div class="campo"><label for="m-nota">Nota (opcional)</label><input id="m-nota" maxlength="500" placeholder="Por ejemplo: comunicado general"></div>'
+      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Marcar informativo</button></div>');
+    $('m-no').onclick = noPregunta;
+    $('m-ok').onclick = async function () {
+      this.disabled = true;
+      try { var r = await rpc('bzt_informativo', { p_ids: ids(), p_nota: $('m-nota').value }); noPregunta(); SEL = {}; avisa((r.marcados || 0) + ' marcados como informativos.'); await carga(); }
+      catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  };
+  $('sel-concepto').onclick = function () {
+    pregunta('<h2 id="pq-t">Cambiar el concepto</h2><div class="campo"><label for="m-con">Concepto</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
+      + '<div class="mut">Si escoges «Cancelación de factura», se pasan a su pestaña.</div>'
+      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Guardar</button></div>');
+    $('m-no').onclick = noPregunta;
+    $('m-ok').onclick = async function () {
+      if (!$('m-con').value) return error('Escoge el concepto');
+      this.disabled = true;
+      try { var r = await rpc('bzt_clasifica', { p_ids: ids(), p_concepto: $('m-con').value }); noPregunta(); SEL = {}; avisa((r.cambiados || 0) + ' cambiados.'); await carga(); }
+      catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  };
+
+  /* ---------- «Cargar mi Excel» (Liliana y Frank) ---------- */
+  function lectorExcel() {
+    if (window.XLSX && window.XLSX.read) return Promise.resolve(window.XLSX);
+    return new Promise(function (ok, ko) {
+      var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = function () { window.XLSX && window.XLSX.read ? ok(window.XLSX) : ko(new Error('no cargó el lector de Excel')); };
+      s.onerror = function () { ko(new Error('no cargó el lector de Excel')); };
+      document.head.appendChild(s);
+    });
+  }
+  // la fecha de una celda: el número de serie de Excel se lee con su propio calendario (sin la zona del equipo)
+  function iso(v) {
+    if (typeof v === 'number' && v > 20000 && v < 80000 && window.XLSX) {
+      var d = window.XLSX.SSF.parse_date_code(v); if (d) return d.y + '-' + String(d.m).padStart(2, '0') + '-' + String(d.d).padStart(2, '0');
+    }
+    var s = String(v || '').trim(), m = s.match(/^(\d{4})-(\d{2})-(\d{2})/) || null;
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0') : '';
+  }
+  async function leeExcel(file) {
+    var X = await lectorExcel(), wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]], T = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    var h = -1, col = {};
+    for (var i = 0; i < Math.min(T.length, 15) && h < 0; i++) {
+      var r = T[i].map(function (c) { return norm(c).trim(); });
+      if (r.indexOf('rfc') >= 0 && r.some(function (c) { return /^indice/.test(c); })) {
+        h = i;
+        r.forEach(function (c, j) {
+          if (/^indice/.test(c)) col.i = j; else if (/^fecha de consulta/.test(c)) col.consulta = j; else if (/^fecha/.test(c)) col.fecha = j;
+          else if (/^asunto del buzon/.test(c)) col.detalle = j; else if (/^asunto/.test(c)) col.asunto = j; else if (/^concepto/.test(c)) col.concepto = j;
+          else if (c === 'rfc') col.rfc = j; else if (/^razon/.test(c)) col.razon = j; else if (/folio|oficio/.test(c)) col.folio = j;
+          else if (/^observ/.test(c)) col.obs = j;
+        });
+      }
+    }
+    if (h < 0 || col.i == null || col.fecha == null || col.rfc == null) throw new Error('No encontré las columnas del Excel (ÍNDICE, FECHA y RFC en el primer renglón).');
+    var filas = [];
+    for (var k = h + 1; k < T.length; k++) {
+      var R = T[k], g = function (n) { return col[n] == null ? '' : R[col[n]]; };
+      if (!String(g('i')).trim() && !String(g('rfc')).trim()) continue;
+      filas.push({ i: String(g('i')).trim(), fecha: iso(g('fecha')), asunto: String(g('asunto')).trim(), concepto: String(g('concepto')).trim(),
+        rfc: String(g('rfc')).trim(), razon: String(g('razon')).trim(), folio: String(g('folio')).trim(), detalle: String(g('detalle')).replace(/\s+/g, ' ').trim(),
+        consulta: iso(g('consulta')), obs: String(g('obs')).trim() });
+    }
+    return filas;
+  }
+  async function porPartes(filas, probar, avance) {
+    var t = { nuevos: 0, cambian: 0, iguales: 0, ligados: 0, malos: [] };
+    for (var i = 0; i < filas.length; i += 1000) {
+      var r = await rpc('bzt_carga_excel', { p_filas: filas.slice(i, i + 1000), p_probar: probar });
+      ['nuevos', 'cambian', 'iguales', 'ligados'].forEach(function (k) { t[k] += r[k] || 0; });
+      t.malos = t.malos.concat(r.malos || []);
+      if (avance) avance(Math.min(i + 1000, filas.length), filas.length);
+    }
+    return t;
+  }
+  $('b-excel').onclick = function () {
+    $('pregunta').dataset.fija = '';
+    pregunta('<h2 id="pq-t">Cargar mi Excel</h2><div>Sube tu Excel del Buzón Tributario (el de siempre, con ÍNDICE, FECHA, ASUNTO, CONCEPTO, RFC…). Todo entra como «Histórico» y lo que ya estaba no se repite: si cambiaste un renglón, se pone al día.</div>'
+      + '<div class="campo"><label for="m-file">Archivo de Excel</label><input type="file" id="m-file" accept=".xlsx,.xls"></div>'
+      + '<div id="m-res"></div><div class="pie"><button class="btn" type="button" id="m-no">Cerrar</button><button class="btn acento" type="button" id="m-ok" disabled>Cargar</button></div>');
+    var FILAS_X = null;
+    $('m-no').onclick = function () { delete $('pregunta').dataset.fija; noPregunta(); };
+    $('m-file').onchange = async function () {
+      var f = this.files && this.files[0]; $('m-ok').disabled = true; FILAS_X = null; if (!f) return;
+      $('m-res').innerHTML = '<div class="msg ojo">Revisando el archivo…</div>';
+      try {
+        FILAS_X = await leeExcel(f);
+        var t = await porPartes(FILAS_X, true, function (a, b) { $('m-res').innerHTML = '<div class="msg ojo">Revisando ' + a + ' de ' + b + '…</div>'; });
+        $('m-res').innerHTML = '<div class="cuenta"><div><b>' + t.nuevos + '</b>entran nuevos</div><div><b>' + t.cambian + '</b>se ponen al día</div><div><b>' + t.ligados + '</b>se juntan con su correo</div><div><b>' + t.iguales + '</b>ya estaban igual</div></div>'
+          + (t.malos.length ? '<div class="msg ojo">No se pudieron leer ' + t.malos.length + (t.malos.length >= 30 ? ' o más' : '') + ' renglones (índice ' + esc(t.malos.slice(0, 10).join(', ')) + '…): les falta la fecha o el RFC.</div>' : '');
+        $('m-ok').disabled = t.nuevos + t.cambian + t.ligados === 0;
+      } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
+    };
+    $('m-ok').onclick = async function () {
+      if (!FILAS_X) return;
+      var b = this; b.disabled = true; $('pregunta').dataset.fija = '1'; $('m-no').disabled = true;
+      try {
+        var t = await porPartes(FILAS_X, false, function (a, n) { $('m-res').innerHTML = '<div class="msg ojo">Cargando ' + a + ' de ' + n + '… no cierres esta ventana.</div>'; });
+        $('m-res').innerHTML = '<div class="msg bien">Listo: ' + t.nuevos + ' nuevos, ' + t.cambian + ' puestos al día y ' + t.ligados + ' juntos con su correo.</div>';
+        await carga();
+      } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '. Lo que ya entró se queda; vuelve a cargar el archivo y solo entra lo que falta.</div>'; }
+      delete $('pregunta').dataset.fija; $('m-no').disabled = false;
+    };
+  };
+
+  /* ---------- Excel y PDF de la lista (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = filtradas(), cancel = PES === 'cancel';
+      var titulo = cancel ? 'Cancelaciones de factura' : 'Buzón tributario';
+      var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado'];
+      var filas = L.map(function (f) {
+        return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, f.detalle || '', f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
+          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', f.asignado_n || 'Sin asignar', (ESTADOS[f.estado] || [f.estado])[0]];
+      });
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
+      ws.columns = (cancel ? [13, 40, 26, 16, 36, 22] : [13, 40, 26, 16, 18, 30, 18, 26, 14]).map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Del ' + fecha(DATOS.desde) + ' al ' + fecha(DATOS.hasta) + ' · ' + L.length + ' avisos', 'Exportado el ' + fh(new Date())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, titulo + ' ' + DATOS.hasta + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* =============================== Arranque =============================== */
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('bzt_estado');
+      if (!EST || !EST.ve) throw new Error('El Buzón tributario lo ven la dirección, los gerentes, quien asigna los avisos y cada contador con sus clientes.');
+      CONSULTA = !!P.consulta || !!EST.consulta;
+      $('consulta').hidden = !CONSULTA;
+      $('b-excel').hidden = !EST.carga || CONSULTA;
+      $('sin-correo').hidden = !(EST.asigna || EST.carga) || EST.correo === 'prendido';
+      var q = new URLSearchParams(location.search);
+      $('f-hasta').value = HOY; $('f-desde').value = HOY.slice(0, 4) + '-01-01';
+      if (q.get('ver') === 'nuevos') $('f-estado').value = 'nuevo';
+      await carga();
+      if (q.get('ver') === 'nuevos') { $('f-estado').value = 'nuevo'; pinta(); }
+      $('cargando').hidden = true; $('principal').hidden = false;
+      var id = +(q.get('id') || 0);
+      if (id > 0) ficha(id);
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
+  window.__bztAbre = function (x) {
+    if (x === 'ver:nuevos') { $('f-estado').value = 'nuevo'; document.querySelector('[data-pes="avisos"]').click(); return; }
+    var n = +x; if (n > 0) ficha(n);
+  };
+  // al volver a la pestaña, lo último (bzt_tab.js manda el aviso; sin relojes)
+  addEventListener('message', function (ev) {
+    if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'bzt-refresca' || !EST || !EST.ve) return;
+    if (!$('pregunta').hidden) return;
+    carga().catch(function () {});
+    if (ABIERTO && !$('velo').hidden && !document.activeElement.matches('textarea,input')) ficha(ABIERTO);
+  });
+  arranca();
+})();
+</script>
+</body></html>
