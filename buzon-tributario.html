@@ -164,6 +164,7 @@ tr.click:hover td{background:var(--navy-soft)}
 .msg.mal{background:var(--red-soft);color:var(--red)}
 .msg.bien{background:var(--ok-soft);color:var(--ok)}
 .msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.msg.nota{background:var(--navy-soft);margin-top:8px}
 .pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
 .pregunta>div{background:var(--surface);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
 .pregunta h2{font-size:20px;font-weight:750}
@@ -667,6 +668,15 @@ tr.click:hover td{background:var(--navy-soft)}
     }
     return t;
   }
+  // cuántas son cancelaciones de factura: no salen en «Avisos del SAT», van a su pestaña (que abre con el último mes)
+  function cuantasCancel(filas) {
+    var n = 0; (filas || []).forEach(function (r) { if (/cancelac/.test(String(r.concepto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) n++; });
+    return n;
+  }
+  function notaCancel(filas) {
+    var n = cuantasCancel(filas); if (!n) return '';
+    return '<div class="msg nota">De estos, ' + n + ' son <b>cancelaciones de factura</b>: no salen en «Avisos del SAT», están en la pestaña «Cancelaciones de factura», que abre con el último mes (cambia «Del» para ver más).</div>';
+  }
   $('b-excel').onclick = function () {
     $('pregunta').dataset.fija = '';
     pregunta('<h2 id="pq-t">Cargar mi Excel</h2><div>Sube tu Excel del Buzón Tributario (el de siempre, con ÍNDICE, FECHA, ASUNTO, CONCEPTO, RFC…). Todo entra como «Histórico» y lo que ya estaba no se repite: si cambiaste un renglón, se pone al día.</div>'
@@ -684,6 +694,7 @@ tr.click:hover td{background:var(--navy-soft)}
         $('m-res').innerHTML = '<div class="cuenta"><div><b>' + t.nuevos + '</b>entran nuevos</div><div><b>' + t.cambian + '</b>se ponen al día</div><div><b>' + t.ligados + '</b>se juntan con su correo</div><div><b>' + t.iguales + '</b>ya estaban igual</div></div>'
           + (malos.length ? '<div class="msg ' + (muchos ? 'mal' : 'ojo') + '">De ' + FILAS_X.length + ' renglones, ' + malos.length + ' no se pueden leer (índice ' + esc(malos.slice(0, 10).join(', ')) + (malos.length > 10 ? '…' : '') + '): les falta la fecha o el RFC está mal escrito.'
               + (muchos ? ' Son demasiados: revisa que el archivo sea el de siempre (ÍNDICE, FECHA, RFC en el primer renglón) antes de cargarlo.' : ' Los demás sí entran.') + '</div>' : '');
+        $('m-res').insertAdjacentHTML('beforeend', notaCancel(FILAS_X));
         $('m-ok').disabled = muchos || t.nuevos + t.cambian + t.ligados === 0;
       } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
     };
@@ -692,7 +703,7 @@ tr.click:hover td{background:var(--navy-soft)}
       var b = this; b.disabled = true; $('pregunta').dataset.fija = '1'; $('m-no').disabled = true;
       try {
         var t = await porPartes(FILAS_X, false, function (a, n) { $('m-res').innerHTML = '<div class="msg ojo">Cargando ' + a + ' de ' + n + '… no cierres esta ventana.</div>'; });
-        $('m-res').innerHTML = '<div class="msg bien">Listo: ' + t.nuevos + ' nuevos, ' + t.cambian + ' puestos al día y ' + t.ligados + ' juntos con su correo.</div>';
+        $('m-res').innerHTML = '<div class="msg bien">Listo: ' + t.nuevos + ' nuevos, ' + t.cambian + ' puestos al día y ' + t.ligados + ' juntos con su correo.</div>' + notaCancel(FILAS_X);
         await carga();
       } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '. Lo que ya entró se queda; vuelve a cargar el archivo y solo entra lo que falta.</div>'; }
       delete $('pregunta').dataset.fija; $('m-no').disabled = false;
