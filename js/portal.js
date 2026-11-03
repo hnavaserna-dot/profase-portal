@@ -104,13 +104,6 @@
   };
 })();
 
-/* ---- La ventana de arriba del portal (2-nov-2026, «Probar la propuesta»). Es window.top, salvo dentro de la vista
-   previa en vivo de las propuestas: ahí la vista de la propuesta corre en un marco del motor (otra dirección:
-   hnavaserna-dot.github.io/profase-vista-previa) y su «arriba» es ella misma, para que se arme igual que en el portal
-   (menú, encabezado). La marca __VP_RAIZ solo la pone el motor de la vista previa, en las páginas que él sirve; en el
-   portal nunca existe y todo sigue con window.top. ---- */
-window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.top; } catch (e) { return window.top; } };
-
 (function () {
   'use strict';
   var SB_URL = 'https://arbykgauatkldznwwtjx.supabase.co';
@@ -199,12 +192,12 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
   var SIGNO_INICIO = '.band img.logo, .band img#logo, .pm-cab img, .pm-cab > span:not(.ptc-caja), .band .brandtxt, .topbar .brand img.mark, [data-al-inicio]';
   P.alInicio = function () {
     try {
-      var t = window.PROFASE_ARRIBA();
+      var t = window.top;
       if (t.PORTAL_MENU && t.PORTAL_MENU.alInicio && t.PORTAL_MENU.alInicio()) return true;
     } catch (e) { /* marco de otro sitio */ }
     var rol = P.perfil ? (P.perfil.rolReal || P.perfil.rol) : ROL;
     var a = PAGINA[rol] ? PAGINA[rol] + '#inicio' : './';
-    try { window.PROFASE_ARRIBA().location.href = a; } catch (e) { location.href = a; }
+    try { window.top.location.href = a; } catch (e) { location.href = a; }
     return true;
   };
   P.signoInicio = function (raiz) {
@@ -802,7 +795,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
   }
   function aLaEntrada(extra) {
     var url = './' + (extra || '');
-    try { (window.PROFASE_ARRIBA() || window).location.replace(new URL(url, location.href).href); } catch (e) { location.replace(url); }
+    try { (window.top || window).location.replace(new URL(url, location.href).href); } catch (e) { location.replace(url); }
   }
   async function cierraPorInactividad() {
     if (cerrando) return;
@@ -1049,7 +1042,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
     if (window.__profaseJalar) return;
     window.__profaseJalar = true;
     var MARCA = 64, MAX = 110, RESISTENCIA = 0.5;
-    function deArriba() { try { var t = window.PROFASE_ARRIBA(); return t && t.document ? t : window; } catch (e) { return window; } }
+    function deArriba() { try { return window.top && window.top.document ? window.top : window; } catch (e) { return window; } }
     function enApp() {
       var w = deArriba();
       try {
@@ -1174,7 +1167,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
      pudo (falla), y se vigilan igual las pestañas que van en su marco (en ellas se recarga solo su marco).
      Antes, si la base no contestaba al leer el perfil, se cerraba la sesión y mandaba a la entrada; ahora, si es por
      falta de conexión, no se cierra nada: se reintenta. ---- */
-  function seguro() { try { return (window.PROFASE_ARRIBA() || window).PROFASE_ARRANQUE || null; } catch (e) { return null; } }
+  function seguro() { try { return (window.top || window).PROFASE_ARRANQUE || null; } catch (e) { return null; } }
   var SEG = ROL ? seguro() : null;
   if (SEG) { try { SEG.vigila(window); } catch (e) { SEG = null; } }
   function noCarga(motivo) {
@@ -1261,7 +1254,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
   P.listo.catch(function () {});
   // ¿Esta pestaña está dentro de la vista de los gerentes? (las pestañas van en un marco de la misma página)
   function enVistaEquipo() {
-    try { var t = window.PROFASE_ARRIBA(); return t !== window.self && t.document.documentElement.getAttribute('data-rol') === 'gerente'; }
+    try { return window.top !== window.self && window.top.document.documentElement.getAttribute('data-rol') === 'gerente'; }
     catch (e) { return false; }
   }
   sb.auth.onAuthStateChange(function (ev) {
@@ -1966,7 +1959,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
 
   function encabezado(p) {
     // Solo en las páginas de cada rol abiertas solas: dentro de un marco (pestañas del portal) no va encabezado propio
-    if (!PAGINA[ROL] || window.PROFASE_ARRIBA() !== window.self) return;
+    if (!PAGINA[ROL] || window.top !== window.self) return;
     var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     var lugar = document.querySelector('header .equipo');
     var pu = document.createElement('div');
@@ -2094,7 +2087,7 @@ window.PROFASE_ARRIBA = function () { try { return window.__VP_RAIZ || window.to
   /* El Cotizador DECOMSA ahora vive dentro del portal (pestaña del módulo Administración):
      dentro de su marco se le esconde el encabezado; si alguien lo abre solo (una liga vieja), se le lleva a su página. */
   if (ROL === 'cotizador') {
-    if (window.PROFASE_ARRIBA() !== window.self) {
+    if (window.top !== window.self) {
       var oc = document.createElement('style'); oc.textContent = 'header.band{display:none!important}';
       document.head.appendChild(oc);
     } else {
