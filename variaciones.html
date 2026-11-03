@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c21da56b9e"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/filtros.js"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c21da56b9e"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/bitacora.js?v=4ce45e3af8"></script><script src="js/filtros.js"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -679,7 +679,18 @@ table.rtab{min-width:1200px}
     <button class="vista on" id="vMov" role="tab" aria-selected="true" aria-controls="secMov">Variaciones</button>
     <button class="vista" id="vCta" role="tab" aria-selected="false" aria-controls="secCta">Movimientos</button>
     <button class="vista" id="vRes" role="tab" aria-selected="false" aria-controls="secRes">Resueltas</button>
+    <button class="vista" id="vBit" role="tab" aria-selected="false" aria-controls="secBit">Bitácora</button>
   </div>
+
+  <section class="tbox" id="secBit" role="tabpanel" aria-labelledby="vBit" hidden>
+    <div class="thead">
+      <div>
+        <h2>Bitácora de cambios</h2>
+        <p class="sub">Quién cambió estatus, comentarios, silencios y criterios, y cuándo, con el antes y el después.</p>
+      </div>
+    </div>
+    <div id="bitBox" style="padding:14px 16px 16px"></div>
+  </section>
 
   <section class="tbox" id="secRes" role="tabpanel" aria-labelledby="vRes" hidden>
     <div class="thead">
@@ -2198,15 +2209,65 @@ document.getElementById("porMes").addEventListener("click", e=>{
 
 function mostrarVista(v){
   S.vista = v;
-  [["vMov","secMov","mov"],["vCta","secCta","cta"],["vRes","secRes","res"]].forEach(([b,s,k])=>{
+  [["vMov","secMov","mov"],["vCta","secCta","cta"],["vRes","secRes","res"],["vBit","secBit","bit"]].forEach(([b,s,k])=>{
     document.getElementById(b).classList.toggle("on", v===k);
     document.getElementById(b).setAttribute("aria-selected", String(v===k));
     document.getElementById(s).hidden = v!==k;
   });
   if(v==="cta") pintarCuentas();
   if(v==="res") pintarResueltas();
+  if(v==="bit"){ abreBitacora(); return; }
   pintarLuego();
 }
+/* ---------- Bitácora (3-nov-2026, pedido de Fernando Cadengo) ----------
+   Cada cambio de estatus, comentario, silencio y criterios queda en la base (rep_bitacora, 163_bitacora_reportes.sql):
+   quién, cuándo, el antes y el después; antes solo quedaba el último. La ven quienes ven Variaciones (la base lo decide:
+   rep_bitacora('var')). La pantalla y el Excel son la pieza común js/bitacora.js (la misma de Cartera y Activo fijo). */
+let BIT = null;
+const BIT_TIPOS = [{k:"estatus",t:"Estatus"},{k:"comentario",t:"Comentarios"},{k:"silencio",t:"Silencios"},{k:"criterios",t:"Criterios"}];
+const silTxt = v => !v || v.vig===null || v.vig===undefined ? "Sin silenciar" : v.vig===0 ? "Silenciado permanente" : "Silenciado "+v.vig+" meses";
+const CRIT_LAB = {umbral:"Sube (%)",umbralBaja:"Baja (%)",nominaRangos:"Cuentas de nómina",nominaMeses:"Meses de nómina",pagoRangos:"Cuentas de provisión",
+  pagoTolMxn:"Tolerancia del pago ($)",pagoTolPct:"Tolerancia del pago (%)",bimestralRangos:"Cuentas bimestrales"};
+const critVal = v => v===true ? "Sí" : v===false ? "No" : v===null || v===undefined || v==="" ? "—" : String(v);
+// un hallazgo que ya no viene con el criterio de hoy: su cuenta y su mes salen de la llave (RFC_mes_cuenta…)
+const sinHallazgo = k => { const p = String(k||"").split("_"); const m = MESES.get(p[1]) || MESES.get(+p[1]);
+  return p[2] ? "Cuenta "+p[2]+(m ? " · "+m : "")+" · ya no sale con el criterio de hoy" : "Hallazgo "+k; };
+function filaBitVar(b){
+  const a = b.antes || {}, d = b.despues || {};
+  const f = PORRID.get(b.llave);
+  const rfc = b.rfc || (b.col==="var_casos" ? String(d.caso||a.caso||"").split("|")[0] : "");
+  const cl = f ? f.cliente : ((CLIENTES.find(c=>c.rfc===rfc)||{}).cliente || (CLIENTES.find(c=>c.rfc===rfc)||{}).nombre || "");
+  const base = {id:b.id, hora:b.hora, quien:b.quien, rfc, cliente:cl, previo:b.previo,
+    objeto: f ? `${f.cta} ${f.nombre} · ${f.mesN} ${f.anio}` : b.col==="var_criterios" ? "Criterios de la bitácora" : b.col==="var_casos" ? "Cuenta "+String(d.caso||a.caso||"").split("|").slice(1).join(" · ") : sinHallazgo(b.llave),
+    abre: f ? ()=>{ S.anio = f.anio; mSeguimiento(f.rid); } : null};
+  if(b.que==="estatus") return Object.assign(base, {tipo:"estatus", tipoTxt:"Estatus",
+    cambio:(b.antes ? tI(okI(a.invit)) : "Sin revisión")+" → "+tI(okI(d.invit)),
+    detalle:[d.motivo ? "Motivo: "+d.motivo : "", d.excel ? "Desde el Excel compartido ("+d.excel+")" : ""].filter(Boolean).join(" · ")});
+  if(b.que==="comentario" || b.que==="comentario_borrado") return Object.assign(base, {tipo:"comentario",
+    tipoTxt: b.que==="comentario_borrado" || !d.comentario ? "Borró el comentario" : a.comentario ? "Cambió el comentario" : "Comentó",
+    cambio: a.comentario ? "Antes: «"+a.comentario+"»" : "", detalle: d.comentario ? "«"+d.comentario+"»" : ""});
+  if(b.que==="silencio" || b.que==="silencio_borrado") return Object.assign(base, {tipo:"silencio", tipoTxt:"Silencio",
+    cambio: silTxt(b.antes)+" → "+silTxt(b.despues), detalle: d.desdeMes ? "Desde "+(MESES.get(d.desdeMes)||"") : ""});
+  // criterios: qué cambió
+  const ks = Array.from(new Set(Object.keys(a).concat(Object.keys(d)))).filter(k=>JSON.stringify(a[k])!==JSON.stringify(d[k]));
+  return Object.assign(base, {tipo:"criterios", tipoTxt:"Criterios",
+    cambio: b.antes ? ks.map(k=>(CRIT_LAB[k]||k)+": "+critVal(a[k])+" → "+critVal(d[k])).join(" · ") || "Sin cambios" : "Criterios vigentes"});
+}
+function abreBitacora(nota){
+  if(!window.PROFASE_BITACORA){ document.getElementById("bitBox").textContent = "La bitácora no cargó; recarga la página."; return; }
+  if(!BIT) BIT = window.PROFASE_BITACORA.crea({donde:document.getElementById("bitBox"), reporte:"Variaciones", archivo:"Bitácora Variaciones",
+    tipos:BIT_TIPOS, marcador:"Cliente, RFC, cuenta o persona",
+    carga: async desde=>{
+      const P = window.PORTAL; if(!P || !P.sb) throw new Error("sin sesión del portal");
+      const q = await P.sb.rpc("rep_bitacora", {p_reporte:"var", p_desde:desde}); if(q.error) throw q.error;
+      return {filas:((q.data && q.data.filas) || []).map(filaBitVar), mas:!!(q.data && q.data.mas)};
+    }});
+  else BIT.recarga();
+  if(nota) BIT.nota(nota);
+}
+/* desde un aviso de «Nuevos cambios» (ver:bitacora): la abre con la nota de qué es lo nuevo */
+window.PROFASE_ABRE_VAR = x => { if(String(x||"")==="ver:bitacora"){ mostrarVista("bit");
+  if(BIT) BIT.nota("Nuevo: cada cambio de estatus, comentario, silencio o criterios queda aquí con quién, cuándo y el antes y el después. Filtra por periodo, persona o movimiento y bájala en Excel o PDF."); return true; } return false; };
 document.getElementById("vMov").addEventListener("click", ()=>mostrarVista("mov"));
 (()=>{  // las instrucciones se abren arriba, debajo del título
   const sec = document.getElementById("secAyu"), btn = document.getElementById("ayudaBtn");
@@ -2220,6 +2281,7 @@ document.getElementById("origen").addEventListener("click", e=>{
 });
 document.getElementById("vCta").addEventListener("click", ()=>mostrarVista("cta"));
 document.getElementById("vRes").addEventListener("click", ()=>mostrarVista("res"));
+document.getElementById("vBit").addEventListener("click", ()=>mostrarVista("bit"));
 document.getElementById("cthr").addEventListener("click", e=>{
   const b = e.target.closest("button[data-ck]"); if(!b) return;
   const k = b.dataset.ck;
