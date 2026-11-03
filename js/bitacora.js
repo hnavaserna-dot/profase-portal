@@ -3,11 +3,13 @@
    Una sola pieza para los tres reportes (la misma pantalla, los mismos filtros y el mismo Excel con su PDF): cada página
    le da sus movimientos ya en palabras; quién ve qué lo decide la base (rep_bitacora() y cartera_bitacora()).
 
-   «Resumen por persona» (3-nov-2026, lo pidió Fernando en la pregunta «bitacora-reportes» y lo autorizó Héctor Daniel
-   Nava: «si», con su recomendación de que solo lo vean la dirección y los gerentes): cuántos cambios hizo cada quien esta
-   semana, la semana pasada, este mes o el mes pasado, por tipo de movimiento. Sale de los mismos movimientos que ya ve
-   esa persona (no pide nada nuevo a la base) y solo a la dirección y a los gerentes (rol real; Gabo en la vista del
-   equipo, no). Picar a una persona enseña sus movimientos de ese periodo. Su «Resumen en Excel» lleva su PDF al lado.
+   «Resumen por persona» (3-nov-2026, lo pidió Fernando en la pregunta «bitacora-reportes»; Héctor Daniel Nava, 13:42:
+   «sí, los que cadengo te diga; pero si hnr hdn y cadengo»; 14:26: «que cadengo le mueva y te autorice quienes sí»):
+   cuántos cambios hizo cada quien esta semana, la semana pasada, este mes o el mes pasado, por tipo de movimiento. Cuenta
+   solo los mismos movimientos que la página ya le dio a esa persona (lo que ya ve en esa Bitácora; no pide nada más).
+   A quién le sale lo decide la base: rep_bit_resumen_veo() (197_bitacora_por_persona.sql; siempre Héctor Daniel Nava,
+   Héctor Nava Ramos y Fernando Cadengo, y a quien Fernando agregue). Es la única llamada de esta pieza a la base.
+   Picar a una persona enseña sus movimientos de ese periodo. Su «Resumen en Excel» lleva su PDF al lado.
 
    var b = PROFASE_BITACORA.crea({
      donde: elemento,                 // aquí se pinta (vacío)
@@ -115,11 +117,25 @@
   function desdeResumen() {
     return RESUMEN.map(function (x) { return rangoDe(x[0]).de; }).sort()[0];
   }
-  // El resumen solo lo ven la dirección y los gerentes (Héctor Daniel Nava, 3-nov-2026). Con el rol real: quien abre
-  // la vista del equipo como gerente sin serlo (Gabo) no lo ve. op.resumen solo lo usan las pruebas.
+  // ¿Le sale el resumen a quien entró? Lo decide la base (rep_bit_resumen_veo; la lista la decide Fernando). Una sola
+  // pregunta por página: la comparten las bitácoras que se abran. Si la base no contesta, no sale. op.resumen solo lo
+  // usan las pruebas.
+  var VEO = null;
   function veoResumen(op) {
-    if (op.resumen != null) return !!op.resumen;
-    try { var p = window.PORTAL && window.PORTAL.perfil; var r = p && (p.rolReal || p.rol); return r === 'director' || r === 'gerente'; } catch (e) { return false; }
+    if (op.resumen != null) return Promise.resolve(!!op.resumen);
+    if (!VEO) {
+      VEO = (async function () {
+        try {
+          var P = window.PORTAL; if (!P) return false;
+          if (P.listo && typeof P.listo.then === 'function') await P.listo;   // con la sesión ya puesta
+          if (!P.sb) return false;
+          var r = await P.sb.rpc('rep_bit_resumen_veo');
+          return !r.error && r.data === true;
+        } catch (e) { return false; }
+      })();
+      VEO.then(function (v) { if (!v) VEO = null; });   // un «no» o una falla se vuelve a preguntar la siguiente vez
+    }
+    return VEO;
   }
 
   function ponCss() {
@@ -131,12 +147,11 @@
     ponCss();
     var S = { periodo: '90', tipo: '', quien: '', q: '', filas: [], mas: false, cargando: false, error: '', ver: 200, nota: '', resalta: null,
       vista: 'mov', rp: 'sem', rango: null };
-    var RES = veoResumen(op);
+    var RES = false;   // se prende cuando la base dice que sí (abajo)
     var raiz = mk('div', 'btc');
     op.donde.innerHTML = ''; op.donde.appendChild(raiz);
 
-    // Ver: Movimientos | Resumen por persona (solo dirección y gerentes; si la página la abre antes de saber quién
-    // entró, se prende en cuanto el portal lo sabe)
+    // Ver: Movimientos | Resumen por persona (solo a quien la base deja; nace escondido)
     var fv = mk('div', 'btc-f'); fv.appendChild(mk('span', null, 'Ver')); fv.hidden = !RES;
     var sv = mk('div', 'btc-seg'); sv.setAttribute('role', 'group'); sv.setAttribute('aria-label', 'Ver');
     [['mov', 'Movimientos'], ['res', 'Resumen por persona']].forEach(function (x) {
@@ -456,20 +471,15 @@
       setTimeout(function () { xr.textContent = antes; xr.disabled = !resumen().per.length; }, 2200);
     }
 
-    carga();
-    if (!RES && op.resumen == null) {
-      try {
-        var P = window.PORTAL;
-        if (P && !P.perfil && P.listo && typeof P.listo.then === 'function') {
-          P.listo.then(function () { if (!RES && veoResumen(op)) { RES = true; carga(); } }, function () { /* sin sesión */ });
-        }
-      } catch (e) { /* sin portal */ }
-    }
+    // Primero se pregunta si le sale el resumen (así se pide de una vez lo que necesita) y luego se carga
+    S.cargando = true; pinta();
+    var listo = veoResumen(op).then(function (v) { RES = !!v; if (!RES) S.vista = 'mov'; return carga(); });
     return {
       recarga: carga,
       nota: function (t) { S.nota = t || ''; pinta(); },
       resalta: function (id) { S.resalta = id; pinta(); },
-      vista: function (v) { if (v === 'res' && !RES) return false; S.vista = v === 'res' ? 'res' : 'mov'; pinta(); return true; }
+      // desde un aviso (ver:bitacora-resumen): espera a saber si le sale; si no, se queda en los movimientos
+      vista: function (v) { return listo.then(function () { if (v === 'res' && !RES) return false; S.vista = v === 'res' ? 'res' : 'mov'; pinta(); return true; }); }
     };
   }
 
