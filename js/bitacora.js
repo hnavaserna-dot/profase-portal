@@ -66,7 +66,7 @@
     + '.btc-res{display:grid;gap:10px;min-width:0}'
     + '.btc-rtit{font-size:13px;font-weight:600;color:var(--bt-ink2)}'
     + '.btc-tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--bt-ln);border-radius:11px;background:var(--bt-sf);min-width:0}'
-    + '.btc-tb{width:100%;border-collapse:collapse;font-size:13px}'
+    + '.btc-tb{width:100%;min-width:0;border-collapse:collapse;font-size:13px}'   // Variaciones y Activo fijo traen table{min-width:1240px/880px}
     + '.btc-tb th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--bt-mu);text-align:right;padding:9px 12px;border-bottom:1px solid var(--bt-ln);background:var(--bt-sf2);white-space:nowrap}'
     + '.btc-tb td{padding:8px 12px;border-bottom:1px solid var(--bt-ln);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--bt-ink2)}'
     + '.btc-tb th:first-child,.btc-tb td:first-child{text-align:left;white-space:normal;min-width:150px}'
