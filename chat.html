@@ -560,8 +560,23 @@ audio.ad-med{width:280px;max-width:100%}
 .lb-cab{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;color:#fff}
 .lb-cab b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-cab button{border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.1);color:#fff;border-radius:8px;padding:6px 12px;font-weight:600}
-.lb-cu{flex:1;min-height:0;display:grid;place-items:center;padding:10px}
-.lb-cu img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.lb-cab .lb-n{flex:none;font-size:13px;font-weight:600;color:#C9D4E5;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lb-cab .lb-n:empty{display:none}
+.lb-nota{flex:none;margin:0 14px 6px;padding:8px 12px;border-radius:8px;background:rgba(240,122,30,.2);border-left:4px solid #F07A1E;color:#fff;font-size:13px;line-height:1.4}
+.lb-cu{flex:1;min-height:0;position:relative}
+/* la foto completa dentro de la pantalla, también las verticales (un ticket tomado con el celular se salía por abajo en el
+   iPad y la computadora: el alto máximo no se respetaba dentro de la cuadrícula) */
+.lb-cu img{position:absolute;inset:0;margin:auto;max-width:calc(100% - 20px);max-height:calc(100% - 20px);object-fit:contain;border-radius:6px}
+/* pasar de una foto a otra (2-nov-2026): ‹ › a los lados, también con ← → del teclado y deslizando el dedo */
+.lb-fl{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.45);background:rgba(15,27,48,.62);color:#fff;display:grid;place-items:center;padding:0;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);transition:background .15s,opacity .15s}
+.lb-fl svg{width:24px;height:24px}
+.lb-fl.ant{left:max(12px,env(safe-area-inset-left,0px))}
+.lb-fl.sig{right:max(12px,env(safe-area-inset-right,0px))}
+.lb-fl:hover:not([disabled]){background:#F07A1E;border-color:#F07A1E}
+.lb-fl:focus-visible{outline:2px solid #F07A1E;outline-offset:3px}
+.lb-fl[disabled]{opacity:0;pointer-events:none}
+.lb-fl[hidden]{display:none}
+@media (max-width:699px){.lb-fl{width:40px;height:40px}.lb-fl svg{width:21px;height:21px}.lb-fl.ant{left:6px}.lb-fl.sig{right:6px}}
 
 .aviso{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:60;max-width:min(420px,calc(100vw - 24px));background:#1F3864;color:#fff;border-left:5px solid #F07A1E;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:10px 14px;font-size:14px}
 .aviso.mal{border-left-color:#F2867B}
@@ -732,9 +747,9 @@ audio.ad-med{width:280px;max-width:100%}
     if (!a) return true;
     try { return a.document.body.getAttribute('data-view') === 'chat'; } catch (e) { return true; }
   }
-  function aviso(t, mal) {
+  function aviso(t, mal, ms) {
     var x = document.createElement('div'); x.className = 'aviso' + (mal ? ' mal' : ''); x.setAttribute('role', 'status'); x.textContent = t;
-    document.body.appendChild(x); setTimeout(function () { x.remove(); }, mal ? 6000 : 3200);
+    document.body.appendChild(x); setTimeout(function () { x.remove(); }, ms || (mal ? 6000 : 3200));
   }
   function err(e) {
     var m = (e && (e.message || e.error_description || e.msg)) || 'No se pudo. Revisa tu conexión e intenta otra vez.';
@@ -3030,21 +3045,115 @@ audio.ad-med{width:280px;max-width:100%}
     VIENDO = false;
   }
 
+  // Varias fotos: pasar de una a otra (Héctor Daniel, 2-nov-2026, 18:13, con el aviso de Fernando Cadengo «cuando mandan
+  // varias imágenes en el chat no se puede cambiar entre una y otra imagen»: «queremos en el chat poder moverle con las
+  // flechas del teclado izquierda y derecha, agrega esta función»). La vista de una foto pasa a la anterior o a la
+  // siguiente de la misma conversación (las del mismo mensaje y las de los demás, en el orden en que se mandaron) con ← y
+  // → del teclado, con los botones ‹ › de los lados y, en el celular y la tableta, deslizando el dedo; arriba dice «2 de
+  // 5». No da la vuelta: en la primera no hay anterior y en la última no hay siguiente. Solo fotos que uno ya ve en esa
+  // conversación (los mensajes ya cargados y su lista de «Archivos»), nada de otras conversaciones.
+  function fotosConv() {
+    if (!ACT) return [];
+    var out = [], ya = {}, borrados = {};
+    function pon(a, mid, i) {
+      if (!a || !a.ruta || ya[a.ruta] || /^local:/.test(a.ruta) || a.ruta.indexOf(ACT.id) !== 0 || !esImagen(a) || /heic|heif/i.test(a.tipo || '')) return;
+      ya[a.ruta] = 1; out.push({ ruta: a.ruta, mid: +mid || 0, i: i });
+    }
+    ACT.orden.forEach(function (k) {
+      var m = ACT.msgs.get(k); if (!m) return;
+      if (m.borrado) { borrados[k] = 1; return; }
+      (m.adjuntos || []).forEach(function (a, i) { pon(a, k, i); });
+    });
+    var n = {};
+    (ARCH || []).forEach(function (a) { if (borrados[a.mensaje]) return; n[a.mensaje] = n[a.mensaje] || 0; pon(a, a.mensaje, n[a.mensaje]++); });
+    return out.sort(function (x, y) { return x.mid - y.mid || x.i - y.i; });
+  }
+  function zoomDedos() {   // con la pantalla acercada con los dedos, deslizar mueve la foto, no cambia de foto
+    var v = null;
+    try { v = (window.top && window.top.visualViewport) || window.visualViewport; } catch (e) { v = window.visualViewport; }
+    return !!(v && v.scale > 1.01);
+  }
+  var FL_ANT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>';
+  var FL_SIG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
   async function verImagen(ruta) {
-    var a = adjDe(ruta); if (!a) return;
-    var u = (await urlsDe([ruta]))[ruta];
-    var lb = document.createElement('div'); lb.className = 'lb'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true'); lb.setAttribute('aria-label', a.nombre);
-    lb.innerHTML = '<div class="lb-cab"><b>' + esc(a.nombre) + '</b><button type="button" data-dbaja="' + esc(a.ruta) + '">Bajar</button><button type="button" data-cierra>Cerrar</button></div><div class="lb-cu"><img alt="' + esc(a.nombre) + '" src="' + esc(u || '') + '"></div>';
+    if (!adjDe(ruta)) return;
+    var vieja = document.querySelector('.lb'); if (vieja && vieja.__cierra) vieja.__cierra(true);
+    var antes = document.activeElement;
+    var lb = document.createElement('div'); lb.className = 'lb'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true');
+    lb.innerHTML = '<div class="lb-cab"><b></b><span class="lb-n" aria-live="polite"></span><button type="button" data-dbaja>Bajar</button><button type="button" data-cierra>Cerrar</button></div>'
+      + '<div class="lb-cu"><img alt="">'
+      + '<button type="button" class="lb-fl ant" data-lb="-1" aria-label="Foto anterior" title="Anterior (←)" hidden>' + FL_ANT + '</button>'
+      + '<button type="button" class="lb-fl sig" data-lb="1" aria-label="Foto siguiente" title="Siguiente (→)" hidden>' + FL_SIG + '</button></div>';
+    var tit = lb.querySelector('.lb-cab b'), cuenta = lb.querySelector('.lb-n'), bBaja = lb.querySelector('[data-dbaja]'),
+      img = lb.querySelector('.lb-cu img'), cu = lb.querySelector('.lb-cu'),
+      bAnt = lb.querySelector('.lb-fl.ant'), bSig = lb.querySelector('.lb-fl.sig');
+    var actual = ruta, turno = 0, deslizo = 0;
     document.body.appendChild(lb);
-    function cierra() { lb.remove(); document.removeEventListener('keydown', tecla); }
-    function tecla(ev) { if (ev.key === 'Escape') cierra(); }
-    document.addEventListener('keydown', tecla);
+
+    async function muestra(r) {
+      var a = adjDe(r); if (!a) return;
+      actual = r; var mio = ++turno;
+      var L = fotosConv(), i = L.findIndex(function (x) { return x.ruta === r; }), varias = L.length > 1 && i >= 0;
+      lb.setAttribute('aria-label', a.nombre);
+      tit.textContent = a.nombre; tit.title = a.nombre;
+      bBaja.setAttribute('data-dbaja', a.ruta);
+      cuenta.textContent = varias ? (i + 1) + ' de ' + L.length : '';
+      bAnt.hidden = bSig.hidden = !varias;
+      bAnt.disabled = !varias || i <= 0;
+      bSig.disabled = !varias || i >= L.length - 1;
+      // si el foco estaba en la flecha que ya no sirve (llegó a la orilla), pasa a la otra o a «Cerrar»
+      var f = document.activeElement;
+      if (f && f.disabled && lb.contains(f)) { try { (!bAnt.disabled ? bAnt : !bSig.disabled ? bSig : lb.querySelector('[data-cierra]')).focus(); } catch (e) { /* sin foco */ } }
+      img.alt = a.nombre;
+      var u = (await urlsDe([r]))[r];
+      if (mio !== turno || !lb.isConnected) return;
+      img.src = u || '';
+      // adelanta las de al lado, para que pasar de una a otra sea al instante
+      var lado = [L[i - 1], L[i + 1]].filter(function (x) { return x && i >= 0; }).map(function (x) { return x.ruta; });
+      if (lado.length) urlsDe(lado).then(function (us) { lado.forEach(function (x) { if (us[x]) { var im = new Image(); im.decoding = 'async'; im.src = us[x]; } }); });
+    }
+    function mueve(d) {
+      var L = fotosConv(), i = L.findIndex(function (x) { return x.ruta === actual; }), j = i + d;
+      if (i < 0 || j < 0 || j >= L.length) return false;
+      muestra(L[j].ruta); return true;
+    }
+    function cierra(sinFoco) {
+      lb.remove(); document.removeEventListener('keydown', tecla, true);
+      if (!sinFoco) { try { if (antes && antes.isConnected && antes.focus) antes.focus(); } catch (e) { /* el botón ya no existe */ } }
+    }
+    lb.__cierra = cierra;
+    // en la fase de captura: las flechas son de la foto (no del reproductor de notas de voz ni de otra cosa de abajo) y
+    // Esc solo cierra la foto (no también el panel de información del chat)
+    function tecla(ev) {
+      if (!lb.isConnected) return;
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cierra(); return; }
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') { ev.preventDefault(); ev.stopPropagation(); mueve(ev.key === 'ArrowLeft' ? -1 : 1); }
+    }
+    document.addEventListener('keydown', tecla, true);
     lb.onclick = function (ev) {
+      if (Date.now() - deslizo < 450) return;   // el toque con el que terminó de deslizar no cierra la foto
       var b = ev.target.closest('button');
+      if (b && b.hasAttribute('data-lb')) { mueve(+b.getAttribute('data-lb')); return; }
       if (b && b.hasAttribute('data-dbaja')) { VISOR.baja(docDe(b), b); return; }
       if ((b && b.hasAttribute('data-cierra')) || ev.target === lb || ev.target.classList.contains('lb-cu')) cierra();
     };
+    // deslizar con un dedo (sin quitar el acercamiento con dos dedos ni mover la foto acercada)
+    var t0 = null;
+    cu.addEventListener('touchstart', function (ev) {
+      if (ev.touches.length !== 1 || zoomDedos()) { t0 = null; return; }
+      var t = ev.touches[0]; t0 = { x: t.clientX, y: t.clientY, en: Date.now() };
+    }, { passive: true });
+    cu.addEventListener('touchmove', function (ev) { if (ev.touches.length !== 1) t0 = null; }, { passive: true });
+    cu.addEventListener('touchcancel', function () { t0 = null; }, { passive: true });
+    cu.addEventListener('touchend', function (ev) {
+      var s = t0; t0 = null;
+      if (!s || !ev.changedTouches.length) return;
+      var t = ev.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+      if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.4 && Date.now() - s.en < 900) { deslizo = Date.now(); mueve(dx < 0 ? 1 : -1); }
+    }, { passive: true });
     try { lb.querySelector('[data-cierra]').focus(); } catch (e) { /* sin foco */ }
+    await muestra(ruta);
   }
 
   // ---------------------------------------------------------------- ventanas
@@ -3107,12 +3216,32 @@ audio.ad-med{width:280px;max-width:100%}
   }
   /* Lo nuevo, iluminado al llegar desde su aviso («ver|<qué>|…»; chat_tab.js, PROFASE_ABRE['chat']; regla de Daniel,
      2-nov-2026: «lo que notifiques al picarle te mande a lo "nuevo"»). Hoy «llamada-varios»: «Nuevo chat» abierto con la
-     opción de llamar a varios iluminada (149). */
+     opción de llamar a varios iluminada (149); «notas-voz» (154) y «fotos-varias» (pasar de una foto a otra). */
   var NUEVOS = {
     'llamada-varios': { nota: 'Nuevo: escoge a varios del despacho y llámalos de una vez (llamada o videollamada), sin crear grupo.', el: '[data-llamar]', abre: nuevoChat },
     // las notas de voz como WhatsApp (154): abre una conversación e ilumina el micrófono con su nota
-    'notas-voz': { ver: verNotasVoz }
+    'notas-voz': { ver: verNotasVoz },
+    // pasar de una foto a otra (2-nov-2026, 18:1x): abre la foto más reciente de la conversación con su nota; si ahí no
+    // hay fotos, lo explica en un aviso
+    'fotos-varias': { ver: verFotosVarias }
   };
+  var NOTA_FOTOS = 'Nuevo: si en el chat hay varias fotos, pasa de una a otra con las flechas ‹ ›, con ← y → del teclado o deslizando el dedo.';
+  function verFotosVarias() {
+    if (!ACT) { var id = window.__chatPrimera && window.__chatPrimera(); if (!id) return false; abre(id); }
+    var n = 0;
+    (function espera() {
+      var L = fotosConv();
+      if (!L.length && ++n < 15) { setTimeout(espera, 200); return; }
+      if (!L.length) { aviso(NOTA_FOTOS, false, 9000); return; }
+      verImagen(L[L.length - 1].ruta).then(function () {
+        var lb = document.querySelector('.lb'), cab = lb && lb.querySelector('.lb-cab');
+        if (!cab || lb.querySelector('.lb-nota')) return;
+        cab.insertAdjacentHTML('afterend', '<div class="lb-nota" role="status">' + esc(NOTA_FOTOS) + '</div>');
+        setTimeout(function () { var x = lb.querySelector('.lb-nota'); if (x) x.remove(); }, 12000);
+      });
+    })();
+    return true;
+  }
   function verNotasVoz() {
     if (!ACT) { var id = window.__chatPrimera && window.__chatPrimera(); if (!id) return false; abre(id); }
     var n = 0;
