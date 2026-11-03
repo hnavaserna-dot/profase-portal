@@ -19,7 +19,16 @@
      limpiar: function () { … },            // opcional: cómo quitar todo (si no, cada campo queda vacío)
      resultados: function () { return 'VER 38 RESULTADOS'; }   // opcional: el texto del botón de abajo
    });
-   f.pinta();   // cuando cambian los datos o el estado desde fuera */
+   f.pinta();   // cuando cambian los datos o el estado desde fuera
+   f.destruye();   // si la página quita la barra (le quita sus avisos a la página)
+
+   Opcionales (3-nov-2026, la Cartera con el concepto de Gabo; las demás páginas siguen igual sin ellos):
+   - en cfg: nota (texto del pie, o false para no poner ninguno) y limpiarTxt (lo que dice el botón de quitar todo);
+   - en cada campo: chip(vals) (cómo se lee su etiqueta), todos (lo que dice su botón «Todos»), lista: true (lista con
+     casillas aunque tenga pocas opciones, sin buscador), defecto: [...] (lo que trae puesto sin que cuente como filtro:
+     no sale su etiqueta y «Limpiar» lo regresa ahí; sin botón «Todos»);
+   - tipo 'rango' con entrada 'numero' o 'fecha' y etiquetas ['Desde', 'Hasta']: dos campos; valor() regresa
+     ['', ''] y pon(['…', '…']) recibe los dos. */
 (function () {
   'use strict';
   if (window.PROFASE_FILTROS) return;
@@ -71,6 +80,11 @@
     + '.pf-b2.pri{background:var(--pf-ac);border-color:var(--pf-ac);color:#0B1220}'
     + '.pf button:focus-visible,.pf input:focus-visible{outline:2px solid var(--pf-ac);outline-offset:2px}'
     + '.pf-velo{display:none}'
+    + '.pf-rg{display:grid;grid-template-columns:1fr 1fr;gap:10px}'
+    + '.pf-rg label{display:block;min-width:0}'
+    + '.pf-rg span{display:block;font-size:11px;font-weight:600;color:var(--pf-mu);margin:0 0 5px}'
+    + '.pf .pf-rg input{width:100%;min-width:0;height:40px;margin:0;padding:0 12px;border-radius:10px;border:1px solid var(--pf-ln);background:var(--pf-sf2);color:var(--pf-ink);font:inherit;font-size:13px;font-weight:600;box-shadow:none}'
+    + '.pf .pf-rg input:focus{border-color:var(--pf-ac);outline:0}'
     // celular: hoja desde abajo
     + '@media (max-width:640px){'
     + '.pf-pan{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;max-height:86vh;border-radius:18px 18px 0 0;border-top:1px solid var(--pf-ln);padding-bottom:env(safe-area-inset-bottom,0px)}'
@@ -79,6 +93,7 @@
     + '.pf-cuerpo{grid-template-columns:1fr}'
     + '.pf-velo{display:block;position:fixed;inset:0;background:rgba(5,10,20,.5);z-index:59}.pf-velo[hidden]{display:none}'
     + '.pf-pie span{display:none}.pf-pie div{width:100%}.pf-pie .pri{flex:1}'
+    + '.pf .pf-rg input{font-size:16px}'
     + '}';
 
   var ICF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>';
@@ -124,8 +139,20 @@
     var todos = [];
     grupos.forEach(function (g) { g.campos.forEach(function (c) { todos.push(c); }); });
 
-    function lista(c) { var v = c.valor(); return c.tipo === 'texto' ? (v ? [v] : []) : (v || []).map(String); }
-    function puesto(c) { return lista(c).length > 0 && !(c.tipo === 'texto' && !String(lista(c)[0]).trim()); }
+    function lista(c) {
+      var v = c.valor();
+      if (c.tipo === 'rango') return [0, 1].map(function (j) { var x = (v || [])[j]; return x == null ? '' : String(x); });
+      return c.tipo === 'texto' ? (v ? [v] : []) : (v || []).map(String);
+    }
+    function igual(a, b) { return a.length === b.length && a.slice().sort().join('\u0001') === b.slice().sort().join('\u0001'); }
+    function puesto(c) {
+      var l = lista(c);
+      if (c.tipo === 'rango') return l.some(function (x) { return x.trim() !== ''; });
+      if (c.defecto) return !igual(l, c.defecto.map(String));
+      return l.length > 0 && !(c.tipo === 'texto' && !String(l[0]).trim());
+    }
+    // cómo queda un campo sin filtro (el de «defecto» regresa a lo suyo)
+    function vacio(c) { return c.tipo === 'texto' ? '' : c.tipo === 'rango' ? ['', ''] : (c.defecto ? c.defecto.map(String) : []); }
     function nombreDe(c, v) {
       var o = (c.opciones ? c.opciones() : []).filter(function (x) { return String(x.v) === String(v); })[0];
       return o ? o.t : v;
@@ -139,10 +166,11 @@
       todos.forEach(function (c, i) {
         if (!puesto(c)) return;
         var vs = lista(c);
-        var txt = c.tipo === 'texto' ? vs[0] : vs.length === 1 ? nombreDe(c, vs[0]) : vs.length;
+        var txt = c.chip ? c.chip(vs) : c.tipo === 'texto' ? vs[0] : c.tipo === 'rango' ? vs.filter(function (x) { return x; }).join(' a ')
+          : vs.length === 1 ? nombreDe(c, vs[0]) : vs.length;
         h += '<button type="button" class="pf-chip" data-q="' + i + '" title="Quitar este filtro"><span>' + esc(c.t) + ': ' + esc(txt) + '</span><i aria-hidden="true">×</i></button>';
       });
-      if (n) h += '<button type="button" class="pf-lim">Limpiar todo</button>';
+      if (n) h += '<button type="button" class="pf-lim">' + esc(cfg.limpiarTxt || 'Limpiar todo') + '</button>';
       return h;
     }
     function campo(c, i) {
@@ -150,15 +178,23 @@
       if (c.tipo === 'texto') {
         return h + '<div class="pf-q">' + ICQ + '<input type="text" data-txt="' + i + '" value="' + esc(lista(c)[0] || '') + '" placeholder="Escribe…" autocomplete="off" spellcheck="false"></div></div>';
       }
+      if (c.tipo === 'rango') {
+        var vr = lista(c), et = c.etiquetas || ['Desde', 'Hasta'], fe = c.entrada === 'fecha';
+        return h + '<div class="pf-rg">' + [0, 1].map(function (j) {
+          return '<label><span>' + esc(et[j]) + '</span><input ' + (fe ? 'type="date"' : 'type="text" inputmode="decimal"')
+            + ' data-rg="' + i + ':' + j + '" value="' + esc(vr[j]) + '" autocomplete="off" spellcheck="false" aria-label="' + esc(c.t + ' · ' + et[j]) + '"></label>';
+        }).join('') + '</div></div>';
+      }
       var ops = c.opciones() || [], sel = lista(c);
-      if (ops.length <= MUCHAS && !c.buscar) {
-        h += '<div class="pf-seg"><button type="button" data-todo="' + i + '" aria-pressed="' + !sel.length + '">Todos</button>';
+      if (ops.length <= MUCHAS && !c.buscar && !c.lista) {
+        h += '<div class="pf-seg">';
+        if (!c.defecto) h += '<button type="button" data-todo="' + i + '" aria-pressed="' + !sel.length + '">' + esc(c.todos || 'Todos') + '</button>';
         ops.forEach(function (o) {
           h += '<button type="button" data-op="' + i + '" data-v="' + esc(o.v) + '" aria-pressed="' + (sel.indexOf(String(o.v)) >= 0) + '">' + esc(o.t) + '</button>';
         });
         return h + '</div></div>';
       }
-      return h + '<div class="pf-q">' + ICQ + '<input type="search" data-q="' + i + '" value="' + esc(qs[i] || '') + '" placeholder="Escribe para buscar…" autocomplete="off" spellcheck="false" aria-label="Buscar ' + esc(c.t) + '"></div>'
+      return h + (c.lista && !c.buscar ? '' : '<div class="pf-q">' + ICQ + '<input type="search" data-q="' + i + '" value="' + esc(qs[i] || '') + '" placeholder="Escribe para buscar…" autocomplete="off" spellcheck="false" aria-label="Buscar ' + esc(c.t) + '"></div>')
         + '<div class="pf-lst" role="listbox" aria-multiselectable="' + (c.tipo === 'varios') + '" data-l="' + i + '">' + filas(c, i) + '</div>'
         + '<div class="pf-mini" data-m="' + i + '">' + mini(c, i) + '</div></div>';
     }
@@ -192,13 +228,15 @@
       }
       h += '<div class="pf-cuerpo">' + grupos[tab].campos.map(function (c) { return campo(c, todos.indexOf(c)); }).join('') + '</div>';
       var r = cfg.resultados ? cfg.resultados() : 'Listo';
-      h += '<div class="pf-pie"><span>Lo que escribes se pasa a mayúsculas; acentos y signos no importan</span><div>'
+      var nota = cfg.nota === false ? '' : (cfg.nota || 'Lo que escribes se pasa a mayúsculas; acentos y signos no importan');
+      h += '<div class="pf-pie">' + (nota ? '<span>' + esc(nota) + '</span>' : '') + '<div>'
         + '<button type="button" class="pf-b2" data-limpia="1">Limpiar</button><button type="button" class="pf-b2 pri" data-cierra="1">' + esc(r) + '</button></div></div>';
       return h;
     }
     function pinta() {
-      var foco = document.activeElement, fq = foco && (raiz.contains(foco) || capa.contains(foco)) && foco.tagName === 'INPUT' ? foco.getAttribute('data-q') || foco.getAttribute('data-txt') : null;
-      var pos = fq != null ? foco.selectionStart : 0, txtFoco = fq != null && foco.hasAttribute('data-txt');
+      var foco = document.activeElement, fq = foco && (raiz.contains(foco) || capa.contains(foco)) && foco.tagName === 'INPUT' ? foco.getAttribute('data-q') || foco.getAttribute('data-txt') || foco.getAttribute('data-rg') : null;
+      var pos = 0, cual = fq == null ? 'q' : foco.hasAttribute('data-txt') ? 'txt' : foco.hasAttribute('data-rg') ? 'rg' : 'q';
+      try { pos = fq != null ? foco.selectionStart || 0 : 0; } catch (e) { pos = 0; }
       var ventana = '<div class="pf-velo"' + (abierto ? '' : ' hidden') + '></div>'
         + '<div class="pf-pan" role="dialog" aria-label="Filtros"' + (abierto ? '' : ' hidden') + '>' + (abierto ? panel() : '') + '</div>';
       var aparte = abierto && celular();
@@ -207,7 +245,7 @@
       if (aparte && !capa.parentNode) document.body.appendChild(capa);
       if (!aparte && capa.parentNode) capa.parentNode.removeChild(capa);
       if (fq != null && abierto) {
-        var el = zona().querySelector(txtFoco ? 'input[data-txt="' + fq + '"]' : 'input[data-q="' + fq + '"]');
+        var el = zona().querySelector('input[data-' + cual + '="' + fq + '"]');
         if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) { /* sin cursor */ } }
       }
       ajusta();
@@ -234,7 +272,7 @@
     }
     function limpiaTodo() {
       qs = {};
-      if (cfg.limpiar) cfg.limpiar(); else todos.forEach(function (c) { c.pon(c.tipo === 'texto' ? '' : []); });
+      if (cfg.limpiar) cfg.limpiar(); else todos.forEach(function (c) { c.pon(vacio(c)); });
       avisa();
     }
 
@@ -242,11 +280,11 @@
       var t = e.target.closest('button');
       if (!t || !(raiz.contains(t) || capa.contains(t))) { if (e.target.classList && e.target.classList.contains('pf-velo')) abre(false); return; }
       if (t.classList.contains('pf-btn')) return abre(!abierto);
-      if (t.classList.contains('pf-chip')) { var c0 = todos[+t.dataset.q]; c0.pon(c0.tipo === 'texto' ? '' : []); return avisa(); }
+      if (t.classList.contains('pf-chip')) { var c0 = todos[+t.dataset.q]; c0.pon(vacio(c0)); return avisa(); }
       if (t.dataset.cierra) return abre(false);
       if (t.dataset.limpia || (t.classList.contains('pf-lim') && !t.dataset.cierra)) return limpiaTodo();
       if (t.dataset.tab != null) { tab = +t.dataset.tab; return pinta(); }
-      if (t.dataset.todo != null) { todos[+t.dataset.todo].pon([]); return avisa(); }
+      if (t.dataset.todo != null) { var c1 = todos[+t.dataset.todo]; c1.pon(vacio(c1)); return avisa(); }
       if (t.dataset.todos != null) {
         var ci = +t.dataset.todos, cc = todos[ci], ya = lista(cc);
         visibles(cc, ci).forEach(function (o) { if (ya.indexOf(String(o.v)) < 0) ya.push(String(o.v)); });
@@ -262,6 +300,13 @@
     function escribe(e) {
       var t = e.target;
       if (t.tagName !== 'INPUT') return;
+      // un rango (montos o fechas): se guarda al dejar de escribir; sus campos no se pasan a mayúsculas
+      if (t.dataset.rg != null) {
+        var pr = t.dataset.rg.split(':'), cr = todos[+pr[0]];
+        clearTimeout(cr._t);
+        cr._t = setTimeout(function () { var v = lista(cr); v[+pr[1]] = t.value.trim(); cr.pon(v); if (cfg.cambio) cfg.cambio(); pinta(); }, t.type === 'date' ? 0 : 350);
+        return;
+      }
       // todo en mayúsculas mientras se escribe
       var p = t.selectionStart, up = t.value.toUpperCase();
       if (up !== t.value) { t.value = up; try { t.setSelectionRange(p, p); } catch (er) { /* sin cursor */ } }
@@ -281,12 +326,22 @@
       }
     }
     [raiz, capa].forEach(function (z) { z.addEventListener('click', clic); z.addEventListener('input', escribe); z.addEventListener('keydown', tecla); });
-    document.addEventListener('mousedown', function (e) { if (abierto && !raiz.contains(e.target) && !capa.contains(e.target)) abre(false); });
+    function fuera(e) { if (abierto && !raiz.contains(e.target) && !capa.contains(e.target)) abre(false); }
     // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
-    document.addEventListener('profase-menu', function (e) { if (abierto && e.detail !== yo) abre(false); });
-    window.addEventListener('resize', function () { if (!abierto) return; if (celular() !== !!capa.parentNode) pinta(); else ajusta(); });
+    function otro(e) { if (abierto && e.detail !== yo) abre(false); }
+    function tam() { if (!abierto) return; if (celular() !== !!capa.parentNode) pinta(); else ajusta(); }
+    document.addEventListener('mousedown', fuera);
+    document.addEventListener('profase-menu', otro);
+    window.addEventListener('resize', tam);
+    function destruye() {
+      document.removeEventListener('mousedown', fuera); document.removeEventListener('profase-menu', otro);
+      window.removeEventListener('resize', tam);
+      if (capa.parentNode) capa.parentNode.removeChild(capa);
+      if (raiz.parentNode) raiz.parentNode.removeChild(raiz);
+    }
     pinta();
-    return { pinta: pinta, abre: function () { abre(true); }, cierra: function () { abre(false); }, raiz: raiz };
+    return { pinta: pinta, abre: function () { abre(true); }, cierra: function () { abre(false); }, raiz: raiz,
+             abierto: function () { return abierto; }, destruye: destruye };
   }
 
   window.PROFASE_FILTROS = { crea: crea, norm: norm, pasa: pasa };
