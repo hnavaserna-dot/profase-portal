@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=3399471b0c"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Tesorería › Facturación (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): alta masiva del mes
    (propuesta con los servicios contratados y su precio vigente), alta y cambio a mano, folios y bajas con motivo, como
@@ -115,7 +115,6 @@ tr.fila:hover td{background:var(--navy-soft)}
 .chip.ojo{background:var(--amber-soft);color:var(--amber)}
 .vence{white-space:nowrap}
 .vacio{padding:20px 14px;color:var(--muted)}
-.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
 .pie{color:var(--muted);font-size:12px;margin:0 0 24px}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
 .nota.practica{border-left:4px solid var(--accent)}
@@ -263,7 +262,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       </header>
       <div class="tabla"><table id="lista"><thead><tr><th>Folio</th><th>Cliente</th><th>Estado</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
-      <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
+      <nav id="pag-fac" hidden></nav>
     </section>
     <p class="pie">Total = conceptos más IVA (las de efectivo, sin IVA). Saldo = total menos lo aplicado de pagos y notas de crédito. Si ya tiene abono y le quedan menos de $10, cuenta como pagada (la diferencia se ve en su ficha y no se cobra); sin abono, menos de $1. Los pagos se capturan en Tesorería › Pagos.</p>
   </div>
@@ -275,7 +274,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 (function(){
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
-  var PAGINA = 150, mostrar = PAGINA;
+  var PAG = null;   // las páginas de la tabla (js/paginas.js; Fernando, 3-nov-2026)
   var EST = null, CIAS = {}, F = [], POR_ID = {}, CONSULTA = false;
   var EMP = {}, CAT = {};          // por compañía: razones sociales y catálogo (se piden una vez)
   var G = null, M = null;          // lo que se está generando o capturando a mano
@@ -378,14 +377,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = conSaldo === 1 ? '1 factura' : conSaldo + ' facturas';
     $('k-sal-c').className = 'kpi' + (sal >= 1 ? ' ojo' : '');
     $('lista-sub').textContent = L.length === 1 ? '1 factura' : L.length + ' facturas';
-    $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (f) {
+    $('lista').tBodies[0].innerHTML = PAG.corta(L).map(function (f) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '</td>'
         + '<td><div class="rs">' + esc(f.razon) + '</div><div class="rfc">' + esc(f.grupo) + (f.conceptos ? ' · ' + esc(f.conceptos) : '') + '</div></td>'
         + '<td>' + chipEst(f) + (f.efectivo ? '<div><span class="tag">Efectivo</span></div>' : '') + '</td><td class="vence">' + esc(fecha(f.fecha)) + '</td>'
         + '<td class="monto">' + esc(dinero(f.total)) + '</td><td class="monto">' + (f.pagada ? '<span class="no">—</span>' : esc(dinero(f.saldo))) + '</td></tr>';
     }).join('');
     $('lista-vacia').hidden = L.length > 0;
-    $('mas').hidden = L.length <= mostrar;
   }
 
   /* ---------- panel ---------- */
@@ -733,8 +731,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   /* ---------- eventos ---------- */
-  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-dia', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { if (k === 'f-mes') diaOpciones(); mostrar = PAGINA; pinta(); }); });
-  $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
+  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-dia', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { if (k === 'f-mes') diaOpciones(); PAG.inicio(); pinta(); }); });
+  PAG = PROFASE_PAGINAS.crea({ donde: $('pag-fac'), clave: 'facturacion.facturas', nombre: 'Facturas', arriba: $('lista').closest('section'), cambio: function () { pinta(); } });
   $('x-fac').onclick = function () { excel(this); };
   $('b-generar').onclick = abreGenerar;
   $('b-nueva').onclick = function () { abreManual(null); };

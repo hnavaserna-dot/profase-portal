@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=3399471b0c"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Tesorería › Pagos (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): como el Access «Registro de
    Pagos» de Dora Montalvo y Eva Rangel, con sus errores corregidos: «Facturas disponibles», pagar varias facturas con su
@@ -112,7 +112,6 @@ tr.fila:hover td{background:var(--navy-soft)}
 .chip.ojo{background:var(--amber-soft);color:var(--amber)}
 .vence{white-space:nowrap}
 .vacio{padding:20px 14px;color:var(--muted)}
-.mas{padding:10px 14px;border-top:1px solid var(--line);text-align:center}
 .pie{color:var(--muted);font-size:12px;margin:0 0 24px}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
 .nota.practica{border-left:4px solid var(--accent)}
@@ -264,7 +263,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       <div class="liq" id="liq-caja" hidden><label for="f-liq">Fecha del pago para «Liquidar»</label><input id="f-liq" type="date"></div>
       <div class="tabla"><table id="lista"><thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Abonado</th><th class="monto">Saldo</th><th><span class="oculto">Liquidar</span></th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
-      <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
+      <nav id="pag-fac" hidden></nav>
     </section>
     <p class="pie">Saldo = total con IVA (las de efectivo, sin IVA) menos lo aplicado de pagos y notas de crédito. Si ya tiene abono y le quedan menos de $10, cuenta como pagada (la diferencia se ve en su ficha y no se cobra); sin abono, menos de $1. Lo mismo con lo que le sobra a un pago. Un pago solo se reparte entre facturas de la misma razón social y la misma compañía.</p>
   </div>
@@ -290,7 +289,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       </header>
       <div class="tabla"><table id="pagos"><thead><tr><th>Pago</th><th>Cliente</th><th>Fecha</th><th class="monto">Monto</th><th class="monto">Aplicado</th><th class="monto">Por aplicar</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="pagos-vacia" hidden>Ningún pago con estos filtros.</div>
-      <div class="mas" id="mas-p" hidden><button class="btn" type="button" id="ver-mas-p">Ver más</button></div>
+      <nav id="pag-pag" hidden></nav>
     </section>
   </div>
 </div>
@@ -301,7 +300,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 (function(){
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
-  var PAGINA = 150, mostrar = PAGINA, mostrarP = PAGINA;
+  var PAG = {};   // las páginas de las dos tablas (js/paginas.js; Fernando, 3-nov-2026)
   var EST = null, CIAS = {}, F = [], POR_ID = {}, PG = [], PG_ID = {}, CONSULTA = false, EMP = {};
   var C = null;   // la captura abierta
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -389,7 +388,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = n === 1 ? '1 factura' : n + ' facturas';
     $('k-sal-c').className = 'kpi' + (sal >= 1 ? ' ojo' : '');
     $('lista-sub').textContent = L.length === 1 ? '1 factura' : L.length + ' facturas';
-    $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (f) {
+    $('lista').tBodies[0].innerHTML = PAG.fac.corta(L).map(function (f) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '<div>' + chipEst(f) + '</div></td>'
         + '<td><div class="rs">' + esc(f.razon) + '</div><div class="rfc">' + esc(f.rfc) + ' · ' + esc(f.grupo) + '</div></td>'
         + '<td class="vence">' + esc(fecha(f.fecha)) + '</td><td class="monto">' + esc(dinero(f.total)) + '</td><td class="monto">' + esc(dinero(f.pagado)) + '</td>'
@@ -397,7 +396,6 @@ tr.fila:hover td{background:var(--navy-soft)}
         + '<td>' + (puedeAlta(f.compania) && conSaldo(f) ? '<button class="btn chico" type="button" data-liq="' + f.id + '">Liquidar</button>' : '') + '</td></tr>';
     }).join('');
     $('lista-vacia').hidden = L.length > 0;
-    $('mas').hidden = L.length <= mostrar;
   }
 
   /* ---------- Registro de pagos ---------- */
@@ -422,14 +420,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('kp-afa-s').textContent = n === 1 ? '1 pago con saldo a favor' : n + ' pagos con saldo a favor';
     $('kp-afa-c').className = 'kpi' + (afa >= 1 ? ' ojo' : '');
     $('pagos-sub').textContent = L.length === 1 ? '1 pago' : L.length + ' pagos';
-    $('pagos').tBodies[0].innerHTML = L.slice(0, mostrarP).map(function (x) {
+    $('pagos').tBodies[0].innerHTML = PAG.pag.corta(L).map(function (x) {
       return '<tr class="fila" tabindex="0" data-pago="' + esc(x.id) + '"><td><div class="rs">' + (x.nota_credito ? 'Nota de crédito ' + esc(x.folio_nc) : 'Pago ' + esc(x.id)) + '</div>' + (varias ? '<div class="rfc">' + esc(cia(x.compania)) + '</div>' : '') + (x.folios ? '<div class="rfc">Folios ' + esc(x.folios) + '</div>' : '') + '</td>'
         + '<td><div class="rs">' + esc(x.razon) + '</div><div class="rfc">' + esc(x.rfc) + ' · ' + esc(x.grupo) + '</div></td>'
         + '<td class="vence">' + esc(fecha(x.fecha)) + '</td><td class="monto">' + esc(dinero(x.monto)) + '</td><td class="monto">' + esc(dinero(x.aplicado)) + '</td>'
         + '<td class="monto">' + (x.por_aplicar > 0.009 ? '<span class="chip ojo">' + esc(dinero(x.por_aplicar)) + '</span>' : '<span class="no">—</span>') + '</td></tr>';
     }).join('');
     $('pagos-vacia').hidden = L.length > 0;
-    $('mas-p').hidden = L.length <= mostrarP;
   }
 
   /* ---------- panel ---------- */
@@ -692,10 +689,10 @@ tr.fila:hover td{background:var(--navy-soft)}
   function muestra(t) { ['fac', 'pag'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; }); }
   $('t-fac').onclick = function () { muestra('fac'); };
   $('t-pag').onclick = function () { muestra('pag'); };
-  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
-  ['g-buscar', 'g-cia', 'g-anio', 'g-mes', 'g-tipo'].forEach(function (k) { $(k).addEventListener(k === 'g-buscar' ? 'input' : 'change', function () { mostrarP = PAGINA; pintaPagos(); }); });
-  $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
-  $('ver-mas-p').onclick = function () { mostrarP += PAGINA; pintaPagos(); };
+  ['f-buscar', 'f-cia', 'f-anio', 'f-mes', 'f-est'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { PAG.fac.inicio(); pinta(); }); });
+  ['g-buscar', 'g-cia', 'g-anio', 'g-mes', 'g-tipo'].forEach(function (k) { $(k).addEventListener(k === 'g-buscar' ? 'input' : 'change', function () { PAG.pag.inicio(); pintaPagos(); }); });
+  PAG.fac = PROFASE_PAGINAS.crea({ donde: $('pag-fac'), clave: 'pagos.facturas', nombre: 'Facturas', arriba: $('lista').closest('section'), cambio: function () { pinta(); } });
+  PAG.pag = PROFASE_PAGINAS.crea({ donde: $('pag-pag'), clave: 'pagos.pagos', nombre: 'Pagos', arriba: $('pagos').closest('section'), cambio: function () { pintaPagos(); } });
   $('x-fac').onclick = function () { excelFacturas(this); };
   $('x-pag').onclick = function () { excelPagos(this); };
   // «Registrar pago» abre con la compañía que ya se filtró (Daniel, 2-nov-2026): primero la de la pestaña que se ve,
