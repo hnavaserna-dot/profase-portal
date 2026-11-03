@@ -2447,6 +2447,8 @@ async function exportaReporteCxcCxp(ci){
   const wb=window.PROFASE_MARCA.libro(EX,'Reporte CXC CXP · '+c[1]);
   // sale en el orden de la pantalla (el que se escogió con las flechas de la ventana)
   sel.hojas.forEach(h=>hojaRCX(wb,h,c,sel.docs.filter(r=>h.mods.includes(r.mod)),corte));
+  // sus saldos de IVA, con lo que se bajó de la ventana (pestaña, lado y sus filtros)
+  hojaIva(wb,sel.docs,corte,{alcance:c[1],filtros:'lo que se ve en la ventana de la empresa (pestaña, lado y sus filtros)'});
   const mm=String(TODAY.getMonth()+1).padStart(2,'0');
   const et=sel.hojas.map(h=>h.etq);
   const que=et.length>1?et.slice(0,-1).join(' ')+' y '+et[et.length-1]:et[0];
@@ -2465,7 +2467,7 @@ let GEN_TXT=null;
 const GEN_LAB='Excel';
 function botonGeneral(){
   const b=el('button','xls xlgen',GEN_TXT||GEN_LAB); b.type='button'; b.id='xlgen'; b.disabled=!!GEN_TXT; b.setAttribute('data-excel',GEN_LAB);
-  b.title='Todas las empresas con lo filtrado, en el formato del reporte CXC CXP y con una hoja de resumen';
+  b.title='Todas las empresas con lo filtrado, en el formato del reporte CXC CXP, con una hoja de resumen y otra de saldos de IVA';
   b.onclick=async()=>{
     if(GEN_TXT) return;
     const pon=t=>{ GEN_TXT=t; const x=document.getElementById('xlgen'); if(x){ x.textContent=t||GEN_LAB; x.disabled=!!t; } };
@@ -2583,6 +2585,121 @@ function hojaResumen(wb,docs,corte,op){
   ws.views=[{state:'frozen',ySplit:R(5)}];
   MK.impresion(ws);
 }
+/* ── hoja «Saldos de IVA» (3-nov-2026, pedido de Fernando con su formato «Saldos IVA por cliente»): por cliente, el IVA
+   del saldo (lo pendiente por cobrar o por pagar, la misma cuenta de las tarjetas de IVA: sumaIva/ivaNeto) de los
+   documentos que se bajan (los filtros de la pantalla), la estrategia fiscal (el IVA neto de lo marcado «Estrategia
+   fiscal», que se resta) y el resultado con fórmulas de Excel: el saldo a favor de periodos anteriores no lo tiene el CRM y
+   va en amarillo para capturarlo; al escribirlo se recalcula todo. Abajo, el resumen por grupo (SUMIF de la tabla de
+   clientes). Resultado positivo = a cargo; negativo = a favor. ── */
+const IVA_MODS=[0,1,4,5];
+const IVA_COLS=['Grupo','Cliente','RFC','Contador asignado','IVA trasladado (por cobrar a clientes)','IVA retenido por clientes',
+  'IVA acreditable (por pagar a proveedores)','IVA retenido a terceros (por enterar)','IVA notas de crédito proveedores',
+  'IVA notas de crédito clientes','Saldo a favor periodos anteriores','Saldo IVA antes de estrategia','Estrategia fiscal',
+  'Resultado IVA','IVA a cargo (en contra)','IVA a favor','Estatus','Observaciones'];
+const ivaEstatus=n=>n>0?'A CARGO':n<0?'A FAVOR':'SIN SALDO';
+function filasIva(docs){
+  const por=new Map();
+  docs.forEach(r=>{ if(!IVA_MODS.includes(r.mod)) return; let l=por.get(r.cli); if(!l){ l=[]; por.set(r.cli,l); } l.push(r); });
+  const rk=rangosPantalla(docs);
+  return [...por.entries()].sort((a,b)=>rk.g(D.cli[a[0]][3])-rk.g(D.cli[b[0]][3])||rk.c(a[0])-rk.c(b[0])).map(([ci,l])=>{
+    const c=D.cli[ci], o=sumaIva(l);
+    const est=cent(l.reduce((a,r)=>a+(r.st==='estrategia'?ivaNeto(r):0),0));
+    const v=[o.tras,o.retC,o.acr,o.retP,o.ntcP,o.ntcC].map(cent);
+    const antes=cent(v[0]-v[1]-v[2]+v[3]+v[4]-v[5]), res=cent(antes-est);
+    return {g:c[3]||'Sin grupo',nom:c[1],rfc:c[2],cont:contDe(c),v,antes,est,res};
+  });
+}
+function hojaIva(wb,docs,corte,op){
+  op=op||{};
+  const lista=filasIva(docs);
+  if(!lista.length) return;
+  const MK=window.PROFASE_MARCA, ws=wb.addWorksheet('Saldos de IVA');
+  const azul=MK.colores.azul, gris='FFE7EBF0', fuente=MK.fuente, AMA='FFFFF2CC', NAR='FFFCE4D6', VER='FFE2EFDA';
+  const nc=IVA_COLS.length;
+  [24,44,16,30,17,16,17,17,16,16,17,17,16,17,17,16,12,44].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const o=MK.encabezado(wb,ws,nc)-1, R=n=>n+o;
+  ws.mergeCells('A'+R(1)+':D'+R(1));
+  const t=ws.getCell('A'+R(1)); t.value='SALDOS DE IVA'; t.font={name:fuente,bold:true,size:14,color:{argb:azul}};
+  ws.getRow(R(1)).height=21;
+  const fl=ws.getCell('A'+R(2)); fl.value='Filtros: '+(op.filtros||textoFiltros(op.modo));
+  fl.font={name:fuente,italic:true,size:9,color:{argb:'FF808080'}};
+  const n0=docs.filter(r=>IVA_MODS.includes(r.mod)).length;
+  [['A'+R(3),'Alcance'],['B'+R(3),'Empresas'],['C'+R(3),'Fecha Corte'],['D'+R(3),'Documentos']].forEach(([a,v])=>{
+    const x=ws.getCell(a); x.value=v; x.font={name:fuente,bold:true,size:10,color:{argb:azul}};
+    x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.border={bottom:{style:'thin',color:{argb:azul}}};
+    x.alignment={horizontal:'center',vertical:'middle'};
+  });
+  [['A'+R(4),op.alcance||'Todos los clientes'],['B'+R(4),lista.length],['C'+R(4),corte],['D'+R(4),n0]].forEach(([a,v])=>{
+    const x=ws.getCell(a); x.value=v; x.font={name:fuente,size:11};
+    x.fill={type:'pattern',pattern:'solid',fgColor:{argb:gris}}; x.alignment={horizontal:'center',vertical:'middle'};
+  });
+  ws.getCell('C'+R(4)).numFmt='dd/mm/yyyy'; ws.getCell('D'+R(4)).numFmt='#,##0';
+  ws.getRow(R(5)).height=5.1;
+  for(let i=1;i<=nc;i++) ws.getCell(R(5),i).fill={type:'pattern',pattern:'solid',fgColor:{argb:MK.colores.naranja}};
+  const nota=(fila,txt)=>{ ws.mergeCells('A'+fila+':'+colL(nc-1)+fila); const x=ws.getCell('A'+fila); x.value=txt;
+    x.font={name:fuente,italic:true,size:9,color:{argb:'FF595959'}}; x.alignment={wrapText:true,vertical:'top'}; ws.getRow(fila).height=26; };
+  nota(R(6),'El IVA del saldo: lo que falta por cobrar a clientes y por pagar a proveedores (el IVA de cada documento en '+
+    'proporción a su saldo). Amarillo: se captura aquí (el saldo a favor de periodos anteriores no lo tiene el CRM). '+
+    'Estrategia fiscal (naranja): el IVA de lo marcado «Estrategia fiscal», que no se considera y se resta. '+
+    'Resultado positivo = a cargo (en contra); negativo = a favor; cada uno va en su columna como monto positivo.');
+  nota(R(7),'Saldo antes de estrategia = Trasladado − Retenido por clientes − Acreditable + Retenido a terceros + '+
+    'Notas de crédito proveedores − Notas de crédito clientes − Saldo a favor anterior · Resultado = Saldo antes de estrategia − Estrategia fiscal.');
+  const encab=(fila,cols)=>{ const h=ws.getRow(fila); h.height=40;
+    cols.forEach((n,i)=>{ const x=h.getCell(i+1); x.value=n;
+      x.font={name:fuente,bold:true,color:{argb:'FFFFFFFF'}}; x.fill={type:'pattern',pattern:'solid',fgColor:{argb:azul}};
+      x.alignment={horizontal:'center',vertical:'middle',wrapText:true}; }); };
+  const st=(n,col)=>'IF('+col+n+'>0,"A CARGO",IF('+col+n+'<0,"A FAVOR","SIN SALDO"))';
+  const pinta=(x,arg)=>{ x.fill={type:'pattern',pattern:'solid',fgColor:{argb:arg}}; };
+  // por cliente
+  const lab=ws.getCell('A'+R(9)); lab.value='Por cliente'; lab.font={name:fuente,bold:true,size:12,color:{argb:azul}};
+  const hdr=R(10), p1=hdr+1, p2=hdr+lista.length, ft=p2+1;
+  encab(hdr,IVA_COLS);
+  lista.forEach((x,k)=>{
+    const n=p1+k, row=ws.getRow(n);
+    const val=[x.g,x.nom,x.rfc,x.cont].concat(x.v,[null,
+      {formula:'E'+n+'-F'+n+'-G'+n+'+H'+n+'+I'+n+'-J'+n+'-K'+n,result:x.antes},x.est,
+      {formula:'L'+n+'-M'+n,result:x.res},{formula:'MAX(N'+n+',0)',result:Math.max(x.res,0)},
+      {formula:'MAX(-N'+n+',0)',result:Math.max(-x.res,0)},{formula:st(n,'N'),result:ivaEstatus(x.res)},null]);
+    val.forEach((v,i)=>{ const c=row.getCell(i+1); c.value=v; c.font={name:fuente,size:10};
+      if(i>=4&&i<=15) c.numFmt=RCX_MON; });
+    pinta(row.getCell(11),AMA); pinta(row.getCell(18),AMA); pinta(row.getCell(13),NAR); pinta(row.getCell(14),VER);
+    row.getCell(17).alignment={horizontal:'center'};
+  });
+  const tot=i=>cent(lista.reduce((a,x)=>a+[...x.v,0,x.antes,x.est,x.res,Math.max(x.res,0),Math.max(-x.res,0)][i-4],0));
+  const rt=ws.getRow(ft); rt.getCell(1).value='TOTAL (respeta filtros)';
+  for(let i=4;i<=15;i++) rt.getCell(i+1).value={formula:'SUBTOTAL(109,'+colL(i)+p1+':'+colL(i)+p2+')',result:tot(i)};
+  rt.getCell(17).value={formula:st(ft,'N'),result:ivaEstatus(tot(13))};
+  for(let i=1;i<=nc;i++){ const c=rt.getCell(i); c.font={name:fuente,size:10,bold:true,color:{argb:azul}};
+    c.border={top:{style:'thin',color:{argb:azul}}}; if(i>=5&&i<=16) c.numFmt=RCX_MON; if(i===17) c.alignment={horizontal:'center'}; }
+  ws.autoFilter={from:{row:hdr,column:1},to:{row:p2,column:nc}};
+  // por grupo (solo en el Excel general): sale de la tabla de clientes, así que el saldo a favor capturado también suma
+  if(op.grupos){
+    const grupos=[]; lista.forEach(x=>{ if(!grupos.includes(x.g)) grupos.push(x.g); });
+    const gl=ws.getCell('A'+(ft+3)); gl.value='Por grupo'; gl.font={name:fuente,bold:true,size:12,color:{argb:azul}};
+    const gh=ft+4, gcols=['Grupo','Clientes'].concat(IVA_COLS.slice(4,17)), rng=c=>'$'+c+'$'+p1+':$'+c+'$'+p2;
+    encab(gh,gcols);
+    grupos.forEach((g,k)=>{
+      const n=gh+1+k, row=ws.getRow(n), mio=lista.filter(x=>x.g===g);
+      const s=i=>cent(mio.reduce((a,x)=>a+[...x.v,0,x.antes,x.est,x.res,Math.max(x.res,0),Math.max(-x.res,0)][i-4],0));
+      row.getCell(1).value=g;
+      row.getCell(2).value={formula:'COUNTIF('+rng('A')+',A'+n+')',result:mio.length};
+      for(let i=4;i<=15;i++) row.getCell(i-1).value={formula:'SUMIF('+rng('A')+',$A'+n+','+rng(colL(i))+')',result:s(i)};
+      row.getCell(15).value={formula:st(n,'L'),result:ivaEstatus(s(13))};
+      for(let i=1;i<=gcols.length;i++){ const c=row.getCell(i); c.font={name:fuente,size:10};
+        if(i>=3&&i<=14) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0'; if(i===15) c.alignment={horizontal:'center'}; }
+    });
+    const gf=gh+grupos.length+1, rg=ws.getRow(gf), g1=gh+1, g2=gh+grupos.length;
+    rg.getCell(1).value='TOTAL';
+    rg.getCell(2).value={formula:'SUM(B'+g1+':B'+g2+')',result:lista.length};
+    for(let i=4;i<=15;i++) rg.getCell(i-1).value={formula:'SUM('+colL(i-2)+g1+':'+colL(i-2)+g2+')',result:tot(i)};
+    rg.getCell(15).value={formula:st(gf,'L'),result:ivaEstatus(tot(13))};
+    for(let i=1;i<=gcols.length;i++){ const c=rg.getCell(i); c.font={name:fuente,size:10,bold:true,color:{argb:azul}};
+      c.border={top:{style:'thin',color:{argb:azul}}}; if(i>=3&&i<=14) c.numFmt=RCX_MON; if(i===2) c.numFmt='#,##0';
+      if(i===15) c.alignment={horizontal:'center'}; }
+  }
+  ws.views=[{state:'frozen',ySplit:hdr,xSplit:2}];
+  MK.impresion(ws,{repetir:hdr});
+}
 async function exportaGeneral(paso,modo){
   const espera=()=>new Promise(r=>setTimeout(r,30));
   paso('Preparando…'); await espera();
@@ -2603,6 +2720,8 @@ async function exportaGeneral(paso,modo){
   const wb=window.PROFASE_MARCA.libro(EX,est?'Reporte de estrategia fiscal':'Reporte CXC CXP · general');
   paso('Armando resumen…'); await espera();
   hojaResumen(wb,docs,corte,{modo,mods:sel.mods,titulo:est?'REPORTE DE ESTRATEGIA FISCAL':null});
+  paso('Armando saldos de IVA…'); await espera();
+  hojaIva(wb,docs,corte,{modo,grupos:true});
   for(const h of sel.hojas){
     paso('Armando '+h.nombre+'…'); await espera();
     hojaRCX(wb,h,null,docs.filter(r=>h.mods.includes(r.mod)),corte,{empresas});
