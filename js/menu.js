@@ -51,6 +51,7 @@
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
     usr: '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1.5"/>',
     mul: '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',   // Multinacional: una caja (la comercializadora)
+    cen: '<path d="M4 4.5h16v4H4z"/><path d="M5.5 8.5v11h13v-11"/><path d="M10 12.5h4"/><path d="m9 16 2 2 4-4"/>',   // Centauro: la bóveda de XML (una caja de archivo con palomita)
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
@@ -121,6 +122,14 @@
       { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección.' },
       // Carga de Quo (2-nov-2026, pedido de Fernando Cadengo): el control de lo que se carga de Quo; la base decide quién (qc_yo, 171)
       { k: 'quo-carga', v: 'qcar', t: 'Carga de Quo', d: 'Qué se cargó de Quo, cliente por cliente y mes por mes, si cuadra y qué hay que atender.' }] },
+    // Centauro (3-nov-2026, Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»): lo de los
+    // programas de la bóveda de XML de la oficina, hecho en el CRM. Por el momento lo ven Héctor Daniel Nava, Héctor Nava Ramos
+    // (solo consulta), Fernando Gutiérrez y Fernando Cadengo (cen_estado(), portal/sql/198_centauro.sql; bloque cen_tab.js)
+    { k: 'cen', t: 'Centauro', d: 'Los XML de cada cliente tal cual los entrega el SAT, las canceladas contra QUO, la lista 69-B y sus reportes.', subs: [
+      { k: 'centauro-boveda', v: 'cenb', t: 'Bóveda XML', d: 'Los XML de cada cliente: búscalos, velos y bájalos tal cual.' },
+      { k: 'centauro-canceladas', v: 'cenc', t: 'Canceladas SAT vs QUO', d: 'Lo cancelado en el SAT que sigue activo en QUO, por cliente.' },
+      { k: 'centauro-69b', v: 'cen9', t: 'Lista 69-B', d: 'Los proveedores de cada cliente en la lista 69-B del SAT.' },
+      { k: 'centauro-reportes', v: 'cenr', t: 'Reportes', d: 'Lo que sale de los XML: resumen por mes y CFDI relacionados.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
@@ -186,7 +195,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'

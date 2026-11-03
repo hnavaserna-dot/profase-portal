@@ -1,0 +1,741 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Centauro</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=dc0b49b86b"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/cfdi.js"></script>
+<style>
+/* Portal PROFASE · Centauro (3-nov-2026; Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»;
+   portal/sql/198_centauro.sql). Lo de los programas de la bóveda de la oficina, hecho en el CRM:
+     - ?s=boveda: Bóveda XML. Los XML de cada cliente tal cual los entrega el SAT (el agente del SAT los baja con la e.firma
+       de cada cliente, nube/sat_agente.py modo «xml», a la cubeta privada «sat_xml»). Buscar, ver (la ficha del CFDI de
+       js/cfdi.js, la misma del chat) y bajar el original.
+     - ?s=canceladas: Canceladas SAT vs QUO (las funciones sat_* de 191; una sola versión con la pantalla que iban a hacer
+       Gabo y Fernando en Reportes).
+     - ?s=69b: la lista 69-B del SAT contra lo que recibió cada cliente en QUO.
+     - ?s=reportes: lo que sale de los XML (resumen por mes y CFDI relacionados); aquí se suman los reportes de Chuy.
+   Quién lo ve: cen_quien (Héctor Daniel Nava, Héctor Nava Ramos de solo consulta, Fernando Gutiérrez y Fernando Cadengo),
+   y de cada cliente, lo que deja sat_ve (lo reservado, solo la dirección y el contador del cliente). Todo por las funciones
+   cen_* y sat_*; la página nunca lee las tablas. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .logo{height:40px;width:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabs button:focus-visible,.kpi:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:0 0 14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.kpi:hover{border-color:var(--navy)}
+.kpi[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.kpi .l{display:block;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{display:block;font-family:var(--f-display);font-size:24px;font-weight:750}
+.kpi.ojo .v{color:var(--accent-ink)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros label{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:240px}
+.seleccion{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;background:var(--navy-soft);border-bottom:1px solid var(--line);font-size:13px}
+.tabla{overflow-x:auto;position:relative}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:top}
+td.chk,th.chk{width:34px;padding-right:0}
+td.chk input,th.chk input{width:18px;height:18px;accent-color:var(--navy)}
+.rs{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.nowrap{white-space:nowrap}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+.vacio{padding:20px 14px;color:var(--muted)}
+.mas{padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:center;border-top:1px solid var(--line)}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(680px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px;display:grid;gap:10px}
+.dl{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:6px 12px;font-size:13.5px}
+.dl dt{color:var(--muted);font-weight:600;font-size:12.5px}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.correo{white-space:pre-wrap;font-size:13px;background:var(--surface-2);border-radius:8px;padding:10px 12px;max-height:280px;overflow:auto;overflow-wrap:anywhere}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.campo textarea{min-height:70px;resize:vertical}
+.lista{list-style:none;margin:0;padding:0}
+.lista li{padding:8px 0;border-top:1px solid var(--line)}
+.lista li:first-child{border-top:0}
+.lista .t{font-weight:600;overflow-wrap:anywhere}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h2{font-size:20px;font-weight:750}
+.pregunta .pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.cuenta{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.cuenta div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.cuenta b{display:block;font-family:var(--f-display);font-size:22px}
+@media (max-width:600px){
+  .band h1{font-size:22px}
+  .campos{grid-template-columns:1fr}
+  .dl{grid-template-columns:1fr}
+  .filtros input[type="search"]{width:100%}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .kpi{padding:8px 10px}
+  .kpi .l{font-size:10.5px;letter-spacing:.02em}
+  .kpi .v{font-size:20px}
+  .campo input,.campo select,.campo textarea,.filtros select,.filtros input{font-size:16px}
+}
+/* la lista como tarjetas en el celular y el iPad parado (así no se corta el estado a la derecha) */
+@media (max-width:820px){
+  table.resp thead{display:none}
+  table.resp,table.resp tbody,table.resp tr,table.resp td{display:block;width:100%}
+  table.resp tr{border-top:1px solid var(--line);padding:8px 44px 8px 10px;position:relative}
+  table.resp td{border:0;padding:2px 0}
+  table.resp td.chk{position:absolute;right:10px;top:10px;width:auto}
+  table.resp td[data-l]::before{content:attr(data-l) " · ";color:var(--muted);font-size:12px}
+}
+/* Centauro */
+.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+.clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:12px 14px}
+.cli{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;min-width:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.cli:hover{border-color:var(--navy)}
+.cli[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.cli .t{font-weight:700;overflow-wrap:anywhere}
+.cli .n{display:flex;flex-wrap:wrap;gap:6px}
+.lados{display:flex;gap:4px;flex-wrap:wrap}
+.lados button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--muted)}
+.lados button[aria-pressed="true"]{background:var(--navy-soft);border-color:var(--navy);color:var(--ink)}
+.filtros .busca{min-width:240px;flex:1 1 260px;max-width:420px}
+.tot{padding:8px 14px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 16px}
+.tot b{color:var(--ink)}
+.rel{display:grid;gap:4px}
+.rel div{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cajaxml{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.cajaxml>div{background:var(--surface);border-radius:14px;width:min(980px,100%);max-height:calc(100% - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.cajaxml .xcab{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.cajaxml .xcab b{overflow-wrap:anywhere;min-width:0}
+.cajaxml .xcu{overflow:auto;min-height:0}
+.pie{color:var(--muted);font-size:12.5px;margin:6px 0 20px;overflow-wrap:anywhere}
+@media (max-width:600px){
+  .filtros .busca{min-width:0;max-width:none;flex-basis:100%}
+  .cajaxml{padding:0}
+  .cajaxml>div{max-height:100%;height:100%;border-radius:0}
+}
+@media (max-width:820px){ table.resp td.num{text-align:left} table.resp tr{padding-right:10px} }
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Centauro</div>
+      <h1 id="titulo">Bóveda XML</h1>
+      <p id="desc">Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no pedir nada al SAT.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <!-- Bóveda XML -->
+  <section id="s-boveda" hidden>
+    <div class="nota info" id="b-prueba"></div>
+    <div class="card">
+      <header><div><h2>Clientes en la bóveda</h2><div class="sub">Pica uno para ver solo sus XML; pícale otra vez para ver todos.</div></div></header>
+      <div class="clis" id="b-clis"></div>
+    </div>
+    <div class="card">
+      <header><div><h2>Los XML</h2><div class="sub" id="b-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-boveda">Excel</button></div></header>
+      <div class="filtros">
+        <div class="lados" role="group" aria-label="Emitidas o recibidas">
+          <button type="button" data-lado="" aria-pressed="true">Todas</button>
+          <button type="button" data-lado="emitida" aria-pressed="false">Emitidas</button>
+          <button type="button" data-lado="recibida" aria-pressed="false">Recibidas</button>
+        </div>
+        <select id="b-tipo" aria-label="Tipo de comprobante">
+          <option value="">Todos los tipos</option><option value="I">Ingreso</option><option value="E">Egreso</option>
+          <option value="P">Pago</option><option value="N">Nómina</option><option value="T">Traslado</option>
+        </select>
+        <label>Del <input type="date" id="b-desde"></label>
+        <label>al <input type="date" id="b-hasta"></label>
+        <input type="search" class="busca" id="b-q" placeholder="Buscar UUID, RFC, nombre o folio" aria-label="Buscar">
+      </div>
+      <div class="tot" id="b-tot"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Tipo</th><th>Serie y folio</th><th>De / para</th><th class="num">Total</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="b-lista"></tbody></table></div>
+      <div class="mas" id="b-mas" hidden><button class="btn" type="button" id="b-mas-b">Ver más</button></div>
+    </div>
+    <p class="pie">Cada XML se guarda tal cual lo entrega el SAT; al bajarlo sale el original, sin cambios. Los XML los baja el CRM solo con la e.firma de cada cliente, que ya vive guardada en el CRM, y cada uso queda en Accesos.</p>
+  </section>
+
+  <!-- Canceladas SAT vs QUO -->
+  <section id="s-canceladas" hidden>
+    <div class="kpis" id="c-kpis"></div>
+    <div class="card">
+      <header><div><h2 id="c-h">Canceladas en el SAT</h2><div class="sub" id="c-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-canceladas">Excel</button></div></header>
+      <div class="filtros">
+        <div class="busca" id="c-cliBox"></div>
+        <div class="lados" role="group" aria-label="Emitidas o recibidas">
+          <button type="button" data-clado="" aria-pressed="true">Todas</button>
+          <button type="button" data-clado="emitida" aria-pressed="false">Emitidas</button>
+          <button type="button" data-clado="recibida" aria-pressed="false">Recibidas</button>
+        </div>
+      </div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Emitida el</th><th>UUID</th><th>De / para</th><th class="num">Total</th><th>Cancelada el</th><th>En QUO</th></tr></thead>
+        <tbody id="c-lista"></tbody></table></div>
+    </div>
+    <div class="card">
+      <header><div><h2>Revisión con el SAT, por cliente</h2><div class="sub" id="c-ult"></div></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Revisado</th><th>e.firma</th><th class="num">Canceladas</th><th class="num">Por cancelar en QUO</th><th></th></tr></thead>
+        <tbody id="c-clis"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- Lista 69-B -->
+  <section id="s-69b" hidden>
+    <div class="nota info" id="n-69b"></div>
+    <div class="card">
+      <header><div><h2>Clientes con proveedores en la lista 69-B</h2><div class="sub" id="n-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-69b">Excel</button></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Proveedor</th><th>Situación</th><th class="num">CFDI</th><th class="num">Total recibido</th><th>Último CFDI</th></tr></thead>
+        <tbody id="n-lista"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- Reportes -->
+  <section id="s-reportes" hidden>
+    <div class="tabs" role="tablist" aria-label="Reportes">
+      <button type="button" role="tab" data-rep="mes" aria-selected="true">Resumen por mes</button>
+      <button type="button" role="tab" data-rep="rel" aria-selected="false">CFDI relacionados</button>
+    </div>
+    <div class="card">
+      <header><div><h2 id="r-h">Resumen por mes</h2><div class="sub" id="r-sub"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-reportes">Excel</button></div></header>
+      <div class="filtros">
+        <div class="busca" id="r-cliBox"></div>
+        <label id="r-anioL">Año <select id="r-anio"></select></label>
+      </div>
+      <div class="tabla"><table class="resp" id="r-tabla"><thead id="r-cab"></thead><tbody id="r-lista"></tbody></table></div>
+    </div>
+    <p class="pie">Salen de los XML de la bóveda. Aquí se irán sumando los demás reportes que hoy se sacan del programa de la bóveda de la oficina.</p>
+  </section>
+</div>
+
+<div class="cajaxml" id="xml" hidden role="dialog" aria-modal="true" aria-labelledby="xml-t"><div>
+  <div class="xcab"><b id="xml-t">XML</b><div class="acciones"><button class="btn" type="button" id="xml-baja">Bajar el XML</button><button class="btn" type="button" id="xml-cierra">Cerrar</button></div></div>
+  <div class="xcu" id="xml-cu" tabindex="0"></div>
+</div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false;
+  var S = new URLSearchParams(location.search).get('s') || 'boveda';
+  if (['boveda', 'canceladas', '69b', 'reportes'].indexOf(S) < 0) S = 'boveda';
+  var TIT = {
+    boveda: ['Bóveda XML', 'Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.'],
+    canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y cómo están en QUO: las que siguen activas en QUO hay que cancelarlas.'],
+    '69b': ['Lista 69-B', 'Los proveedores de los clientes que el SAT publica como presuntos o definitivos en la lista del artículo 69-B del CFF.'],
+    reportes: ['Reportes', 'Lo que sale de los XML de la bóveda: el resumen por mes y los CFDI relacionados.']
+  };
+  var TIPOS = { I: 'Ingreso', E: 'Egreso', P: 'Pago', N: 'Nómina', T: 'Traslado' };
+  var RELACION = { '01': 'Nota de crédito', '02': 'Nota de débito', '03': 'Devolución de mercancía', '04': 'Sustitución', '05': 'Traslados facturados antes', '06': 'Factura de traslados', '07': 'Aplicación de anticipo' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : fecha(s); } catch (e) { return fecha(s); } }
+  function mes(s) { var p = String(s || '').split('-'); return p.length < 2 ? String(s || '') : MESES_L[+p[1] - 1] + ' ' + p[0]; }
+  function dinero(v, m) {
+    if (v === null || v === undefined || v === '') return '';
+    var n = +v; if (!isFinite(n)) return esc(v);
+    var mon = /^[A-Z]{3}$/.test(m || '') && m !== 'XXX' ? m : 'MXN';
+    try { return n.toLocaleString('es-MX', { style: 'currency', currency: mon, minimumFractionDigits: 2 }); } catch (e) { return n.toFixed(2); }
+  }
+  function cuenta(n, uno, varios) { n = +n || 0; return n.toLocaleString('es-MX') + ' ' + (n === 1 ? uno : varios); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function vacio(tb, cols, t) { tb.innerHTML = '<tr><td colspan="' + cols + '" class="vacio">' + esc(t) + '</td></tr>'; }
+
+  /* ---------- Excel (y su PDF al lado, con la marca PROFASE) ---------- */
+  async function excel(btn, titulo, head, filas, anchos, lineas) {
+    btn.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: (lineas || []).concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, titulo + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    btn.disabled = false;
+  }
+
+  /* ---------- un buscador de cliente (la pieza común js/buscador.js) ---------- */
+  function buscaCliente(donde, id, clis, cambio) {
+    return window.PROFASE_BUSCA.crea({ donde: donde, id: id, varios: false,
+      opciones: clis.map(function (c) { return { v: c.rfc, t: c.cliente || c.rfc, nota: c.rfc }; }),
+      valor: [], marcador: 'Todos los clientes', vacio: 'Ningún cliente coincide',
+      sinOpciones: 'Todavía no hay clientes', cambio: function (v) { cambio(v[0] || ''); } });
+  }
+
+  /* =============================== Bóveda XML =============================== */
+  var B = { cli: '', lado: '', filas: [], total: 0, mxn: 0, clis: [] };
+  function filtroB() {
+    return { rfc: B.cli, lado: B.lado, tipo: $('b-tipo').value, desde: $('b-desde').value, hasta: $('b-hasta').value, q: $('b-q').value.trim() };
+  }
+  function estadoDescarga(c) {
+    var d = c.descarga || [];
+    if (!d.length) return c.efirma && c.efirma !== 'Se usa la e.firma' ? chip(c.efirma, 'mal') : chip('Sin pedir todavía', '');
+    return d.slice(0, 2).map(function (s) {
+      var l = s.lado === 'emitida' ? 'Emitidas' : 'Recibidas';
+      if (s.estado === 'pedida') return chip(l + ': el SAT la está preparando', 'ojo');
+      if (s.estado === 'descargada') return chip(l + ': bajadas el ' + fecha(s.revisada), 'ok');
+      if (s.estado === 'vacia') return chip(l + ': el SAT no tiene XML', '');
+      if (s.estado === 'rechazada') return chip(l + ': el SAT no la aceptó', 'mal');
+      return chip(l + ': ' + (s.estado === 'vencida' ? 'el SAT no la terminó' : 'falló'), 'mal');
+    }).join(' ');
+  }
+  function pintaClientes() {
+    var h = B.clis.map(function (c) {
+      return '<button type="button" class="cli" data-rfc="' + esc(c.rfc) + '" aria-pressed="' + (B.cli === c.rfc) + '">'
+        + '<span class="t">' + esc(c.cliente) + '</span><span class="mut">' + esc(c.rfc) + (c.primera ? ' · del ' + esc(fecha(c.primera)) + ' al ' + esc(fecha(c.ultima)) : '') + '</span>'
+        + '<span class="n">' + chip(cuenta(c.emitidas, 'emitida', 'emitidas'), 'az') + chip(cuenta(c.recibidas, 'recibida', 'recibidas'), 'az')
+        + (c.kb ? chip((c.kb / 1024).toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' MB', '') : '') + '</span>'
+        + '<span class="n">' + estadoDescarga(c) + '</span>'
+        + (c.efirma && c.efirma !== 'Se usa la e.firma' && (c.descarga || []).length ? '<span class="mut">' + esc(c.efirma) + '</span>' : '') + '</button>';
+    }).join('');
+    $('b-clis').innerHTML = h || '<div class="vacio">Todavía no hay clientes en la bóveda.</div>';
+    $('b-clis').querySelectorAll('[data-rfc]').forEach(function (b) {
+      b.onclick = function () { var r = b.getAttribute('data-rfc'); B.cli = B.cli === r ? '' : r; pintaClientes(); listaB(true); };
+    });
+  }
+  function filaB(f) {
+    var de = f.lado === 'emitida' ? 'Para: ' : 'De: ', rfc = f.lado === 'emitida' ? f.rfc_receptor : f.rfc_emisor, nom = f.lado === 'emitida' ? f.nombre_receptor : f.nombre_emisor;
+    var est = (f.cancelada ? chip('Cancelada en el SAT', 'mal') + ' ' : '') + (f.relacionados ? chip('Relaciona ' + f.relacionados, 'az') + ' ' : '')
+      + ((f.complementos || []).indexOf('Pagos') >= 0 ? chip('Complemento de pago', '') : '');
+    return '<tr data-uuid="' + esc(f.uuid) + '" data-rfc="' + esc(f.rfc) + '">'
+      + '<td data-l="Fecha" class="nowrap">' + esc(fecha(f.fecha)) + '</td>'
+      + '<td data-l="Tipo">' + chip(TIPOS[f.tipo] || f.tipo || '¿?', f.lado === 'emitida' ? 'na' : 'az') + ' <span class="mut">' + (f.lado === 'emitida' ? 'emitida' : 'recibida') + '</span></td>'
+      + '<td data-l="Serie y folio">' + esc([f.serie, f.folio].filter(Boolean).join('-') || '—') + '<div class="mono mut">' + esc(f.uuid) + '</div></td>'
+      + '<td data-l="De / para"><span class="rs">' + esc(nom || rfc) + '</span><div class="mut">' + esc(de + rfc) + (B.cli ? '' : ' · ' + esc(clienteDe(f.rfc))) + '</div></td>'
+      + '<td data-l="Total" class="num">' + (f.tipo === 'P' || f.tipo === 'T' ? '<span class="mut">—</span>' : dinero(f.total, f.moneda)) + '</td>'
+      + '<td data-l="Estado">' + (est || '<span class="mut">Vigente</span>') + '</td>'
+      + '<td><div class="acciones"><button class="btn chico" type="button" data-ver>Ver</button><button class="btn chico" type="button" data-baja>Bajar</button></div></td></tr>';
+  }
+  function clienteDe(rfc) { var c = B.clis.filter(function (x) { return x.rfc === rfc; })[0]; return c ? c.cliente : rfc; }
+  async function listaB(reset) {
+    if (reset) { B.filas = []; }
+    try {
+      var r = await rpc('cen_xml_lista', { p: Object.assign(filtroB(), { max: 300, desde_n: B.filas.length }) });
+      B.total = r.total || 0; B.mxn = r.mxn || 0; B.filas = B.filas.concat(r.filas || []);
+      var tb = $('b-lista');
+      if (!B.filas.length) vacio(tb, 7, B.clis.length ? 'No hay XML con estos filtros.' : 'Todavía no hay XML en la bóveda.');
+      else tb.innerHTML = B.filas.map(filaB).join('');
+      tb.querySelectorAll('tr[data-uuid]').forEach(function (tr) {
+        var f = B.filas.filter(function (x) { return x.uuid === tr.getAttribute('data-uuid') && x.rfc === tr.getAttribute('data-rfc'); })[0];
+        tr.querySelector('[data-ver]').onclick = function (ev) { verXml(f, ev.currentTarget); };
+        tr.querySelector('[data-baja]').onclick = function (ev) { bajaXml(f, ev.currentTarget); };
+      });
+      $('b-tot').innerHTML = '<span><b>' + B.total.toLocaleString('es-MX') + '</b> ' + (B.total === 1 ? 'XML' : 'XML') + (B.cli ? ' de ' + esc(clienteDe(B.cli)) : '') + '</span>'
+        + (B.filas.length < B.total ? '<span>Se ven ' + B.filas.length.toLocaleString('es-MX') + '</span>' : '');
+      $('b-mas').hidden = B.filas.length >= B.total;
+      $('b-sub').textContent = B.cli ? clienteDe(B.cli) : 'Todos los clientes';
+    } catch (e) { error(falla(e)); }
+  }
+  async function cargaBoveda() {
+    B.clis = await rpc('cen_xml_clientes') || [];
+    var pruebas = EST.modo === 'piloto';
+    $('b-prueba').hidden = !pruebas;
+    $('b-prueba').innerHTML = '<strong>Prueba con ' + cuenta(B.clis.length, 'cliente', 'clientes') + ':</strong> el CRM le pide al SAT sus XML desde el ' + esc(fecha(EST.desde))
+      + ' (los emitidos, todos; los recibidos, los vigentes, que es lo que entrega el SAT). Cuando terminemos de medir cuánto pesan y cuánto tardan, se decide pasar a todos los clientes y la descarga de cada día.';
+    pintaClientes();
+    await listaB(true);
+  }
+  var tB = null;
+  function enCambioB() { clearTimeout(tB); tB = setTimeout(function () { listaB(true); }, 300); }
+  document.querySelectorAll('[data-lado]').forEach(function (b) {
+    b.onclick = function () { B.lado = b.getAttribute('data-lado'); document.querySelectorAll('[data-lado]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); listaB(true); };
+  });
+  ['b-tipo', 'b-desde', 'b-hasta'].forEach(function (id) { $(id).addEventListener('change', function () { listaB(true); }); });
+  $('b-q').addEventListener('input', enCambioB);
+  $('b-mas-b').onclick = function () { listaB(false); };
+  $('x-boveda').onclick = async function () {
+    var btn = this, todas = [], r;
+    btn.disabled = true;
+    try {
+      do { r = await rpc('cen_xml_lista', { p: Object.assign(filtroB(), { max: 1000, desde_n: todas.length }) }); todas = todas.concat(r.filas || []); }
+      while ((r.filas || []).length === 1000 && todas.length < 20000);
+    } catch (e) { btn.disabled = false; error(falla(e)); return; }
+    btn.disabled = false;
+    excel(btn, 'Bóveda XML', ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Tipo', 'Fecha', 'Serie y folio', 'UUID', 'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Moneda', 'Subtotal', 'Total', 'Método de pago', 'Forma de pago', 'Uso del CFDI', 'Cancelada en el SAT', 'Relaciona'],
+      todas.map(function (f) { return [clienteDe(f.rfc), f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', TIPOS[f.tipo] || f.tipo, fecha(f.fecha), [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.moneda, f.subtotal == null ? '' : +f.subtotal, f.total == null ? '' : +f.total, f.metodo_pago, f.forma_pago, f.uso_cfdi, f.cancelada ? 'Sí' : '', f.relacionados || '']; }),
+      [34, 15, 12, 10, 12, 14, 38, 15, 34, 15, 34, 8, 14, 14, 10, 10, 10, 12, 10], [(B.cli ? clienteDe(B.cli) : 'Todos los clientes') + ' · ' + cuenta(todas.length, 'XML', 'XML')]);
+  };
+
+  /* ---------- ver y bajar un XML (la cubeta privada; el original, tal cual) ---------- */
+  var V = null, ABIERTO = null, antes = null;
+  async function bytesXml(d) {
+    var r = await P.sb.storage.from('sat_xml').download(d.ruta);
+    if (r.error || !r.data) throw new Error('No se pudo traer el XML');
+    return new Uint8Array(await r.data.arrayBuffer());
+  }
+  function visor() {
+    if (V) return V;
+    V = window.PROFASE_VISOR.nuevo({ trae: bytesXml, esPdf: function () { return false; },
+      nombre: function (d) { return d.nombre; },
+      alBajar: function (d) { try { P.registrar('descarga', 'Centauro · XML ' + d.nombre); } catch (e) {} } });
+    return V;
+  }
+  function docXml(f) { return { id: f.ruta, ruta: f.ruta, nombre: f.uuid + '.xml', tipo: 'application/xml' }; }
+  function bajaXml(f, btn) { visor().baja(docXml(f), btn); }
+  async function verXml(f, btn) {
+    var t0 = btn.textContent; btn.disabled = true; btn.textContent = 'Abriendo…';
+    try {
+      var b = await visor().bytes(docXml(f)), txt = new TextDecoder('utf-8').decode(b), doc = new DOMParser().parseFromString(txt, 'application/xml');
+      var cuerpo;
+      if (doc.getElementsByTagName('parsererror').length) cuerpo = '<p class="vacio">El XML trae un error y no se puede acomodar; bájalo para verlo tal cual.</p>';
+      else {
+        var fi = window.PROFASE_CFDI.ficha(doc);
+        cuerpo = fi + (fi ? '<details class="vx-xml"><summary>XML completo</summary>' : '') + '<pre class="vx-pre">'
+          + window.PROFASE_CFDI.bonito(doc.documentElement, 400000) + '</pre>' + (fi ? '</details>' : '');
+      }
+      ABIERTO = f; antes = document.activeElement;
+      $('xml-t').textContent = (TIPOS[f.tipo] || 'CFDI') + ' ' + ([f.serie, f.folio].filter(Boolean).join('-') || f.uuid);
+      $('xml-cu').innerHTML = cuerpo; $('xml-cu').scrollTop = 0; $('xml').hidden = false;
+      try { $('xml-cierra').focus(); } catch (e) {}
+      try { P.registrar('vista', 'Centauro · XML ' + f.uuid); } catch (e) {}
+    } catch (e) { error('No se pudo abrir el XML: ' + falla(e)); }
+    btn.disabled = false; btn.textContent = t0;
+  }
+  function cierraXml() { $('xml').hidden = true; $('xml-cu').innerHTML = ''; ABIERTO = null; try { if (antes) antes.focus(); } catch (e) {} }
+  $('xml-cierra').onclick = cierraXml;
+  $('xml-baja').onclick = function () { if (ABIERTO) bajaXml(ABIERTO, this); };
+  $('xml').addEventListener('click', function (ev) {
+    if (ev.target === $('xml')) { cierraXml(); return; }
+    var b = ev.target.closest('[data-copia]');
+    if (b) { try { navigator.clipboard.writeText(b.getAttribute('data-copia')); b.textContent = 'Copiado'; setTimeout(function () { b.textContent = 'Copiar'; }, 1400); } catch (e) {} }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('xml').hidden) cierraXml(); });
+
+  /* =============================== Canceladas SAT vs QUO =============================== */
+  var C = { estado: 'activa', cli: '', lado: '', res: null, filas: [] };
+  var KPI = [['activa', 'Por cancelar en QUO', 'por_cancelar', 'ojo'], ['no_esta', 'No están en QUO', 'no_estan', ''], ['corregida', 'Corregidas en QUO', 'corregidas', ''],
+             ['bien', 'Bien en QUO', 'bien', ''], ['raros', 'Para revisar', 'raros', 'ojo']];
+  var QUO = { activa: ['Activa en QUO: hay que cancelarla', 'mal'], cancelada: ['Cancelada en QUO', 'ok'], no_esta: ['No está en QUO', ''], sustituida: ['Sustituida', 'ok'], otro: ['Otro estatus en QUO', 'ojo'], pendiente: ['Por cruzar', ''] };
+  function pintaKpis() {
+    var k = (C.res && C.res.cuadros) || {};
+    $('c-kpis').innerHTML = KPI.map(function (x) {
+      var v = k[x[2]], n = typeof v === 'object' && v ? v.n : v || 0, m = typeof v === 'object' && v ? v.monto : null;
+      return '<button type="button" class="kpi ' + x[3] + '" data-est="' + x[0] + '" aria-pressed="' + (C.estado === x[0]) + '"><span class="l">' + esc(x[1]) + '</span><span class="v">' + (+n || 0).toLocaleString('es-MX') + '</span>'
+        + (m ? '<span class="mut">' + dinero(m) + '</span>' : '') + '</button>';
+    }).join('');
+    $('c-kpis').querySelectorAll('[data-est]').forEach(function (b) { b.onclick = function () { C.estado = b.getAttribute('data-est'); pintaKpis(); listaC(); }; });
+  }
+  async function listaC() {
+    var tb = $('c-lista');
+    try {
+      // «Bien en QUO» es lo cancelado o sustituido en QUO que no se tuvo que corregir: igual que su cuadro
+      var bien = C.estado === 'bien';
+      C.filas = await rpc('sat_lista', { p: { estado: bien ? '' : C.estado, rfc: C.cli, lado: C.lado, max: 20000 } }) || [];
+      if (bien) C.filas = C.filas.filter(function (f) { return (f.estado_quo === 'cancelada' || f.estado_quo === 'sustituida') && !f.corregida_el; });
+      var x = KPI.filter(function (k) { return k[0] === C.estado; })[0];
+      $('c-h').textContent = x ? x[1] : 'Canceladas en el SAT';
+      $('c-sub').textContent = cuenta(C.filas.length, 'factura', 'facturas') + (C.cli ? ' · ' + (C.filas[0] ? C.filas[0].cliente : C.cli) : '');
+      if (!C.filas.length) { vacio(tb, 7, 'No hay facturas aquí.'); return; }
+      tb.innerHTML = C.filas.map(function (f) {
+        var q = QUO[f.estado_quo] || [f.estado_quo, ''];
+        return '<tr><td data-l="Cliente"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.lado === 'emitida' ? 'Emitida' : 'Recibida') + '</div></td>'
+          + '<td data-l="Emitida el" class="nowrap">' + esc(fecha(f.fecha_emision)) + '</td>'
+          + '<td data-l="UUID"><span class="mono">' + esc(f.uuid) + '</span></td>'
+          + '<td data-l="De / para"><span class="rs">' + esc(f.lado === 'emitida' ? (f.nombre_receptor || f.rfc_receptor) : (f.nombre_emisor || f.rfc_emisor)) + '</span><div class="mut">' + esc(f.lado === 'emitida' ? f.rfc_receptor : f.rfc_emisor) + '</div></td>'
+          + '<td data-l="Total" class="num">' + dinero(f.total) + '</td>'
+          + '<td data-l="Cancelada el" class="nowrap">' + esc(f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : 'Se vio el ' + fecha(f.detectada)) + '</td>'
+          + '<td data-l="En QUO">' + chip(f.corregida_el ? 'Corregida en QUO el ' + fecha(f.corregida_el) : q[0], f.corregida_el ? 'ok' : q[1]) + (f.raro ? ' ' + chip('Trae saldo en QUO', 'ojo') : '') + (f.fuera_rango ? '<div class="mut">De antes de lo que trae QUO</div>' : '') + '</td></tr>';
+      }).join('');
+    } catch (e) { error(falla(e)); }
+  }
+  function pintaClisC() {
+    var cl = (C.res && C.res.clientes) || [], puede = C.res && C.res.puede_pedir && !CONSULTA;
+    $('c-ult').textContent = C.res && C.res.ultima ? 'La última revisión terminó el ' + fechaHora(C.res.ultima) : '';
+    var tb = $('c-clis');
+    if (!cl.length) { vacio(tb, 6, 'Todavía no se revisa ningún cliente.'); return; }
+    tb.innerHTML = cl.map(function (c) {
+      return '<tr><td data-l="Cliente"><span class="rs">' + esc(c.cliente) + '</span><div class="mut">' + esc(c.rfc) + '</div></td>'
+        + '<td data-l="Revisado">' + (c.revisado ? esc(fechaHora(c.revisado)) + '<div class="mut">' + esc({ efirma: 'con la e.firma', verificador: 'con el verificador del SAT', manual: 'con lo que se subió' }[c.como] || '') + '</div>' : '<span class="mut">Todavía no</span>') + '</td>'
+        + '<td data-l="e.firma">' + esc(c.efirma || '—') + (c.efirma_vence ? '<div class="mut">Vence el ' + esc(fecha(c.efirma_vence)) + '</div>' : '') + '</td>'
+        + '<td data-l="Canceladas" class="num">' + (+c.canceladas || 0).toLocaleString('es-MX') + '</td>'
+        + '<td data-l="Por cancelar en QUO" class="num">' + ((+c.por_cancelar || 0) ? chip(String(c.por_cancelar), 'mal') : '0') + '</td>'
+        + '<td>' + (puede ? '<button class="btn chico" type="button" data-pide="' + esc(c.rfc) + '">Revisar ahora con el SAT</button>' : '') + '</td></tr>';
+    }).join('');
+    tb.querySelectorAll('[data-pide]').forEach(function (b) {
+      b.onclick = async function () {
+        b.disabled = true;
+        try { var r = await rpc('sat_pide', { p_rfc: b.getAttribute('data-pide') }); avisa(r && r.mensaje || 'Se pidió al SAT.'); }
+        catch (e) { error(falla(e)); }
+        b.disabled = false;
+      };
+    });
+  }
+  var bC = null;
+  async function cargaCanceladas() {
+    C.res = await rpc('sat_resumen');
+    if (!C.res || !C.res.ve) throw new Error('No tienes clientes en esta revisión.');
+    pintaKpis(); pintaClisC();
+    if (!bC) bC = buscaCliente($('c-cliBox'), 'c-cli', C.res.clientes || [], function (v) { C.cli = v; listaC(); });
+    await listaC();
+  }
+  document.querySelectorAll('[data-clado]').forEach(function (b) {
+    b.onclick = function () { C.lado = b.getAttribute('data-clado'); document.querySelectorAll('[data-clado]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); listaC(); };
+  });
+  $('x-canceladas').onclick = function () {
+    var x = KPI.filter(function (k) { return k[0] === C.estado; })[0];
+    excel(this, 'Canceladas SAT vs QUO', ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Emitida el', 'UUID', 'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Total', 'Cancelada el', 'En QUO', 'Corregida en QUO el'],
+      C.filas.map(function (f) { return [f.cliente, f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', fecha(f.fecha_emision), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.total == null ? '' : +f.total, f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : '', (QUO[f.estado_quo] || [f.estado_quo])[0], f.corregida_el ? fecha(f.corregida_el) : '']; }),
+      [34, 15, 12, 12, 38, 15, 34, 15, 34, 14, 12, 28, 14], [(x ? x[1] : '') + ' · ' + cuenta(C.filas.length, 'factura', 'facturas')]);
+  };
+
+  /* =============================== Lista 69-B =============================== */
+  var N = { filas: [] };
+  async function carga69b() {
+    var r = await Promise.all([rpc('sat_69b_lista'), rpc('sat_resumen')]);
+    N.filas = r[0] || [];
+    var res = r[1] || {};
+    $('n-69b').innerHTML = res.lista_69b ? 'La lista del SAT se revisó el ' + esc(fechaHora(res.lista_69b)) + ' y se cruza con lo que recibió cada cliente en QUO. Se vuelve a revisar los días 1 y 15.'
+      : 'La lista del SAT se revisa los días 1 y 15 y se cruza con lo que recibió cada cliente en QUO.';
+    $('n-sub').textContent = cuenta(N.filas.length, 'caso', 'casos');
+    var tb = $('n-lista');
+    if (!N.filas.length) { vacio(tb, 6, 'Ningún cliente ni sus proveedores aparecen en la lista 69-B.'); return; }
+    tb.innerHTML = N.filas.map(function (h) {
+      var s = String(h.situacion || ''), cls = /definitiv/i.test(s) ? 'mal' : /presun/i.test(s) ? 'ojo' : '';
+      return '<tr><td data-l="Cliente"><span class="rs">' + esc(h.cliente) + '</span><div class="mut">' + esc(h.rfc) + '</div></td>'
+        + '<td data-l="Proveedor">' + (h.propio ? chip('El cliente mismo aparece', 'mal') : '<span class="rs">' + esc(h.nombre_proveedor || h.rfc_proveedor) + '</span><div class="mut">' + esc(h.rfc_proveedor) + '</div>') + '</td>'
+        + '<td data-l="Situación">' + chip(s || '—', cls) + '</td>'
+        + '<td data-l="CFDI" class="num">' + (+h.n_cfdi || 0).toLocaleString('es-MX') + '</td>'
+        + '<td data-l="Total recibido" class="num">' + dinero(h.total) + '</td>'
+        + '<td data-l="Último CFDI" class="nowrap">' + esc(fecha(h.ultima)) + '</td></tr>';
+    }).join('');
+  }
+  $('x-69b').onclick = function () {
+    excel(this, 'Lista 69-B', ['Cliente', 'RFC del cliente', 'RFC del proveedor', 'Proveedor', 'Situación', 'CFDI', 'Total recibido', 'Último CFDI', 'El cliente aparece'],
+      N.filas.map(function (h) { return [h.cliente, h.rfc, h.rfc_proveedor, h.nombre_proveedor, h.situacion, +h.n_cfdi || 0, h.total == null ? '' : +h.total, fecha(h.ultima), h.propio ? 'Sí' : '']; }),
+      [34, 15, 15, 34, 16, 8, 14, 12, 10], [cuenta(N.filas.length, 'caso', 'casos')]);
+  };
+
+  /* =============================== Reportes =============================== */
+  var R = { rep: 'mes', cli: '', clis: [], filas: [] };
+  function anios() {
+    var hoy = new Date().getFullYear(), de = +String(EST.desde || hoy).slice(0, 4) || hoy, s = $('r-anio'), h = '';
+    for (var a = hoy; a >= Math.min(de, hoy); a--) h += '<option value="' + a + '">' + a + '</option>';
+    s.innerHTML = h;
+  }
+  function cabR(cols) { $('r-cab').innerHTML = '<tr>' + cols.map(function (c) { return '<th' + (c[1] ? ' class="num"' : '') + '>' + esc(c[0]) + '</th>'; }).join('') + '</tr>'; }
+  function porMes(filas) {
+    var m = {};
+    filas.forEach(function (f) {
+      var k = f.mes + '|' + f.lado, x = m[k] || (m[k] = { mes: f.mes, lado: f.lado, I: [0, 0], E: [0, 0], P: [0, 0], N: [0, 0], T: [0, 0], k: 0 });
+      var t = x[f.tipo] || (x[f.tipo] = [0, 0]); t[0] += +f.n || 0; t[1] += +f.total || 0; x.k += +f.canceladas || 0;
+    });
+    return Object.keys(m).sort().map(function (k) { return m[k]; });
+  }
+  async function listaR() {
+    var tb = $('r-lista');
+    try {
+      if (R.rep === 'mes') {
+        $('r-h').textContent = 'Resumen por mes'; $('r-anioL').hidden = false;
+        cabR([['Mes'], ['Emitidas o recibidas'], ['Ingresos', 1], ['Egresos', 1], ['Pagos', 1], ['Nómina', 1], ['Canceladas en el SAT', 1]]);
+        R.filas = porMes(await rpc('cen_xml_resumen', { p: { rfc: R.cli, anio: +$('r-anio').value } }) || []);
+        $('r-sub').textContent = (R.cli ? (R.clis.filter(function (c) { return c.rfc === R.cli; })[0] || {}).cliente || R.cli : 'Todos los clientes') + ' · ' + $('r-anio').value + ' · solo lo que está en pesos suma';
+        if (!R.filas.length) { vacio(tb, 7, 'No hay XML de este año.'); return; }
+        tb.innerHTML = R.filas.map(function (x) {
+          function cel(t, l, conM) { return '<td data-l="' + l + '" class="num">' + (t[0] ? t[0].toLocaleString('es-MX') + (conM ? '<div class="mut">' + dinero(t[1]) + '</div>' : '') : '<span class="mut">0</span>') + '</td>'; }
+          return '<tr><td data-l="Mes" class="nowrap"><b>' + esc(mes(x.mes)) + '</b></td><td data-l="Lado">' + chip(x.lado === 'emitida' ? 'Emitidas' : 'Recibidas', x.lado === 'emitida' ? 'na' : 'az') + '</td>'
+            + cel(x.I, 'Ingresos', true) + cel(x.E, 'Egresos', true) + cel(x.P, 'Pagos', false) + cel(x.N, 'Nómina', true)
+            + '<td data-l="Canceladas" class="num">' + (x.k ? chip(String(x.k), 'mal') : '<span class="mut">0</span>') + '</td></tr>';
+        }).join('');
+      } else {
+        $('r-h').textContent = 'CFDI relacionados'; $('r-anioL').hidden = true;
+        cabR([['Fecha'], ['El CFDI'], ['De / para'], ['Relación'], ['CFDI relacionado'], ['Cómo está']]);
+        R.filas = await rpc('cen_xml_relacionados', { p: { rfc: R.cli } }) || [];
+        $('r-sub').textContent = cuenta(R.filas.length, 'CFDI que relaciona a otros', 'CFDI que relacionan a otros');
+        if (!R.filas.length) { vacio(tb, 6, 'Ningún XML de la bóveda relaciona a otros.'); return; }
+        tb.innerHTML = R.filas.map(function (f) {
+          var rel = (f.rel || []).map(function (r) {
+            return '<div>' + chip(RELACION[r.tipo] || r.tipo || '—', 'az') + ' <span class="mono">' + esc(r.uuid) + '</span></div>';
+          }).join(''), como = (f.rel || []).map(function (r) {
+            return '<div>' + (r.esta ? chip('En la bóveda', 'ok') : chip('No está en la bóveda', '')) + (r.cancelada ? ' ' + chip('Cancelado en el SAT', 'mal') : '') + '</div>';
+          }).join('');
+          return '<tr><td data-l="Fecha" class="nowrap">' + esc(fecha(f.fecha)) + '</td>'
+            + '<td data-l="El CFDI">' + chip(TIPOS[f.tipo] || f.tipo, f.lado === 'emitida' ? 'na' : 'az') + ' ' + esc([f.serie, f.folio].filter(Boolean).join('-')) + (f.cancelada ? ' ' + chip('Cancelado', 'mal') : '') + '<div class="mono mut">' + esc(f.uuid) + '</div></td>'
+            + '<td data-l="De / para"><span class="rs">' + esc(f.contraparte || f.rfc_contraparte) + '</span><div class="mut">' + esc(f.rfc_contraparte) + '</div></td>'
+            + '<td data-l="Relación" colspan="2"><div class="rel">' + rel + '</div></td>'
+            + '<td data-l="Cómo está"><div class="rel">' + como + '</div></td></tr>';
+        }).join('');
+      }
+    } catch (e) { error(falla(e)); }
+  }
+  var bR = null;
+  async function cargaReportes() {
+    R.clis = await rpc('cen_xml_clientes') || [];
+    anios();
+    if (!bR) bR = buscaCliente($('r-cliBox'), 'r-cli', R.clis, function (v) { R.cli = v; listaR(); });
+    await listaR();
+  }
+  document.querySelectorAll('[data-rep]').forEach(function (b) {
+    b.onclick = function () { R.rep = b.getAttribute('data-rep'); document.querySelectorAll('[data-rep]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); }); listaR(); };
+  });
+  $('r-anio').addEventListener('change', listaR);
+  $('x-reportes').onclick = function () {
+    if (R.rep === 'mes') {
+      excel(this, 'Resumen por mes', ['Mes', 'Emitidas o recibidas', 'Ingresos', 'Ingresos en pesos', 'Egresos', 'Egresos en pesos', 'Pagos', 'Nómina', 'Nómina en pesos', 'Canceladas en el SAT'],
+        R.filas.map(function (x) { return [mes(x.mes), x.lado === 'emitida' ? 'Emitidas' : 'Recibidas', x.I[0], x.I[1], x.E[0], x.E[1], x.P[0], x.N[0], x.N[1], x.k]; }),
+        [16, 14, 10, 16, 10, 16, 10, 10, 16, 12], [$('r-sub').textContent]);
+    } else {
+      var filas = [];
+      R.filas.forEach(function (f) { (f.rel || []).forEach(function (r) { filas.push([fecha(f.fecha), TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.contraparte, f.rfc_contraparte, RELACION[r.tipo] || r.tipo, r.uuid, r.esta ? 'Sí' : 'No', r.cancelada ? 'Sí' : '']); }); });
+      excel(this, 'CFDI relacionados', ['Fecha', 'Tipo', 'Serie y folio', 'UUID', 'De / para', 'RFC', 'Relación', 'UUID relacionado', 'En la bóveda', 'Cancelado en el SAT'], filas, [12, 10, 14, 38, 34, 15, 22, 38, 10, 12], [$('r-sub').textContent]);
+    }
+  };
+
+  /* =============================== Arranque =============================== */
+  async function carga() {
+    if (S === 'boveda') await cargaBoveda();
+    else if (S === 'canceladas') await cargaCanceladas();
+    else if (S === '69b') await carga69b();
+    else await cargaReportes();
+  }
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('cen_estado');
+      if (!EST || !EST.ve) throw new Error('Centauro lo ven, por ahora, Héctor Daniel Nava, Héctor Nava Ramos, Fernando Gutiérrez y Fernando Cadengo.');
+      CONSULTA = !!P.consulta || !!EST.consulta;
+      $('consulta').hidden = !CONSULTA;
+      $('titulo').textContent = TIT[S][0]; $('desc').textContent = TIT[S][1];
+      try { document.title = 'Portal PROFASE · Centauro · ' + TIT[S][0]; } catch (e) {}
+      await carga();
+      $('cargando').hidden = true; $('s-' + S).hidden = false;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  // al volver a la pestaña, lo último (cen_tab.js manda el aviso; sin relojes)
+  addEventListener('message', function (ev) {
+    if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'cen-refresca' || !EST || !EST.ve || !$('xml').hidden) return;
+    carga().catch(function () {});
+  });
+  arranca();
+})();
+</script>
+</body></html>
