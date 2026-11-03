@@ -595,6 +595,13 @@
       // 31-oct-2026: «COMPA / ÑÍA», «N0200 / 2», «INVENTA / DO»). overflow-wrap:anywhere encogía la columna hasta partir
       // cada palabra; break-word solo parte lo que de verdad no cabe y, si la tabla no cabe, se desliza en su recuadro.
       + 'td,th,td *,th *{overflow-wrap:break-word!important}'
+      // Desplegables (<details>): se abren o se cierran solo al picar sus palabras, no con el blanco del mismo renglón
+      // (Daniel, 2-nov-2026, 18:57, con «Más filtros» del Panel de trabajo que encontró Chuy: «ponlo como regla para que
+      // no cometas ese error en lo nuevo»). Por omisión el título mide lo que sus palabras, en todas las páginas, las de
+      // hoy y las nuevas; :where() no pesa, así que un desplegable que sí debe abrirse con todo su renglón (uno con
+      // recuadro o fondo) lo dice en su página con «/* renglón completo */» y width:auto. construir.py
+      // (exige_desplegables()) no publica si se quita.
+      + ':where(details)>summary{width:fit-content;max-width:100%}'
       + '.pt-desliza{scroll-behavior:smooth;overscroll-behavior-x:contain}'
       + ':is(.pt-desliza,.pt-tabla).pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
       + ':is(.pt-desliza,.pt-tabla).pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
