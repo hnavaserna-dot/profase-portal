@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Cartera</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Cartera</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/bitacora.js?v=4ce45e3af8"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1010,7 +1010,7 @@ function filtros(){
     S.desde=D._min; S.hasta=D._max; S.grupo=null; S.cliente=null; S.doc=null; render();
   };
   const acc=el('div','topacc');
-  if(ESTC.ok) acc.appendChild(botonExcluidos());
+  if(ESTC.ok){ acc.appendChild(botonExcluidos()); acc.appendChild(botonBitacora()); }
   acc.appendChild(botonGeneral()); acc.appendChild(lim);
   top.appendChild(acc); b.appendChild(top);
 
@@ -2303,6 +2303,48 @@ function botonExcluidos(){
   b.onclick=()=>abreExcluidos('fuera',n?{solo:'por_aprobar'}:{});
   return b;
 }
+/* ── Bitácora (3-nov-2026, pedido de Fernando Cadengo): quién marcó, aprobó, regresó o quitó cada estatus y quién
+   prendió o apagó una regla, con cuándo y el antes y el después. Sale de lo que la base ya guarda (car_marcas nunca
+   borra); quién ve qué lo decide cartera_bitacora() con la regla de siempre (lo que solo ve la dirección, solo a ella).
+   La pantalla y el Excel son la pieza común js/bitacora.js (la misma de Variaciones y Activo fijo). ── */
+function botonBitacora(){
+  const b=el('button','minibtn','Bitácora'); b.type='button'; b.id='btn-bitacora';
+  b.title='Quién cambió qué en los estatus de la cartera, y cuándo';
+  b.onclick=()=>abreBitacora();
+  return b;
+}
+const BIT_TIPOS=[{k:'estatus',t:'Estatus'},{k:'aprobo',t:'Aprobaciones'},{k:'regreso',t:'Regresos'},{k:'regla',t:'Reglas'}];
+const stTxt=k=>k==='normal'?'Que cuente':(ST_LAB[k]||k||'Sin estatus');
+function filaBitacora(f){
+  const obj=f.que==='regla'?'Regla automática: '+((REGLAS_DEF[f.regla]||{}).lab||f.regla)
+    :f.uuid?((f.folio?'Factura '+f.folio:'Factura')+(f.contraparte?' · '+f.contraparte:'')):'Empresa completa';
+  const base={id:f.id,hora:f.hora,quien:f.quien,cliente:f.empresa||'',rfc:f.rfc||'',objeto:obj};
+  const mot=f.estatus==='fuera'&&f.motivo?'Motivo: '+f.motivo:'';
+  if(f.que==='regla') return Object.assign(base,{tipo:'regla',tipoTxt:f.activa?'Prendió regla':'Apagó regla',cambio:f.activa?'Apagada → Prendida':'Prendida → Apagada'});
+  const ver=D.cli.some(c=>c[2]===f.rfc)?()=>verMarca({rfc:f.rfc,uuid:f.uuid,parte:f.parte||'k',estado:'regresada',estatus:'normal'}):null;
+  if(f.que==='aprobo') return Object.assign(base,{tipo:'aprobo',tipoTxt:'Aprobó',cambio:'Fuera · por aprobar → Fuera del reporte',
+    detalle:[mot,'Lo pidió '+f.pidio].filter(Boolean).join(' · '),abre:ver});
+  if(f.que==='regreso') return Object.assign(base,{tipo:'regreso',tipoTxt:f.quito?'Quitó el estatus':'Regresó',cambio:stTxt(f.estatus)+' → Sin estatus',
+    detalle:[f.nota&&!f.quito?'«'+f.nota+'»':'',f.pidio&&f.pidio!==f.quien?'Lo había puesto '+f.pidio:''].filter(Boolean).join(' · '),abre:ver});
+  const por=f.estatus==='fuera'&&!f.aplicada;
+  return Object.assign(base,{tipo:'estatus',tipoTxt:por?'Pidió sacar':f.antes?'Cambió el estatus':'Marcó',
+    cambio:(f.antes?stTxt(f.antes):'Sin estatus')+' → '+(por?'Fuera · por aprobar':stTxt(f.estatus)),
+    detalle:[mot,f.comentario?'«'+f.comentario+'»':''].filter(Boolean).join(' · '),abre:ver});
+}
+function abreBitacora(nota){
+  if(S.cliente!=null) cierraOv();
+  const body=el('div'); body.id='bit';
+  const pie=el('div','sheet-f');
+  pie.appendChild(el('span','enota','Cada cambio queda con quién lo hizo y cuándo; nada se borra.'));
+  pie.appendChild(boton('Cerrar','g',cierraOv));
+  const s=sheet('Bitácora','Quién cambió qué en los estatus de la cartera',body,pie); s.classList.add('ancha');
+  abreOv(s);
+  const b=window.PROFASE_BITACORA.crea({donde:body,reporte:'Cartera',archivo:'Bitácora Cartera',cliente:'Empresa',tipos:BIT_TIPOS,
+    marcador:'Empresa, RFC, folio o persona',
+    carga:async desde=>{ const q=await SB.rpc('cartera_bitacora',{p_desde:desde}); if(q.error) throw q.error;
+      return {filas:((q.data&&q.data.filas)||[]).map(filaBitacora),mas:false}; }});
+  if(nota) b.nota(nota);
+}
 function abreExcluidos(tab,o){
   EXC=Object.assign({tab:tab||'fuera',solo:'todas',q:'',resalta:null,nota:null},o||{});
   if(S.cliente!=null) cierraOv();
@@ -2457,7 +2499,8 @@ function pintaExcluidos(nuevo){
 }
 /* lo nuevo que un aviso ilumina (regla de Daniel, 2-nov-2026, 12:27: «lo que notifiques al picarle te mande a lo
    "nuevo"»): la clave «ver|cartera-estatus|…» abre «Excluidos» con una nota corta de qué es lo nuevo */
-const NUEVOS={'cartera-estatus':()=>abreExcluidos('fuera',{nota:'Cada factura, o la empresa entera, puede ser «Estrategia fiscal» o «Fuera del reporte». '+
+const NUEVOS={'bitacora':()=>abreBitacora('Nuevo: aquí ves quién marcó, aprobó, regresó o quitó cada estatus de la cartera y quién prendió o apagó una regla, con la fecha y la hora. Filtra por periodo, persona o movimiento y bájala en Excel o PDF.'),
+  'cartera-estatus':()=>abreExcluidos('fuera',{nota:'Cada factura, o la empresa entera, puede ser «Estrategia fiscal» o «Fuera del reporte». '+
   'Aquí ves lo que no suma, la estrategia fiscal (con su reporte) y las reglas automáticas; '+(yoApruebo()?'tú apruebas y regresas.':'lo aprueban la dirección y quienes ven toda la cartera.')})};
 /* desde un aviso de la campanita (car-marca-<id>) o de «Nuevos cambios» (ver:cartera-estatus) */
 function abreDesdeAviso(x){

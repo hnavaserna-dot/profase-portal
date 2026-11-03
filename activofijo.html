@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Activo fijo</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/filtros.js"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Activo fijo</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=c39afda3fd"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/filtros.js"></script><script src="js/bitacora.js?v=4ce45e3af8"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -383,6 +383,7 @@ label.mot{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text
     <div class="tabs" role="tablist" aria-label="Secciones">
       <button class="tab" role="tab" id="tab-ficha" aria-selected="true" data-tab="ficha">Ficha por cliente</button>
       <button class="tab" role="tab" id="tab-control" aria-selected="false" data-tab="control">Control y avance</button>
+      <button class="tab" role="tab" id="tab-bitacora" aria-selected="false" data-tab="bitacora">Bitácora</button>
       <button class="tab" role="tab" id="tab-guia" aria-selected="false" data-tab="guia">Cómo leer y glosario</button>
     </div>
     <div class="topbar-actions">
@@ -462,6 +463,15 @@ label.mot{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text
   <section id="view-control" role="tabpanel" aria-labelledby="tab-control" hidden></section>
 
   <!-- ===================== GUIA ===================== -->
+  <!-- ===================== BITÁCORA ===================== -->
+  <section id="view-bitacora" role="tabpanel" aria-labelledby="tab-bitacora" hidden>
+    <div class="panel" style="padding:14px 16px 16px">
+      <h2 style="margin:0 0 2px;font-size:15px">Bitácora de cambios</h2>
+      <p style="margin:0 0 12px;font-size:12.5px;color:var(--muted)">Quién marcó, propuso, confirmó o regresó cada observación y quién comentó o borró un comentario, con la fecha y la hora.</p>
+      <div id="bitBox"></div>
+    </div>
+  </section>
+
   <section id="view-guia" role="tabpanel" aria-labelledby="tab-guia" hidden></section>
 </main>
 
@@ -1358,16 +1368,65 @@ function ingest(f){
   fr.readAsArrayBuffer(f);
 }
 
+/* ============ 11b. bitácora (3-nov-2026, pedido de Fernando Cadengo) ============
+   Cada cambio de estatus y cada comentario queda en la base (rep_bitacora, 166_bitacora_reportes.sql): quién, cuándo, el
+   antes y el después; antes el historial lo armaba la página (hasta 40 pasos) y un comentario borrado se perdía. Quién ve
+   qué cliente lo decide la base con la misma regla de esta pantalla (rep_bitacora('af'), con af_lee); en la vista de
+   contador de quien también ve todo, solo los suyos, como la ficha. La pantalla y el Excel son la pieza común
+   js/bitacora.js (la misma de Cartera y Variaciones). */
+var BIT=null;
+var BIT_TIPOS=[{k:"estatus",t:"Estatus"},{k:"comentario",t:"Comentarios"}];
+function estTxt(x){ if(!x||!x.e) return "Sin estatus";
+  if(x.conf==="propuesta") return "Propuesta: "+(LAB[x.e]||x.e);
+  if(x.conf==="confirmada") return (LAB[x.e]||x.e)+" (confirmada)";
+  if(x.conf==="regresada") return "Regresada al contador";
+  return LAB[x.e]||x.e; }
+function filaBitAf(b){
+  var a=b.antes||{}, d=b.despues||{}, k=b.col==="af_com"?(d.k||a.k||""):b.llave, o=findObs(k), rfc=b.rfc||String(k).split("|")[0];
+  var cl=o?o.cliente:((CLI[rfc]&&(CLI[rfc].cliente||CLI[rfc].nombre))||"");
+  var f={id:b.id,hora:b.hora,quien:b.quien,rfc:rfc,cliente:cl,previo:b.previo,
+    objeto:o?[o.tipo,String(o.concepto||"").slice(0,90),o.mes,money(o.monto)].filter(Boolean).join(" · "):"Observación que ya no viene en el Excel",
+    abre:o?function(){ openDrawer(o.k) }:null};
+  if(b.col==="af_est"){
+    var c=d.conf||"";
+    f.tipo="estatus"; f.tipoTxt=c==="propuesta"?"Propuso":c==="confirmada"?"Confirmó":c==="regresada"?"Regresó":"Marcó";
+    f.cambio=(b.antes?estTxt(a):"Pendiente")+" → "+estTxt(d); f.detalle=d.motivo?"Motivo: "+d.motivo:"";
+  } else {
+    f.tipo="comentario"; f.tipoTxt=b.que==="comentario_borrado"?"Borró el comentario":a.x?"Cambió el comentario":"Comentó";
+    f.detalle=(b.que==="comentario_borrado"?a.x:d.x)?"«"+(b.que==="comentario_borrado"?a.x:d.x)+"»":"";
+  }
+  return f;
+}
+function abreBitacora(nota){
+  if(!window.PROFASE_BITACORA){ $("#bitBox").textContent="La bitácora no cargó; recarga la página."; return }
+  if(!BIT) BIT=window.PROFASE_BITACORA.crea({donde:$("#bitBox"),reporte:"Activo fijo",archivo:"Bitácora Activo fijo",tipos:BIT_TIPOS,
+    marcador:"Cliente, RFC, concepto o persona",
+    carga:async function(desde){
+      var q=await P.sb.rpc("rep_bitacora",{p_reporte:"af",p_desde:desde}); if(q.error) throw q.error;
+      var ls=((q.data&&q.data.filas)||[]).map(filaBitAf);
+      if(MIOS) ls=ls.filter(function(f){ return MIOS.has(f.rfc) });
+      return {filas:ls,mas:!!(q.data&&q.data.mas)};
+    }});
+  else BIT.recarga();
+  if(nota) BIT.nota(nota);
+}
+/* desde un aviso de «Nuevos cambios» (ver:bitacora): la abre con la nota de qué es lo nuevo */
+window.PROFASE_ABRE_AF=function(x){ if(String(x||"")!=="ver:bitacora") return false;
+  go("bitacora");
+  if(BIT) BIT.nota("Nuevo: cada cambio de estatus y cada comentario de una observación queda aquí con quién, cuándo y el antes y el después (también lo que se borra). Filtra por periodo, persona o movimiento y bájala en Excel o PDF.");
+  return true; };
+
 /* ============ 12. pestañas, tema y arranque ============ */
 var CUR="ficha";
 function go(t){
   CUR=t;
-  ["ficha","control","guia"].forEach(function(k){
+  ["ficha","control","bitacora","guia"].forEach(function(k){
     $("#view-"+k).hidden=(k!==t)||!R;
     $("#tab-"+k).setAttribute("aria-selected",String(k===t));
   });
   if(t==="control") renderControl();
   if(t==="guia") renderGuia();
+  if(t==="bitacora") abreBitacora();
   saveUI();
   try{ if(location.hash.slice(1)!==t) history.replaceState(null,"","#"+t) }catch(e){}
 }
@@ -1384,7 +1443,7 @@ function updateSub(){
   $("#brandSub").textContent=(M.periodo?M.periodo+" · ":"")+(M.cargadoEn?"Excel del "+fh(M.cargadoEn)+(M.cargadoPor?" ("+M.cargadoPor+")":"")+" · ":"")
     +b.total+" observaciones, "+b.abiertas+" abiertas"+(b.porconf?", "+b.porconf+" por confirmar":"");
 }
-function gate(t,s){ var g=$("#gate"); g.hidden=false; g.innerHTML="<b>"+esc(t)+"</b>"+esc(s||""); ["ficha","control","guia"].forEach(function(k){ $("#view-"+k).hidden=true }) }
+function gate(t,s){ var g=$("#gate"); g.hidden=false; g.innerHTML="<b>"+esc(t)+"</b>"+esc(s||""); ["ficha","control","bitacora","guia"].forEach(function(k){ $("#view-"+k).hidden=true }) }
 var pend=false;
 function pinta(){
   if(pend) return; pend=true;
@@ -1392,7 +1451,7 @@ function pinta(){
     if(!LISTO.af) return;
     $("#gate").hidden=true;
     if(!allObs().length&&!Object.keys(CLI).length){ gate("Todavía no hay datos",R&&R.carga?"Sube el Reporte Activo Fijo con el botón «Subir Excel».":"Cadengo todavía no sube el Reporte Activo Fijo."); return }
-    if($("#view-ficha").hidden&&$("#view-control").hidden&&$("#view-guia").hidden) go(CUR);
+    if($("#view-ficha").hidden&&$("#view-control").hidden&&$("#view-bitacora").hidden&&$("#view-guia").hidden) go(CUR);
     initColFilters(); renderRail(); renderAll(); refreshDrawer();
     if(CUR==="guia"){ guiaDone=false; renderGuia() }
   });
@@ -1437,7 +1496,7 @@ function vigila(){
   $("#btnUpdate").hidden=!R.carga;
   var chip=$("#roleChip"), rol=R.confirma?"Gerencia Contable":R.marca?"Mis clientes":"";
   if(rol){ chip.textContent=rol; chip.hidden=false }
-  var h=location.hash.slice(1); CUR=(h==="control"||h==="guia")?h:(ui.tab||"ficha");
+  var h=location.hash.slice(1); CUR=(h==="control"||h==="guia"||h==="bitacora")?h:(ui.tab||"ficha");
   vigila();
 })();
 })();
