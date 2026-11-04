@@ -3,12 +3,14 @@
    desaparecer en la búsqueda de los reportes de cartera, variaciones y activo fijo»; Héctor Daniel, 3-nov-2026: que se
    quede el nombre como lo pidió Fernando).
    Una sola pieza para Reportes › Carga de Quo, Cartera, Variaciones y Activo fijo (portal/sql/172_clientes_ocultos.sql):
-   la lista es de cada quien y solo achica lo que ve esa persona; a los demás no les cambia nada. La base decide todo:
+   la lista es de cada quien y solo achica lo que ve esa persona; a los demás no les cambia nada. Desde 217 (3-nov-2026, pedido
+   de Fernando: «Si para todos»), además se ocultan solos, para todos, los clientes sin contabilidad activa (en pausa en el
+   WorkFlow, inactivos o incubados en su ficha): rep_ocultos_auto() (solo RFC de los clientes que esa persona ve). La base decide todo:
    rep_ocultos() (mis RFC ocultos), rep_ocultos_lista() (los que tengo ocultos y los que puedo ocultar, solo de los clientes
    que veo) y rep_oculta(rfcs, ocultar). Nunca lee tablas.
 
    PROFASE_OCULTOS.carga()              // una vez por página (las demás veces regresa lo mismo)
-   PROFASE_OCULTOS.es(rfc)              // ¿lo ocultó? (falso mientras «Verlos por ahora»)
+   PROFASE_OCULTOS.es(rfc)              // ¿lo ocultó, o se oculta solo por no tener contabilidad activa (217)? (falso mientras «Verlos por ahora»)
    PROFASE_OCULTOS.nota(donde, {sinVer}) // «Ocultaste N clientes de tu lista» con «Verlos por ahora» y «Cambiar mi lista»
    PROFASE_OCULTOS.alCambiar(fn)        // para volver a pintar cuando cambia la lista (aquí o en otra pantalla abierta)
    PROFASE_OCULTOS.ventana()            // la ventana «Mis clientes ocultos» (escoger varios y regresarlos)
@@ -78,6 +80,7 @@
   }
 
   var LISTA = new Set();        // los RFC que ocultó quien entró
+  var AUTO = new Map();         // los que se ocultan solos, para todos (217): RFC → pausa | inactivo | incubado
   var VER = false;              // «Verlos por ahora» (solo en esta pantalla; no cambia la lista)
   var CARGA = null;             // la promesa de la primera carga
   var OYEN = [];                // alCambiar
@@ -98,11 +101,25 @@
     ponLista(d.lista); avisa();
   };
 
+  function ponAuto(arr) {
+    AUTO = new Map();
+    (Array.isArray(arr) ? arr : []).forEach(function (a) {
+      var r = String((a && a.rfc) || '').toUpperCase().trim(); if (r) AUTO.set(r, String((a && a.por) || 'pausa'));
+    });
+  }
   function carga() {
-    if (!CARGA) CARGA = rpc('rep_ocultos').then(function (d) { ponLista(d); return LISTA; }).catch(function () { ponLista([]); return LISTA; });
+    if (!CARGA) CARGA = Promise.all([
+      rpc('rep_ocultos').then(ponLista).catch(function () { ponLista([]); }),
+      // los clientes sin contabilidad activa (en pausa en el WorkFlow, inactivos o incubados) se ocultan solos, para todos
+      rpc('rep_ocultos_auto').then(ponAuto).catch(function () { ponAuto([]); })
+    ]).then(function () { return LISTA; });
     return CARGA;
   }
-  function es(rfc) { return !VER && LISTA.size > 0 && LISTA.has(String(rfc || '').toUpperCase().trim()); }
+  function es(rfc) {
+    if (VER || (!LISTA.size && !AUTO.size)) return false;
+    var r = String(rfc || '').toUpperCase().trim();
+    return LISTA.has(r) || AUTO.has(r);
+  }
   function alCambiar(fn) { if (typeof fn === 'function') OYEN.push(fn); }
 
   // Cambia la lista (de 500 en 500, como deja la base) y avisa aquí y a las demás pantallas abiertas
@@ -129,11 +146,18 @@
   // ---------- La nota de las pantallas ----------
   function pintaNota(n) {
     var el = n.el; if (!el) return;
-    var c = LISTA.size;
-    if (!c) { el.hidden = true; el.innerHTML = ''; return; }
+    var c = LISTA.size, a = 0;
+    AUTO.forEach(function (_, r) { if (!LISTA.has(r)) a++; });
+    if (!c && !a) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false; el.classList.add('poc-nota');
-    var t = VER ? 'Por ahora ves también los ' + plural(c, 'cliente que ocultaste', 'clientes que ocultaste') + '.'
-                : 'Ocultaste ' + plural(c, 'cliente', 'clientes') + ' de tu lista: ' + (n.sinVer ? 'no te salen aquí.' : 'no te salen aquí ni en la búsqueda.');
+    var donde = n.sinVer ? 'no te salen aquí.' : 'no te salen aquí ni en la búsqueda.';
+    var partes = [];
+    if (c) partes.push('ocultaste ' + plural(c, 'cliente', 'clientes') + ' de tu lista');
+    if (a) partes.push(plural(a, 'cliente sin contabilidad activa (en pausa en el WorkFlow, inactivo o incubado) se oculta solo',
+                                 'clientes sin contabilidad activa (en pausa en el WorkFlow, inactivos o incubados) se ocultan solos'));
+    var t = VER ? 'Por ahora ves también ' + (c + a === 1 ? 'el cliente oculto' : 'los ' + (c + a) + ' clientes ocultos') + '.'
+                : partes.join(' y ') + ': ' + donde;
+    t = t.charAt(0).toUpperCase() + t.slice(1);
     el.innerHTML = '<span class="t">' + esc(t) + '</span>'
       + (n.sinVer ? '' : '<button type="button" data-poc="ver">' + (VER ? 'Ocultarlos otra vez' : 'Verlos por ahora') + '</button>')
       + '<button type="button" data-poc="cambia">Cambiar mi lista</button>';
@@ -156,7 +180,7 @@
     var velo = document.createElement('div'); velo.className = 'poc-velo'; velo.hidden = true;
     velo.innerHTML = '<div class="poc-vent" role="dialog" aria-modal="true" aria-labelledby="poc-tit">'
       + '<div class="poc-cab"><h2 id="poc-tit">Mis clientes ocultos</h2>'
-      + '<p>Los que ocultes dejan de salirte solo a ti en Carga de Quo, Cartera, Variaciones y Activo fijo, también en sus búsquedas. A los demás no les cambia nada y los regresas cuando quieras.</p></div>'
+      + '<p>Los que ocultes dejan de salirte solo a ti en Carga de Quo, Cartera, Variaciones y Activo fijo, también en sus búsquedas. A los demás no les cambia nada y los regresas cuando quieras. Los clientes sin contabilidad activa se ocultan solos, para todos.</p></div>'
       + '<div class="poc-cuerpo"></div>'
       + '<div class="poc-pie"><button type="button" class="poc-btn pri" id="poc-x">Cerrar</button></div></div>';
     document.body.appendChild(velo);
@@ -195,6 +219,18 @@
       if (!ro && oc.length > 1) h += '<div class="poc-acc"><button type="button" class="poc-btn" id="poc-todos">Regresar todos</button></div>';
     }
     h += '</div>';
+    var au = LISTA_V.auto || [];
+    if (au.length) {
+      var POR = { pausa: 'En pausa en el WorkFlow', inactivo: 'Inactivo en su ficha', incubado: 'Incubado en su ficha' };
+      h += '<div class="poc-sec" id="poc-solos"><h3>Se ocultan solos (' + au.length + ')</h3>'
+        + '<p class="poc-mu">Los clientes sin contabilidad activa no les salen a nadie aquí ni en Cartera, Variaciones y Activo fijo. '
+        + 'Vuelven a salir solos en cuanto se quita la pausa o los ponen Activos en su ficha (Clientes › Base de clientes). '
+        + 'En Cartera, Variaciones y Activo fijo los ves con «Verlos por ahora».</p>'
+        + '<div>' + au.map(function (o) {
+          return '<div class="poc-fila"><span class="t">' + esc(o.nombre || o.rfc) + '<small>' + esc(o.rfc) + ' · '
+            + esc(POR[o.por] || 'Sin contabilidad activa') + '</small></span></div>';
+        }).join('') + '</div></div>';
+    }
     v.cuerpo.innerHTML = h;
     if (!ro) {
       var bo = v.cuerpo.querySelector('#poc-ocultar');
@@ -237,7 +273,7 @@
     LISTA_V = null;
     if (VENT && !VENT.velo.hidden) pintaVentana();
     return rpc('rep_ocultos_lista').then(function (d) {
-      LISTA_V = d || { ocultos: [], clientes: [] };
+      LISTA_V = d || { ocultos: [], clientes: [], auto: [] };
       if (VENT && !VENT.velo.hidden) pintaVentana();
     }).catch(function (e) {
       LISTA_V = { ocultos: Array.from(LISTA).map(function (r) { return { rfc: r }; }), clientes: [] };
@@ -254,5 +290,5 @@
   }
 
   window.PROFASE_OCULTOS = { carga: carga, es: es, nota: nota, alCambiar: alCambiar, ventana: ventana, ocultaUno: ocultaUno, pon: pon,
-                             cuantos: function () { return LISTA.size; } };
+                             cuantos: function () { return LISTA.size; }, solos: function () { return AUTO.size; } };
 })();
