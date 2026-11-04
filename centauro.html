@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=dc0b49b86b"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/cfdi.js"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=66ff2e2e8c"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/cfdi.js"></script>
 <style>
 /* Portal PROFASE · Centauro (3-nov-2026; Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»;
    portal/sql/198_centauro.sql). Lo de los programas de la bóveda de la oficina, hecho en el CRM:
@@ -224,6 +224,10 @@ tr.total td{background:var(--surface-2)}
 .cajaxml .xcab{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .cajaxml .xcab b{overflow-wrap:anywhere;min-width:0}
 .cajaxml .xcu{overflow:auto;min-height:0}
+.filtros .chk{display:flex;align-items:center;gap:6px;font-size:13px}
+.cajaxml .uuc{width:min(620px,100%)}
+.cajaxml .uucu{padding:12px 14px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+.cajaxml .uucu textarea{width:100%;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);color:var(--ink);resize:vertical}
 .pie{color:var(--muted);font-size:12.5px;margin:6px 0 20px;overflow-wrap:anywhere}
 @media (max-width:600px){
   .filtros .busca{min-width:0;max-width:none;flex-basis:100%}
@@ -299,7 +303,7 @@ tr.total td{background:var(--surface-2)}
     </div>
     <div class="card">
       <header><div><h2>Los XML</h2><div class="sub" id="b-sub"></div></div>
-        <div class="acciones"><button class="btn" type="button" data-excel id="x-boveda">Excel</button></div></header>
+        <div class="acciones"><button class="btn" type="button" id="x-zip" title="Los XML de lo que filtras, tal cual los entrega el SAT, en un ZIP acomodado en carpetas">Bajar los XML (ZIP)</button><button class="btn" type="button" data-excel id="x-boveda">Excel</button></div></header>
       <div class="filtros">
         <div class="lados" role="group" aria-label="Emitidas o recibidas">
           <button type="button" data-lado="" aria-pressed="true">Todas</button>
@@ -310,9 +314,14 @@ tr.total td{background:var(--surface-2)}
           <option value="">Todos los tipos</option><option value="I">Ingreso</option><option value="E">Egreso</option>
           <option value="P">Pago</option><option value="N">Nómina</option><option value="T">Traslado</option>
         </select>
+        <select id="b-estado" aria-label="Vigentes o canceladas"><option value="">Vigentes y canceladas</option><option value="vigente">Solo vigentes</option><option value="cancelada">Solo canceladas en el SAT</option></select>
+        <select id="b-metodo" aria-label="Método de pago"><option value="">Todo método de pago</option><option value="PUE">PUE (una exhibición)</option><option value="PPD">PPD (parcialidades)</option></select>
+        <select id="b-por" aria-label="Qué periodo"><option value="">Por fecha de emisión</option><option value="pago">Lo pagado o cobrado en el periodo</option></select>
         <label>Del <input type="date" id="b-desde"></label>
         <label>al <input type="date" id="b-hasta"></label>
         <input type="search" class="busca" id="b-q" placeholder="Buscar UUID, RFC, nombre o folio" aria-label="Buscar">
+        <button class="btn" type="button" id="b-uuidsB" title="Pega una lista de UUID (uno por renglón, o separados por comas o espacios)">Pegar UUID</button>
+        <span class="chip az" id="b-uuidsT" hidden></span>
       </div>
       <div class="tot" id="b-tot"></div>
       <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Tipo</th><th>Serie y folio</th><th>De / para</th><th class="num">Total</th><th>Estado</th><th></th></tr></thead>
@@ -368,6 +377,8 @@ tr.total td{background:var(--surface-2)}
       <button type="button" role="tab" data-rep="anual" aria-selected="false">Tablero anual</button>
       <button type="button" role="tab" data-rep="dup" aria-selected="false">Pagos duplicados</button>
       <button type="button" role="tab" data-rep="err" aria-selected="false">Pagos con errores</button>
+      <button type="button" role="tab" data-rep="canc" aria-selected="false">Canceladas por periodo</button>
+      <button type="button" role="tab" data-rep="ret" aria-selected="false">Retenciones</button>
     </div>
     <div class="card">
       <header><div><h2 id="r-h">Resumen por mes</h2><div class="sub" id="r-sub"></div></div>
@@ -379,6 +390,14 @@ tr.total td{background:var(--surface-2)}
         <div class="lados" id="r-lados" hidden role="group" aria-label="Emitidos o recibidos">
           <button type="button" data-rlado="emitida" aria-pressed="true">Emitidos</button><button type="button" data-rlado="recibida" aria-pressed="false">Recibidos</button>
         </div>
+        <div class="lados" id="r-lado3" hidden role="group" aria-label="Emitidas o recibidas">
+          <button type="button" data-rlado3="" aria-pressed="true">Todas</button><button type="button" data-rlado3="emitida" aria-pressed="false">Emitidas</button><button type="button" data-rlado3="recibida" aria-pressed="false">Recibidas</button>
+        </div>
+        <label id="r-ctipoL" hidden>Tipo <select id="r-ctipo"><option value="">Todos</option><option value="I">Ingreso</option><option value="E">Egreso (notas de crédito)</option><option value="P">Pago (complementos)</option><option value="N">Nómina</option><option value="T">Traslado</option></select></label>
+        <div class="lados" id="r-cpor" hidden role="group" aria-label="Qué fecha cuenta">
+          <button type="button" data-rcpor="cancelacion" aria-pressed="true">Por fecha de cancelación</button><button type="button" data-rcpor="emision" aria-pressed="false">Por fecha de emisión</button>
+        </div>
+        <label id="r-sinrelL" hidden class="chk"><input type="checkbox" id="r-sinrel"> También las notas de crédito y los complementos sin relación</label>
         <label id="r-tipoL" hidden>Tipo <select id="r-tipo"><option value="I">Ingreso</option><option value="E">Egreso (notas de crédito)</option><option value="P">Pago (complementos)</option><option value="N">Nómina</option><option value="T">Traslado</option><option value="">Todos</option></select></label>
         <label id="r-medL" hidden>Qué ver <select id="r-med"></select></label>
         <label id="r-kL" hidden>Qué revisar <select id="r-k"></select></label>
@@ -396,10 +415,16 @@ tr.total td{background:var(--surface-2)}
       </div>
       <div class="tabla"><table class="resp" id="r-tabla"><thead id="r-cab"></thead><tbody id="r-lista"></tbody></table></div>
     </div>
-    <p class="pie">Salen de los XML de la bóveda, en pesos y sin los cancelados en el SAT. Los reportes de un cliente («XML Datos 4.0», «Nómina 1.2 Extendido», «Método de pago», «Tablero anual», «Pagos duplicados» y «Pagos con errores») traen en pantalla una vista previa, y el Excel (y su PDF) trae todo. Un complemento de pago se emite a más tardar el día 5 del mes siguiente al pago (regla 2.7.1.32 de la RMF 2026).</p>
+    <p class="pie">Salen de los XML de la bóveda, en pesos y sin los cancelados en el SAT. Los reportes de un cliente («XML Datos 4.0», «Nómina 1.2 Extendido», «Método de pago», «Tablero anual», «Pagos duplicados» y «Pagos con errores») traen en pantalla una vista previa, y el Excel (y su PDF) trae todo. Un complemento de pago se emite a más tardar el día 5 del mes siguiente al pago (regla 2.7.1.32 de la RMF 2026). «Canceladas por periodo» sale de las canceladas que el CRM le pide al SAT (de todos los clientes que ves, o de uno). «Retenciones» separa lo retenido por el régimen del emisor y la tasa que resulta contra la base (subtotal menos descuento): es una guía para revisar, no sustituye la DIOT ni la contabilidad.</p>
   </section>
 </div>
 
+<div class="cajaxml" id="uu" hidden role="dialog" aria-modal="true" aria-labelledby="uu-t"><div class="uuc">
+  <div class="xcab"><b id="uu-t">Buscar por una lista de UUID</b></div>
+  <div class="uucu"><p class="mut">Pega los UUID (uno por renglón, o separados por comas o espacios), hasta 5,000. La Bóveda enseña solo esos y «Bajar los XML (ZIP)» baja solo esos.</p>
+    <textarea id="uu-x" rows="9" spellcheck="false" aria-label="UUID"></textarea><div class="mut" id="uu-n"></div></div>
+  <div class="xcab"><span></span><div class="acciones"><button class="btn" type="button" id="uu-quita">Quitar la lista</button><button class="btn" type="button" id="uu-cierra">Cerrar</button><button class="btn acento" type="button" id="uu-usa">Usar estos</button></div></div>
+</div></div>
 <div class="cajaxml" id="xml" hidden role="dialog" aria-modal="true" aria-labelledby="xml-t"><div>
   <div class="xcab"><b id="xml-t">XML</b><div class="acciones"><button class="btn" type="button" id="xml-baja">Bajar el XML</button><button class="btn" type="button" id="xml-cierra">Cerrar</button></div></div>
   <div class="xcu" id="xml-cu" tabindex="0"></div>
@@ -482,9 +507,15 @@ tr.total td{background:var(--surface-2)}
   }
 
   /* =============================== Bóveda XML =============================== */
-  var B = { cli: '', lado: '', filas: [], total: 0, mxn: 0, clis: [] };
+  var B = { cli: '', lado: '', filas: [], total: 0, mxn: 0, clis: [], uuids: [] };
   function filtroB() {
-    return { rfc: B.cli, lado: B.lado, tipo: $('b-tipo').value, desde: $('b-desde').value, hasta: $('b-hasta').value, q: $('b-q').value.trim() };
+    var f = { rfc: B.cli, lado: B.lado, tipo: $('b-tipo').value, desde: $('b-desde').value, hasta: $('b-hasta').value, q: $('b-q').value.trim() };
+    // 241 (segundo envío de Chuy): vigentes o canceladas, método de pago, lo pagado o cobrado y una lista de UUID
+    if ($('b-estado').value) f.estado = $('b-estado').value;
+    if ($('b-metodo').value) f.metodo = $('b-metodo').value;
+    if ($('b-por').value && B.cli && f.desde && f.hasta) f.por = $('b-por').value;
+    if (B.uuids && B.uuids.length) f.uuids = B.uuids;
+    return f;
   }
   var ANIO_K = { hecho: ['ok', 'ya está', ' ✓'], bajando: ['ojo', 'bajándose', ' …'], falta: ['', 'todavía no empieza', ''],
                  sin: ['mal', 'no se pudo (se vuelve a intentar cada semana)', ' ✕'] };
@@ -652,7 +683,62 @@ tr.total td{background:var(--surface-2)}
   document.querySelectorAll('[data-lado]').forEach(function (b) {
     b.onclick = function () { B.lado = b.getAttribute('data-lado'); document.querySelectorAll('[data-lado]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); listaB(true); };
   });
-  ['b-tipo', 'b-desde', 'b-hasta'].forEach(function (id) { $(id).addEventListener('change', function () { listaB(true); }); });
+  ['b-tipo', 'b-desde', 'b-hasta', 'b-estado', 'b-metodo'].forEach(function (id) { $(id).addEventListener('change', function () { listaB(true); }); });
+  /* 241: «Lo pagado o cobrado en el periodo» necesita un cliente y el periodo (del… al…) */
+  $('b-por').addEventListener('change', function () {
+    if (this.value && (!B.cli || !$('b-desde').value || !$('b-hasta').value)) avisa('Para lo pagado o cobrado, escoge el cliente y el periodo (del… al…).');
+    listaB(true);
+  });
+  /* 241: buscar por una lista de UUID (hasta 5,000) */
+  var UU_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, uuAntes = null;
+  function uuLee() { var m = ($('uu-x').value.match(UU_RE) || []).map(function (u) { return u.toUpperCase(); }); return m.filter(function (u, i) { return m.indexOf(u) === i; }); }
+  function uuPinta() {
+    var n = (B.uuids || []).length;
+    $('b-uuidsT').hidden = !n; $('b-uuidsT').textContent = n ? cuenta(n, 'UUID de la lista', 'UUID de la lista') : '';
+    $('b-uuidsB').textContent = n ? 'Cambiar la lista' : 'Pegar UUID';
+  }
+  function uuCierra() { $('uu').hidden = true; try { if (uuAntes) uuAntes.focus(); } catch (e) {} }
+  $('b-uuidsB').onclick = function () {
+    uuAntes = this; $('uu-x').value = (B.uuids || []).join('\n'); $('uu').hidden = false; $('uu-x').dispatchEvent(new Event('input')); $('uu-x').focus();
+  };
+  $('uu-x').addEventListener('input', function () { var n = uuLee().length; $('uu-n').textContent = n ? cuenta(n, 'UUID', 'UUID') + (n > 5000 ? ': son más de 5,000, quita algunos' : '') : 'Ningún UUID todavía.'; });
+  $('uu-cierra').onclick = uuCierra;
+  $('uu-quita').onclick = function () { B.uuids = []; uuPinta(); uuCierra(); listaB(true); };
+  $('uu-usa').onclick = function () {
+    var l = uuLee();
+    if (l.length > 5000) { $('uu-n').textContent = 'Son ' + l.length.toLocaleString('es-MX') + ': hasta 5,000 a la vez.'; return; }
+    B.uuids = l; uuPinta(); uuCierra(); listaB(true);
+  };
+  $('uu').addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); uuCierra(); } });
+  $('uu').addEventListener('click', function (ev) { if (ev.target === this) uuCierra(); });
+  /* 241: los XML de lo que filtras, en un ZIP acomodado en carpetas (RFC del cliente / año-mes / emitidas o recibidas),
+     con la pieza común js/visor.js; se anota una sola vez en Accesos */
+  var TOPE_ZIP = 20000, VZ = null;
+  $('x-zip').onclick = async function () {
+    var btn = this, todas = [], r, f = filtroB();
+    if (!B.total) { avisa('No hay XML con estos filtros.'); return; }
+    if (B.total > TOPE_ZIP || B.mas) { error('Son ' + (B.mas ? 'más de 100,000' : B.total.toLocaleString('es-MX')) + ' XML: escoge un cliente o un periodo más corto (hasta 20,000 en un ZIP).'); return; }
+    btn.disabled = true;
+    var t0 = btn.textContent;
+    try {
+      do {
+        btn.textContent = 'Juntando la lista… ' + todas.length.toLocaleString('es-MX');
+        r = await rpc('cen_xml_lista', { p: Object.assign({}, f, { max: 1000, desde_n: todas.length }) }); todas = todas.concat(r.filas || []);
+      } while ((r.filas || []).length === 1000 && todas.length < TOPE_ZIP);
+    } catch (e) { btn.disabled = false; btn.textContent = t0; error(falla(e)); return; }
+    btn.disabled = false; btn.textContent = t0;
+    if (!VZ) VZ = window.PROFASE_VISOR.nuevo({ trae: bytesXml, esPdf: function () { return false; }, nombre: function (d) { return d.nombre; }, aLaVez: 12 });
+    var lista = todas.map(function (x) {
+      var fe = String(x.fecha || '').slice(0, 7) || 'sin-fecha';
+      return { d: docXml(x), ruta: x.rfc + '/' + fe + '/' + (x.lado === 'emitida' ? 'Emitidas' : 'Recibidas') + '/', fecha: x.fecha };
+    });
+    var nombre = 'XML ' + (B.cli || 'clientes') + ' ' + new Date().toISOString().slice(0, 10);
+    var res = await VZ.bajaVarios(lista, btn, nombre);
+    if (res && res.ok) {
+      try { P.registrar('descarga', 'Centauro · ZIP con ' + res.n + ' XML' + (B.cli ? ' de ' + B.cli : '')); } catch (e) {}
+      if (res.fallas && res.fallas.length) avisa('Se bajaron ' + res.n + ' XML; ' + res.fallas.length + ' no se pudieron traer (vuelve a intentar).');
+    }
+  };
   $('b-q').addEventListener('input', enCambioB);
   $('b-mas-b').onclick = function () { listaB(false); };
   $('x-boveda').onclick = async function () {
@@ -818,7 +904,8 @@ tr.total td{background:var(--surface-2)}
   };
 
   /* =============================== Reportes =============================== */
-  var R = { rep: 'mes', cli: '', clis: [], filas: [], lado: 'emitida', res: null, seq: 0, crit: 'fecha', vista: 'mes', anios: null, anual: null };
+  var R = { rep: 'mes', cli: '', clis: [], filas: [], lado: 'emitida', res: null, seq: 0, crit: 'fecha', vista: 'mes', anios: null, anual: null,
+            lado3: '', cpor: 'cancelacion', retVisto: false };
   var SAT_P = { '001': 'Sueldos, salarios, rayas y jornales', '002': 'Gratificación anual (aguinaldo)', '003': 'PTU', '004': 'Reembolso de gastos médicos',
     '005': 'Fondo de ahorro', '006': 'Caja de ahorro', '009': 'Contribuciones a cargo del trabajador pagadas por el patrón', '010': 'Premios por puntualidad',
     '011': 'Prima de seguro de vida', '012': 'Seguro de gastos médicos mayores', '013': 'Cuotas sindicales pagadas por el patrón', '014': 'Subsidios por incapacidad',
@@ -874,15 +961,24 @@ tr.total td{background:var(--surface-2)}
   function pintaLados() {
     document.querySelectorAll('[data-rlado]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-rlado') === R.lado ? 'true' : 'false'); });
     var b = document.querySelector('[data-rlado="emitida"]'), c = document.querySelector('[data-rlado="recibida"]');
-    b.textContent = R.rep === 'nomina' ? 'Que timbró (como patrón)' : 'Emitidos';
-    c.textContent = R.rep === 'nomina' ? 'Que recibió' : 'Recibidos';
+    b.textContent = R.rep === 'nomina' ? 'Que timbró (como patrón)' : R.rep === 'ret' ? 'Le retuvieron (emitidos)' : 'Emitidos';
+    c.textContent = R.rep === 'nomina' ? 'Que recibió' : R.rep === 'ret' ? 'Retuvo (recibidos)' : 'Recibidos';
     document.querySelectorAll('[data-rcrit]').forEach(function (x) { x.setAttribute('aria-pressed', x.getAttribute('data-rcrit') === R.crit ? 'true' : 'false'); });
     document.querySelectorAll('[data-rvista]').forEach(function (x) { x.setAttribute('aria-pressed', x.getAttribute('data-rvista') === R.vista ? 'true' : 'false'); });
   }
   async function listaR() {
     var tb = $('r-lista'), rep = R.rep, mi = ++R.seq;
-    var dos = ['datos', 'nomina', 'metodo', 'dup', 'err'].indexOf(rep) >= 0, lado = dos || rep === 'anual';
-    $('r-anioL').hidden = rep === 'rel' || rep === 'anual'; $('r-mesL').hidden = !dos; $('r-lados').hidden = !lado; $('r-tot').hidden = true;
+    var dos = ['datos', 'nomina', 'metodo', 'dup', 'err'].indexOf(rep) >= 0, lado = dos || rep === 'anual' || rep === 'ret';
+    if (rep === 'ret' && !R.retVisto) { R.retVisto = true; R.lado = 'recibida'; }   // retenciones: primero lo que retuvo el cliente
+    // 241: en «CFDI relacionados» el año es opcional (sin escogerlo sale como antes: de todos los años)
+    var selA = $('r-anio'), opT = selA.querySelector('option[value=""]');
+    if (rep === 'rel' && !opT) { selA.insertAdjacentHTML('afterbegin', '<option value="">Todos los años</option>'); selA.value = ''; }
+    if (rep !== 'rel' && opT) { var eraT = selA.value === ''; selA.removeChild(opT); if (eraT) selA.selectedIndex = 0; }
+    $('r-anioL').hidden = rep === 'anual';
+    $('r-mesL').hidden = !(dos || rep === 'canc' || rep === 'ret' || (rep === 'rel' && selA.value));
+    $('r-lados').hidden = !lado; $('r-tot').hidden = true;
+    $('r-lado3').hidden = rep !== 'canc' && rep !== 'rel'; $('r-ctipoL').hidden = rep !== 'canc' && rep !== 'rel';
+    $('r-cpor').hidden = rep !== 'canc'; $('r-sinrelL').hidden = rep !== 'rel' || !R.cli;
     $('r-tipoL').hidden = rep !== 'anual'; $('r-medL').hidden = rep !== 'anual'; $('r-kL').hidden = rep !== 'err';
     $('r-crit').hidden = rep !== 'dup'; $('r-vista').hidden = rep !== 'metodo'; $('r-graf').hidden = true;
     $('x-reportes').disabled = false;
@@ -892,6 +988,8 @@ tr.total td{background:var(--surface-2)}
       if (rep === 'anual') return await listaAnual(tb, mi);
       if (rep === 'dup') return await listaDup(tb, mi);
       if (rep === 'err') return await listaErr(tb, mi);
+      if (rep === 'canc') return await listaCanc(tb, mi);
+      if (rep === 'ret') return await listaRet(tb, mi);
       if (R.rep === 'mes') {
         $('r-h').textContent = 'Resumen por mes';
         cabR([['Mes'], ['Emitidas o recibidas'], ['Ingresos', 1], ['Egresos', 1], ['Pagos', 1], ['Nómina', 1], ['Canceladas en el SAT', 1]]);
@@ -907,10 +1005,21 @@ tr.total td{background:var(--surface-2)}
       } else if (R.rep === 'rel') {
         $('r-h').textContent = 'CFDI relacionados';
         cabR([['Fecha'], ['El CFDI'], ['De / para'], ['Relación'], ['CFDI relacionado'], ['Cómo está']]);
-        R.filas = await rpc('cen_xml_relacionados', { p: { rfc: R.cli } }) || [];
-        $('r-sub').textContent = cuenta(R.filas.length, 'CFDI que relaciona a otros', 'CFDI que relacionan a otros');
+        var prl = { rfc: R.cli, lado: R.lado3, tipo: $('r-ctipo').value, sin_rel: !!(R.cli && $('r-sinrel').checked) };
+        if ($('r-anio').value) { var per = periodo(); prl.desde = per.desde; prl.hasta = per.hasta; }
+        R.filas = await rpc('cen_xml_relacionados', { p: prl }) || [];
+        var nSin = R.filas.filter(function (f) { return f.sin_rel; }).length;
+        $('r-sub').textContent = cuenta(R.filas.length - nSin, 'CFDI que relaciona a otros', 'CFDI que relacionan a otros')
+          + (prl.sin_rel ? ' · ' + cuenta(nSin, 'sin relación', 'sin relación') : '') + ($('r-anio').value ? ' · ' + periodo().t : '');
         if (!R.filas.length) { vacio(tb, 6, 'Ningún XML de la bóveda relaciona a otros.'); return; }
         tb.innerHTML = R.filas.map(function (f) {
+          if (f.sin_rel) {
+            return '<tr><td data-l="Fecha" class="nowrap">' + esc(fecha(f.fecha)) + '</td>'
+              + '<td data-l="El CFDI">' + chip(TIPOS[f.tipo] || f.tipo, f.lado === 'emitida' ? 'na' : 'az') + ' ' + esc([f.serie, f.folio].filter(Boolean).join('-')) + (f.cancelada ? ' ' + chip('Cancelado', 'mal') : '') + '<div class="mono mut">' + esc(f.uuid) + '</div></td>'
+              + '<td data-l="De / para"><span class="rs">' + esc(f.contraparte || f.rfc_contraparte) + '</span><div class="mut">' + esc(f.rfc_contraparte) + '</div></td>'
+              + '<td data-l="Relación" colspan="2">' + chip(f.tipo === 'P' ? 'Complemento sin documento relacionado' : 'Nota de crédito sin CFDI relacionado', 'ojo') + '</td>'
+              + '<td data-l="Cómo está"><span class="mut">—</span></td></tr>';
+          }
           var rel = (f.rel || []).map(function (r) {
             return '<div>' + chip(RELACION[r.tipo] || r.tipo || '—', 'az') + ' <span class="mono">' + esc(r.uuid) + '</span></div>';
           }).join(''), como = (f.rel || []).map(function (r) {
@@ -965,6 +1074,143 @@ tr.total td{background:var(--surface-2)}
     return '<tr' + (tot ? ' class="total"' : '') + '><td data-l="Mes" class="nowrap"><b>' + esc(t) + '</b></td>'
       + '<td data-l="Recibos" class="num">' + n0(x.recibos).toLocaleString('es-MX') + '</td>'
       + c('percepciones', 'Percepciones') + c('otros_pagos', 'Otros pagos') + c('deducciones', 'Deducciones') + c('isr', 'ISR retenido') + c('subsidio', 'Subsidio') + c('neto', 'Neto') + '</tr>';
+  }
+  /* =============== 241: Canceladas por periodo y Retenciones (segundo envío de Chuy) =============== */
+  async function listaCanc(tb, mi) {
+    $('r-h').textContent = 'Canceladas por periodo';
+    cabR([['Cancelada'], ['El CFDI'], ['De / para'], ['Total', 1], ['En QUO']]);
+    var pe = periodo();
+    var r = await rpc('cen_xml_canceladas', { p: { rfc: R.cli, lado: R.lado3, tipo: $('r-ctipo').value, desde: pe.desde, hasta: pe.hasta, por: R.cpor, max: 300 } })
+      || { total: 0, filas: [], por_mes: [] };
+    if (mi !== R.seq) return;
+    R.res = r;
+    $('r-sub').textContent = nomCli() + ' · ' + pe.t + ' · ' + (R.cpor === 'emision' ? 'por fecha de emisión' : 'por fecha de cancelación');
+    var porT = {};
+    (r.por_mes || []).forEach(function (m) { var k = (m.lado === 'emitida' ? 'Emitidas' : 'Recibidas') + ' · ' + (TIPOS[m.tipo] || m.tipo || '¿?'); porT[k] = (porT[k] || 0) + n0(m.n); });
+    $('r-tot').innerHTML = '<span><b>' + cuenta(r.total, 'cancelada', 'canceladas') + '</b></span>'
+      + Object.keys(porT).sort().map(function (k) { return '<span>' + chip(k + ': ' + porT[k].toLocaleString('es-MX'), '') + '</span>'; }).join('');
+    $('r-tot').hidden = false;
+    if (!r.total) { vacio(tb, 5, 'No hay canceladas en este periodo.'); $('x-reportes').disabled = true; return; }
+    tb.innerHTML = (r.filas || []).map(function (f) {
+      var de = f.lado === 'emitida' ? [f.nombre_receptor, f.rfc_receptor, 'Para: '] : [f.nombre_emisor, f.rfc_emisor, 'De: '], q = QUO[f.estado_quo] || [f.estado_quo || '—', ''];
+      return '<tr><td data-l="Cancelada" class="nowrap">' + (f.fecha_cancelacion ? esc(fecha(f.fecha_cancelacion)) : '<span class="mut">Se detectó el ' + esc(fecha(f.detectada)) + '</span>')
+        + '<div class="mut">Emitida el ' + esc(fecha(f.fecha_emision)) + '</div></td>'
+        + '<td data-l="El CFDI">' + chip(TIPOS[f.tipo] || f.tipo || '¿?', f.lado === 'emitida' ? 'na' : 'az') + ' ' + esc([f.serie, f.folio].filter(Boolean).join('-')) + '<div class="mono mut">' + esc(f.uuid) + '</div>'
+        + (R.cli ? '' : '<div class="mut">' + esc(clienteR(f.rfc)) + '</div>') + '</td>'
+        + '<td data-l="De / para"><span class="rs">' + esc(de[0] || de[1]) + '</span><div class="mut">' + esc(de[2] + de[1]) + '</div></td>'
+        + '<td data-l="Total" class="num">' + dinero(f.total, f.moneda) + '</td>'
+        + '<td data-l="En QUO">' + chip(q[0], q[1]) + (f.sustituida_por ? '<div class="mut">La sustituye ' + esc(f.sustituida_por) + '</div>' : '') + '</td></tr>';
+    }).join('') + (r.total > (r.filas || []).length ? '<tr><td colspan="5" class="vacio">Aquí ves las primeras ' + r.filas.length + ' de ' + n0(r.total).toLocaleString('es-MX') + '. El Excel (y su PDF) trae todas.</td></tr>' : '');
+  }
+  function clienteR(rfc) { var c = R.clis.filter(function (x) { return x.rfc === rfc; })[0]; return c ? c.cliente + ' (' + rfc + ')' : rfc; }
+  async function excelCanc(btn) {
+    var pe = periodo(), r;
+    btn.disabled = true;
+    try { r = await rpc('cen_xml_canceladas', { p: { rfc: R.cli, lado: R.lado3, tipo: $('r-ctipo').value, desde: pe.desde, hasta: pe.hasta, por: R.cpor, max: 20000 } }); }
+    catch (e) { btn.disabled = false; error(falla(e)); return; }
+    var fs = r.filas || [];
+    var head = ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Tipo', 'Serie y folio', 'UUID', 'Fecha de emisión', 'Fecha de cancelación', 'Se detectó',
+      'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Total', 'En QUO', 'La sustituye', 'Motivo'];
+    var filas = fs.map(function (f) {
+      return [clienteR(f.rfc).replace(/ \(.*\)$/, ''), f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid,
+        fechaX(f.fecha_emision), fechaX(f.fecha_cancelacion), fechaX(f.detectada), f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, num(f.total),
+        (QUO[f.estado_quo] || [f.estado_quo || ''])[0], f.sustituida_por || '', f.motivo || ''];
+    });
+    var hm = ['Mes', 'Emitidas o recibidas', 'Tipo', 'Canceladas', 'Total'];
+    var fm = (r.por_mes || []).map(function (m) { return [mes(m.mes), m.lado === 'emitida' ? 'Emitidas' : 'Recibidas', TIPOS[m.tipo] || m.tipo, n0(m.n), num(m.total)]; });
+    var fmt = { 6: 'dd/mm/yyyy', 7: 'dd/mm/yyyy hh:mm', 8: 'dd/mm/yyyy', 13: '#,##0.00' };
+    await libroExcel(btn, 'Canceladas por periodo', [
+      { nombre: 'Canceladas', head: head, filas: filas, formatos: fmt, anchos: [30, 15, 12, 10, 14, 38, 12, 16, 12, 15, 30, 15, 30, 14, 24, 38, 10],
+        pdfDeja: ['Cliente', 'Tipo', 'Serie y folio', 'Fecha de cancelación', 'Emisor', 'Receptor', 'Total', 'En QUO'] },
+      { nombre: 'Por mes', head: hm, filas: fm, formatos: { 4: '#,##0.00' }, anchos: [18, 14, 12, 12, 16] }],
+      [nomCli() + ' · ' + pe.t + ' · ' + (R.cpor === 'emision' ? 'por fecha de emisión' : 'por fecha de cancelación'), cuenta(fs.length, 'cancelada en el SAT', 'canceladas en el SAT')]);
+  }
+  /* Retenciones: el régimen del emisor y la tasa que resulta contra la base (subtotal menos descuento, en pesos) */
+  var REGIMEN = { '601': 'General de ley personas morales', '603': 'Personas morales con fines no lucrativos', '605': 'Sueldos y salarios', '606': 'Arrendamiento',
+    '607': 'Enajenación o adquisición de bienes', '608': 'Demás ingresos', '610': 'Residentes en el extranjero', '611': 'Dividendos', '612': 'Actividades empresariales y profesionales',
+    '614': 'Intereses', '615': 'Obtención de premios', '616': 'Sin obligaciones fiscales', '620': 'Sociedades cooperativas de producción', '621': 'Incorporación fiscal',
+    '622': 'Actividades agrícolas, ganaderas, silvícolas y pesqueras', '623': 'Opcional para grupos de sociedades', '624': 'Coordinados', '625': 'Plataformas tecnológicas', '626': 'Simplificado de confianza (RESICO)' };
+  function tasaT(t) { return (Math.round(t * 100) / 100).toLocaleString('es-MX', { maximumFractionDigits: 2 }) + ' %'; }
+  function cerca(t, v, h) { return Math.abs(t - v) <= h; }
+  function tipoIva(t) {
+    if (cerca(t, 10.6667, 0.35)) return 'Dos terceras partes del IVA (10.67 %)';
+    if (cerca(t, 5.3333, 0.3)) return 'Dos terceras partes del IVA en frontera (5.33 %)';
+    if (cerca(t, 4, 0.25)) return '4 % (fletes)';
+    if (cerca(t, 6, 0.25)) return '6 %';
+    if (cerca(t, 16, 0.4)) return 'Todo el IVA (16 %)';
+    if (cerca(t, 8, 0.3)) return 'Todo el IVA en frontera (8 %)';
+    return 'Otra tasa (' + tasaT(t) + ')';
+  }
+  function tipoIsr(f, t) {
+    var rf = f.rf_e || '', nom = REGIMEN[rf] ? REGIMEN[rf] + ' (' + rf + ')' : rf ? 'Régimen ' + rf : 'Sin régimen en el XML';
+    var tasa = cerca(t, 10, 0.2) ? '10 %' : cerca(t, 1.25, 0.08) ? '1.25 %' : tasaT(t);
+    return nom + ' · ' + tasa;
+  }
+  function retDe(f) {
+    var base = pesos(f, n0(f.subtotal) - n0(f.descuento)), isr = pesos(f, f.r_isr), iva = pesos(f, f.r_iva), out = [];
+    var ti = base ? 100 * isr / base : 0, tv = base ? 100 * iva / base : 0;
+    if (isr) out.push({ imp: 'ISR', tipo: tipoIsr(f, ti), base: base, monto: isr, tasa: ti });
+    if (iva) out.push({ imp: 'IVA', tipo: tipoIva(tv), base: base, monto: iva, tasa: tv });
+    return out;
+  }
+  function agrupaRet(fs) {
+    var G = {};
+    fs.forEach(function (f) {
+      if (f.cancelada) return;
+      retDe(f).forEach(function (x) {
+        var k = x.imp + '|' + x.tipo, g = G[k] || (G[k] = { imp: x.imp, tipo: x.tipo, n: 0, base: 0, monto: 0, m: {} });
+        var mm = String(f.fecha || '').slice(0, 7);
+        g.n++; g.base += x.base; g.monto += x.monto; g.m[mm] = (g.m[mm] || 0) + x.monto;
+      });
+    });
+    return Object.keys(G).sort(function (a, b) { return G[a].imp === G[b].imp ? G[b].monto - G[a].monto : G[a].imp < G[b].imp ? -1 : 1; }).map(function (k) { return G[k]; });
+  }
+  async function listaRet(tb, mi) {
+    $('r-h').textContent = 'Retenciones';
+    cabR([['Impuesto'], ['Tipo'], ['CFDI', 1], ['Base', 1], ['Retenido', 1]]);
+    if (!R.cli) { R.res = null; $('r-sub').textContent = 'El ISR y el IVA retenidos, separados por tipo'; vacio(tb, 5, 'Escoge un cliente para ver su reporte.'); $('x-reportes').disabled = true; return; }
+    var pe = periodo();
+    var r = await rpc('cen_xml_retenciones', { p: { rfc: R.cli, lado: R.lado, desde: pe.desde, hasta: pe.hasta, max: 100000 } }) || { total: 0, filas: [] };
+    if (mi !== R.seq) return;
+    R.res = r;
+    $('r-sub').textContent = nomCli() + ' · ' + (R.lado === 'recibida' ? 'lo que retuvo (en lo que recibió)' : 'lo que le retuvieron (en lo que emitió)') + ' · ' + pe.t;
+    var g = agrupaRet(r.filas || []), canc = (r.filas || []).filter(function (f) { return f.cancelada; }).length;
+    var tI = g.filter(function (x) { return x.imp === 'ISR'; }).reduce(function (a, x) { return a + x.monto; }, 0), tV = g.filter(function (x) { return x.imp === 'IVA'; }).reduce(function (a, x) { return a + x.monto; }, 0);
+    $('r-tot').innerHTML = '<span><b>' + cuenta(r.total, 'CFDI con retención', 'CFDI con retención') + '</b></span><span>ISR retenido ' + dinero(tI) + '</span><span>IVA retenido ' + dinero(tV) + '</span>'
+      + '<span class="mut">en pesos, sin los cancelados en el SAT</span>' + (canc ? '<span>' + chip(cuenta(canc, 'cancelado en el SAT (no suma)', 'cancelados en el SAT (no suman)'), 'mal') + '</span>' : '');
+    $('r-tot').hidden = false;
+    if (!g.length) { vacio(tb, 5, 'No hay CFDI con retenciones en este periodo.'); $('x-reportes').disabled = !r.total; return; }
+    tb.innerHTML = g.map(function (x) {
+      return '<tr><td data-l="Impuesto">' + chip(x.imp, x.imp === 'ISR' ? 'na' : 'az') + '</td><td data-l="Tipo">' + esc(x.tipo) + '</td>'
+        + '<td data-l="CFDI" class="num">' + x.n.toLocaleString('es-MX') + '</td><td data-l="Base" class="num">' + dinero(x.base) + '</td>'
+        + '<td data-l="Retenido" class="num"><b>' + dinero(x.monto) + '</b></td></tr>';
+    }).join('');
+  }
+  async function excelRet(btn) {
+    var r = R.res, pe = periodo();
+    if (!r || !r.total) return;
+    var fs = r.filas || [], g = agrupaRet(fs);
+    var meses = []; fs.forEach(function (f) { var m = String(f.fecha || '').slice(0, 7); if (m && meses.indexOf(m) < 0) meses.push(m); }); meses.sort();
+    var headT = ['Impuesto', 'Tipo', 'CFDI', 'Base', 'Retenido'].concat(meses.map(mes));
+    var filasT = g.map(function (x) { return [x.imp, x.tipo, x.n, x.base, x.monto].concat(meses.map(function (m) { return x.m[m] || 0; })); });
+    var fmtT = {}; headT.forEach(function (h, j) { if (j >= 3) fmtT[j] = '#,##0.00'; });
+    var headD = ['Estado', 'Fecha', 'Tipo', 'Serie y folio', 'UUID', 'RFC emisor', 'Emisor', 'Régimen del emisor', 'RFC receptor', 'Receptor', 'Moneda', 'Base (subtotal menos descuento, en pesos)',
+      'ISR retenido', 'Tasa ISR', 'Tipo de retención de ISR', 'IVA retenido', 'Tasa IVA', 'Tipo de retención de IVA', 'Impuestos locales retenidos', 'Total'];
+    var filasD = fs.map(function (f) {
+      var xs = retDe(f), i = xs.filter(function (x) { return x.imp === 'ISR'; })[0] || {}, v = xs.filter(function (x) { return x.imp === 'IVA'; })[0] || {};
+      return [f.cancelada ? 'Cancelado en el SAT' : 'Vigente', fechaX(f.fecha), TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.rfc_emisor, f.nombre_emisor,
+        f.rf_e ? (REGIMEN[f.rf_e] ? f.rf_e + ' · ' + REGIMEN[f.rf_e] : f.rf_e) : '', f.rfc_receptor, f.nombre_receptor, f.moneda,
+        pesos(f, n0(f.subtotal) - n0(f.descuento)), i.monto || '', i.tasa ? Math.round(i.tasa * 10000) / 1000000 : '', i.tipo || '',
+        v.monto || '', v.tasa ? Math.round(v.tasa * 10000) / 1000000 : '', v.tipo || '', num(f.l_r), num(f.total)];
+    });
+    await libroExcel(btn, 'Retenciones', [
+      { nombre: 'Por tipo', titulo: 'Retenciones · por tipo y mes', head: headT, filas: filasT, formatos: fmtT, anchos: headT.map(function (h, j) { return j === 1 ? 46 : j === 0 ? 10 : 14; }) },
+      { nombre: 'Detalle', titulo: 'Retenciones · cada CFDI', head: headD, filas: filasD,
+        formatos: { 1: 'dd/mm/yyyy', 11: '#,##0.00', 12: '#,##0.00', 13: '0.00%', 15: '#,##0.00', 16: '0.00%', 18: '#,##0.00', 19: '#,##0.00' },
+        anchos: [14, 12, 10, 14, 38, 15, 30, 30, 15, 30, 8, 16, 14, 9, 40, 14, 9, 36, 14, 14],
+        pdfDeja: ['Fecha', 'Serie y folio', 'Emisor', 'Base (subtotal menos descuento, en pesos)', 'ISR retenido', 'Tipo de retención de ISR', 'IVA retenido', 'Tipo de retención de IVA'] }],
+      [nomCli() + ' (' + R.cli + ') · ' + (R.lado === 'recibida' ? 'lo que retuvo (en lo que recibió)' : 'lo que le retuvieron (en lo que emitió)') + ' · ' + pe.t,
+       'El tipo sale del régimen del emisor y de la tasa que resulta contra la base; «Por tipo» no suma los cancelados en el SAT']);
   }
   function totDatos(r) {
     var h = '<span><b>' + cuenta(r.total, 'CFDI', 'CFDI') + '</b></span>';
@@ -1088,14 +1334,39 @@ tr.total td{background:var(--surface-2)}
     var fmtR = {}, fmtM = {};
     head.forEach(function (h, j) { if (j >= fijos.length || /Salario/.test(h)) fmtR[j] = '#,##0.00'; if (/^Fecha/.test(h)) fmtR[j] = 'dd/mm/yyyy'; });
     headM.forEach(function (h, j) { if (j >= 2) fmtM[j] = '#,##0.00'; });
+    // por empleado y mes de pago (segundo envío de Chuy), sin los cancelados en el SAT; el ISR es la deducción 002
+    var E = {};
+    filas.forEach(function (fx) {
+      var f = fx[0], x = fx[1], n = x.n; if (f.cancelada) return;
+      var tr = f.lado === 'emitida' ? [f.rfc_receptor, f.nombre_receptor] : [f.rfc_emisor, f.nombre_emisor];
+      var e = E[tr[0] || '?'] || (E[tr[0] || '?'] = { rfc: tr[0] || '', nom: tr[1] || '', curp: n.curp || '', num: n.num || '', m: {} });
+      if (!e.nom && tr[1]) e.nom = tr[1];
+      var k = String(n.fp || f.fecha || '').slice(0, 7) || '?', m = e.m[k] || (e.m[k] = { n: 0, tg: 0, te: 0, tp: 0, to: 0, sub: 0, td: 0, isr: 0 });
+      m.n++; m.tg += x.tg; m.te += x.te; m.tp += x.tp; m.to += x.to; m.sub += x.sub; m.td += x.td; m.isr += n0(x.d['002']);
+    });
+    var headE = ['RFC del trabajador', 'Nombre', 'CURP', 'Núm. de empleado', 'Mes de pago', 'Recibos', 'Total gravado', 'Total exento', 'Total percepciones',
+      'Otros pagos', 'Subsidio causado', 'Deducciones', 'ISR retenido (deducción 002)', 'Neto'];
+    var cuerpoE = [];
+    Object.keys(E).sort(function (a, b) { return (E[a].nom || a).localeCompare(E[b].nom || b, 'es'); }).forEach(function (k) {
+      var e = E[k], ks = Object.keys(e.m).sort(), T = { n: 0, tg: 0, te: 0, tp: 0, to: 0, sub: 0, td: 0, isr: 0 };
+      ks.forEach(function (mm) {
+        var m = e.m[mm]; Object.keys(T).forEach(function (c) { T[c] += m[c]; });
+        cuerpoE.push([e.rfc, e.nom, e.curp, e.num, mes(mm), m.n, m.tg, m.te, m.tp, m.to, m.sub, m.td, m.isr, m.tp + m.to - m.td]);
+      });
+      if (ks.length > 1) cuerpoE.push([e.rfc, e.nom, e.curp, e.num, 'Total del trabajador', T.n, T.tg, T.te, T.tp, T.to, T.sub, T.td, T.isr, T.tp + T.to - T.td]);
+    });
+    var fmtE = {}; headE.forEach(function (h, j) { if (j >= 6) fmtE[j] = '#,##0.00'; });
     var lin = [nomCli() + ' (' + R.cli + ') · ' + (R.lado === 'emitida' ? 'los que timbró como patrón' : 'los que recibió') + ' · ' + pe.t,
-      cuenta(rec.length, 'recibo de nómina', 'recibos de nómina') + ' · «Por mes» no suma los cancelados en el SAT'];
+      cuenta(rec.length, 'recibo de nómina', 'recibos de nómina') + ' · «Por mes» y «Por empleado» no suman los cancelados en el SAT'];
     await libroExcel(btn, 'Nómina 1.2 Extendido', [
       { nombre: 'Por recibo', titulo: 'Nómina 1.2 Extendido · por recibo', head: head, filas: cuerpo, formatos: fmtR,
         anchos: head.map(function (h) { return /UUID/.test(h) ? 38 : /Nombre|Puesto|Departamento/.test(h) ? 28 : /^(Percepción|Deducción|Otro pago)/.test(h) ? 18 : 14; }),
         pdfDeja: ['Estado', 'Fecha de pago', 'RFC del trabajador', 'Nombre', 'Total percepciones', 'Total otros pagos', 'Total deducciones', 'Neto'] },
       { nombre: 'Por mes', titulo: 'Nómina 1.2 Extendido · por mes de pago', head: headM, filas: cuerpoM, formatos: fmtM,
-        anchos: headM.map(function (h, j) { return j === 0 ? 18 : j === 1 ? 10 : 18; }) }], lin);
+        anchos: headM.map(function (h, j) { return j === 0 ? 18 : j === 1 ? 10 : 18; }) },
+      { nombre: 'Por empleado', titulo: 'Nómina 1.2 Extendido · por empleado y mes de pago', head: headE, filas: cuerpoE, formatos: fmtE,
+        anchos: [15, 32, 20, 12, 18, 9, 15, 15, 16, 14, 14, 15, 16, 15],
+        pdfDeja: ['Nombre', 'Mes de pago', 'Recibos', 'Total percepciones', 'Subsidio causado', 'Deducciones', 'ISR retenido (deducción 002)', 'Neto'] }], lin);
   }
 
   /* =============== 210: Método de pago, Tablero anual, Pagos duplicados y Pagos con errores =============== */
@@ -1496,6 +1767,14 @@ tr.total td{background:var(--surface-2)}
     b.onclick = function () { R.rep = b.getAttribute('data-rep'); document.querySelectorAll('[data-rep]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); }); listaR(); };
   });
   document.querySelectorAll('[data-rlado]').forEach(function (b) { b.onclick = function () { R.lado = b.getAttribute('data-rlado'); listaR(); }; });
+  document.querySelectorAll('[data-rlado3]').forEach(function (b) { b.onclick = function () { R.lado3 = b.getAttribute('data-rlado3'); pintaLado3(); listaR(); }; });
+  document.querySelectorAll('[data-rcpor]').forEach(function (b) { b.onclick = function () { R.cpor = b.getAttribute('data-rcpor'); pintaLado3(); listaR(); }; });
+  function pintaLado3() {
+    document.querySelectorAll('[data-rlado3]').forEach(function (x) { x.setAttribute('aria-pressed', x.getAttribute('data-rlado3') === R.lado3 ? 'true' : 'false'); });
+    document.querySelectorAll('[data-rcpor]').forEach(function (x) { x.setAttribute('aria-pressed', x.getAttribute('data-rcpor') === R.cpor ? 'true' : 'false'); });
+  }
+  $('r-ctipo').addEventListener('change', listaR);
+  $('r-sinrel').addEventListener('change', listaR);
   $('r-anio').addEventListener('change', listaR);
   $('r-mes').addEventListener('change', listaR);
   $('r-tipo').addEventListener('change', listaR);
@@ -1520,13 +1799,18 @@ tr.total td{background:var(--surface-2)}
     if (R.rep === 'anual') return excelAnual(this);
     if (R.rep === 'dup') return excelDup(this);
     if (R.rep === 'err') return excelErr(this);
+    if (R.rep === 'canc') return excelCanc(this);
+    if (R.rep === 'ret') return excelRet(this);
     if (R.rep === 'mes') {
       excel(this, 'Resumen por mes', ['Mes', 'Emitidas o recibidas', 'Ingresos', 'Ingresos en pesos', 'Egresos', 'Egresos en pesos', 'Pagos', 'Nómina', 'Nómina en pesos', 'Canceladas en el SAT'],
         R.filas.map(function (x) { return [mes(x.mes), x.lado === 'emitida' ? 'Emitidas' : 'Recibidas', x.I[0], x.I[1], x.E[0], x.E[1], x.P[0], x.N[0], x.N[1], x.k]; }),
         [16, 14, 10, 16, 10, 16, 10, 10, 16, 12], [$('r-sub').textContent]);
     } else {
       var filas = [];
-      R.filas.forEach(function (f) { (f.rel || []).forEach(function (r) { filas.push([fecha(f.fecha), TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.contraparte, f.rfc_contraparte, RELACION[r.tipo] || r.tipo, r.uuid, r.esta ? 'Sí' : 'No', r.cancelada ? 'Sí' : '']); }); });
+      R.filas.forEach(function (f) {
+        if (f.sin_rel) { filas.push([fecha(f.fecha), TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.contraparte, f.rfc_contraparte, f.tipo === 'P' ? 'Complemento sin documento relacionado' : 'Nota de crédito sin CFDI relacionado', '', '', f.cancelada ? 'Sí' : '']); return; }
+        (f.rel || []).forEach(function (r) { filas.push([fecha(f.fecha), TIPOS[f.tipo] || f.tipo, [f.serie, f.folio].filter(Boolean).join('-'), f.uuid, f.contraparte, f.rfc_contraparte, RELACION[r.tipo] || r.tipo, r.uuid, r.esta ? 'Sí' : 'No', r.cancelada ? 'Sí' : '']); });
+      });
       excel(this, 'CFDI relacionados', ['Fecha', 'Tipo', 'Serie y folio', 'UUID', 'De / para', 'RFC', 'Relación', 'UUID relacionado', 'En la bóveda', 'Cancelado en el SAT'], filas, [12, 10, 14, 38, 34, 15, 22, 38, 10, 12], [$('r-sub').textContent]);
     }
   };

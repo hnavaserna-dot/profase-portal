@@ -24,7 +24,8 @@
    Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
                                        doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, originalTodos });
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton);
-         V.bajaVarios([{d, ruta: 'Carpeta/'}], boton, 'nombre del zip', (i, n) => {})   (expediente, 3-nov-2026: un ZIP) */
+         V.bajaVarios([{d, ruta: 'Carpeta/'}], boton, 'nombre del zip', (i, n) => {})   (expediente, 3-nov-2026: un ZIP)
+         con aLaVez: n en nuevo({…}) trae hasta n archivos a la vez para el ZIP (Centauro, los XML: 4-nov-2026) */
 (function () {
   'use strict';
   var PDFJS = 'js/lib/pdfjs/pdf.min.js', PDFJS_TRABAJADOR = 'js/lib/pdfjs/pdf.worker.min.js';
@@ -227,12 +228,28 @@
       if (btn) btn.disabled = true;
       var sal = [], usados = {}, fallas = [];
       try {
+        // 4-nov-2026 (Centauro, el ZIP de los XML): con op.aLaVez se traen varios a la vez (y se juntan en su orden)
+        var aLaVez = Math.max(1, Math.min(+op.aLaVez || 1, 16)), traidos = [], hechos = 0, sig = 0;
+        if (aLaVez > 1) {
+          await Promise.all(Array.from({ length: Math.min(aLaVez, lista.length) }, async function () {
+            while (sig < lista.length) {
+              var k = sig++;
+              try { traidos[k] = { b: await bytes(lista[k].d) }; } catch (e) { traidos[k] = { e: e }; }
+              hechos++;
+              if (avance) { try { avance(hechos, lista.length); } catch (e) { /* nada */ } }
+              if (btn) btn.textContent = 'Juntando ' + hechos + ' de ' + lista.length + '…';
+            }
+          }));
+        }
         for (var i = 0; i < lista.length; i++) {
           var x = lista[i];
-          if (avance) { try { avance(i + 1, lista.length); } catch (e) { /* nada */ } }
-          if (btn) btn.textContent = 'Juntando ' + (i + 1) + ' de ' + lista.length + '…';
+          if (aLaVez === 1) {
+            if (avance) { try { avance(i + 1, lista.length); } catch (e) { /* nada */ } }
+            if (btn) btn.textContent = 'Juntando ' + (i + 1) + ' de ' + lista.length + '…';
+          }
           try {
-            var b = await bytes(x.d);
+            if (aLaVez > 1 && traidos[i].e) throw traidos[i].e;
+            var b = aLaVez > 1 ? traidos[i].b : await bytes(x.d);
             var n = String(x.ruta || '') + nombre(x.d), k = n.toLowerCase(), j = 1;
             while (usados[k]) { j += 1; n = String(x.ruta || '') + nombre(x.d).replace(/(\.[^.]+)?$/, ' (' + j + ')$1'); k = n.toLowerCase(); }
             usados[k] = true;
