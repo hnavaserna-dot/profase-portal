@@ -15,9 +15,8 @@
    menu: 'rh' (y sub: 'rh-vacaciones', opcional): el paso abre ese módulo donde esté el menú de quien lo ve (riel, menú
    arriba o el ☰ del celular, con PORTAL_MENU.ensena) e ilumina su tarjeta u opción; al pasar a otro paso o al terminar,
    el menú se vuelve a cerrar solo.
-   obligatorio: true: sin «Saltar» ni Esc; solo se sale llegando al final. Lo usan el recorrido general del portal
-   (bienvenida_tab.js; Daniel: «Obligatorio») y el de «+ Subir aviso» del Buzón tributario a Liliana Lechuga y Francisco
-   Rivera (bzt_tab.js; Héctor Daniel, 4-nov-2026: «dale un recorrido a lili y a frank obligatorio»), por unaVez(). El del chat ya no es obligatorio (Héctor Daniel, 3-nov-2026,
+   obligatorio: true: sin «Saltar» ni Esc; solo se sale llegando al final. Hoy solo lo usa el recorrido general del
+   portal (bienvenida_tab.js; Daniel: «Obligatorio»). El del chat ya no es obligatorio (Héctor Daniel, 3-nov-2026,
    15:57: «quita la regla del recorrido obligatorio en chat»): se puede saltar, como los de las demás pantallas.
    Último paso de todos (regla de Daniel, 31-oct-2026, 5:04): dónde está SuperConta (IA) para sus dudas. Lo registra
    PROFASE_RECORRIDO.alFinal(() => paso) (portal/guia_tab.js) y se agrega solo; sinCierre: true lo apaga (los de SuperConta). */
@@ -290,9 +289,7 @@
   // Un recorrido de lo nuevo, una sola vez por persona (31-oct-2026): el flujo de siempre de los recorridos de lo nuevo
   // (después de su ventana de «Nuevos cambios», o al entrar si ya la cerró; nunca encima de otra ventana ni de otro
   // recorrido; visto con recorrido_visto() y, en solo consulta, en su navegador), en un solo lugar para no repetirlo en
-  // cada pestaña. o = { id, liga, laVe: async (PORTAL, perfil) => true|false, pasos: [...] o async () => [...], fin,
-  // obligatorio }. Con obligatorio: true (solo cuando Daniel lo pide) va sin «Saltar» ni Esc y solo cuenta como visto al
-  // llegar al final: si se interrumpe, vuelve a salir la próxima vez.
+  // cada pestaña. o = { id, liga, laVe: async (PORTAL, perfil) => true|false, pasos: [...] o async () => [...], fin }.
   function unaVez(o) {
     var dormir = function (ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); };
     function vistoLocal() { try { return (JSON.parse(localStorage.getItem('profase-recorridos') || '[]') || []).indexOf(o.id) >= 0; } catch (e) { return false; } }
@@ -330,8 +327,8 @@
         if (ocupado()) return;
         var pasos = typeof o.pasos === 'function' ? await o.pasos() : o.pasos;
         if (!pasos || !pasos.length) return;
-        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio });
-        if (como === 'fin' || (como === 'saltado' && !o.obligatorio)) marcaVisto();
+        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!' });
+        if (como === 'fin' || como === 'saltado') marcaVisto();
       } catch (e) { /* un recorrido nunca rompe la página */ } finally { esperando = false; }
     }
     addEventListener('profase:novedad-cerrada', function (ev) {
