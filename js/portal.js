@@ -1339,18 +1339,24 @@
      la pantalla), en algo que se arrastra con el dedo (touch-action: none) ni a media llamada del chat. Escucha sin
      detener el deslizamiento (passive): no hace más lento nada ni le pregunta nada a la base. Si algún día un recuadro
      no debe usarlo, lleva data-sin-jalar. Prueba: herramientas/pruebas/pantallas/prueba_jalar.py (en profase-datos). ---- */
+  /* ¿Es la app de la pantalla de inicio (iPhone, iPad o Android instalada) y no el navegador? Se le pregunta a la página
+     de arriba, porque una pestaña en su marco no lo sabe sola. Una sola versión: la usan «Jalar para actualizar» y
+     «Bajar en la app del iPhone o iPad» (abajo). */
+  P.enApp = function () {
+    var w = window;
+    try { if (window.top && window.top.document) w = window.top; } catch (e) { w = window; }
+    try {
+      return w.navigator.standalone === true || w.matchMedia('(display-mode: standalone)').matches
+        || w.matchMedia('(display-mode: fullscreen)').matches;
+    } catch (e) { return false; }
+  };
+
   (function jalarParaActualizar() {
     if (window.__profaseJalar) return;
     window.__profaseJalar = true;
     var MARCA = 64, MAX = 110, RESISTENCIA = 0.5;
     function deArriba() { try { return window.top && window.top.document ? window.top : window; } catch (e) { return window; } }
-    function enApp() {
-      var w = deArriba();
-      try {
-        return w.navigator.standalone === true || w.matchMedia('(display-mode: standalone)').matches
-          || w.matchMedia('(display-mode: fullscreen)').matches;
-      } catch (e) { return false; }
-    }
+    function enApp() { return P.enApp(); }
     function enLlamada() { try { var t = deArriba().PORTAL; return !!(t && (t.ocupado ? t.ocupado(true) : t.enLlamada && t.enLlamada())); } catch (e) { return false; } }
     function hastaArriba(w) {
       try { var se = w.document.scrollingElement || w.document.documentElement; return (se ? se.scrollTop : 0) <= 0 && (w.scrollY || 0) <= 0; } catch (e) { return true; }
@@ -1459,6 +1465,187 @@
       if (listo) actualiza(); else quita();
     }, { passive: true, capture: true });
     document.addEventListener('touchcancel', cancela, { passive: true, capture: true });
+  })();
+
+  /* ---- Bajar archivos en la app del iPhone o iPad (Héctor Daniel, 4-nov-2026, 11:03, desde su iPad, en la app de la
+     pantalla de inicio: «Le puse bajar en el chat crm para poder copiar y pegar algo; y ya no me deja regresar al chat
+     ni nada; lo cierro y vuelve abrir ahí»). En la app de la pantalla de inicio del iPhone y del iPad, un «Bajar» del
+     portal (un enlace con download a un blob: o data:) no baja nada: la app entera se va al archivo (pantalla gris con
+     su nombre, «Abrir en Vista Previa» y «Más…»), sin forma de regresar, y al cerrarla vuelve a abrir ahí; la única
+     salida era borrar la app de la pantalla de inicio y volverla a agregar desde Safari.
+     Se arregla aquí, una sola vez para todo el portal, lo de hoy y lo nuevo (el chat, el visor de documentos, el
+     expediente y su ZIP, los Excel y PDF con la marca, las facturas, las cotizaciones y cualquier descarga que venga):
+     en esa app, en lugar de irse al archivo, sale la hoja de Compartir del iPhone o iPad con el archivo (Guardar en
+     Archivos, Guardar imagen, Copiar, AirDrop, Mail, WhatsApp…) y el portal se queda donde estaba. Si el sistema no
+     la deja salir sola (el archivo tardó en llegar y ya no cuenta como el toque de la persona), sale una ventanita con
+     el nombre del archivo y «Guardar o compartir»; si es foto, ahí mismo se ve y, dejando el dedo encima, se copia o se
+     guarda en Fotos. En el navegador (Safari o Chrome, que sí bajan el archivo), en Android y en la computadora no
+     cambia nada.
+     Cubre las tres formas de bajar que hay en el portal y en sus librerías: a.click() de un enlace (visor, marca,
+     cotizador, «downloads»), el click de un enlace suelto que nunca entra a la página (dispatchEvent, como doc.save()
+     de jsPDF) y el toque de la persona en un enlace con download. Lo que se anota en Accesos lo sigue haciendo quien
+     baja. Para las pruebas, window.__profaseBajarApp (true o false) lo prende o lo apaga sin ser iPhone ni iPad.
+     Prueba: herramientas/pruebas/pantallas/prueba_bajar_app.py (profase-datos); construir.py (exige_bajar_app()) no
+     publica si se quita. Nunca hagas otra versión en una página: una descarga nueva solo usa un enlace con download. ---- */
+  (function bajarEnApp() {
+    if (window.__profaseBajarAppListo) return;
+    window.__profaseBajarAppListo = true;
+    var A = window.HTMLAnchorElement && window.HTMLAnchorElement.prototype;
+    if (!A) return;
+    var TIPOS = {
+      png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+      svg: 'image/svg+xml', pdf: 'application/pdf', xml: 'application/xml', zip: 'application/zip', csv: 'text/csv', txt: 'text/plain',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+      xls: 'application/vnd.ms-excel', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', mp4: 'video/mp4', mov: 'video/quicktime',
+      m4a: 'audio/mp4', mp3: 'audio/mpeg', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg'
+    };
+    function deApple() {
+      var ua = navigator.userAgent || '';
+      return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);   // el iPad se presenta como Mac
+    }
+    function toca() {
+      var f = window.__profaseBajarApp;
+      if (f === true || f === false) return f;
+      return deApple() && P.enApp();
+    }
+    function esBajada(a) {
+      if (!a || !a.hasAttribute || !a.hasAttribute('download')) return false;
+      return /^(blob:|data:|https?:)/i.test(a.getAttribute('href') || '');
+    }
+    // el tipo de verdad: los «Bajar» del portal arman el archivo como «datos» (application/octet-stream) y así el iPad
+    // no ofrece «Guardar imagen»; se saca de la terminación del nombre
+    function tipoDe(nombre, tipo) {
+      var t = String(tipo || '').toLowerCase();
+      if (t && t !== 'application/octet-stream' && t !== 'binary/octet-stream') return tipo;
+      var m = /\.([a-z0-9]{1,5})$/i.exec(nombre || '');
+      return (m && TIPOS[m[1].toLowerCase()]) || 'application/octet-stream';
+    }
+    function nombreDe(a) {
+      var n = a.getAttribute('download');
+      if (!n) { try { n = decodeURIComponent(String(a.pathname || '').split('/').pop()); } catch (e) { n = ''; } }
+      return String(n || 'archivo').replace(/[\\/:*?"<>|]/g, '_');
+    }
+    function tam(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+    function escH(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function sePuedeCompartir(f) {
+      try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { return false; }
+    }
+
+    var ULTIMO = { k: '', t: 0 };
+    function maneja(a) {
+      var href = a.href || a.getAttribute('href'), nombre = nombreDe(a), k = href + '|' + nombre, ahora = Date.now();
+      if (ULTIMO.k === k && ahora - ULTIMO.t < 1500) return;   // el mismo archivo por dos caminos a la vez: una sola hoja
+      ULTIMO = { k: k, t: ahora };
+      // se lee luego luego: la página suelta el archivo (revokeObjectURL) a los pocos segundos
+      fetch(href).then(function (r) {
+        if (!r.ok && r.status) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(function (b) {
+        comparte(new File([b], nombre, { type: tipoDe(nombre, b.type) }));
+      }).catch(function (e) {
+        try { console.warn('[bajar en la app] ' + nombre, e); } catch (x) { /* sin consola */ }
+        // una liga de fuera que no se deja leer: se abre en la hojita de Safari de la app (tiene «OK» para regresar)
+        if (/^https?:/i.test(href)) { try { window.open(href, '_blank', 'noopener'); return; } catch (x) { /* sigue */ } }
+        P.toast('No se pudo preparar «' + nombre + '». Intenta otra vez.');
+      });
+    }
+    function comparte(f) {
+      if (!sePuedeCompartir(f)) { ventana(f); return; }
+      navigator.share({ files: [f] }).then(null, function (e) {
+        if (e && e.name === 'AbortError') return;   // la persona cerró la hoja
+        ventana(f);                                   // ya no contaba como su toque: con uno más sale
+      });
+    }
+
+    var CSS_BA = '.pba-velo{position:fixed;inset:0;z-index:9500;background:rgba(10,18,32,.55);display:flex;align-items:center;justify-content:center;'
+      + 'padding:max(16px,env(safe-area-inset-top,0px)) 16px max(16px,env(safe-area-inset-bottom,0px));box-sizing:border-box}'
+      + '.pba-caja{background:var(--surface,#fff);color:var(--ink,#132036);width:min(440px,100%);max-height:100%;overflow:auto;border-radius:14px;'
+      + 'box-shadow:0 20px 50px rgba(0,0,0,.35);font-family:var(--f-body,inherit);display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}'
+      + '.pba-cab{flex:none;background:#1F3864;color:#fff;border-bottom:4px solid #F07A1E;padding:12px 16px;font-weight:700;font-size:16px;line-height:1.3}'
+      + '.pba-cu{padding:14px 16px;display:flex;flex-direction:column;gap:12px}'
+      + '.pba-nom{font-size:14px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}'
+      + '.pba-tam{font-weight:400;color:var(--muted,#5A6577)}'
+      + '.pba-foto{display:block;max-width:100%;max-height:40vh;margin:0 auto;border-radius:8px;border:1px solid var(--line,#DCE2EB);'
+      + '-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}'
+      + '.pba-nota{font-size:13px;line-height:1.45;color:var(--muted,#5A6577);margin:0}'
+      + '.pba-bot{flex:none;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;padding:0 16px 16px}'
+      + '.pba-bot button{min-height:44px;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;font-size:15px;cursor:pointer}'
+      + '.pba-si{background:#F07A1E;color:#fff;border:1px solid #F07A1E;flex:1 1 auto}'
+      + '.pba-no{background:transparent;color:var(--ink,#132036);border:1px solid var(--line-strong,#C4CDDA)}'
+      + '.pba-bot button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
+      + ':root[data-theme="dark"] .pba-caja{background:var(--surface,#16213A);color:var(--ink,#E6ECF7)}'
+      + ':root[data-theme="dark"] .pba-no{color:var(--ink,#E6ECF7);border-color:var(--line-strong,#3A4C6E)}'
+      + ':root[data-theme="dark"] .pba-nota,:root[data-theme="dark"] .pba-tam{color:var(--muted,#A9B6CC)}';
+    function ventana(f) {
+      var viejo = document.querySelector('.pba-velo');
+      if (viejo && viejo.__cierra) viejo.__cierra();
+      if (!document.getElementById('pba-css')) {
+        var st = document.createElement('style'); st.id = 'pba-css'; st.textContent = CSS_BA;
+        (document.head || document.documentElement).appendChild(st);
+      }
+      var foto = /^image\/(png|jpeg|gif|webp|heic|heif|svg\+xml)$/i.test(f.type), puede = sePuedeCompartir(f);
+      var url = foto ? URL.createObjectURL(f) : '';
+      var nota = puede
+        ? 'Toca «Guardar o compartir» para guardarlo en Archivos' + (foto ? ' o en Fotos' : '') + ', copiarlo o mandarlo.'
+          + (foto ? ' También puedes dejar el dedo sobre la foto para copiarla o guardarla.' : '')
+        : (foto ? 'Deja el dedo sobre la foto para copiarla o guardarla en Fotos.'
+          : 'Este equipo no deja guardarlo desde la app. Ábrelo en Safari, en crmprofase.com.mx, para bajarlo.');
+      var antes = document.activeElement;
+      var v = document.createElement('div');
+      v.className = 'pba-velo'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-modal', 'true'); v.setAttribute('aria-labelledby', 'pba-t');
+      v.innerHTML = '<div class="pba-caja">'
+        + '<div class="pba-cab" id="pba-t">Tu archivo está listo</div>'
+        + '<div class="pba-cu"><div class="pba-nom">' + escH(f.name) + ' <span class="pba-tam">· ' + tam(f.size) + '</span></div>'
+        + (foto ? '<img class="pba-foto" alt="' + escH(f.name) + '" src="' + url + '">' : '')
+        + '<p class="pba-nota">' + escH(nota) + '</p></div>'
+        + '<div class="pba-bot"><button type="button" class="pba-no" data-pba="cerrar">Cerrar</button>'
+        + (puede ? '<button type="button" class="pba-si" data-pba="si">Guardar o compartir</button>' : '') + '</div></div>';
+      function cierra() {
+        window.removeEventListener('keydown', tecla, true);
+        if (url) setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        v.remove();
+        try { if (antes && antes.focus && document.contains(antes)) antes.focus(); } catch (e) { /* nada */ }
+      }
+      // en la ventana y en captura: Esc cierra solo esta ventanita, no también lo de abajo (la foto abierta del chat)
+      function tecla(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); cierra(); } }
+      v.__cierra = cierra;
+      v.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-pba]') : null;
+        if (e.target === v || (b && b.getAttribute('data-pba') === 'cerrar')) { cierra(); return; }
+        if (b && b.getAttribute('data-pba') === 'si') {
+          navigator.share({ files: [f] }).then(cierra, function (er) {
+            if (er && er.name === 'AbortError') return;   // cerró la hoja: la ventanita se queda por si quiere otra vez
+            P.toast('No se pudo abrir Compartir. Intenta otra vez.');
+          });
+        }
+      });
+      window.addEventListener('keydown', tecla, true);
+      (document.body || document.documentElement).appendChild(v);
+      var pri = v.querySelector('[data-pba="si"]') || v.querySelector('[data-pba="cerrar"]');
+      try { pri.focus({ preventScroll: true }); } catch (e) { pri.focus(); }
+    }
+
+    // 1) a.click() de un enlace (en la página o suelto)
+    var clicOrig = A.click;
+    A.click = function () {
+      if (esBajada(this) && toca()) { maneja(this); return; }
+      return clicOrig.apply(this, arguments);
+    };
+    // 2) el click «a mano» de un enlace suelto (jsPDF y FileSaver): nunca llega a la página
+    var dispOrig = A.dispatchEvent;
+    A.dispatchEvent = function (ev) {
+      if (ev && ev.type === 'click' && esBajada(this) && toca()) { maneja(this); return false; }
+      return dispOrig.apply(this, arguments);
+    };
+    // 3) el toque de la persona en un enlace con download
+    document.addEventListener('click', function (ev) {
+      if (ev.defaultPrevented) return;
+      var a = ev.target && ev.target.closest ? ev.target.closest('a[download]') : null;
+      if (!a || !esBajada(a) || !toca()) return;
+      ev.preventDefault();
+      maneja(a);
+    }, true);
   })();
 
   /* ---- Seguro de arranque (30-oct-2026, pedido de Daniel: «y un mensaje o algo de que avísenle a Héctor Daniel Nava
