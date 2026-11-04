@@ -139,7 +139,7 @@
     await pon([rfc], true);
     var p = P(), quien = nombre || rfc;
     if (p && p.avisoChico) p.avisoChico({ id: 'poc', texto: 'Ocultaste ' + quien + ' de tu lista.',
-      detalle: 'Ya no te sale aquí ni en Cartera, Variaciones y Activo fijo. A los demás no les cambia nada.',
+      detalle: 'Ya no te sale aquí ni en Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo. A los demás no les cambia nada.',
       boton: 'Deshacer', ms: 9000, accion: function () { pon([rfc], false).catch(function () { /* nada */ }); } });
   }
 
@@ -180,7 +180,7 @@
     var velo = document.createElement('div'); velo.className = 'poc-velo'; velo.hidden = true;
     velo.innerHTML = '<div class="poc-vent" role="dialog" aria-modal="true" aria-labelledby="poc-tit">'
       + '<div class="poc-cab"><h2 id="poc-tit">Mis clientes ocultos</h2>'
-      + '<p>Los que ocultes dejan de salirte solo a ti en Carga de Quo, Cartera, Variaciones y Activo fijo, también en sus búsquedas. A los demás no les cambia nada y los regresas cuando quieras. Los clientes sin contabilidad activa se ocultan solos, para todos.</p></div>'
+      + '<p>Los que ocultes dejan de salirte solo a ti en Carga de Quo, Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo, también en sus búsquedas. A los demás no les cambia nada y los regresas cuando quieras. Los clientes sin contabilidad activa se ocultan solos, para todos.</p></div>'
       + '<div class="poc-cuerpo"></div>'
       + '<div class="poc-pie"><button type="button" class="poc-btn pri" id="poc-x">Cerrar</button></div></div>';
     document.body.appendChild(velo);
@@ -223,9 +223,9 @@
     if (au.length) {
       var POR = { pausa: 'En pausa en el WorkFlow', inactivo: 'Inactivo en su ficha', incubado: 'Incubado en su ficha' };
       h += '<div class="poc-sec" id="poc-solos"><h3>Se ocultan solos (' + au.length + ')</h3>'
-        + '<p class="poc-mu">Los clientes sin contabilidad activa no les salen a nadie aquí ni en Cartera, Variaciones y Activo fijo. '
+        + '<p class="poc-mu">Los clientes sin contabilidad activa no les salen a nadie aquí ni en Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo. '
         + 'Vuelven a salir solos en cuanto se quita la pausa o los ponen Activos en su ficha (Clientes › Base de clientes). '
-        + 'En Cartera, Variaciones y Activo fijo los ves con «Verlos por ahora».</p>'
+        + 'En Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo los ves con «Verlos por ahora».</p>'
         + '<div>' + au.map(function (o) {
           return '<div class="poc-fila"><span class="t">' + esc(o.nombre || o.rfc) + '<small>' + esc(o.rfc) + ' · '
             + esc(POR[o.por] || 'Sin contabilidad activa') + '</small></span></div>';

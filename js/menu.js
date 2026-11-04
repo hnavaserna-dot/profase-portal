@@ -118,9 +118,9 @@
       { k: 'tes-tdc', v: 'tdc', t: 'TDC DECOMSA', d: 'Los cargos de la tarjeta de crédito de DECOMSA y a quién va cada gasto.' },   // la dirección, Eva y Dora (Héctor Daniel Nava, 4-nov-2026; 248)
       { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
-      { k: 'cartera', v: 'car', t: 'Cartera', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo.' },
-      { k: 'variaciones', v: 'var', t: 'Variaciones', d: 'Variaciones contables mes a mes.' },
-      { k: 'activofijo', v: 'af', t: 'Activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección.' },
+      { k: 'cartera', v: 'car', t: 'Depuración de CxC / CxP', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo (antes «Cartera»).' },
+      { k: 'variaciones', v: 'var', t: 'Variaciones / Movimientos', d: 'Variaciones contables mes a mes (antes «Variaciones»).' },
+      { k: 'activofijo', v: 'af', t: 'Reclasificación de activo fijo', d: 'Compras y ventas de activo fijo mal registradas y su corrección (antes «Activo fijo»).' },
       // Carga de Quo (2-nov-2026, pedido de Fernando Cadengo): el control de lo que se carga de Quo; la base decide quién (qc_yo, 171)
       { k: 'quo-carga', v: 'qcar', t: 'Carga de Quo', d: 'Qué se cargó de Quo, cliente por cliente y mes por mes, si cuadra y qué hay que atender.' }] },
     // Centauro (3-nov-2026, Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»): lo de los
