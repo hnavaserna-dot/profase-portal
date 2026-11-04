@@ -1,9 +1,9 @@
 /* Portal PROFASE · «Al abrir un cliente, lo más nuevo de Quo» (3-nov-2026; Héctor Daniel, 14:47: «Sí, a 45, dale: carril
    rápido cada 10 minutos»).
-   Una sola pieza para Reportes › Cartera, Reportes › Variaciones y Clientes › Expedientes
+   Una sola pieza para Reportes › Cartera, Reportes › Variaciones, Reportes › Activo fijo (4-nov-2026) y Clientes › Expedientes
    (portal/sql/199_quo_carril_rapido.sql): al abrir un cliente le avisa a la base, que lo pone primero en el carril rápido
    de Quo y, si la siguiente vuelta está a más de 4 minutos, la manda en ese momento (1 a 2 minutos). Cuando llega algo
-   nuevo, Cartera y Variaciones se ponen al día solas, como con la vuelta de cada hora. La base decide todo
+   nuevo, Cartera, Variaciones y Activo fijo se ponen al día solos, como con la vuelta de cada hora. La base decide todo
    (qc_abierto()): solo los clientes que esa persona ve, nunca con solo consulta, cada cliente una vez cada 10 minutos y un
    tope al día para cuidar el gasto. Nunca lee ni escribe tablas.
 
