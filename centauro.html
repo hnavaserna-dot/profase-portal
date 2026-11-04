@@ -586,7 +586,7 @@ tr.total td{background:var(--surface-2)}
     await listaB(true);
   }
   /* 215: a quiénes no se les pudieron bajar sus XML, con su grupo, el porqué y qué hacer (Héctor Daniel, 3-nov-2026) */
-  var SB = { filas: [], k: '', q: '', abierta: false };
+  var SB = { filas: [], k: '', q: '', abierta: false, dir: 0 };
   var SB_MOT = { sin_efirma: 'No tienen e.firma', sin_archivos: 'Faltan los archivos', sin_clave: 'Falta la contraseña',
     clave_mala: 'La contraseña no abre', no_es_fiel: 'Son sellos, no e.firma', vencida: 'E.firma vencida', rfc_distinto: 'E.firma de otro RFC',
     sat: 'El SAT no la aceptó', error: 'El SAT no los entregó', ya_sirve: 'Ya tiene una que sirve' };
@@ -602,7 +602,7 @@ tr.total td{background:var(--surface-2)}
   }
   function sbSin(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function sbPasa(f) {
-    if (SB.k && f.k !== SB.k) return false;
+    if (SB.k === 'dir') { if (!f.dir) return false; } else if (SB.k && f.k !== SB.k) return false;
     if (!SB.q) return true;
     var h = sbSin([f.grupo, f.cliente, f.rfc, (f.contadores || []).join(' ')].join(' '));
     return sbSin(SB.q).split(/\s+/).every(function (w) { return h.indexOf(w) >= 0; });
@@ -611,14 +611,17 @@ tr.total td{background:var(--surface-2)}
     var r;
     try { r = await rpc('cen_xml_sin_bajar'); } catch (e) { $('b-sin').hidden = true; return; }
     SB.filas = (r && r.filas) || [];
+    SB.dir = +(r && r.dir) || 0;   /* 220: a la dirección, cuántos no pide el equipo (Héctor Daniel, 3-nov-2026, 22:03) */
     $('b-sin').hidden = !SB.filas.length;
     if (!SB.filas.length) return;
     var pm = (r && r.por_motivo) || {}, ks = SB_ORD.filter(function (k) { return pm[k]; });
     $('b-sinT').textContent = 'No se pudieron bajar: ' + cuenta(SB.filas.length, 'cliente', 'clientes');
-    $('b-sinSub').textContent = 'Casi siempre falta la e.firma o no sirve. El CRM lo vuelve a intentar solo cada semana; en cuanto la e.firma sirva, se bajan.';
-    $('b-sinTot').innerHTML = ks.map(function (k) { return '<span><b>' + (+pm[k]).toLocaleString('es-MX') + '</b> ' + esc(SB_TOT[k]) + '</span>'; }).join('');
+    $('b-sinSub').textContent = 'Casi siempre falta la e.firma o no sirve. En cuanto se captura o se corrige en Claves SAT, el CRM le baja sus XML ese mismo día; lo demás lo vuelve a intentar solo cada semana.';
+    $('b-sinTot').innerHTML = ks.map(function (k) { return '<span><b>' + (+pm[k]).toLocaleString('es-MX') + '</b> ' + esc(SB_TOT[k]) + '</span>'; }).join('')
+      + (SB.dir ? '<span><b>' + SB.dir.toLocaleString('es-MX') + '</b> de ellos los ve solo la dirección (el equipo no los pide)</span>' : '');
     $('b-sinFil').innerHTML = '<button type="button" data-sk="" aria-pressed="' + (!SB.k) + '">Todos (' + SB.filas.length + ')</button>'
-      + ks.map(function (k) { return '<button type="button" data-sk="' + k + '" aria-pressed="' + (SB.k === k) + '">' + esc(SB_MOT[k]) + ' (' + pm[k] + ')</button>'; }).join('');
+      + ks.map(function (k) { return '<button type="button" data-sk="' + k + '" aria-pressed="' + (SB.k === k) + '">' + esc(SB_MOT[k]) + ' (' + pm[k] + ')</button>'; }).join('')
+      + (SB.dir ? '<button type="button" data-sk="dir" aria-pressed="' + (SB.k === 'dir') + '">Solo dirección (' + SB.dir + ')</button>' : '');
     $('b-sinFil').querySelectorAll('[data-sk]').forEach(function (b) {
       b.onclick = function () { SB.k = b.getAttribute('data-sk'); $('b-sinFil').querySelectorAll('[data-sk]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); pintaSinBajar(); };
     });
@@ -629,7 +632,8 @@ tr.total td{background:var(--surface-2)}
     $('b-sinLista').innerHTML = fs.map(function (f) {
       return '<tr><td data-l="Grupo">' + (f.grupo ? '<span class="rs">' + esc(f.grupo) + '</span>' : '<span class="mut">Sin grupo en la ficha</span>') + '</td>'
         + '<td data-l="Razón social"><span class="rs">' + esc(f.cliente) + '</span><div class="mut mono">' + esc(f.rfc) + '</div></td>'
-        + '<td data-l="Por qué no se pudo">' + chip(SB_MOT[f.k] || 'No se pudo', f.k === 'ya_sirve' ? 'ok' : f.k === 'error' ? 'ojo' : 'mal') + '<div>' + esc(f.motivo) + '</div></td>'
+        + '<td data-l="Por qué no se pudo">' + chip(SB_MOT[f.k] || 'No se pudo', f.k === 'ya_sirve' ? 'ok' : f.k === 'error' ? 'ojo' : 'mal')
+        + (f.dir ? ' ' + chip('Solo dirección', 'az') : '') + '<div>' + esc(f.motivo) + '</div></td>'
         + '<td data-l="Qué hacer">' + esc(f.que_hacer) + (f.siguiente ? '<div class="mut">El CRM lo vuelve a intentar el ' + esc(fecha(f.siguiente)) + '</div>' : '') + '</td>'
         + '<td data-l="Contador">' + ((f.contadores || []).length ? esc(f.contadores.join(', ')) : '<span class="mut">Sin contador</span>') + '</td>'
         + '<td data-l="Qué falta">' + esc(sbAnios(f)) + '</td></tr>';
@@ -643,9 +647,15 @@ tr.total td{background:var(--surface-2)}
   $('b-sinQ').addEventListener('input', function () { var v = this.value; clearTimeout(tSB); tSB = setTimeout(function () { SB.q = v.trim(); pintaSinBajar(); }, 200); });
   $('x-sin').onclick = function () {
     var fs = SB.filas.filter(sbPasa);
-    excel(this, 'No se pudieron bajar', ['Grupo', 'Razón social', 'RFC', 'Por qué no se pudo', 'Qué hacer', 'Contador', 'Qué falta', 'Se vuelve a intentar'],
-      fs.map(function (f) { return [f.grupo || '', f.cliente, f.rfc, f.motivo, f.que_hacer, (f.contadores || []).join(', '), sbAnios(f), f.siguiente ? fecha(f.siguiente) : '']; }),
-      [26, 36, 15, 40, 46, 24, 26, 14], ['Centauro · Bóveda XML · ' + cuenta(fs.length, 'cliente', 'clientes') + (SB.k ? ' · ' + SB_MOT[SB.k] : '')]);
+    var cols = ['Grupo', 'Razón social', 'RFC', 'Por qué no se pudo', 'Qué hacer', 'Contador', 'Qué falta', 'Se vuelve a intentar'], an = [26, 36, 15, 40, 46, 24, 26, 14];
+    if (SB.dir) { cols.push('Quién la pide'); an.push(18); }
+    excel(this, 'No se pudieron bajar', cols,
+      fs.map(function (f) {
+        var r = [f.grupo || '', f.cliente, f.rfc, f.motivo, f.que_hacer, (f.contadores || []).join(', '), sbAnios(f), f.siguiente ? fecha(f.siguiente) : ''];
+        if (SB.dir) r.push(f.dir ? 'Solo la dirección' : 'El equipo');
+        return r;
+      }),
+      an, ['Centauro · Bóveda XML · ' + cuenta(fs.length, 'cliente', 'clientes') + (SB.k ? ' · ' + (SB.k === 'dir' ? 'Solo dirección' : SB_MOT[SB.k]) : '')]);
   };
   var tB = null;
   function enCambioB() { clearTimeout(tB); tB = setTimeout(function () { listaB(true); }, 300); }
