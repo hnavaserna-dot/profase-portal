@@ -115,19 +115,21 @@ def compara(lista):
         st, vivo = baja(rel)
         return rel, st, huella(local) == huella(vivo) if st == 200 else False
 
-    malos = []
-    with ThreadPoolExecutor(max_workers=12) as ex:
-        for rel, st, igual in ex.map(uno, lista):
-            if not igual:
-                malos.append((rel, st))
-    if malos:   # lo que recién se publicó puede tardar unos segundos más en llegar a todos los servidores de GitHub
-        time.sleep(45)
-        otra = []
+    # Lo que recién se publicó puede tardar en llegar a todos los servidores de GitHub (y un cambio que no mueve la
+    # versión, como cierre.json, llega sin que version.json cambie): lo que no cuadra se vuelve a revisar cada 20 s,
+    # hasta 15 minutos desde que empezó la revisión.
+    t0 = time.time()
+    pendientes = list(lista)
+    while True:
+        malos = []
         with ThreadPoolExecutor(max_workers=12) as ex:
-            for rel, st, igual in ex.map(uno, [m[0] for m in malos]):
+            for rel, st, igual in ex.map(uno, pendientes):
                 if not igual:
-                    otra.append((rel, st))
-        malos = otra
+                    malos.append((rel, st))
+        if not malos or time.time() - t0 > ESPERA_MAX:
+            break
+        pendientes = [m[0] for m in malos]
+        time.sleep(20)
     for rel, st in malos:
         if st == 200:
             falla(f"{rel}: lo que está en vivo no es igual a lo del repositorio")
