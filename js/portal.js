@@ -772,7 +772,7 @@
       + '.band .fr-tit{min-width:0;max-width:100%}'
       + '.band .fr-tit .fr-eti{display:block;margin:0;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim,rgba(255,255,255,.72));line-height:1.3}'
       + '.band .fr-fila{display:flex;align-items:center;gap:8px;min-width:0}'
-      + '.band .fr-tit h1.fr-h1{margin:0;font-size:20px;line-height:1.2;font-weight:750;overflow-wrap:anywhere;min-width:0}'
+      + '.band .fr-tit h1.fr-h1{margin:0;color:inherit;font-size:20px;line-height:1.2;font-weight:750;overflow-wrap:anywhere;min-width:0}'
       + '.band .fr-q{flex:none;width:24px;height:24px;padding:0;border-radius:50%;border:1.5px solid var(--band-dim,rgba(255,255,255,.72));'
       + 'background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-grid;place-items:center;cursor:pointer}'
       + '.band .fr-q:hover,.band .fr-q[aria-expanded="true"]{background:rgba(255,255,255,.14)}'
@@ -781,8 +781,16 @@
       + 'background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-radius:12px;'
       + 'padding:12px 14px;box-shadow:0 10px 30px rgba(10,18,32,.28);font-size:14px;font-weight:400;line-height:1.45;'
       + 'letter-spacing:0;text-transform:none;text-align:left;white-space:normal;overflow-wrap:anywhere}'
-      + '.fr-g b{display:block;margin:0 0 4px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#5A6577)}'
-      + '@media (max-width:600px){.band .fr-tit h1.fr-h1{font-size:18px}.band .fr-q{width:26px;height:26px}}';
+      + '.fr-g b{display:block;margin:0 0 4px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5A6577}'
+      // colores propios (no los de cada página, que no se llaman igual en todas: en Activo fijo el texto salía oscuro sobre oscuro)
+      + '.fr-g{background:#fff;color:#132036;border-color:#DCE2EB}'
+      + ':root[data-theme="dark"] .fr-g{background:#1B2438;color:#E6EBF5;border-color:#33405E}:root[data-theme="dark"] .fr-g b{color:#9AA8BF}'
+      + '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fr-g{background:#1B2438;color:#E6EBF5;border-color:#33405E}:root:not([data-theme="light"]) .fr-g b{color:#9AA8BF}}'
+      + '.band.fr-propia{--band-dim:#B9C7DE;background:#1F3864;color:#fff;border-bottom:4px solid #F07A1E;font-family:inherit}'
+      + ':root[data-theme="dark"] .band.fr-propia{--band-dim:#8FA3C4;background:#16284A;color:#E5EAF2}'
+      + '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .band.fr-propia{--band-dim:#8FA3C4;background:#16284A;color:#E5EAF2}}'
+      + '.band.fr-propia>.fr-wrap{padding:8px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px}'
+      + '@media (max-width:600px){.band .fr-tit h1.fr-h1{font-size:18px}.band .fr-q{width:26px;height:26px}.band.fr-propia>.fr-wrap{padding:8px 16px}}';
     var band = null, tit = null, eti = null, h1 = null, q = null, glo = null, orig = null, fijo = false, quita = null;
     var MENU = 'franja';
     // la opción del menú por la que se entró: el marco vive en <main id="v-<vista>"> de la vista
@@ -825,6 +833,8 @@
       // justo debajo del «?», aunque la franja traiga más cosas abajo (los números del Calendario, el periodo de la Caja chica)
       try { glo.style.top = Math.round(q.getBoundingClientRect().bottom - band.getBoundingClientRect().top + 8) + 'px'; } catch (e) { /* se queda abajo de la franja */ }
       glo.hidden = false;
+      // encima de lo que la página tenga pegado arriba (la barra de pestañas de Activo fijo)
+      band.dataset.frZ = band.style.zIndex || ''; band.style.zIndex = '80';
       q.setAttribute('aria-expanded', 'true');
       try { P.abreMenu(MENU); } catch (e) { /* sin aviso */ }
     }
@@ -833,6 +843,7 @@
       clearTimeout(quita);
       if (!glo || glo.hidden) return;
       glo.hidden = true;
+      band.style.zIndex = band.dataset.frZ || '';
       q.setAttribute('aria-expanded', 'false');
     }
     var conMouse = function () { try { return matchMedia('(hover:hover) and (pointer:fine)').matches; } catch (e) { return false; } };
@@ -840,6 +851,19 @@
       if (tit || !document.body) return !!tit;
       // la franja de la pantalla, no el encabezado del portal (el de las vistas y el del Cotizador DECOMSA traen el signo)
       band = [].filter.call(document.querySelectorAll('body .band'), function (b) { return b.querySelector('h1') && !b.querySelector('.brandtxt'); })[0];
+      // las pantallas con su propio encabezado (Cartera, Variaciones, Activo fijo; Fernando, 4-nov-2026: «hay que unificar
+      // el estilo de las pantallas») marcan su título viejo con data-franja-oculta: se les pone la misma franja arriba y
+      // su título se esconde (su línea de datos y sus botones se quedan donde están)
+      var viejos = band ? [] : [].slice.call(document.querySelectorAll('[data-franja-oculta]'));
+      if (!band && viejos.length) {
+        var tv = viejos.map(function (x) { return x.tagName === 'H1' ? x : x.querySelector('h1'); }).filter(Boolean)[0];
+        band = document.createElement('div'); band.className = 'band fr-propia';
+        band.innerHTML = '<div class="fr-wrap"><div><h1></h1></div></div>';
+        band.querySelector('h1').textContent = texto(tv);
+        document.body.insertBefore(band, document.body.firstChild);
+        viejos.forEach(function (x) { x.classList.add('fr-oculto'); });
+        document.documentElement.classList.add('fr-con');
+      }
       var h = band && band.querySelector('h1');
       if (!h) return false;
       var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
