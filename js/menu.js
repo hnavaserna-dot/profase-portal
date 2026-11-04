@@ -115,6 +115,7 @@
       { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos por entregar', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
       { k: 'tes-reportes', v: 'trep', t: 'Reportes de cobranza', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'tes-estado-cuenta', v: 'tbc', t: 'Estado de cuenta bancario', d: 'El Excel de saldos de Tesorería y la revisión de los depósitos.' },   // solo la dirección y Eva (Daniel, 2-nov-2026)
+      { k: 'tes-tdc', v: 'tdc', t: 'TDC DECOMSA', d: 'Los cargos de la tarjeta de crédito de DECOMSA y a quién va cada gasto.' },   // la dirección, Eva y Dora (Héctor Daniel Nava, 4-nov-2026; 248)
       { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
       { k: 'cartera', v: 'car', t: 'Cartera', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo.' },

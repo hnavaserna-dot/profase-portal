@@ -198,6 +198,7 @@ tr.total td{background:var(--surface-2)}
 .tot>span{min-width:0;overflow-wrap:anywhere}.tot .chip{white-space:normal}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
 .clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:12px 14px}
+tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel td{background:var(--navy-soft)}
 .cli{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;min-width:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cli:hover{border-color:var(--navy)}
 .cli[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -366,6 +367,29 @@ tr.total td{background:var(--surface-2)}
     </div>
   </section>
 
+  <!-- Declaraciones (247; la revisión fiscal de Frank): las que el robot baja del portal del SAT con la e.firma de cada cliente -->
+  <section id="s-declaraciones" hidden>
+    <div class="nota info" id="d-nota"></div>
+    <div class="card">
+      <header><div><h2>Clientes</h2><div class="sub" id="d-sub"></div></div></header>
+      <div class="filtros"><div class="busca" id="d-cliBox"></div></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Cómo va cada año</th><th class="num">Declaraciones</th><th>Revisado</th></tr></thead>
+        <tbody id="d-clis"></tbody></table></div>
+    </div>
+    <div class="card" id="d-card" hidden>
+      <header><div><h2 id="d-h">Declaraciones</h2><div class="sub" id="d-sub2"></div></div>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-decl">Excel</button></div></header>
+      <div class="filtros">
+        <label>Año <select id="d-anio" aria-label="Año"></select></label>
+        <label>Tipo <select id="d-tipo" aria-label="Tipo"><option value="">Todas</option><option value="normal">Normales</option><option value="comp">Complementarias</option></select></label>
+      </div>
+      <div class="tot" id="d-tot" hidden></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Presentada</th><th>Periodo</th><th>Tipo</th><th>Obligaciones</th><th>Número de operación</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="d-lista"></tbody></table></div>
+    </div>
+    <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT.</p>
+  </section>
+
   <!-- Reportes -->
   <section id="s-reportes" hidden>
     <div class="tabs" role="tablist" aria-label="Reportes">
@@ -435,11 +459,12 @@ tr.total td{background:var(--surface-2)}
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var EST = null, CONSULTA = false;
   var S = new URLSearchParams(location.search).get('s') || 'boveda';
-  if (['boveda', 'canceladas', '69b', 'reportes'].indexOf(S) < 0) S = 'boveda';
+  if (['boveda', 'canceladas', '69b', 'reportes', 'declaraciones'].indexOf(S) < 0) S = 'boveda';
   var TIT = {
     boveda: ['Bóveda XML', 'Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.'],
     canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y cómo están en QUO: las que siguen activas en QUO hay que cancelarlas.'],
     '69b': ['Lista 69-B', 'Los proveedores de los clientes que el SAT publica como presuntos o definitivos en la lista del artículo 69-B del CFF.'],
+    declaraciones: ['Declaraciones', 'Las declaraciones provisionales o definitivas de cada cliente (normales y complementarias), con su acuse, tal cual las tiene el SAT.'],
     reportes: ['Reportes', 'Lo que sale de los XML de la bóveda: el resumen por mes, los CFDI relacionados, XML Datos 4.0, Nómina 1.2 Extendido, el método de pago, el tablero anual y los pagos duplicados o con errores.']
   };
   var TIPOS = { I: 'Ingreso', E: 'Egreso', P: 'Pago', N: 'Nómina', T: 'Traslado' };
@@ -505,6 +530,119 @@ tr.total td{background:var(--surface-2)}
       valor: [], marcador: 'Todos los clientes', vacio: 'Ningún cliente coincide',
       sinOpciones: 'Todavía no hay clientes', cambio: function (v) { cambio(v[0] || ''); } });
   }
+
+  /* =============================== Declaraciones (247) =============================== */
+  var D = { clis: [], cli: '', filas: [], cliente: '', seq: 0 }, bD = null, VD = null;
+  var DECL_K = { hecho: ['ok', 'ya está', ' ✓'], falta: ['', 'por bajar', ' …'], tomado: ['az', 'bajándose', ' …'],
+                 sin: ['mal', 'no se pudo', ' ✕'], error: ['mal', 'no se pudo', ' ✕'], fuera: ['', 'no aplica', ''] };
+  async function bytesDecl(d) {
+    var r = await P.sb.storage.from('sat_decl').download(d.ruta);
+    if (r.error || !r.data) throw new Error('No se pudo traer la declaración');
+    var b = new Uint8Array(await r.data.arrayBuffer());
+    var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: d.nombre }); if (m) b = m;
+    return b;
+  }
+  function visorDecl() {
+    if (VD) return VD;
+    VD = window.PROFASE_VISOR.nuevo({ trae: bytesDecl, esPdf: function () { return true; }, originalTodos: true,   // «Con marca» / «Original» (Héctor Daniel, 4-nov-2026, decisión 7 del prompt de Frank)
+      nombre: function (d) { return String(d.nombre || 'declaracion').replace(/[\\/:*?"<>|]/g, '_'); },
+      alVer: function (d) { try { P.registrar('vista', 'Centauro · ' + d.nombre); } catch (e) {} },
+      alBajar: function (d) { try { P.registrar('descarga', 'Centauro · ' + d.nombre); } catch (e) {} } });
+    return VD;
+  }
+  function anioChips(c) {
+    return (c.anios || []).map(function (a) {
+      var k = DECL_K[a.k] || ['', a.k, ''];
+      var t = a.anio + ': ' + k[1] + (a.k === 'hecho' && a.n != null ? ' (' + a.n + ')' : '') + (a.mensaje ? ' · ' + a.mensaje : '');
+      return '<span class="chip ' + k[0] + '" title="' + esc(t) + '">' + esc(a.anio + k[2]) + (a.k === 'hecho' && a.n != null ? ' ' + a.n : '') + '</span>';
+    }).join(' ');
+  }
+  function pintaClientesD() {
+    var tb = $('d-clis'), l = D.clis.filter(function (c) { return !D.cli || c.rfc === D.cli; });
+    $('d-sub').textContent = D.clis.length ? cuenta(D.clis.length, 'cliente', 'clientes') + ' · pícale a uno para ver sus declaraciones' : '';
+    if (!D.clis.length) { vacio(tb, 4, 'Todavía no hay clientes con declaraciones: el robot empieza por los 5 clientes de la prueba.'); return; }
+    tb.innerHTML = l.map(function (c) {
+      var mal = (c.anios || []).filter(function (a) { return a.k === 'sin' || a.k === 'error'; })[0];
+      return '<tr data-rfc="' + esc(c.rfc) + '" class="pica' + (c.rfc === D.cli ? ' sel' : '') + '"><td data-l="Cliente"><span class="rs">' + esc(c.cliente || c.rfc) + '</span><div class="mut">' + esc(c.rfc) + '</div>'
+        + (mal && mal.mensaje ? '<div class="mut">' + esc(mal.mensaje) + '</div>' : '') + '</td>'
+        + '<td data-l="Cómo va cada año">' + anioChips(c) + '</td>'
+        + '<td data-l="Declaraciones" class="num">' + (+c.n || 0).toLocaleString('es-MX') + '</td>'
+        + '<td data-l="Revisado">' + (c.revisado ? esc(fechaHora(c.revisado)) : '<span class="mut">Todavía no</span>') + '</td></tr>';
+    }).join('');
+    tb.querySelectorAll('tr[data-rfc]').forEach(function (tr) {
+      tr.onclick = function () { D.cli = tr.getAttribute('data-rfc'); if (bD && bD.pon) bD.pon([D.cli]); pintaClientesD(); listaD(); };
+    });
+  }
+  async function cargaDecl() {
+    D.clis = await rpc('cen_decl_clientes') || [];
+    var n = D.clis.length, hechos = 0, faltan = 0;
+    D.clis.forEach(function (c) { (c.anios || []).forEach(function (a) { if (a.k === 'hecho') hechos++; else if (a.k === 'falta' || a.k === 'tomado') faltan++; }); });
+    $('d-nota').textContent = n ? 'Prueba con ' + cuenta(n, 'cliente', 'clientes') + ': ' + cuenta(hechos, 'año ya está', 'años ya están') + (faltan ? ' y ' + cuenta(faltan, 'falta', 'faltan') + ' por bajar' : '') + '. Primero 2026 de todos, luego 2025, 2024, 2023 y 2022.'
+      : 'El robot empieza con los 5 clientes de la prueba de los XML: primero 2026, luego 2025, 2024, 2023 y 2022.';
+    if (!bD) {
+      bD = buscaCliente($('d-cliBox'), 'd-cli', D.clis, function (v) { D.cli = v; pintaClientesD(); listaD(); });
+    }
+    var sa = $('d-anio');
+    if (!sa.options.length) {
+      sa.innerHTML = '<option value="">Todos los años</option>' + [2026, 2025, 2024, 2023, 2022].map(function (y) { return '<option>' + y + '</option>'; }).join('');
+      sa.onchange = function () { pintaD(); }; $('d-tipo').onchange = function () { pintaD(); };
+    }
+    pintaClientesD();
+    if (D.cli) await listaD();
+  }
+  async function listaD() {
+    var mi = ++D.seq;
+    $('d-card').hidden = !D.cli;
+    if (!D.cli) return;
+    $('d-lista').innerHTML = '<tr><td colspan="7" class="vacio">Cargando…</td></tr>';
+    var r = await rpc('cen_decl_lista', { p: { rfc: D.cli } }) || { filas: [] };
+    if (mi !== D.seq) return;
+    D.filas = r.filas || []; D.cliente = r.cliente || D.cli;
+    pintaD();
+  }
+  function visiblesD() {
+    var a = $('d-anio').value, t = $('d-tipo').value;
+    return D.filas.filter(function (f) {
+      if (a && String(f.ejercicio) !== a) return false;
+      var comp = /complement/i.test(f.tipo || '');
+      return !t || (t === 'comp' ? comp : !comp);
+    });
+  }
+  function docDe(f, k) {
+    var ruta = k === 'acuse' ? f.acuse : f.decl;
+    return ruta ? { ruta: ruta, nombre: (k === 'acuse' ? 'Acuse ' : 'Declaración ') + (f.periodo || '') + ' ' + f.ejercicio + ' ' + f.numero + '.pdf' } : null;
+  }
+  function pintaD() {
+    var l = visiblesD(), tb = $('d-lista');
+    $('d-h').textContent = 'Declaraciones de ' + D.cliente;
+    var comp = l.filter(function (f) { return /complement/i.test(f.tipo || ''); }).length;
+    $('d-sub2').textContent = D.cli + ' · ' + ($('d-anio').value || 'todos los años');
+    $('d-tot').innerHTML = '<span><b>' + cuenta(l.length, 'declaración', 'declaraciones') + '</b></span>' + (comp ? '<span>' + chip(cuenta(comp, 'complementaria', 'complementarias'), 'ojo') + '</span>' : '');
+    $('d-tot').hidden = false;
+    $('x-decl').disabled = !l.length;
+    if (!l.length) { vacio(tb, 7, D.filas.length ? 'Nada con estos filtros.' : 'Todavía no hay declaraciones de este cliente: el robot las está bajando.'); return; }
+    tb.innerHTML = l.map(function (f, i) {
+      var c = /complement/i.test(f.tipo || '');
+      return '<tr><td data-l="Presentada" class="nowrap">' + esc(f.presentada ? fechaHora(f.presentada) : '') + (f.vence ? '<div class="mut">Vencía el ' + esc(fecha(f.vence)) + '</div>' : '') + '</td>'
+        + '<td data-l="Periodo">' + esc([f.periodo, f.ejercicio].filter(Boolean).join(' ')) + (f.periodicidad ? '<div class="mut">' + esc(f.periodicidad) + '</div>' : '') + '</td>'
+        + '<td data-l="Tipo">' + chip(f.tipo || '—', c ? 'ojo' : 'az') + (f.tipo_comp ? '<div class="mut">' + esc(f.tipo_comp) + '</div>' : '') + '</td>'
+        + '<td data-l="Obligaciones">' + ((f.obligaciones || []).map(function (o) { return '<div>' + esc(o) + '</div>'; }).join('') || '<span class="mut">—</span>') + '</td>'
+        + '<td data-l="Número de operación" class="mono">' + esc(f.numero) + '</td>'
+        + '<td data-l="Estado">' + esc(f.estado || '') + '</td>'
+        + '<td data-l=""><div class="acciones">'
+        + (f.decl ? '<button class="btn chico" type="button" data-dver="' + i + '">Ver</button><button class="btn chico" type="button" data-dbaja="' + i + '">Bajar</button>' : '')
+        + (f.acuse ? '<button class="btn chico" type="button" data-dacuse="' + i + '">Acuse</button>' : '') + '</div></td></tr>';
+    }).join('');
+    tb.querySelectorAll('[data-dver]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dver')], 'decl'), b); }; });
+    tb.querySelectorAll('[data-dbaja]').forEach(function (b) { b.onclick = function () { visorDecl().baja(docDe(l[+b.getAttribute('data-dbaja')], 'decl'), b); }; });
+    tb.querySelectorAll('[data-dacuse]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dacuse')], 'acuse'), b); }; });
+  }
+  $('x-decl').onclick = function () {
+    var l = visiblesD();
+    excel(this, 'Declaraciones', ['Cliente', 'RFC', 'Ejercicio', 'Periodo', 'Periodicidad', 'Tipo', 'Tipo de complementaria', 'Presentada', 'Vencía', 'Obligaciones', 'Número de operación', 'Estado'],
+      l.map(function (f) { return [D.cliente, D.cli, f.ejercicio, f.periodo || '', f.periodicidad || '', f.tipo || '', f.tipo_comp || '', fechaHora(f.presentada), fecha(f.vence), (f.obligaciones || []).join(' · '), f.numero, f.estado || '']; }),
+      [30, 15, 9, 12, 12, 14, 24, 18, 12, 44, 18, 20], [D.cliente + ' (' + D.cli + ') · ' + ($('d-anio').value || 'todos los años')]);
+  };
 
   /* =============================== Bóveda XML =============================== */
   var B = { cli: '', lado: '', filas: [], total: 0, mxn: 0, clis: [], uuids: [] };
@@ -1820,6 +1958,7 @@ tr.total td{background:var(--surface-2)}
     if (S === 'boveda') await cargaBoveda();
     else if (S === 'canceladas') await cargaCanceladas();
     else if (S === '69b') await carga69b();
+    else if (S === 'declaraciones') await cargaDecl();
     else await cargaReportes();
   }
   async function arranca() {
@@ -1828,7 +1967,7 @@ tr.total td{background:var(--surface-2)}
       var p = await P.listo; if (!p) return;
       if (window.top === window.self) $('logo').hidden = false;
       EST = await rpc('cen_estado');
-      if (!EST || !EST.ve) throw new Error('Centauro lo ven, por ahora, Héctor Daniel Nava, Héctor Nava Ramos, Fernando Gutiérrez y Fernando Cadengo.');
+      if (!EST || !EST.ve) throw new Error('Centauro lo ven, por ahora, Héctor Daniel Nava, Héctor Nava Ramos, Fernando Gutiérrez, Fernando Cadengo y Francisco Rivera.');
       CONSULTA = !!P.consulta || !!EST.consulta;
       $('consulta').hidden = !CONSULTA;
       $('titulo').textContent = TIT[S][0]; $('desc').textContent = TIT[S][1];
