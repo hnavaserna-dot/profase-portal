@@ -703,6 +703,15 @@ td.ab{width:40px;padding-left:4px}
 .aplo{font-size:11px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
 .aplq{font-size:11px;color:var(--ok);margin-top:2px}
 .aplsin{font-size:11.5px;color:var(--ink-3)}
+/* 251: el aviso de las canceladas sin saldo y el «Total CFDI» con «Sin abonos» */
+.cansin{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:10px 20px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--warn) 12%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:var(--ink);font-size:12.5px}
+.cansin .csi{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--warn);color:#fff;font-weight:800;font-size:12px}
+.cansin .csl{padding:6px 12px;font-size:12px}
+.cansin .cst{flex:1 1 260px;min-width:0}
+.cansin .csl{flex:none}
+.tcf .b{font-weight:600}
+.tcf .sinab{display:inline-block;margin-top:3px;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+@media (max-width:819px){.cansin{margin-left:14px;margin-right:14px}}
 .c-rel{text-align:left}
 .aplbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line-2)}
 .aplbar .track{flex-wrap:wrap}
@@ -768,7 +777,7 @@ const MOD_SHORT=['CXC','CXP','ANT CLIEN','ANT PROV','NTC CLIEN','NTC PROV','TERC
 const MOD_VAR=['--cli','--prov','--cli-2','--prov-2','--cli-3','--prov-3','--ink-3'];
 const ES_CLI=[true,false,true,false,true,false,false];
 const FAM={todos:MODS_BASE,fac:[0,1],ant:[2,3],ntc:[4,5],ter:[TER],apl:[],can:MODS_BASE};
-const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones'],['can','Canceladas']];
+const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones'],['can','Canceladas en el SAT con saldo']];   // 251: el nombre dice qué cuenta (petición 20261104-1356)
 /* tarjetas por rubro del resumen; cada una abre su lista */
 const RUBROS=[
   {k:'cxc',lab:'Cuentas por cobrar',mods:[0],tab:'fac',lado:'cli',iva:'emi',dot:'--cli'},
@@ -2739,12 +2748,13 @@ window.__carAbre=function(x){ if(!CARGADA){ ABRE_PEND=x; return true; } abreDesd
      · «Confirmada (CFDI)»: lo que dice el XML de una nota de crédito o de un anticipo (sus CFDI relacionados) va antes que lo
        que sugiere la Cartera. Se lee al abrir la ventana de cada empresa.
    Lo que todavía no se revisa en el SAT sigue sumando como siempre. ── */
-const SAT={ok:false,can:new Map(),rel:new Map(),sust:new Map(),relDe:new Map()};
+const SAT={ok:false,can:new Map(),rel:new Map(),sust:new Map(),relDe:new Map(),sin:new Map()};   // sin: 251, cuántas sin saldo por empresa
 const REL_APL=new Set(['01','02','03','07']);   // nota de crédito, de débito, devolución y aplicación de anticipo
 async function cargaSat(){
   let q; try{ q=await SB.rpc('cartera_sat',{p:{modo:'canceladas'}}); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ SAT.ok=false; return false; }
-  SAT.ok=true; SAT.can=new Map();
+  SAT.ok=true; SAT.can=new Map(); SAT.sin=new Map();
+  (q.data.sin_saldo||[]).forEach(x=>{ SAT.sin.set(x.rfc,{sinc:+x.sinc||0,pagadas:+x.pagadas||0}); });
   (q.data.canceladas||[]).forEach(x=>{ let m=SAT.can.get(x.rfc); if(!m) SAT.can.set(x.rfc,m=new Map()); m.set(String(x.uuid||'').toUpperCase(),x); });
   // los folios fiscales solo de las empresas con canceladas (para reconocer cada factura)
   const rs=[...SAT.can.keys()].filter(r=>!UUID_OK.has(r)&&(RANGO['k|'+r]||RANGO['p|'+r]));
@@ -2868,14 +2878,43 @@ function bloqueSat(d){
   return box;
 }
 // la pestaña «Canceladas» de la ventana
+// 251: ¿quien entró tiene Centauro? (el botón de su pantalla en la vista; mismo portal)
+function cenCanceladas(){ try{ const b=window.top.document.querySelector('.vsw button[data-view="cenc"]'); return !!(b&&!b.hidden&&window.top.PROFASE_ABRE&&window.top.PROFASE_ABRE['centauro-canceladas']); }catch(e){ return false; } }
+// «Total CFDI» (lo que trae QUO): en otra moneda, el total en su moneda y debajo su equivalente en pesos
+function totalCfdi(d){
+  const box=el('div','dc r tcf'); box.style.setProperty('--w','124px');
+  if(d.mon&&d.mon!=='MXN'&&d.tme){
+    let t; try{ t=new Intl.NumberFormat('es-MX',{style:'currency',currency:d.mon,minimumFractionDigits:2}).format(d.tme); }catch(e){ t=F.dec.format(d.tme)+' '+d.mon; }
+    box.appendChild(el('div','b',t)); box.appendChild(el('div','aplsin','≈ '+F.mxn.format(d.total||0)+' MXN'));
+  }else box.appendChild(el('div','b',F.mxn.format(d.total||0)));
+  if(Math.abs(Math.abs(d.saldo||0)-Math.abs(d.total||0))<1) box.appendChild(el('span','sinab','Sin abonos'));
+  return box;
+}
 function pestanaCan(rows,lista,m){
   N_VEN=rows.length;
   const bar=el('div','aplbar');
   bar.appendChild(el('span','aplnota',SAT.ok?'Las facturas que el SAT ya canceló y QUO trae vigentes con saldo (de Centauro). No suman en la Cartera: corrígelas en QUO.'
     :'No se pudo saber qué está cancelado en el SAT; vuelve a intentar en un momento.'));
   lista.appendChild(bar);
-  const hd=el('div','dhead apl'), AW=[0,110,130,190,0];
-  [['Documento','g'],['Saldo','r'],['Cancelada en el SAT','p3'],['La sustituyó','p2'],['','ch']].forEach(([t,c],i)=>{ const x=el('span','dc '+c,t);
+  // 251: las que el SAT canceló y QUO sigue trayendo activas sin saldo (no salen aquí porque no tienen saldo)
+  const rfc=S.cliente!=null&&D.cli[S.cliente]?D.cli[S.cliente][2]:'', sin=SAT.sin.get(rfc);
+  if(sin&&(sin.sinc+sin.pagadas)>0){
+    const av=el('div','cansin'), t=el('div','cst');
+    av.appendChild(el('span','csi','!'));
+    t.appendChild(el('b','','Además hay '+plural(sin.sinc+sin.pagadas,'sin saldo','sin saldo')));
+    const det=[sin.sinc?F.int.format(sin.sinc)+' en Sincronizados':'',sin.pagadas?F.int.format(sin.pagadas)+(sin.pagadas===1?' ya pagada':' ya pagadas'):''].filter(Boolean).join(' y ');
+    t.appendChild(el('span','',' que el SAT canceló y QUO sigue trayendo activas ('+det+'). No pesan en la Cartera, pero también hay que cancelarlas en QUO.'));
+    av.appendChild(t);
+    if(cenCanceladas()){
+      const b=el('button','btn csl','Verlas en Centauro'); b.type='button';
+      b.onclick=()=>{ try{ sessionStorage.setItem('cen-canc-abre',JSON.stringify({rfc,donde:['sinc','tablero']})); }catch(e){}
+        try{ window.top.PROFASE_ABRE['centauro-canceladas'](); }catch(e){} };
+      av.appendChild(b);
+    }
+    lista.appendChild(av);
+  }
+  const hd=el('div','dhead apl'), AW=[0,124,104,112,170,0];   // caben las cinco junto al detalle en una laptop
+  [['Documento','g'],['Total CFDI','r'],['Saldo','r'],['Cancelada en el SAT','p3'],['La sustituyó','p2'],['','ch']].forEach(([t,c],i)=>{ const x=el('span','dc '+c,t);
     if(AW[i]) x.style.setProperty('--w',AW[i]+'px'); hd.appendChild(x); });
   lista.appendChild(hd);
   if(!rows.length){ lista.appendChild(el('div','empty','Ninguna factura de esta empresa está cancelada en el SAT y vigente en QUO.')); return; }
@@ -2886,9 +2925,10 @@ function pestanaCan(rows,lista,m){
     t2.appendChild(el('div','dt1',modLab(d.mod)+' '+folioDe(d)));
     t2.appendChild(el('div','dt2',[(D.cp[d.cp]||[])[1]||(D.cp[d.cp]||[])[0]||'—',d.fecha||'sin fecha',d.mon].filter(Boolean).join(' · ')));
     c0.appendChild(t2); b.appendChild(c0);
-    b.appendChild(mo(F.mxn.format(d.saldo),'mo b'));
-    b.appendChild(mo(fechaSat(d.satCan),'p3',130));
-    const su=sustitutaDe(d), cs=mo('','p2',190);
+    b.appendChild(totalCfdi(d));
+    b.appendChild(mo(F.mxn.format(d.saldo),'mo b',104));
+    b.appendChild(mo(fechaSat(d.satCan),'p3',112));
+    const su=sustitutaDe(d), cs=mo('','p2',170);
     if(su&&su.r){ cs.appendChild(el('div','aplo','Factura '+folioDe(su.r))); cs.appendChild(el('div','aplq','saldo '+F.mxn.format(su.r.saldo))); }
     else cs.appendChild(el('span','aplsin',su?'No está en la cartera':'—'));
     b.appendChild(cs);
@@ -2899,8 +2939,9 @@ function pestanaCan(rows,lista,m){
   if(rows.length>500) lista.appendChild(el('div','empty','Se ven las primeras 500; el Excel trae todas.'));
   const tt=el('div','dtots'), tr=el('div','dtot');
   tr.appendChild(el('div','dc g k','Total · '+plural(rows.length,'factura','facturas')));
-  tr.appendChild(mo(F.mxn.format(rows.reduce((a,d)=>a+(d.saldo||0),0)),'mo'));
-  tr.appendChild(mo('','p3',130)); tr.appendChild(mo('','p2',190)); tr.appendChild(el('span','ch',''));
+  tr.appendChild(mo(F.mxn.format(rows.reduce((a,d)=>a+(d.total||0),0)),'mo',124));
+  tr.appendChild(mo(F.mxn.format(rows.reduce((a,d)=>a+(d.saldo||0),0)),'mo',104));
+  tr.appendChild(mo('','p3',112)); tr.appendChild(mo('','p2',170)); tr.appendChild(el('span','ch',''));
   tt.appendChild(tr); lista.appendChild(tt);
 }
 // su Excel (con su PDF al lado, js/marca.js)

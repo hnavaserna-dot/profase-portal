@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=66ff2e2e8c"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/cfdi.js"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=dd7f32648a"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/cfdi.js"></script><script src="js/filtros.js"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Centauro (3-nov-2026; Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»;
    portal/sql/198_centauro.sql). Lo de los programas de la bóveda de la oficina, hecho en el CRM:
@@ -107,6 +107,20 @@ button,select,input,textarea{font:inherit;color:inherit}
 .kpi .l{display:block;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .kpi .v{display:block;font-family:var(--f-display);font-size:24px;font-weight:750}
 .kpi.ojo .v{color:var(--accent-ink)}
+/* 251: la tarjeta de activas en QUO, partida según dónde está en QUO (cada renglón filtra la lista) */
+.kpi.ancha{grid-column:span 2;cursor:default}
+@media (max-width:520px){.kpi.ancha{grid-column:1/-1}}
+.kpi .kv{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
+.kpi .kd{display:grid;gap:6px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.kpi .kd button{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:8px;padding:4px 6px;font:inherit;color:inherit;cursor:pointer}
+.kpi .kd button:hover{border-color:var(--line-strong)}
+.kpi .kd button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.kpi .kd .kt{font-size:12.5px;font-weight:600}
+.kpi .kd .kn{font-family:var(--f-display);font-weight:750;font-variant-numeric:tabular-nums}
+.kpi .kd .kb{grid-column:1/-1;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.kpi .kd .kb i{display:block;height:100%;background:var(--accent)}
+.kpi .ks{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.cfil{padding:0 14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
 .card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
 .card h2{font-size:18px;font-weight:700}
@@ -346,12 +360,14 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
           <button type="button" data-clado="recibida" aria-pressed="false">Recibidas</button>
         </div>
       </div>
-      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Emitida el</th><th>UUID</th><th>De / para</th><th class="num">Total</th><th>Cancelada el</th><th>En QUO</th></tr></thead>
+      <div class="cfil" id="c-fil"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Emitida el</th><th>UUID</th><th>De / para</th><th class="num">Total</th><th>Cancelada el</th><th>En QUO</th><th>Dónde está en QUO</th></tr></thead>
         <tbody id="c-lista"></tbody></table></div>
+      <nav class="pgn" id="c-pag" aria-label="Páginas"></nav>
     </div>
     <div class="card">
       <header><div><h2>Revisión con el SAT, por cliente</h2><div class="sub" id="c-ult"></div></div></header>
-      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Revisado</th><th>e.firma</th><th class="num">Canceladas</th><th class="num">Por cancelar en QUO</th><th></th></tr></thead>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Revisado</th><th>e.firma</th><th class="num">Canceladas</th><th class="num">Activas en QUO</th><th></th></tr></thead>
         <tbody id="c-clis"></tbody></table></div>
     </div>
   </section>
@@ -938,41 +954,122 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('xml').hidden) cierraXml(); });
 
   /* =============================== Canceladas SAT vs QUO =============================== */
-  var C = { estado: 'activa', cli: '', lado: '', res: null, filas: [] };
-  var KPI = [['activa', 'Por cancelar en QUO', 'por_cancelar', 'ojo'], ['no_esta', 'No están en QUO', 'no_estan', ''], ['corregida', 'Corregidas en QUO', 'corregidas', ''],
-             ['bien', 'Bien en QUO', 'bien', ''], ['raros', 'Para revisar', 'raros', 'ojo']];
+  var C = { estado: 'activa', donde: '', cli: '', lado: '', res: null, filas: [], vis: [],
+            f: { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], donde: [] } };
+  // 251 (petición 20261104-1356 de Fernando): la de activas se llama «Activas en QUO · canceladas en el SAT» y se parte según
+  // dónde está en QUO; «Canceladas en QUO con saldo» sale aparte de «Bien en QUO»
+  var KPI = [['activa', 'Activas en QUO · canceladas en el SAT', 'por_cancelar', 'ojo'], ['no_esta', 'No están en QUO', 'no_estan', ''], ['corregida', 'Corregidas en QUO', 'corregidas', ''],
+             ['bien', 'Bien en QUO', 'bien', ''], ['cancel_saldo', 'Canceladas en QUO con saldo', 'cancel_saldo', 'ojo'], ['raros', 'Para revisar', 'raros', 'ojo']];
+  var KPI_SUB = { bien: 'Canceladas en los dos, sin saldo', cancel_saldo: 'Limpiar el saldo en QUO' };
+  var DONDE = { cartera: ['Con saldo (salen en la Cartera)', 'con_saldo'], sinc: ['Solo en Sincronizados', 'sinc'], tablero: ['Sin saldo en QUO', 'sin_saldo'] };
+  var DONDE_TXT = { cartera: 'Con saldo en su cartera', sinc: 'Solo en Sincronizados', tablero: 'Sin saldo (ya pagada)' };
   var QUO = { activa: ['Activa en QUO: hay que cancelarla', 'mal'], cancelada: ['Cancelada en QUO', 'ok'], no_esta: ['No está en QUO', ''], sustituida: ['Sustituida', 'ok'], otro: ['Otro estatus en QUO', 'ojo'], pendiente: ['Por cruzar', ''] };
   function pintaKpis() {
     var k = (C.res && C.res.cuadros) || {};
     $('c-kpis').innerHTML = KPI.map(function (x) {
       var v = k[x[2]], n = typeof v === 'object' && v ? v.n : v || 0, m = typeof v === 'object' && v ? v.monto : null;
+      if (x[0] === 'activa') {   // la tarjeta partida: el número grande regresa a todas; cada renglón filtra
+        var tot = +n || 0, filas = Object.keys(DONDE).map(function (d) {
+          var c = +(v && v[DONDE[d][1]]) || 0, pct = tot ? Math.round(100 * c / tot) : 0;
+          return '<button type="button" data-donde="' + d + '" aria-pressed="' + (C.estado === 'activa' && C.donde === d) + '"><span class="kt">' + esc(DONDE[d][0]) + '</span>'
+            + '<span class="kn">' + c.toLocaleString('es-MX') + '</span><span class="kb"><i style="width:' + pct + '%"></i></span></button>';
+        }).join('') + ((+(v && v.sin_dato) || 0) ? '<div class="ks">' + cuenta(v.sin_dato, 'todavía sin acomodar (en unas horas, con el siguiente cruce con QUO)', 'todavía sin acomodar (en unas horas, con el siguiente cruce con QUO)') + '</div>' : '');
+        return '<div class="kpi ancha ' + x[3] + '" aria-pressed="' + (C.estado === 'activa' && !C.donde) + '"><button type="button" class="kv" data-est="activa"><span class="l">' + esc(x[1]) + '</span>'
+          + '<span class="v">' + tot.toLocaleString('es-MX') + '</span>' + (m ? '<span class="mut">' + dinero(m) + '</span>' : '') + '</button><div class="kd">' + filas + '</div></div>';
+      }
       return '<button type="button" class="kpi ' + x[3] + '" data-est="' + x[0] + '" aria-pressed="' + (C.estado === x[0]) + '"><span class="l">' + esc(x[1]) + '</span><span class="v">' + (+n || 0).toLocaleString('es-MX') + '</span>'
-        + (m ? '<span class="mut">' + dinero(m) + '</span>' : '') + '</button>';
+        + (m ? '<span class="mut">' + dinero(m) + '</span>' : '') + (KPI_SUB[x[0]] ? '<span class="ks">' + esc(KPI_SUB[x[0]]) + '</span>' : '') + '</button>';
     }).join('');
-    $('c-kpis').querySelectorAll('[data-est]').forEach(function (b) { b.onclick = function () { C.estado = b.getAttribute('data-est'); pintaKpis(); listaC(); }; });
+    $('c-kpis').querySelectorAll('[data-est]').forEach(function (b) { b.onclick = function () { C.estado = b.getAttribute('data-est'); C.donde = ''; pintaKpis(); listaC(); }; });
+    $('c-kpis').querySelectorAll('[data-donde]').forEach(function (b) {
+      b.onclick = function () { var d = b.getAttribute('data-donde'); C.donde = C.estado === 'activa' && C.donde === d ? '' : d; C.estado = 'activa'; pintaKpis(); listaC(); };
+    });
+  }
+  /* 251: la lista con las piezas comunes de las demás pantallas: FILTROS (js/filtros.js) y páginas (js/paginas.js) */
+  var FC = null, PC = null;
+  function nfc(t) { return window.PROFASE_FILTROS ? window.PROFASE_FILTROS.norm(t) : String(t || '').toUpperCase(); }
+  function dePara(f) { return f.lado === 'emitida' ? [f.nombre_receptor, f.rfc_receptor] : [f.nombre_emisor, f.rfc_emisor]; }
+  function enQuo(f) { return f.corregida_el ? 'corregida' : f.estado_quo; }
+  var QUO_TXT = function (k) { return k === 'corregida' ? 'Corregida en QUO' : (QUO[k] || [k])[0]; };
+  function visiblesC() {
+    var g = C.f;
+    var dentro = function (val, r) { if (!val) return true; var v = String(val).slice(0, 10); return (!r[0] || v >= r[0]) && (!r[1] || v <= r[1]); };
+    return C.filas.filter(function (f) {
+      if (g.cli.length && g.cli.indexOf(f.rfc) < 0) return false;
+      if (g.de) { var dp = dePara(f); if (nfc((dp[0] || '') + ' ' + (dp[1] || '')).indexOf(nfc(g.de)) < 0) return false; }
+      if (g.uuid && nfc(f.uuid).indexOf(nfc(g.uuid)) < 0) return false;
+      if ((g.em[0] || g.em[1]) && (!f.fecha_emision || !dentro(f.fecha_emision, g.em))) return false;
+      var fc = f.fecha_cancelacion || f.detectada;
+      if ((g.ca[0] || g.ca[1]) && (!fc || !dentro(fc, g.ca))) return false;
+      var t = +f.total || 0;
+      if (g.tot[0] !== '' && t < +g.tot[0]) return false;
+      if (g.tot[1] !== '' && t > +g.tot[1]) return false;
+      if (g.quo.length && g.quo.indexOf(enQuo(f)) < 0) return false;
+      if (g.donde.length && g.donde.indexOf(f.quo_donde || '') < 0) return false;
+      return true;
+    });
+  }
+  function filtrosC() {
+    if (FC || !window.PROFASE_FILTROS) return;
+    var opc = function (fn) { return function () { var m = {}; C.filas.forEach(function (f) { var k = fn(f); if (k[0] !== undefined && k[0] !== null) m[k[0]] = { v: k[0], t: k[1], n: ((m[k[0]] || {}).n || 0) + 1 }; }); return Object.keys(m).map(function (x) { return m[x]; }).sort(function (a, b) { return String(a.t).localeCompare(String(b.t)); }); }; };
+    var campo = function (k, t, tipo, extra) { return Object.assign({ k: k, t: t, tipo: tipo, valor: function () { return C.f[k]; }, pon: function (v) { C.f[k] = v; } }, extra || {}); };
+    FC = window.PROFASE_FILTROS.crea({
+      donde: $('c-fil'),
+      grupos: [
+        { t: 'Documento', campos: [campo('cli', 'Cliente', 'varios', { opciones: opc(function (f) { return [f.rfc, f.cliente || f.rfc]; }), buscar: true }),
+                                   campo('de', 'De / para', 'texto'), campo('uuid', 'UUID', 'texto')] },
+        { t: 'Fechas', campos: [campo('em', 'Emitida el', 'rango', { entrada: 'fecha', etiquetas: ['Desde', 'Hasta'] }),
+                                campo('ca', 'Cancelada el', 'rango', { entrada: 'fecha', etiquetas: ['Desde', 'Hasta'] })] },
+        { t: 'Monto', campos: [campo('tot', 'Total', 'rango', { entrada: 'numero', etiquetas: ['Desde', 'Hasta'] })] },
+        { t: 'En QUO', campos: [campo('quo', 'En QUO', 'varios', { lista: true, opciones: opc(function (f) { var k = enQuo(f); return [k, QUO_TXT(k)]; }) }),
+                                campo('donde', 'Dónde está en QUO', 'varios', { lista: true, opciones: opc(function (f) { return f.quo_donde ? [f.quo_donde, DONDE_TXT[f.quo_donde]] : [undefined]; }) })] }],
+      cambio: function () { if (PC) PC.inicio(); pintaC(); },
+      limpiar: function () { C.f = { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], donde: [] }; },
+      resultados: function () { var n = visiblesC().length; return 'Ver ' + n.toLocaleString('es-MX') + (n === 1 ? ' factura' : ' facturas'); }
+    });
+    if (window.PROFASE_PAGINAS) PC = window.PROFASE_PAGINAS.crea({ donde: $('c-pag'), clave: 'centauro.canceladas', nombre: 'Facturas', arriba: $('c-lista').closest('.card'), cambio: function () { pintaC(); } });
+  }
+  function pintaC() {
+    var tb = $('c-lista'), l = visiblesC();
+    C.vis = l;
+    $('c-sub').textContent = cuenta(l.length, 'factura', 'facturas') + (l.length !== C.filas.length ? ' de ' + C.filas.length.toLocaleString('es-MX') : '') + (C.cli ? ' · ' + (C.filas[0] ? C.filas[0].cliente : C.cli) : '');
+    var pag = PC ? PC.corta(l) : l;
+    if (!l.length) { vacio(tb, 8, C.filas.length ? 'Nada con estos filtros.' : 'No hay facturas aquí.'); return; }
+    tb.innerHTML = pag.map(function (f) {
+      var q = QUO[f.estado_quo] || [f.estado_quo, ''], dp = dePara(f);
+      return '<tr><td data-l="Cliente"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.lado === 'emitida' ? 'Emitida' : 'Recibida') + '</div></td>'
+        + '<td data-l="Emitida el" class="nowrap">' + esc(fecha(f.fecha_emision)) + '</td>'
+        + '<td data-l="UUID"><span class="mono">' + esc(f.uuid) + '</span></td>'
+        + '<td data-l="De / para"><span class="rs">' + esc(dp[0] || dp[1]) + '</span><div class="mut">' + esc(dp[1]) + '</div></td>'
+        + '<td data-l="Total" class="num">' + dinero(f.total) + '</td>'
+        + '<td data-l="Cancelada el" class="nowrap">' + esc(f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : 'Se vio el ' + fecha(f.detectada)) + '</td>'
+        + '<td data-l="En QUO">' + chip(f.corregida_el ? 'Corregida en QUO el ' + fecha(f.corregida_el) : q[0], f.corregida_el ? 'ok' : q[1]) + (f.raro ? ' ' + chip('Trae saldo en QUO', 'ojo') : '') + (f.fuera_rango ? '<div class="mut">De antes de lo que trae QUO</div>' : '') + '</td>'
+        + '<td data-l="Dónde está en QUO">' + (f.quo_donde ? esc(DONDE_TXT[f.quo_donde]) : f.quo_cancel_saldo ? esc('Cancelada, con saldo en su cartera') : '<span class="mut">—</span>') + '</td></tr>';
+    }).join('');
   }
   async function listaC() {
     var tb = $('c-lista');
     try {
-      // «Bien en QUO» es lo cancelado o sustituido en QUO que no se tuvo que corregir: igual que su cuadro
-      var bien = C.estado === 'bien';
-      C.filas = await rpc('sat_lista', { p: { estado: bien ? '' : C.estado, rfc: C.cli, lado: C.lado, max: 20000 } }) || [];
-      if (bien) C.filas = C.filas.filter(function (f) { return (f.estado_quo === 'cancelada' || f.estado_quo === 'sustituida') && !f.corregida_el; });
+      filtrosC();
+      vacio(tb, 8, 'Cargando…');
+      // «Bien en QUO» (sin las que QUO canceló con saldo) y «Canceladas en QUO con saldo» los filtra la base (251), igual que sus tarjetas
+      C.filas = await rpc('sat_lista', { p: { estado: C.estado, donde: C.estado === 'activa' ? C.donde : '', rfc: C.cli, lado: C.lado, max: 20000 } }) || [];
       var x = KPI.filter(function (k) { return k[0] === C.estado; })[0];
-      $('c-h').textContent = x ? x[1] : 'Canceladas en el SAT';
-      $('c-sub').textContent = cuenta(C.filas.length, 'factura', 'facturas') + (C.cli ? ' · ' + (C.filas[0] ? C.filas[0].cliente : C.cli) : '');
-      if (!C.filas.length) { vacio(tb, 7, 'No hay facturas aquí.'); return; }
-      tb.innerHTML = C.filas.map(function (f) {
-        var q = QUO[f.estado_quo] || [f.estado_quo, ''];
-        return '<tr><td data-l="Cliente"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.lado === 'emitida' ? 'Emitida' : 'Recibida') + '</div></td>'
-          + '<td data-l="Emitida el" class="nowrap">' + esc(fecha(f.fecha_emision)) + '</td>'
-          + '<td data-l="UUID"><span class="mono">' + esc(f.uuid) + '</span></td>'
-          + '<td data-l="De / para"><span class="rs">' + esc(f.lado === 'emitida' ? (f.nombre_receptor || f.rfc_receptor) : (f.nombre_emisor || f.rfc_emisor)) + '</span><div class="mut">' + esc(f.lado === 'emitida' ? f.rfc_receptor : f.rfc_emisor) + '</div></td>'
-          + '<td data-l="Total" class="num">' + dinero(f.total) + '</td>'
-          + '<td data-l="Cancelada el" class="nowrap">' + esc(f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : 'Se vio el ' + fecha(f.detectada)) + '</td>'
-          + '<td data-l="En QUO">' + chip(f.corregida_el ? 'Corregida en QUO el ' + fecha(f.corregida_el) : q[0], f.corregida_el ? 'ok' : q[1]) + (f.raro ? ' ' + chip('Trae saldo en QUO', 'ojo') : '') + (f.fuera_rango ? '<div class="mut">De antes de lo que trae QUO</div>' : '') + '</td></tr>';
-      }).join('');
+      $('c-h').textContent = (x ? x[1] : 'Canceladas en el SAT') + (C.estado === 'activa' && C.donde ? ' · ' + DONDE[C.donde][0] : '');
+      if (PC) PC.inicio();
+      if (FC) FC.pinta();
+      pintaC();
     } catch (e) { error(falla(e)); }
+  }
+  /* desde la Cartera («Verlas en Centauro»): el cliente y lo que hay que ver */
+  function abrePedido() {
+    var a = null;
+    try { a = JSON.parse(sessionStorage.getItem('cen-canc-abre') || 'null'); sessionStorage.removeItem('cen-canc-abre'); } catch (e) {}
+    if (!a || !a.rfc) return false;
+    C.estado = 'activa'; C.donde = ''; C.cli = String(a.rfc).toUpperCase();
+    C.f.donde = Array.isArray(a.donde) ? a.donde.slice() : [];
+    if (bC && bC.pon) bC.pon([C.cli]);
+    return true;
   }
   function pintaClisC() {
     var cl = (C.res && C.res.clientes) || [], puede = C.res && C.res.puede_pedir && !CONSULTA;
@@ -984,7 +1081,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         + '<td data-l="Revisado">' + (c.revisado ? esc(fechaHora(c.revisado)) + '<div class="mut">' + esc({ efirma: 'con la e.firma', verificador: 'con el verificador del SAT', manual: 'con lo que se subió' }[c.como] || '') + '</div>' : '<span class="mut">Todavía no</span>') + '</td>'
         + '<td data-l="e.firma">' + esc(c.efirma || '—') + (c.efirma_vence ? '<div class="mut">Vence el ' + esc(fecha(c.efirma_vence)) + '</div>' : '') + '</td>'
         + '<td data-l="Canceladas" class="num">' + (+c.canceladas || 0).toLocaleString('es-MX') + '</td>'
-        + '<td data-l="Por cancelar en QUO" class="num">' + ((+c.por_cancelar || 0) ? chip(String(c.por_cancelar), 'mal') : '0') + '</td>'
+        + '<td data-l="Activas en QUO" class="num">' + ((+c.por_cancelar || 0) ? chip(String(c.por_cancelar), 'mal') : '0') + '</td>'
         + '<td>' + (puede ? '<button class="btn chico" type="button" data-pide="' + esc(c.rfc) + '">Revisar ahora con el SAT</button>' : '') + '</td></tr>';
     }).join('');
     tb.querySelectorAll('[data-pide]').forEach(function (b) {
@@ -1000,18 +1097,19 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   async function cargaCanceladas() {
     C.res = await rpc('sat_resumen');
     if (!C.res || !C.res.ve) throw new Error('No tienes clientes en esta revisión.');
-    pintaKpis(); pintaClisC();
     if (!bC) bC = buscaCliente($('c-cliBox'), 'c-cli', C.res.clientes || [], function (v) { C.cli = v; listaC(); });
+    abrePedido();
+    pintaKpis(); pintaClisC();
     await listaC();
   }
   document.querySelectorAll('[data-clado]').forEach(function (b) {
     b.onclick = function () { C.lado = b.getAttribute('data-clado'); document.querySelectorAll('[data-clado]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); listaC(); };
   });
   $('x-canceladas').onclick = function () {
-    var x = KPI.filter(function (k) { return k[0] === C.estado; })[0];
-    excel(this, 'Canceladas SAT vs QUO', ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Emitida el', 'UUID', 'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Total', 'Cancelada el', 'En QUO', 'Corregida en QUO el'],
-      C.filas.map(function (f) { return [f.cliente, f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', fecha(f.fecha_emision), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.total == null ? '' : +f.total, f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : '', (QUO[f.estado_quo] || [f.estado_quo])[0], f.corregida_el ? fecha(f.corregida_el) : '']; }),
-      [34, 15, 12, 12, 38, 15, 34, 15, 34, 14, 12, 28, 14], [(x ? x[1] : '') + ' · ' + cuenta(C.filas.length, 'factura', 'facturas')]);
+    var x = KPI.filter(function (k) { return k[0] === C.estado; })[0], l = visiblesC();   // todo lo que dejan los filtros, no solo la página
+    excel(this, 'Canceladas SAT vs QUO', ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Emitida el', 'UUID', 'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Total', 'Cancelada el', 'En QUO', 'Dónde está en QUO', 'Corregida en QUO el'],
+      l.map(function (f) { return [f.cliente, f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', fecha(f.fecha_emision), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.total == null ? '' : +f.total, f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : '', (QUO[f.estado_quo] || [f.estado_quo])[0], f.quo_donde ? DONDE_TXT[f.quo_donde] : (f.quo_cancel_saldo ? 'Cancelada, con saldo en su cartera' : ''), f.corregida_el ? fecha(f.corregida_el) : '']; }),
+      [34, 15, 12, 12, 38, 15, 34, 15, 34, 14, 12, 28, 24, 14], [(x ? x[1] : '') + (C.estado === 'activa' && C.donde ? ' · ' + DONDE[C.donde][0] : '') + ' · ' + cuenta(l.length, 'factura', 'facturas')]);
   };
 
   /* =============================== Lista 69-B =============================== */
