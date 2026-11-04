@@ -146,13 +146,16 @@
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },
       { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' },
       { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes del personal', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
-    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores y cambios al portal.', subs: [
+    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores, el IMPI y cambios al portal.', subs: [
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
       // Campañas Facebook (Héctor Daniel, 3-nov-2026: «en administración, campañas facebook… que nadamás me salga a mi»):
       // autoriza las campañas de la página Profase Fiscal; solo él (fb_estado(), 190_campanas_facebook.sql; bloque fbk_tab.js)
       { k: 'campanas-facebook', v: 'fbk', t: 'Campañas Facebook', d: 'Las publicaciones de la página de Facebook: autoriza, pide cambios o no las publiques.' },
+      // IMPI (Héctor Daniel, 3-nov-2026, 17:15: «podemos subir lo del IMPI a CRM? Administración - IMPI?»; «Solo tú y HNR
+      // (lector)»): el control de las notificaciones de su cuenta PASE (impi_estado(), 204_impi.sql; bloque impi_tab.js)
+      { k: 'impi', v: 'imp', t: 'IMPI', d: 'Las notificaciones del IMPI: cada oficio, qué pide y su fecha límite para contestar.' },
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
