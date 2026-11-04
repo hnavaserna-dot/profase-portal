@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=bc8b94bad2"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=bc8b94bad2"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/claves-quo.js?v=31392e4e2e"></script>
 <style>
 /* Portal PROFASE · Administración › Base de clientes (etapa 4 de la migración del Access, 29-oct-2026): la ficha de cada
    cliente se edita en el portal, como «Base de Clientes» del Access y con sus errores corregidos. La página lee las
@@ -41,7 +41,12 @@
    ficha, todo menos lo que factura la otra compañía y los precios de QUO; portal/sql/51_clientes.sql) y escribe solo
    con cli_guarda() y cli_borra() (portal/sql/55_clientes_ficha.sql), que revisan quién edita qué (decisión de Daniel:
    la dirección, los gerentes y Elisa Mata; servicios y precios de la otra compañía y de QUO, solo la dirección) y
-   anotan cada cambio. Sin contraseñas ni archivos del SAT: siguen en Access › Clientes. */
+   anotan cada cambio. Sin contraseñas ni archivos del SAT: siguen en Clientes › Claves SAT y renovaciones. Única
+   excepción (Héctor Daniel Nava, 3-nov-2026, 17:23: «sí porfavor»): la sección «Usuarios QUO» de la ficha, como la pestaña
+   del Access (QUO ID, Contabilita y Facturita). El QUO ID es el de la ficha (id_quo) y los usuarios los enseña y cambia
+   la pieza común js/claves-quo.js (la misma de Claves SAT; una sola versión), con las reglas de siempre: los ven y
+   cambian la dirección, los gerentes y el contador del cliente, cada vista o cambio queda en Accesos y se esconden solos
+   al minuto. Esta página no pide contraseñas por su cuenta. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -194,6 +199,14 @@ tr.fila:hover td{background:var(--navy-soft)}
 /* renglón completo: este desplegable se abre con todo su renglón (recuadro o fondo) */
 details.hist>summary{width:auto}
 .sat{font-size:12.5px;color:var(--muted);padding:0 14px 12px}
+/* «Usuarios QUO» (3-nov-2026): el QUO ID y, abajo, la pieza común js/claves-quo.js */
+.quo-id{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr);gap:6px 14px;padding:12px 14px 0;margin:0}
+.quo-id dt{color:var(--muted);font-size:12.5px;font-weight:600}
+.quo-id dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.quo-us{padding:12px 14px}
+/* lo nuevo, desde su aviso (regla de Daniel, 2-nov-2026, 12:27) */
+.sec.nuevo{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nuevo-nota{margin:12px 14px 0;padding:8px 11px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:6px;font-size:12.5px;overflow-wrap:anywhere}
 .enlace{background:none;border:0;padding:0;color:var(--navy);font-weight:600;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:2px}
 :root[data-theme="dark"] .enlace{color:var(--accent-ink)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .enlace{color:var(--accent-ink)}}
@@ -202,7 +215,7 @@ details.hist>summary{width:auto}
   .filtros input,.filtros select{width:100%}
   .filtros{width:100%}
   .campos{grid-template-columns:minmax(0,1fr)}
-  .datos{grid-template-columns:minmax(0,1fr)}
+  .datos,.quo-id{grid-template-columns:minmax(0,1fr)}
   .datos dd{margin-bottom:6px}
   #lista thead,#grupos thead,#cat thead{display:none}
   #lista tr,#grupos tr,#cat tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 14px;border-top:1px solid var(--line)}
@@ -278,7 +291,7 @@ details.hist>summary{width:auto}
       <div class="tabla"><table id="cat"><thead><tr><th>Servicio</th><th class="monto">Precio de lista</th><th>Texto en la factura</th><th>Clientes</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="cat-vacia" hidden>Sin servicios en esta compañía.</div>
     </section>
-    <p class="pie">Las contraseñas y los archivos del SAT de cada cliente (CIEC, e.firma, sellos y QUO) están en Clientes › Claves SAT y renovaciones, con su propio candado.</p>
+    <p class="pie">Las contraseñas y los archivos del SAT de cada cliente (CIEC, e.firma y sellos) están en Clientes › Claves SAT y renovaciones, con su propio candado. Los usuarios de QUO salen también aquí, en la ficha de cada empresa («Usuarios QUO»), con el mismo candado.</p>
   </div>
 </div>
 
@@ -362,8 +375,20 @@ details.hist>summary{width:auto}
       indices();
       opciones(); pinta();
       $('cargando').hidden = true; $('principal').hidden = false;
+      // desde un aviso (el contacto que se capturó al mandar, 206): abre la ficha de esa razón social
+      var ab = +(new URLSearchParams(location.search).get('abre') || 0);
+      if (ab && I.empresa[ab]) abreEmpresa(ab);
+      else if (VER) verNuevo();   // lo nuevo, desde su aviso (NUEVOS)
     } catch (e) { $('cargando').hidden = true; error('No se pudo leer la base de clientes: ' + falla(e)); }
   }
+  /* El aviso «Contacto nuevo» (portal/sql/206_envios_contacto_ventana.sql, a quien edita la ficha): bcli_tab.js llama
+     __bcliAbre(id) con la razón social; se vuelven a leer sus contactos (los acaba de capturar alguien más) y se abre */
+  var LISTO = null;
+  window.__bcliAbre = async function (id) {
+    try { await LISTO; await recarga(['contactos', 'contacto_reg']); } catch (e) { /* abre con lo que ya tiene */ }
+    if (!I.empresa || !I.empresa[id]) return false;
+    abreEmpresa(id); return true;
+  };
   async function recarga(tablas) {
     var R = await Promise.all(tablas.map(todo));
     tablas.forEach(function (t, i) { T[t] = R[i]; });
@@ -442,8 +467,8 @@ details.hist>summary{width:auto}
     return '<div class="cab"><div><div class="rfc">' + esc(sup) + '</div><h2 id="f-tit">' + esc(tit) + '</h2>' + (sub ? '<div class="rfc">' + esc(sub) + '</div>' : '') + '</div>'
       + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div>';
   }
-  function sec(tit, cuerpo, nota, boton) {
-    return '<section class="sec"><h3><span>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</span>' + (boton || '') + '</h3>' + cuerpo + '</section>';
+  function sec(tit, cuerpo, nota, boton, id) {
+    return '<section class="sec"' + (id ? ' id="' + esc(id) + '"' : '') + '><h3><span>' + esc(tit) + (nota ? ' <small>' + esc(nota) + '</small>' : '') + '</span>' + (boton || '') + '</h3>' + cuerpo + '</section>';
   }
   function bt(acc, txt, datos, clase) {
     var d = Object.keys(datos || {}).map(function (k) { return ' data-' + k + '="' + esc(datos[k]) + '"'; }).join('');
@@ -455,7 +480,14 @@ details.hist>summary{width:auto}
     $('ficha').scrollTop = quieto ? y : 0;
     if (!quieto) { try { $('cerrar').focus(); } catch (er) {} }
   }
-  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; ABIERTA = null; Z = null; }
+  function cierra() { escondeQuo(); $('velo').hidden = true; $('ficha').innerHTML = ''; ABIERTA = null; Z = null; }
+  /* Los usuarios de QUO de la empresa abierta (js/claves-quo.js; la misma pieza de Claves SAT y renovaciones) */
+  function usuariosQuo(e) {
+    var z = $('quo-usuarios'); if (!z) return;
+    if (!window.PROFASE_CLAVES_QUO) { z.innerHTML = '<div class="no">No se pudo abrir. Cierra la ficha y vuelve a abrirla.</div>'; return; }
+    window.PROFASE_CLAVES_QUO.crea({ donde: z, rfc: e.rfc, sb: P.sb, consulta: CONSULTA });
+  }
+  function escondeQuo() { try { if (window.PROFASE_CLAVES_QUO) window.PROFASE_CLAVES_QUO.escondeTodo(); } catch (er) {} }
 
   function dato(l, v) { return '<dt>' + esc(l) + '</dt><dd>' + (v === '' || v == null ? '<span class="no">—</span>' : esc(v)) + '</dd>'; }
   function domicilio(e) {
@@ -476,8 +508,12 @@ details.hist>summary{width:auto}
       + dato('Domicilio fiscal', domicilio(e)) + dato('Entre calles', [e.entre1, e.entre2].filter(Boolean).join(' y '))
       + dato('e.firma', e.cuenta_fiel ? 'Sí' + (e.vence_fiel ? ', vence ' + fecha(e.vence_fiel) : '') : 'No')
       + dato('Sellos', e.cuenta_sellos ? 'Sí' + (e.vence_sellos ? ', vencen ' + fecha(e.vence_sellos) : '') : 'No')
-      + dato('CIEC', e.cuenta_ciec ? 'Sí' : 'No') + dato('Número en QUO', e.id_quo) + '</dl>'
+      + dato('CIEC', e.cuenta_ciec ? 'Sí' : 'No') + '</dl>'
       + '<div class="sat">Las contraseñas y los archivos del SAT están en Clientes › Claves SAT y renovaciones.</div>');
+    // Usuarios QUO, como la pestaña del Access (Héctor Daniel Nava, 3-nov-2026): el QUO ID de la ficha y los usuarios de
+    // Contabilita y Facturita, que enseña y cambia la pieza común js/claves-quo.js (quién, lo decide la base)
+    h += sec('Usuarios QUO', '<dl class="quo-id"><dt>QUO ID</dt><dd>' + (e.id_quo == null || e.id_quo === '' ? '<span class="no">Sin capturar</span>' : esc(e.id_quo)) + '</dd></dl>'
+      + '<div class="quo-us" id="quo-usuarios"></div>', '', ed ? bt('edQuo', e.id_quo == null ? 'Capturar QUO ID' : 'Cambiar QUO ID', { id: id }) : '', 'sec-quo');
     // compañías que la atienden
     var R = (I.regDeEmp[id] || []).slice().sort(function (a, b) { return a.compania - b.compania; });
     h += sec('Compañías que la atienden', R.length ? R.map(function (r) {
@@ -533,6 +569,7 @@ details.hist>summary{width:auto}
     h += sec('Historia', '<div id="historia"><div class="cargando">Cargando…</div></div>');
     h += '</div>';
     abre(h, quieto);
+    usuariosQuo(e);
     historia(id);
     devCond(id);
   }
@@ -702,13 +739,18 @@ details.hist>summary{width:auto}
   function camposEmpresa(nueva) {
     return [{ k: 'grupo_id', l: 'Grupo', t: 'sel', op: [['', 'Escoge el grupo']].concat(opGrupos()) }, { k: 'razon', l: 'Razón social', ancho: 1, max: 500 },
       { k: 'rfc', l: 'RFC', max: 13 }, { k: 'estatus', l: 'Estatus', t: 'sel', op: [[1, 'Activo'], [2, 'Incubado'], [0, 'Inactivo']] },
-      { k: 'inicio_op', l: 'Inicio de operaciones', t: 'date' }, { k: 'id_quo', l: 'Número en QUO', t: 'num' },
+      { k: 'inicio_op', l: 'Inicio de operaciones', t: 'date' }, { k: 'id_quo', l: 'QUO ID', t: 'num' },
       { k: 'tipo_vialidad', l: 'Tipo de vialidad' }, { k: 'vialidad', l: 'Calle' }, { k: 'num_ext', l: 'Número exterior', max: 30 }, { k: 'num_int', l: 'Número interior', max: 30 },
       { k: 'colonia', l: 'Colonia' }, { k: 'localidad', l: 'Localidad' }, { k: 'municipio', l: 'Municipio' }, { k: 'estado', l: 'Estado' }, { k: 'cp', l: 'Código postal', max: 5 },
       { k: 'entre1', l: 'Entre calle' }, { k: 'entre2', l: 'Y calle' },
       { k: 'cuenta_fiel', l: 'e.firma', t: 'chk', txt: 'Cuenta con e.firma' }, { k: 'vence_fiel', l: 'Vencimiento de la e.firma', t: 'date' },
       { k: 'cuenta_sellos', l: 'Sellos', t: 'chk', txt: 'Cuenta con sellos' }, { k: 'vence_sellos', l: 'Vencimiento de los sellos', t: 'date' },
       { k: 'cuenta_ciec', l: 'CIEC', t: 'chk', txt: 'Cuenta con CIEC' }];
+  }
+  // el QUO ID es un número entero (como en QUO); vacío, si la empresa no está en QUO
+  function quoIdMal(p) {
+    if (!('id_quo' in p) || p.id_quo == null) return '';
+    return Number.isInteger(p.id_quo) && p.id_quo > 0 && p.id_quo < 2147483647 ? '' : 'El QUO ID es un número entero, sin letras ni decimales.';
   }
   function camposContacto() {
     return [{ k: 'nombre', l: 'Nombre' }, { k: 'apellido', l: 'Apellido' }, { k: 'correo1', l: 'Correo 1', t: 'mail' }, { k: 'correo2', l: 'Correo 2', t: 'mail' },
@@ -736,7 +778,13 @@ details.hist>summary{width:auto}
     grupo: function (d) { abreGrupo(+d.id); },
     zCancela: function () { Z = null; if ($('zona')) $('zona').innerHTML = ''; },
     borra: function (d) { zonaBorra(d.t, +d.id, d.q); },
-    edEmp: function (d) { forma('cli_empresas', camposEmpresa(false), I.empresa[+d.id], null, 'Datos de la empresa', ['empresas']); },
+    edEmp: function (d) { forma('cli_empresas', camposEmpresa(false), I.empresa[+d.id], null, 'Datos de la empresa', ['empresas']); Z.antes = quoIdMal; },
+    // el QUO ID solo (sección «Usuarios QUO», 3-nov-2026): lo cambian los mismos que editan la ficha
+    edQuo: function (d) {
+      forma('cli_empresas', [{ k: 'id_quo', l: 'QUO ID', t: 'num' }], I.empresa[+d.id], null, 'QUO ID', ['empresas'], null,
+        'El número de esta empresa en QUO Contabilita. Con él se traen de QUO su Cartera, sus Variaciones y lo fiscal de SuperConta.');
+      Z.antes = quoIdMal;
+    },
     estatus: async function (d, b) {
       if (!window.confirm(+d.v === 0 ? '¿Dar de baja esta empresa (estatus Inactivo)? Su historia se queda.' : '¿Reactivar esta empresa?')) return;
       b.disabled = true;
@@ -750,7 +798,7 @@ details.hist>summary{width:auto}
     nuevaEmp: function (d) {
       var c = camposEmpresa(true);
       forma('cli_empresas', c, { grupo_id: d.gru ? +d.gru : '', estatus: 1 }, null, 'Nueva empresa', ['empresas']);
-      Z.abrir = abreEmpresa;
+      Z.abrir = abreEmpresa; Z.antes = quoIdMal;
     },
     nuevoCto: function (d) { forma('cli_contactos', camposContacto(), null, { grupo_id: +d.gru }, 'Nuevo contacto', ['contactos']); },
     edCto: function (d) { forma('cli_contactos', camposContacto(), I.cto[+d.id], null, 'Contacto', ['contactos']); },
@@ -831,6 +879,39 @@ details.hist>summary{width:auto}
     }
   }
 
+  /* ---------- Lo nuevo, desde su aviso (regla de Daniel, 2-nov-2026, 12:27: «lo que notifiques al picarle te mande a
+     lo "nuevo" o a donde debe de mandarte») ----------
+     La vista de afuera lo pide con window.PROFASE_ABRE_BCLI('ver:<qué>') (bcli_tab.js, PROFASE_ABRE['base-clientes']) o,
+     si esta página se abre sola, con #<qué>. Aquí se abre la ficha de la primera empresa de la lista (una que ya tenga su
+     QUO ID, si hay) y se ilumina lo nuevo; si los clientes todavía no llegan, espera a carga(). */
+  var VER = '';
+  var NUEVOS = {
+    // «Usuarios QUO» en la ficha, como la pestaña del Access (Héctor Daniel Nava, 3-nov-2026, 17:23)
+    'usuarios-quo': { sec: 'sec-quo', nota: 'Nuevo: «Usuarios QUO», como en el Access: el QUO ID y los usuarios y contraseñas de Contabilita y Facturita, con «Ver» y «Copiar». Son los mismos de Claves SAT y renovaciones: lo que cambies aquí sale allá al momento.' }
+  };
+  function verNuevo() {
+    var t = VER, n = NUEVOS[t]; if (!n || !T.empresas) return;
+    VER = '';
+    if (VISTA !== 'emp') { VISTA = 'emp'; pinta(); }
+    var L = filtradas(), e = L.filter(function (x) { return x.estatus === 1 && x.id_quo != null; })[0] || L[0] || T.empresas[0];
+    if (!e) return;
+    abreEmpresa(e.id);
+    var s = $(n.sec); if (!s) return;
+    var h3 = s.querySelector('h3'); if (h3) h3.insertAdjacentHTML('afterend', '<div class="nuevo-nota" role="status">' + esc(n.nota) + '</div>');
+    s.classList.add('nuevo');
+    var f = $('ficha'), cab = f.querySelector('.cab');
+    s.style.scrollMarginTop = ((cab ? cab.offsetHeight : 0) + 12) + 'px';
+    try { s.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (er) {}
+    setTimeout(function () { s.classList.remove('nuevo'); }, 12000);
+  }
+  window.PROFASE_ABRE_BCLI = function (x) {
+    var m = /^ver:([a-z-]{1,40})$/.exec(String(x || ''));
+    if (!m || !NUEVOS[m[1]]) return false;
+    VER = m[1];
+    if (T.empresas && !$('principal').hidden) verNuevo();
+    return true;
+  };
+
   /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
   async function excel(b) {
     b.disabled = true;
@@ -884,7 +965,11 @@ details.hist>summary{width:auto}
     if (ev.key === 'Escape' && !$('velo').hidden) cierra();
     if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) ev.target.click();
   });
-  carga();
+  (function () {   // abierta sola con #<qué> (lo nuevo): se abre en cuanto lleguen los clientes
+    var t = location.hash ? location.hash.slice(1) : '';
+    if (NUEVOS[t]) VER = t;
+  })();
+  LISTO = carga();
 })();
 </script>
 </body></html>

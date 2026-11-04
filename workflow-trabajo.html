@@ -201,6 +201,30 @@ tr.fila:hover td{background:var(--navy-soft)}
 .subir input[type=file]{max-width:100%;font-size:13px}
 .env-l li .d.mal{color:var(--red)}
 .env-l .para{overflow-wrap:anywhere}
+/* Ventana del contacto que recibe documentos (206_envios_contacto_ventana.sql, 3-nov-2026): sale encima de la ficha
+   cuando el cliente no tiene a quién mandarle; en el celular, pantalla completa con sus botones abajo a la vista */
+.velo-cto{position:fixed;inset:0;background:rgba(10,18,32,.5);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.cto{background:var(--bg);width:min(540px,100%);max-height:100%;display:flex;flex-direction:column;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.3);overflow:hidden}
+.cto .cab{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:12px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex:none}
+.cto .cab h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.cto .cab .rfc{color:var(--band-dim);overflow-wrap:anywhere}
+.cto .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35);flex:none}
+.cto .cuerpo{padding:14px 16px;overflow-y:auto;display:grid;gap:10px;flex:1 1 auto;min-height:0;align-content:start}
+.cto .expl{font-size:13.5px;margin:0}
+.cto .sub3{font-size:12.5px;color:var(--muted);font-weight:600;margin:4px 0 0}
+.cto-op{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;margin:0;color:inherit;font-size:14px}
+.cto-op input{margin-top:3px;flex:none}
+.cto-op .t{font-weight:600;overflow-wrap:anywhere}
+.cto-op .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.cto-op.sel{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+:root[data-theme="dark"] .cto-op.sel{border-color:#9FB6E0;box-shadow:0 0 0 1px #9FB6E0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .cto-op.sel{border-color:#9FB6E0;box-shadow:0 0 0 1px #9FB6E0}}
+.cto-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cto-campos label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:4px}
+.cto input[type=text],.cto input[type=email],.cto input[type=tel]{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;color:inherit;min-width:0}
+.cto .pie-cto{padding:10px 16px;border-top:1px solid var(--line);background:var(--surface-2);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex:none}
+.env-l .cto-b{margin-top:6px}
+@media (max-width:600px){.velo-cto{padding:0;align-items:stretch}.cto{border-radius:0;width:100%;max-height:none;height:100%}.cto-campos{grid-template-columns:minmax(0,1fr)}.cto input[type=text],.cto input[type=email],.cto input[type=tel]{font-size:16px}}
 .env-chk{display:flex;gap:8px;align-items:center;font-size:13.5px}
 .env-chk input{width:18px;height:18px}
 .btn.peligro{color:var(--red);border-color:var(--red-soft)}
@@ -339,6 +363,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 </div>
 
 <div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="f-tit"></div></div>
+<div class="velo-cto" id="cto-velo" hidden><div class="cto" id="cto" role="dialog" aria-modal="true" aria-labelledby="cto-tit"></div></div>
 
 <script>
 (function(){
@@ -351,7 +376,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var ROL = '', RREAL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
   var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
-  var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1 }, ENVD = {}, ENV_IDS = [];
+  var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1 }, ENVD = {}, ENV_IDS = [], ENV_TODOS = [];
   // configuración del mes (portal/sql/70_wf_config.sql): Reiniciar, Borrar, «Tareas a tiempo», editar el mes y agregar tarea;
   // la base dice quién: la dirección y quien Daniel autorizó (30-oct-2026)
   var CONF = { edita: false, a_tiempo: false }, PERS = null, CATS = null;
@@ -1156,9 +1181,12 @@ tr.fila:hover td{background:var(--navy-soft)}
     }
     return res;
   }
-  function envItem(x) {
+  // el cliente no tiene en su ficha a nadie que reciba documentos (env_preparar, 201): se captura ahí mismo (202)
+  function sinContacto(x) { return !!(x && x.error && /contacto que reciba documentos/.test(x.error)); }
+  function envItem(x, conBoton) {
     return '<li><div class="t">' + esc(x.rs) + '</div><div class="d">' + esc(x.actividad) + ' · ' + esc(mesTxt(x.periodo)) + (x.complementaria ? ' · <span class="tag az">Complementaria</span>' : '') + '</div>'
       + (x.error ? '<div class="d mal">' + esc(x.error) + '</div>'
+        + (conBoton && sinContacto(x) && !CONSULTA ? '<div class="cto-b"><button class="btn" type="button" data-cto="' + x.wfra + '">Capturar el contacto</button></div>' : '')
         : '<div class="d para">Para: ' + esc((x.para || []).join(', ')) + ' · ' + (x.docs || []).length + ' documento' + ((x.docs || []).length === 1 ? '' : 's') + ': ' + esc((x.docs || []).map(function (d) { return d.nombre; }).join(', ')) + '</div>')
       + '</li>';
   }
@@ -1188,8 +1216,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       var it = (await envPrepara([a.id]))[0];
       if (!it) { box.innerHTML = '<div class="vacio">No se encontró la actividad.</div>'; return; }
       var listo = !it.error && envPuedeMandar();
-      box.innerHTML = '<ul class="lista env-l">' + envItem(it) + '</ul>'
+      box.innerHTML = '<ul class="lista env-l">' + envItem(it, true) + '</ul>'
         + (listo ? '<div class="subir"><label class="env-chk"><input type="checkbox" id="env-uno-junto" checked> En un solo correo</label><button class="btn acento" type="button" id="env-uno-manda">Mandar</button></div>' : '');
+      if (sinContacto(it) && !CONSULTA) abreContacto(a.id, envUno);
     } catch (e) { box.innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
   }
   async function envUnoManda(btn) {
@@ -1204,7 +1233,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
   function abreEnvios() {
     if (!ENV.visible || CONSULTA) return;
-    ABIERTA = null; ENV_IDS = [];
+    ABIERTA = null; ENV_IDS = []; ENV_TODOS = [];
     var L = filtradas().filter(function (a) { return ENVIABLES[a.actividad_id] && a.activa && a.estatus !== 3 && a.estatus !== 6 && (a.n_docs || 0) > 0; });
     var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Enviar al cliente</h2><div class="rfc">Líneas de captura, opiniones de cumplimiento, declaraciones y acuses anuales del panel como está filtrado, como los envíos del Access</div></div>'
       + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">'
@@ -1213,16 +1242,16 @@ tr.fila:hover td{background:var(--navy-soft)}
         + (L.length ? '<div class="subir"><button class="btn acento" type="button" id="env-revisa">Revisar qué se mandaría</button></div>' : ''))
       + '<div id="env-res"></div></div>';
     $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
-    ENV_IDS = L.map(function (a) { return a.id; });
+    ENV_IDS = L.map(function (a) { return a.id; }); ENV_TODOS = ENV_IDS.slice();
     try { $('cerrar').focus(); } catch (er) {}
   }
   async function envRevisa(btn) {
     btn.disabled = true; $('env-res').innerHTML = '<div class="vacio">Revisando…</div>';
     try {
-      var it = await envPrepara(ENV_IDS), ok = it.filter(function (x) { return !x.error; }), no = it.filter(function (x) { return x.error; });
+      var it = await envPrepara(ENV_TODOS.length ? ENV_TODOS : ENV_IDS), ok = it.filter(function (x) { return !x.error; }), no = it.filter(function (x) { return x.error; });
       ENV_IDS = ok.map(function (x) { return x.wfra; });
       var h = sec('Listas para mandar', ok.length ? '<ul class="lista env-l">' + ok.map(envItem).join('') + '</ul>' : '<div class="vacio">Ninguna.</div>', String(ok.length));
-      if (no.length) h += sec('No se mandan', '<ul class="lista env-l">' + no.map(envItem).join('') + '</ul>', String(no.length));
+      if (no.length) h += sec('No se mandan', '<ul class="lista env-l">' + no.map(function (x) { return envItem(x, true); }).join('') + '</ul>', String(no.length));
       if (ok.length && envPuedeMandar()) h += '<div class="sec"><div class="subir"><label class="env-chk"><input type="checkbox" id="env-junto" checked> Cada cliente en un solo correo</label><button class="btn acento" type="button" id="env-manda">Mandar ' + ok.length + '</button><span class="rfc" id="env-av"></span></div></div>';
       $('env-res').innerHTML = h;
     } catch (e) { $('env-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; }
@@ -1236,6 +1265,92 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('env-res').innerHTML = envResumen(res);
       ENV_IDS = [];
     } catch (e) { btn.disabled = false; btn.textContent = 'Volver a intentar'; if ($('env-av')) $('env-av').textContent = e.message || falla(e); }
+  }
+
+  /* ---------- Ventana del contacto que recibe documentos (portal/sql/206_envios_contacto_ventana.sql; Héctor Daniel,
+     3-nov-2026: «que lo pongan en un pop up para que llenen los datos de contacto, le pongan guardar… y ya lo pueden
+     mandar»). Sale cuando el cliente no tiene en su ficha a nadie que reciba documentos, a quien puede mandar esa
+     actividad: escoge a alguien que ya está en el grupo o captura uno nuevo. Se guarda en la misma ficha del cliente
+     (Clientes › Base de clientes, con su bitácora) y a quien edita la ficha le llega el aviso; luego se revisa otra vez
+     el envío y ya se puede mandar. La base decide quién puede y qué se guarda. ---------- */
+  var CTO = null;   // {wfra, d (env_contacto_ctx), despues}
+  function ctoAbierta() { return !!(CTO && !$('cto-velo').hidden); }
+  function ctoCierra() {
+    $('cto-velo').hidden = true; $('cto').innerHTML = ''; CTO = null;
+    try { if (P.escribiendo) P.escribiendo('contacto-envio', false); } catch (er) {}
+  }
+  async function abreContacto(wfra, despues) {
+    if (CONSULTA || ctoAbierta()) return;
+    CTO = { wfra: wfra, d: null, despues: despues };
+    $('cto').innerHTML = '<div class="cab"><div><div class="rfc">Envío al cliente</div><h2 id="cto-tit">¿A quién le mandamos?</h2></div>'
+      + '<button class="btn" type="button" id="cto-x" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo"><div class="vacio">Buscando los contactos del cliente…</div></div>';
+    $('cto-velo').hidden = false;
+    try { if (P.escribiendo) P.escribiendo('contacto-envio', true); } catch (er) {}
+    var d;
+    try { var r = await P.sb.rpc('env_contacto_ctx', { p_wfra: wfra }); if (r.error) throw r.error; d = r.data; }
+    catch (e) { if (CTO && CTO.wfra === wfra) $('cto').querySelector('.cuerpo').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; return; }
+    if (!CTO || CTO.wfra !== wfra) return;
+    CTO.d = d;
+    ctoPinta();
+  }
+  function ctoPinta() {
+    var d = CTO.d, L = d.contactos || [], conCorreo = L.filter(function (c) { return (c.correos || []).length; });
+    var hay = L.length > 0;
+    var h = '<div class="cab"><div><div class="rfc">Envío al cliente</div><h2 id="cto-tit">¿A quién le mandamos?</h2><div class="rfc">' + esc(d.rs) + '</div></div>'
+      + '<button class="btn" type="button" id="cto-x" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">';
+    if ((d.para || []).length) {
+      h += '<p class="expl">Este cliente ya tiene a quién mandarle: ' + esc(d.para.join(', ')) + '.</p>';
+    } else {
+      h += '<p class="expl">Este cliente no tiene en su ficha a nadie que reciba documentos. ' + (hay ? 'Escoge a alguien de su grupo o captura uno nuevo.' : 'Captura a quién se le manda.')
+        + ' Queda guardado en su ficha de Base de clientes para los siguientes envíos.</p>';
+    }
+    if (hay) {
+      h += '<div class="sub3">Ya están en su grupo</div>' + L.map(function (c) {
+        var cor = (c.correos || []).join(', ');
+        return '<label class="cto-op"><input type="radio" name="cto-q" value="' + c.id + '"' + (c.recibe ? ' disabled' : '') + '><span><span class="t">' + esc(c.nombre || 'Sin nombre') + '</span>'
+          + '<span class="d" style="display:block">' + (cor ? esc(cor) : 'Sin correo: al escogerlo, escribe su correo') + (c.recibe ? ' · ya recibe documentos' : '') + '</span></span></label>';
+      }).join('');
+    }
+    h += '<label class="cto-op"><input type="radio" name="cto-q" value="nuevo"' + (!conCorreo.length ? ' checked' : '') + '><span><span class="t">Uno nuevo</span><span class="d" style="display:block">Lo das de alta aquí con su nombre y correo</span></span></label>';
+    h += '<div id="cto-correo" hidden><div class="cto-campos"><div><label for="cto-c1">Su correo</label><input type="email" id="cto-c1" autocomplete="off" inputmode="email"></div></div></div>';
+    h += '<div id="cto-nuevo"' + (!conCorreo.length ? '' : ' hidden') + '><div class="cto-campos">'
+      + '<div><label for="cto-n">Nombre</label><input type="text" id="cto-n" autocomplete="off"></div>'
+      + '<div><label for="cto-a">Apellido (opcional)</label><input type="text" id="cto-a" autocomplete="off"></div>'
+      + '<div><label for="cto-c">Correo</label><input type="email" id="cto-c" autocomplete="off" inputmode="email"></div>'
+      + '<div><label for="cto-t">Teléfono (opcional)</label><input type="tel" id="cto-t" autocomplete="off" inputmode="tel"></div></div></div>';
+    h += '<div class="msg" id="cto-msg" hidden></div></div>'
+      + '<div class="pie-cto"><button class="btn" type="button" id="cto-cancela">Cancelar</button><button class="btn acento" type="button" id="cto-ok">Guardar</button></div>';
+    $('cto').innerHTML = h;
+    ctoElige();
+    try { (!conCorreo.length ? $('cto-n') : $('cto').querySelector('input[name="cto-q"]:not([disabled])')).focus(); } catch (er) {}
+  }
+  function ctoElige() {
+    var q = $('cto') && $('cto').querySelector('input[name="cto-q"]:checked'), v = q ? q.value : '';
+    $('cto').querySelectorAll('.cto-op').forEach(function (l) { var i = l.querySelector('input'); l.classList.toggle('sel', !!(i && i.checked)); });
+    if ($('cto-nuevo')) $('cto-nuevo').hidden = v !== 'nuevo';
+    var c = v && v !== 'nuevo' ? (CTO.d.contactos || []).find(function (x) { return String(x.id) === v; }) : null;
+    if ($('cto-correo')) $('cto-correo').hidden = !(c && !(c.correos || []).length);
+  }
+  async function ctoGuarda(btn) {
+    var q = $('cto').querySelector('input[name="cto-q"]:checked'), v = q ? q.value : '', p;
+    var m = function (t) { var g = $('cto-msg'); g.hidden = !t; g.className = 'msg mal'; g.textContent = t || ''; };
+    if (!v) { m('Escoge a alguien del grupo o «Uno nuevo».'); return; }
+    if (v === 'nuevo') {
+      p = { nombre: $('cto-n').value.trim(), apellido: $('cto-a').value.trim(), correo: $('cto-c').value.trim(), telefono: $('cto-t').value.trim() };
+      if (!p.nombre) { m('Escribe el nombre del contacto.'); $('cto-n').focus(); return; }
+      if (!p.correo) { m('Escribe su correo: ahí le llegan los documentos.'); $('cto-c').focus(); return; }
+    } else {
+      p = { contacto_id: +v };
+      if (!$('cto-correo').hidden) { p.correo = $('cto-c1').value.trim(); if (!p.correo) { m('Escribe su correo: ahí le llegan los documentos.'); $('cto-c1').focus(); return; } }
+    }
+    m(''); btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      var r = await P.sb.rpc('env_contacto_guarda', { p_wfra: CTO.wfra, p: p }); if (r.error) throw r.error;
+      var despues = CTO.despues;
+      ctoCierra();
+      try { P.toast('Listo: quedó en su ficha de Base de clientes. Ya se puede mandar.'); } catch (er) {}
+      if (typeof despues === 'function') despues();
+    } catch (e) { btn.disabled = false; btn.textContent = 'Guardar'; m(falla(e)); }
   }
 
   /* ---------- Generar el mes (como «Generar» del Access; portal/sql/45_wf_generar.sql). Dirección, Cadengo y Gabo (157). ---------- */
@@ -1715,6 +1830,11 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'env-manda') { envMandaTodos(ev.target); return; }
     if (ev.target.id === 'env-uno') { envUno(); return; }
     if (ev.target.id === 'env-uno-manda') { envUnoManda(ev.target); return; }
+    var ct = ev.target.closest('[data-cto]');
+    if (ct) { abreContacto(+ct.getAttribute('data-cto'), function () { var rb = $('env-revisa'); if (rb) envRevisa(rb); else envUno(); }); return; }
+    if (ev.target.id === 'cto-x' || ev.target.id === 'cto-cancela') { ctoCierra(); return; }
+    if (ev.target.id === 'cto-ok') { ctoGuarda(ev.target); return; }
+    if (ev.target.closest && ev.target.closest('#cto-velo')) return;
     if (ev.target.id === 'g-revisa') { genera(true); return; }
     if (ev.target.id === 'g-genera') { genera(false); return; }
     var gt = ev.target.closest('[data-gtodos]');
@@ -1727,7 +1847,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
   });
+  document.addEventListener('change', function (ev) { if (ev.target && ev.target.name === 'cto-q') ctoElige(); });
   document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && ctoAbierta()) { ev.stopPropagation(); ctoCierra(); return; }
+    if (ev.key === 'Enter' && ctoAbierta() && ev.target && ev.target.tagName === 'INPUT' && ev.target.type !== 'radio') { var ok = $('cto-ok'); if (ok && !ok.disabled) { ev.preventDefault(); ctoGuarda(ok); } return; }
     if (ev.key === 'Escape' && !$('velo').hidden) cierra();
     if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) abre(+ev.target.getAttribute('data-id'));
   });

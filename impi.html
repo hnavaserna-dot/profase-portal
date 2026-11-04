@@ -1,0 +1,595 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · IMPI</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=bc8b94bad2"></script><script src="js/marca.js?v=a743a9d941"></script><script src="js/visor.js?v=dc0b49b86b"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<style>
+/* Portal PROFASE · Administración › IMPI (Héctor Daniel, 3-nov-2026, 17:15: «podemos subir lo del IMPI a CRM? Administración
+   - IMPI?»; «Solo tú y HNR (lector)»). El control de las notificaciones de su cuenta PASE que antes vivía en su Excel: cada
+   oficio con su expediente, la marca, qué pide y su fecha límite, con el semáforo de los plazos, el PDF del oficio y la
+   historia de cada revisión del tablero. Lo ven Héctor Daniel Nava y Héctor Nava Ramos (solo consulta); lo cambia solo
+   Héctor Daniel Nava (impi_estado(), portal/sql/204_impi.sql). La página solo llama sus funciones impi_* y solo lee la
+   cubeta privada «impi» (y sube ahí, a «manual/», el PDF de un oficio que él agrega a mano). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.kpi:focus-visible,.tabla tr.fila:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+/* El tablero: cuándo se revisó y cuándo toca */
+.tab{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:16px 0;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.tab .dat{display:flex;flex-wrap:wrap;gap:6px 18px;min-width:0}
+.tab .dat div{min-width:0}
+.tab .dat b{display:block;font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.tab .dat span{font-weight:600;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* Las pilas de arriba (filtran la lista) */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;cursor:pointer;min-width:0}
+.kpi b{display:block;font-family:var(--f-display);font-size:26px;font-weight:750;line-height:1.1}
+.kpi span{font-size:12.5px;color:var(--muted);font-weight:600;overflow-wrap:anywhere}
+.kpi[aria-pressed="true"]{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy-soft);background:var(--navy-soft)}
+.kpi.mal b{color:var(--red)}
+.kpi.ojo b{color:var(--amber)}
+.kpi.ok b{color:var(--ok)}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.filtros input,.filtros select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 10px;min-width:0}
+.filtros input{flex:1 1 240px}
+/* La lista */
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .marca{font-weight:700}
+.tabla .marca i{font-weight:600;color:var(--navy)}
+:root[data-theme="dark"] .tabla .marca i{color:#8FB3E8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tabla .marca i{color:#8FB3E8}}
+.tabla .idea{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:62ch}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.vacio{padding:20px 16px;color:var(--muted)}
+@media (max-width:760px){
+  .tabla thead{display:none}
+  .tabla,.tabla tbody,.tabla tr,.tabla td{display:block;width:100%}
+  .tabla tr.fila{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla td{border:0;padding:2px 0}
+  .tabla td.vence{margin-top:6px}
+  .tabla .idea{max-width:none}
+}
+/* Ventanas */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:640px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:19px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+.campo{display:grid;gap:4px;margin:0 0 10px;min-width:0}
+.campo label{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0;width:100%}
+.campo textarea{min-height:110px;resize:vertical;line-height:1.45}
+.dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 12px}
+.radios{display:flex;flex-wrap:wrap;gap:8px 16px}
+.radios label{display:flex;gap:6px;align-items:center;font-weight:600;color:var(--ink)}
+.msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere;margin:0 0 10px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.msg.az{background:var(--navy-soft);color:var(--ink)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) 1fr;gap:6px 14px;margin:0 0 12px}
+.dl dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.sec{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.sec h4{font-family:var(--f-display);font-stretch:85%;font-size:15px;margin:0 0 6px}
+.bit{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.bit li{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.bit b{color:var(--ink);font-weight:600}
+details.hist{margin:0 0 24px}
+details.hist summary{cursor:pointer;font-weight:700;padding:6px 0}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:700px){
+  input,select,textarea,.campo input,.campo select,.campo textarea,.filtros input,.filtros select{font-size:16px}
+  .band h1{font-size:22px}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .dl dt{margin-top:4px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Administración</div>
+      <h1>IMPI</h1>
+      <p>Las notificaciones de tu cuenta PASE: cada oficio, qué pide y su fecha límite para contestar.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+  <div class="nota" id="vacio" hidden>Todavía no hay oficios. Lo que trae la revisión de tu tablero del IMPI entra aquí solo.</div>
+
+  <div id="todo" hidden>
+    <section class="tab" id="tablero" aria-label="Tu tablero del IMPI">
+      <div class="dat" id="tab-dat"></div>
+      <div class="acciones">
+        <button class="btn" type="button" id="b-revisa" hidden>Revisar el tablero ahora</button>
+        <button class="btn acento" type="button" id="b-nuevo" hidden>Agregar un oficio</button>
+      </div>
+    </section>
+    <div class="nota info" id="robot-nota" hidden></div>
+
+    <div class="kpis" id="kpis" role="group" aria-label="Qué ver"></div>
+    <div class="filtros">
+      <input type="search" id="f-q" placeholder="Busca por marca, expediente, oficio o lo que dice" aria-label="Buscar">
+      <select id="f-tipo" aria-label="Qué acto es"></select>
+    </div>
+    <section class="caja" id="caja-lista">
+      <header><h2 id="t-lista">Plazos corriendo</h2>
+        <div class="acciones"><button class="btn" type="button" data-excel id="x-lista">Excel</button></div></header>
+      <div class="desliza"><table class="tabla" id="tabla">
+        <thead><tr><th>Notificado</th><th>Marca</th><th>Expediente · oficio</th><th>Qué es</th><th>Fecha límite</th></tr></thead>
+        <tbody id="lista"></tbody>
+      </table></div>
+      <div class="vacio" id="lista-vacia" hidden></div>
+      <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+    </section>
+
+    <details class="hist" id="hist"><summary>Revisiones del tablero</summary><div id="hist-c"></div></details>
+    <p class="pie">El plazo se cuenta como en tu Excel: dos meses desde el día siguiente a la notificación, de fecha a fecha, menos un día, sin recorrer por días inhábiles; si cae en fin de semana se avisa. Si un oficio da otro plazo, se anota el suyo. Lo de «Histórico» es el índice del tablero de antes del 12 de agosto de 2026 (no se abre ni cuenta como pendiente). Nunca se entra a «Notificaciones por recibir»: esas las recibes tú.</p>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false, PUEDE = false, DATOS = null, VISTA = 'corre', TIPO = '', Q = '', SEL = null, PAG = null, V = null, ABIERTO = null;
+  var TIPOS = { titulo: 'Título de registro', anterioridad: 'Cita de anterioridad', requerimiento: 'Requerimiento', impedimento: 'Impedimento legal',
+    abandono: 'Abandono', informativo: 'Informativo', negativa: 'Negativa', resolucion: 'Resolución', otro: 'Otro' };
+  var VISTAS = [
+    ['corre', 'Plazos corriendo', function (f) { return f.sem === 'corre' || f.sem === 'pronto'; }, ''],
+    ['pronto', 'Vencen en 15 días', function (f) { return f.sem === 'pronto'; }, 'ojo'],
+    ['vencido', 'Vencidos sin contestar', function (f) { return f.sem === 'vencido'; }, 'mal'],
+    ['contestado', 'Contestados', function (f) { return f.sem === 'contestado'; }, 'ok'],
+    ['pendiente', 'Sin poder bajar', function (f) { return f.sem === 'pendiente'; }, 'mal'],
+    ['leidos', 'Todos los leídos', function (f) { return f.estado === 'leido'; }, ''],
+    ['historico', 'Histórico (solo índice)', function (f) { return f.sem === 'historico'; }, '']
+  ];
+  var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function diaSem(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return DIAS[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
+  function finde(s) { var d = diaSem(s); return d === 'sábado' || d === 'domingo'; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function filas() { return (DATOS && DATOS.filas) || []; }
+  function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0] || VISTAS[0]; }
+
+  // el semáforo de la fecha límite, en palabras
+  function plazo(f) {
+    if (f.sem === 'historico') return chip('Histórico', '');
+    if (f.sem === 'pendiente') return chip('No se pudo bajar', 'mal');
+    if (f.sem === 'sin') return chip('Sin plazo', '');
+    var d = f.dias, t = fecha(f.vence);
+    if (f.sem === 'contestado') return chip('Contestado el ' + fecha(f.contestado), 'ok') + '<div class="mut">Vencía el ' + esc(t) + '</div>';
+    if (f.sem === 'vencido') return chip(d === -1 ? 'Venció ayer' : 'Venció hace ' + (-d) + ' días', 'mal') + '<div class="mut">' + esc(t) + '</div>';
+    var c = d <= 5 ? 'mal' : d <= 15 ? 'ojo' : 'az';
+    return chip(d === 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : 'Vence en ' + d + ' días', c) + '<div class="mut">' + esc(t) + ' · ' + esc(diaSem(f.vence)) + (finde(f.vence) ? ' (fin de semana)' : '') + '</div>';
+  }
+  function marca(f) {
+    if (!f.marca) return '<span class="mut">No consta</span>';
+    return f.marca_origen === 'marcanet' ? '<i title="Tomada de MARCANET, no del oficio">' + esc(f.marca) + '</i>' : esc(f.marca);
+  }
+
+  /* ---------- pintar ---------- */
+  function cuenta(k) { var fn = vista(k)[2]; return filas().filter(fn).length; }
+  function pintaKpis() {
+    $('kpis').innerHTML = VISTAS.filter(function (v) { return v[0] !== 'historico' || cuenta('historico'); }).map(function (v) {
+      var n = cuenta(v[0]);
+      return '<button type="button" class="kpi ' + (n ? v[3] : '') + '" data-v="' + v[0] + '" aria-pressed="' + (VISTA === v[0]) + '"><b>' + n + '</b><span>' + esc(v[1]) + '</span></button>';
+    }).join('');
+    $('kpis').querySelectorAll('[data-v]').forEach(function (b) { b.onclick = function () { VISTA = b.getAttribute('data-v'); if (PAG) PAG.inicio(); pinta(); }; });
+  }
+  function pintaTipos() {
+    var hay = {}; filas().forEach(function (f) { if (f.tipo) hay[f.tipo] = (hay[f.tipo] || 0) + 1; });
+    $('f-tipo').innerHTML = '<option value="">Todos los actos</option>' + Object.keys(TIPOS).filter(function (k) { return hay[k]; })
+      .map(function (k) { return '<option value="' + k + '"' + (TIPO === k ? ' selected' : '') + '>' + esc(TIPOS[k]) + ' (' + hay[k] + ')</option>'; }).join('');
+  }
+  function filtradas() {
+    var fn = vista(VISTA)[2], q = norm(Q).split(/\s+/).filter(Boolean);
+    var l = filas().filter(function (f) {
+      if (!fn(f)) return false;
+      if (TIPO && f.tipo !== TIPO) return false;
+      if (!q.length) return true;
+      var t = norm([f.marca, f.expediente, f.oficio, f.idea, f.notif_id, TIPOS[f.tipo] || ''].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+    if (VISTA === 'corre' || VISTA === 'pronto' || VISTA === 'vencido') l.sort(function (a, b) { return String(a.vence).localeCompare(String(b.vence)); });
+    return l;
+  }
+  function pintaTablero() {
+    var t = DATOS.tablero || {}, h = [];
+    h.push('<div><b>Tu tablero</b><span>' + (t.n != null ? esc(t.n) + ' notificaciones' : 'Sin revisar todavía') + '</span></div>');
+    if (t.revisado) h.push('<div><b>Última revisión</b><span>' + esc(t.quien === 'Tu Excel' ? fecha(t.revisado) : fechaHora(t.revisado)) + '</span><div class="mut">' + esc(t.quien || '') + '</div></div>');
+    if (t.toca) h.push('<div><b>Te toca revisarlo</b><span>' + (t.toca === DATOS.hoy ? 'Hoy' : esc(fecha(t.toca))) + '</span><div class="mut">Días 15 y último de cada mes</div></div>');
+    $('tab-dat').innerHTML = h.join('');
+    $('b-revisa').hidden = !PUEDE || t.robot === 'apagado';
+    $('b-nuevo').hidden = !PUEDE;
+    var nota = '';
+    if (t.robot === 'apagado') nota = 'La revisión automática de tu tablero en la nube se prende cuando pegues tu cuenta PASE en GitHub. Mientras, lo nuevo entra con la revisión de tu Mac o lo agregas tú con «Agregar un oficio».';
+    else if (t.robot_error) nota = 'La última revisión automática no se pudo: ' + t.robot_error + '. Se reintenta sola.';
+    $('robot-nota').textContent = nota; $('robot-nota').hidden = !nota || CONSULTA;
+  }
+  function pinta() {
+    pintaKpis();
+    var v = vista(VISTA), l = filtradas();
+    $('t-lista').textContent = v[1];
+    var pag = PAG ? PAG.corta(l) : l;
+    $('lista').innerHTML = pag.map(function (f) {
+      return '<tr class="fila' + (SEL === f.id ? ' sel' : '') + '" tabindex="0" data-id="' + f.id + '">'
+        + '<td class="num">' + esc(fecha(f.fecha)) + '</td>'
+        + '<td class="marca">' + marca(f) + '</td>'
+        + '<td class="num">Exp. ' + esc(f.expediente) + '<div class="mut">Oficio ' + esc(f.oficio) + '</div></td>'
+        + '<td>' + (f.tipo ? chip(TIPOS[f.tipo] || f.tipo, f.tipo === 'titulo' ? 'ok' : f.tipo === 'abandono' || f.tipo === 'negativa' ? 'mal' : f.tipo === 'informativo' ? '' : 'na') : '')
+        + (f.idea ? '<div class="idea">' + esc(f.idea) + '</div>' : f.estado === 'solo_indice' ? '<div class="mut">Solo en el índice del tablero</div>' : f.pendiente ? '<div class="mut">' + esc(f.pendiente) + '</div>' : '') + '</td>'
+        + '<td class="vence">' + plazo(f) + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = l.length > 0;
+    $('lista-vacia').textContent = { corre: 'No tienes plazos corriendo.', pronto: 'Nada vence en los próximos 15 días.', vencido: 'No hay plazos vencidos sin contestar.',
+      contestado: 'Todavía no marcas nada como contestado.', pendiente: 'Todos los oficios se bajaron completos.', leidos: 'No hay oficios leídos.', historico: 'No hay histórico.' }[VISTA] || 'No hay oficios.';
+    if (Q || TIPO) $('lista-vacia').textContent = 'Nada coincide con tu búsqueda.';
+  }
+  function pintaHist() {
+    var c = DATOS.corridas || [];
+    $('hist').hidden = !c.length;
+    $('hist-c').innerHTML = '<ul class="bit">' + c.map(function (x) {
+      // el Excel solo guardaba el día de cada revisión (sin la hora)
+      return '<li><b>' + esc(x.quien === 'Tu Excel' ? fecha(x.hora) : fechaHora(x.hora)) + '</b> · ' + esc(x.quien) + (x.ok ? '' : ' · ' + chip('No se pudo', 'mal'))
+        + (x.n != null ? ' · ' + esc(x.n) + ' notificaciones en el tablero' : '') + (x.nuevos ? ' · ' + esc(x.nuevos) + ' nuevos' : '')
+        + (x.nota ? '<br>' + esc(x.nota) : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  /* ---------- ventanas ---------- */
+  var antes = null;
+  function abre(html, foco) {
+    antes = document.activeElement;
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    // Con teclado de verdad, el cursor va al primer campo; en el celular no (abriría el teclado y taparía el título).
+    var tecl = true; try { tecl = P.conTeclado ? !!P.conTeclado() : true; } catch (e) {}
+    try { (foco && tecl ? $(foco) : $('dlg-c').querySelector('button')).focus({ preventScroll: true }); } catch (e) {}
+    try { $('dlg-c').scrollTop = 0; } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('impi', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = ''; ABIERTO = null;
+    try { if (P.escribiendo) P.escribiendo('impi', false); } catch (e) {}
+    try { if (antes) antes.focus(); } catch (e) {}
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && !$('dlg').dataset.fija) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden && !$('dlg').dataset.fija) cierra(); });
+
+  /* ---------- el PDF del oficio (cubeta privada; se ve con la marca PROFASE) ---------- */
+  async function bytesDoc(d) {
+    var r = await P.sb.storage.from('impi').download(d.ruta);
+    if (r.error || !r.data) throw new Error('No se pudo traer el oficio');
+    var b = new Uint8Array(await r.data.arrayBuffer());
+    var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: d.nombre }); if (m) b = m;
+    return b;
+  }
+  function visor() {
+    if (V) return V;
+    V = window.PROFASE_VISOR.nuevo({ trae: bytesDoc, esPdf: function () { return true; },
+      nombre: function (d) { return String(d.nombre || 'oficio').replace(/[\\/:*?"<>|]/g, '_'); },
+      alVer: function (d) { try { P.registrar('vista', 'IMPI · ' + d.nombre); } catch (e) {} },
+      alBajar: function (d) { try { P.registrar('descarga', 'IMPI · ' + d.nombre); } catch (e) {} } });
+    return V;
+  }
+
+  /* ---------- la ficha de un oficio ---------- */
+  async function ficha(id) {
+    try { var a = await rpc('impi_ficha', { p_id: id }); ABIERTO = id; SEL = id; pintaFicha(a); }
+    catch (e) { error(falla(e)); }
+  }
+  function pintaFicha(a) {
+    var doc = a.ruta ? { ruta: a.ruta, nombre: 'Oficio ' + a.oficio + ' exp ' + a.expediente + '.pdf' } : null;
+    var h = '<h3 id="dlg-t">' + (a.marca ? esc(a.marca) : 'Exp. ' + esc(a.expediente)) + '</h3>'
+      + '<div style="margin:0 0 10px">' + (a.tipo ? chip(TIPOS[a.tipo] || a.tipo, 'az') + ' ' : '') + plazo(a) + '</div>'
+      + '<dl class="dl">'
+      + '<dt>Oficio</dt><dd>' + esc(a.oficio) + '</dd>'
+      + '<dt>Expediente</dt><dd>' + esc(a.expediente) + '</dd>'
+      + '<dt>Notificado</dt><dd>' + (a.fecha ? esc(fecha(a.fecha)) + ' (' + esc(diaSem(a.fecha)) + ')' : 'No consta') + '</dd>'
+      + (a.notif_id ? '<dt>Notificación</dt><dd>' + esc(a.notif_id) + (a.pagina ? ' <span class="mut">(página ' + esc(a.pagina) + ' del tablero)</span>' : '') + '</dd>' : '')
+      + '<dt>Marca</dt><dd>' + marca(a) + (a.marca_origen === 'marcanet' ? '<div class="mut">' + esc(a.marca_nota || 'Tomada de MARCANET (búsqueda por expediente), no del oficio notificado.') + '</div>' : '') + '</dd>'
+      + '<dt>Qué es y qué pide</dt><dd>' + (a.idea ? esc(a.idea) : a.estado === 'solo_indice' ? '<span class="mut">Histórico: solo está en el índice del tablero; su oficio no se abrió (decisión del 12 de agosto de 2026).</span>' : '<span class="mut">No consta</span>') + '</dd>'
+      + (a.vence ? '<dt>Fecha límite</dt><dd>' + esc(fecha(a.vence)) + ' (' + esc(diaSem(a.vence)) + ')'
+          + (a.plazo === 'dos_meses' ? '<div class="mut">Dos meses desde el día siguiente a la notificación, menos un día.</div>' : '')
+          + (a.vence_nota ? '<div class="mut">' + esc(a.vence_nota) + '</div>' : '')
+          + (finde(a.vence) ? '<div class="mut">Cae en fin de semana: revisa el calendario de días inhábiles del IMPI.</div>' : '') + '</dd>' : '')
+      + (a.contestado ? '<dt>Contestado</dt><dd>' + esc(fecha(a.contestado)) + (a.contest_nota ? '<div class="mut">' + esc(a.contest_nota) + '</div>' : '') + '</dd>' : '')
+      + (a.pendiente ? '<dt>Pendiente</dt><dd>' + esc(a.pendiente) + '</dd>' : '')
+      + '</dl>';
+    if (doc) h += '<div class="acciones" style="margin:0 0 6px"><button class="btn" type="button" id="f-ver">Ver el oficio</button><button class="btn" type="button" id="f-baja">Bajar</button></div>';
+    else if (a.estado === 'leido') h += '<div class="mut" style="margin:0 0 6px">El PDF de este oficio está en tu Mac (en «IMPI oficios procesados»); lo nuevo ya se guarda aquí.</div>';
+    if ((a.mismo || []).length) h += '<div class="sec"><h4>El mismo expediente</h4><ul class="bit">' + a.mismo.map(function (m) {
+      return '<li><b>' + esc(fecha(m.fecha)) + '</b> · oficio ' + esc(m.oficio) + (m.tipo ? ' · ' + esc(TIPOS[m.tipo] || m.tipo) : '') + (m.idea ? '<br>' + esc(m.idea) : '') + '</li>'; }).join('') + '</ul></div>';
+    if ((a.bitacora || []).length) h += '<div class="sec"><h4>Bitácora</h4><ul class="bit">' + a.bitacora.map(function (b) {
+      return '<li><b>' + esc(b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(fechaHora(b.hora)) + (b.texto ? '<br>' + esc(b.texto) : '') + '</li>'; }).join('') + '</ul></div>';
+    var bs = ['<button class="btn" type="button" id="f-cierra">Cerrar</button>'];
+    if (PUEDE) {
+      if (a.estado === 'leido' && !a.pdf) bs.unshift('<button class="btn" type="button" id="f-pdf">Subir el PDF</button>');
+      bs.unshift('<button class="btn" type="button" id="f-edita">' + (a.estado === 'leido' ? 'Corregir' : 'Llenar con el oficio') + '</button>');
+      if (a.vence && !a.contestado) bs.unshift('<button class="btn bien" type="button" id="f-cont">Marcar contestado</button>');
+      if (a.contestado) bs.unshift('<button class="btn" type="button" id="f-reabre">Regresar a sin contestar</button>');
+    }
+    h += '<div class="acciones">' + bs.join('') + '</div>';
+    abre(h, 'f-cierra');
+    $('f-cierra').onclick = function () { cierra(); pinta(); };
+    if (doc) { $('f-ver').onclick = function () { visor().ver(doc, this); }; $('f-baja').onclick = function () { visor().baja(doc, this); }; }
+    if ($('f-cont')) $('f-cont').onclick = function () { contesta(a); };
+    if ($('f-reabre')) $('f-reabre').onclick = function () { reabre(a); };
+    if ($('f-edita')) $('f-edita').onclick = function () { forma(a); };
+    if ($('f-pdf')) $('f-pdf').onclick = function () { subePdf(a); };
+  }
+  function contesta(a) {
+    abre('<h3 id="dlg-t">Marcar contestado · ' + esc(a.marca || 'Exp. ' + a.expediente) + '</h3>'
+      + '<p>Oficio ' + esc(a.oficio) + ', fecha límite ' + esc(fecha(a.vence)) + '. Al marcarlo deja de avisarte.</p>'
+      + '<div class="campo"><label for="c-f">¿Qué día se contestó?</label><input type="date" id="c-f" value="' + esc(DATOS.hoy) + '" max="' + esc(DATOS.hoy) + '"></div>'
+      + '<div class="campo"><label for="c-n">Nota (opcional)</label><textarea id="c-n" maxlength="600" placeholder="Por ejemplo: se contestó por Marca en Línea con el pago de la tarifa"></textarea></div>'
+      + '<div class="msg mal" id="c-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="c-no">Cancelar</button><button class="btn bien" type="button" id="c-si">Marcar contestado</button></div>', 'c-f');
+    $('c-no').onclick = function () { ficha(a.id); };
+    $('c-si').onclick = async function () {
+      this.disabled = true;
+      try { await rpc('impi_contesta', { p_id: a.id, p_fecha: $('c-f').value || null, p_nota: $('c-n').value }); avisa('Listo: quedó contestado.'); await carga(); ficha(a.id); }
+      catch (e) { $('c-e').textContent = falla(e); $('c-e').hidden = false; this.disabled = false; }
+    };
+  }
+  function reabre(a) {
+    abre('<h3 id="dlg-t">Regresar a sin contestar</h3><p>Vuelve a correr su plazo y a avisarte.</p>'
+      + '<div class="campo"><label for="r-n">¿Por qué?</label><textarea id="r-n" maxlength="600"></textarea></div><div class="msg mal" id="r-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="r-no">Cancelar</button><button class="btn" type="button" id="r-si">Regresarlo</button></div>', 'r-n');
+    $('r-no').onclick = function () { ficha(a.id); };
+    $('r-si').onclick = async function () {
+      this.disabled = true;
+      try { await rpc('impi_reabre', { p_id: a.id, p_motivo: $('r-n').value }); avisa('Regresó a sin contestar.'); await carga(); ficha(a.id); }
+      catch (e) { $('r-e').textContent = falla(e); $('r-e').hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- agregar o corregir un oficio a mano ---------- */
+  function vence2m(f) {   // la misma cuenta de la base (impi_vence_2m), solo para enseñarla antes de guardar
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f || '')) return '';
+    var p = f.split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + 1)), y = d.getUTCFullYear(), m = d.getUTCMonth() + 2, dd = d.getUTCDate();
+    y += Math.floor(m / 12); m = m % 12;
+    var ult = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(), v = new Date(Date.UTC(y, m, Math.min(dd, ult)) - 86400000);
+    return v.toISOString().slice(0, 10);
+  }
+  function forma(a) {
+    a = a || {};
+    var pl = a.plazo || (a.id ? 'sin' : 'dos_meses');
+    abre('<h3 id="dlg-t">' + (a.id ? 'Corregir el oficio' : 'Agregar un oficio') + '</h3>'
+      + '<p class="mut">Con lo que dice el oficio. Lo que no consta, déjalo vacío.</p>'
+      + '<div class="dos"><div class="campo"><label for="m-of">Número de oficio</label><input id="m-of" inputmode="numeric" value="' + esc(a.oficio || '') + '"></div>'
+      + '<div class="campo"><label for="m-ex">Expediente</label><input id="m-ex" inputmode="numeric" value="' + esc(a.expediente || '') + '"></div></div>'
+      + '<div class="dos"><div class="campo"><label for="m-fe">Día en que quedó notificado</label><input type="date" id="m-fe" value="' + esc(a.fecha || '') + '" max="' + esc(DATOS.hoy) + '"></div>'
+      + '<div class="campo"><label for="m-id">Id de notificación (opcional)</label><input id="m-id" inputmode="numeric" value="' + esc(a.notif_id || '') + '"></div></div>'
+      + '<div class="campo"><label for="m-ma">Marca o signo distintivo</label><input id="m-ma" value="' + esc(a.marca || '') + '"></div>'
+      + '<div class="campo"><label for="m-ti">Qué acto es</label><select id="m-ti">' + Object.keys(TIPOS).map(function (k) { return '<option value="' + k + '"' + ((a.tipo || 'requerimiento') === k ? ' selected' : '') + '>' + esc(TIPOS[k]) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="m-id2">Qué es y qué pide</label><textarea id="m-id2" maxlength="2000" placeholder="Por ejemplo: Cita de anterioridad (art. 173 fr. XVIII LFPPI): se opone el registro 2828582 por semejanza en grado de confusión. Requiere manifestar lo que a su derecho convenga.">' + esc(a.idea || '') + '</textarea></div>'
+      + '<div class="campo"><label>Plazo para contestar</label><div class="radios">'
+      + '<label><input type="radio" name="m-pl" value="dos_meses"' + (pl === 'dos_meses' ? ' checked' : '') + '> Dos meses</label>'
+      + '<label><input type="radio" name="m-pl" value="otro"' + (pl === 'otro' ? ' checked' : '') + '> Otro plazo</label>'
+      + '<label><input type="radio" name="m-pl" value="sin"' + (pl === 'sin' ? ' checked' : '') + '> No da plazo</label></div></div>'
+      + '<div class="msg az" id="m-2m" hidden></div>'
+      + '<div class="dos" id="m-otro" hidden><div class="campo"><label for="m-ve">Fecha límite</label><input type="date" id="m-ve" value="' + esc(pl === 'otro' ? a.vence || '' : '') + '"></div>'
+      + '<div class="campo"><label for="m-vn">Qué plazo da</label><input id="m-vn" placeholder="Por ejemplo: 10 días hábiles" value="' + esc(pl === 'otro' ? a.vence_nota || '' : '') + '"></div></div>'
+      + '<div class="msg mal" id="m-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-si">Guardar</button></div>', 'm-of');
+    function plazoSel() { var r = document.querySelector('input[name="m-pl"]:checked'); return r ? r.value : 'sin'; }
+    function refresca() {
+      var p = plazoSel(), v = vence2m($('m-fe').value);
+      $('m-otro').hidden = p !== 'otro';
+      $('m-2m').hidden = !(p === 'dos_meses' && v);
+      if (p === 'dos_meses' && v) $('m-2m').textContent = 'Fecha límite: ' + fecha(v) + ' (' + diaSem(v) + ')' + (finde(v) ? '; cae en fin de semana: revisa el calendario de días inhábiles del IMPI' : '') + '.';
+    }
+    document.querySelectorAll('input[name="m-pl"]').forEach(function (r) { r.onchange = refresca; });
+    $('m-fe').oninput = refresca; $('m-fe').onchange = refresca; refresca();
+    $('m-no').onclick = function () { if (a.id) ficha(a.id); else cierra(); };
+    $('m-si').onclick = async function () {
+      this.disabled = true;
+      var p = { oficio: $('m-of').value.trim(), expediente: $('m-ex').value.trim(), fecha: $('m-fe').value, notif_id: $('m-id').value.trim(),
+        marca: $('m-ma').value.trim(), tipo: $('m-ti').value, idea: $('m-id2').value.trim(), plazo: plazoSel(), vence: $('m-ve').value, vence_nota: $('m-vn').value.trim() };
+      if (a.id) p.id = a.id;
+      try { var r = await rpc('impi_guarda', { p: p }); avisa(a.id ? 'Listo: quedó corregido.' : 'Listo: quedó agregado.'); await carga(); ficha(r.id); }
+      catch (e) { $('m-e').textContent = falla(e); $('m-e').hidden = false; this.disabled = false; }
+    };
+  }
+  function uuid() { try { return crypto.randomUUID(); } catch (e) { return 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); }); } }
+  function subePdf(a) {
+    abre('<h3 id="dlg-t">Subir el PDF del oficio</h3><p>El oficio ' + esc(a.oficio) + ' (exp. ' + esc(a.expediente) + '). Solo PDF.</p>'
+      + '<div class="campo"><label for="s-f">Archivo</label><input type="file" id="s-f" accept="application/pdf,.pdf"></div><div class="msg mal" id="s-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="s-no">Cancelar</button><button class="btn acento" type="button" id="s-si" disabled>Subir</button></div>', 's-f');
+    $('s-f').onchange = function () { $('s-si').disabled = !(this.files && this.files[0]); };
+    $('s-no').onclick = function () { ficha(a.id); };
+    $('s-si').onclick = async function () {
+      var f = $('s-f').files[0]; if (!f) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { $('s-e').textContent = 'Tiene que ser un PDF.'; $('s-e').hidden = false; return; }
+      this.disabled = true; $('dlg').dataset.fija = '1';
+      try {
+        var ruta = 'manual/' + uuid() + '.pdf';
+        var up = await P.sb.storage.from('impi').upload(ruta, f, { contentType: 'application/pdf' });
+        if (up.error) throw up.error;
+        await rpc('impi_pdf_pon', { p_id: a.id, p_ruta: ruta });
+        delete $('dlg').dataset.fija; avisa('Listo: el PDF quedó guardado.'); await carga(); ficha(a.id);
+      } catch (e) { delete $('dlg').dataset.fija; $('s-e').textContent = falla(e); $('s-e').hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- Excel y PDF de la lista (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = filtradas(), titulo = 'IMPI · ' + vista(VISTA)[1];
+      var head = ['Notificado', 'Marca', 'Expediente', 'Oficio', 'Qué es', 'Qué pide', 'Fecha límite', 'Estado'];
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('IMPI');
+      ws.columns = [14, 28, 14, 16, 22, 70, 16, 24].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' oficio' : ' oficios') + (Q ? ' · búsqueda: ' + Q : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (f, i) {
+        var est = { corre: 'Corre', pronto: 'Vence pronto', vencido: 'Vencido sin contestar', contestado: 'Contestado el ' + fecha(f.contestado), sin: 'Sin plazo', pendiente: 'No se pudo bajar', historico: 'Histórico' }[f.sem] || '';
+        var r = ws.getRow(f0 + 1 + i);
+        r.values = [fecha(f.fecha), f.marca || 'No consta', f.expediente, f.oficio, TIPOS[f.tipo] || '', f.idea || '', f.vence ? fecha(f.vence) : '', est];
+        r.getCell(6).alignment = { wrapText: true, vertical: 'top' };
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'IMPI ' + vista(VISTA)[1] + ' ' + DATOS.hoy + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- traer ---------- */
+  async function carga() {
+    DATOS = await rpc('impi_lista');
+    PUEDE = !!DATOS.puede && !CONSULTA;
+    var hay = filas().length > 0;
+    $('vacio').hidden = hay; $('todo').hidden = false;
+    pintaTablero(); pintaTipos(); pinta(); pintaHist();
+  }
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
+  $('f-tipo').onchange = function () { TIPO = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) ficha(+tr.getAttribute('data-id')); });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); ficha(+tr.getAttribute('data-id')); } });
+  $('b-nuevo').onclick = function () { forma(null); };
+  $('b-revisa').onclick = async function () {
+    var b = this; b.disabled = true;
+    try { var r = await rpc('impi_revisa_ya'); avisa(r && r.ya ? 'Ya se está revisando: en unos minutos entra lo nuevo y te llega el aviso.' : 'Listo: en unos minutos se revisa tu tablero y te llega el aviso si hay algo nuevo.'); }
+    catch (e) { error(falla(e)); }
+    setTimeout(function () { b.disabled = false; }, 20000);
+  };
+  // la campanita, el Inicio o el recorrido: abre un oficio (ver:<id> o el id), lo pendiente o el tablero
+  window.__impiAbre = function (que) {
+    var s = String(que || '').replace(/^ver:/, '');
+    if (!DATOS) return false;
+    if (s === 'pendientes') { VISTA = 'pendiente'; pinta(); return true; }
+    if (s === 'tablero') { try { $('tablero').scrollIntoView({ block: 'start' }); } catch (e) {} return true; }
+    var id = +s, f = filas().filter(function (x) { return x.id === id; })[0];
+    if (!f) return false;
+    VISTA = vista(VISTA)[2](f) ? VISTA : f.sem === 'vencido' ? 'vencido' : f.sem === 'contestado' ? 'contestado' : f.estado === 'leido' ? 'leidos' : 'historico';
+    SEL = id; pinta(); ficha(id);
+    return true;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('impi_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para la dirección.');
+      CONSULTA = !!P.consulta || !!EST.consulta; $('consulta').hidden = !CONSULTA;
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'impi.oficios', nombre: 'Oficios', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      await carga();
+      if (!cuenta('corre')) VISTA = cuenta('vencido') ? 'vencido' : 'leidos';
+      pinta();
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) carga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>
