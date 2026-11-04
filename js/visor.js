@@ -24,6 +24,7 @@
    Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
                                        doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, originalTodos });
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton);
+         (cada documento d lleva su id o, si no, su ruta: con eso se reconoce lo ya traído; sin ninguno no se guarda)
          V.bajaVarios([{d, ruta: 'Carpeta/'}], boton, 'nombre del zip', (i, n) => {})   (expediente, 3-nov-2026: un ZIP)
          con aLaVez: n en nuevo({…}) trae hasta n archivos a la vez para el ZIP (Centauro, los XML: 4-nov-2026) */
 (function () {
@@ -160,15 +161,24 @@
         return new Promise(function (ok) { setTimeout(ok, ESPERAS[n]); }).then(function () { return intenta(d, n + 1, p); });
       });
     }
+    // con qué se reconoce un documento ya traído: su id y, si no trae, su ruta. Centauro › Declaraciones y el IMPI
+    // mandaban solo ruta y nombre: sin id todos compartían una sola llave y «Acuse» (u otro renglón) enseñaba el documento
+    // que se abrió primero (Héctor Daniel, 4-nov-2026, 14:47: «se ven que son los mismos»). Sin id ni ruta no se guarda.
+    function llave(d) {
+      if (d.id != null && d.id !== '') return d.id;
+      return d.ruta ? 'ruta:' + d.ruta : null;
+    }
     // los bytes de un documento (con la marca si es PDF), una sola vez por página abierta
     function bytes(d) {
-      var g = guardados.get(d.id);
+      var k = llave(d);
+      if (k == null) return intenta(d, 1);
+      var g = guardados.get(k);
       if (g) return g.p;
       g = { p: null, n: 0 };
       g.p = intenta(d, 1).then(function (b) {
         g.n = b ? b.byteLength : 0; recorta(); return b;
-      }, function (e) { guardados.delete(d.id); throw e; });
-      guardados.set(d.id, g);
+      }, function (e) { guardados.delete(k); throw e; });
+      guardados.set(k, g);
       return g.p;
     }
     function guardaArchivo(b, d) {
