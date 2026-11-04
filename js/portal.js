@@ -754,6 +754,135 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
   })();
+  /* ---- La franja de arriba de cada pantalla (pedido de Fernando Cadengo, 4-nov-2026: «Cada módulo en la parte superior
+     donde trae el nombre, dice una explicación de qué es el módulo, ¿no sería mejor poner un signo de interrogación…?
+     Así la cintilla se hace más pequeña»; «que en pequeño traigan el nombre del menú y en grande el nombre del submenú»;
+     «Todas las pantallas de una vez»). La franja azul de cada pantalla (div.band, con su línea naranja) queda de un solo
+     renglón: en chico el módulo del menú y en grande la opción por la que se entró (la misma de PORTAL_MENU, una sola
+     versión de los nombres; si la página se abre sola, sus propios títulos), y a un lado un «?» que enseña la
+     explicación de la pantalla en un globito (al pasar el mouse o al tocarlo; se cierra al tocar fuera o con Esc). La
+     explicación es el mismo párrafo de siempre de cada página (se esconde, pero la página lo sigue escribiendo, también
+     el que cambia según el puesto); si no trae, la descripción de esa opción en el menú. Los títulos y párrafos
+     originales se quedan escondidos para que las páginas los sigan escribiendo sin que nada se rompa. Los botones de la
+     franja (.acts) no cambian. El globito es un menú más: avisa con P.abreMenu('franja') y se cierra si se abre otro.
+     construir.py (exige_franja()) no publica si se quita. ---- */
+  (function franja() {
+    var CSS = '.fr-oculto{display:none!important}'
+      + '.band.fr-lista>.wrap{padding-top:8px!important;padding-bottom:8px!important;align-items:center!important}'
+      + '.band .fr-tit{min-width:0;max-width:100%}'
+      + '.band .fr-tit .fr-eti{display:block;margin:0;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim,rgba(255,255,255,.72));line-height:1.3}'
+      + '.band .fr-fila{display:flex;align-items:center;gap:8px;min-width:0}'
+      + '.band .fr-tit h1.fr-h1{margin:0;font-size:20px;line-height:1.2;font-weight:750;overflow-wrap:anywhere;min-width:0}'
+      + '.band .fr-q{flex:none;width:24px;height:24px;padding:0;border-radius:50%;border:1.5px solid var(--band-dim,rgba(255,255,255,.72));'
+      + 'background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-grid;place-items:center;cursor:pointer}'
+      + '.band .fr-q:hover,.band .fr-q[aria-expanded="true"]{background:rgba(255,255,255,.14)}'
+      + '.band .fr-q:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
+      + '.fr-g{position:absolute;z-index:70;top:calc(100% + 6px);left:12px;right:12px;max-width:520px;box-sizing:border-box;'
+      + 'background:var(--surface,#fff);color:var(--ink,#132036);border:1px solid var(--line,#DCE2EB);border-radius:12px;'
+      + 'padding:12px 14px;box-shadow:0 10px 30px rgba(10,18,32,.28);font-size:14px;font-weight:400;line-height:1.45;'
+      + 'letter-spacing:0;text-transform:none;text-align:left;white-space:normal;overflow-wrap:anywhere}'
+      + '.fr-g b{display:block;margin:0 0 4px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#5A6577)}'
+      + '@media (max-width:600px){.band .fr-tit h1.fr-h1{font-size:18px}.band .fr-q{width:26px;height:26px}}';
+    var band = null, tit = null, eti = null, h1 = null, q = null, glo = null, orig = null, fijo = false, quita = null;
+    var MENU = 'franja';
+    // la opción del menú por la que se entró: el marco vive en <main id="v-<vista>"> de la vista
+    function miOpcion() {
+      try {
+        var fe = window.parent !== window ? window.frameElement : null;
+        if (!fe) return null;
+        var sec = fe.closest('[id^="v-"]'), pm = window.parent.PORTAL_MENU;
+        if (!sec || !pm || typeof pm.modulos !== 'function') return null;
+        var v = sec.id.slice(2), mods = pm.modulos() || [];
+        for (var i = 0; i < mods.length; i++) {
+          var subs = mods[i].subs || [];
+          for (var j = 0; j < subs.length; j++) if (subs[j].v === v) return { m: mods[i].t, t: subs[j].t, d: subs[j].d || '' };
+        }
+      } catch (e) { /* otro origen o sin menú */ }
+      return null;
+    }
+    var OP = null;
+    function texto(el) { return el ? String(el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+    function explicacion() {
+      var t = orig.ps.map(texto).filter(Boolean).join(' ');
+      return t || (OP && OP.d) || '';
+    }
+    function pinta() {
+      if (!tit) return;
+      var m = OP ? OP.m : texto(orig.eti), t = OP ? OP.t : texto(orig.h1);
+      if (eti.textContent !== m) eti.textContent = m;
+      eti.hidden = !m;
+      if (h1.textContent !== t) h1.textContent = t;
+      q.hidden = !explicacion();
+      if (q.hidden) cierra();
+    }
+    function abre(fija) {
+      var t = explicacion();
+      if (!t) return;
+      fijo = fijo || !!fija;
+      if (!glo.hidden) { glo.lastChild.textContent = t; return; }
+      glo.innerHTML = '<b>¿Qué es esta pantalla?</b><span></span>';
+      glo.lastChild.textContent = t;
+      // justo debajo del «?», aunque la franja traiga más cosas abajo (los números del Calendario, el periodo de la Caja chica)
+      try { glo.style.top = Math.round(q.getBoundingClientRect().bottom - band.getBoundingClientRect().top + 8) + 'px'; } catch (e) { /* se queda abajo de la franja */ }
+      glo.hidden = false;
+      q.setAttribute('aria-expanded', 'true');
+      try { P.abreMenu(MENU); } catch (e) { /* sin aviso */ }
+    }
+    function cierra() {
+      fijo = false;
+      clearTimeout(quita);
+      if (!glo || glo.hidden) return;
+      glo.hidden = true;
+      q.setAttribute('aria-expanded', 'false');
+    }
+    var conMouse = function () { try { return matchMedia('(hover:hover) and (pointer:fine)').matches; } catch (e) { return false; } };
+    function arma() {
+      if (tit || !document.body) return !!tit;
+      // la franja de la pantalla, no el encabezado del portal (el de las vistas y el del Cotizador DECOMSA traen el signo)
+      band = [].filter.call(document.querySelectorAll('body .band'), function (b) { return b.querySelector('h1') && !b.querySelector('.brandtxt'); })[0];
+      var h = band && band.querySelector('h1');
+      if (!h) return false;
+      var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+      var pe = h.parentNode;
+      orig = {
+        h1: h,
+        eti: band.querySelector('.eti') || band.querySelector('.mark'),
+        ps: [].filter.call(pe.children, function (x) { return x.tagName === 'P'; })
+      };
+      tit = document.createElement('div'); tit.className = 'fr-tit';
+      tit.innerHTML = '<div class="eti fr-eti"></div><div class="fr-fila"><h1 class="fr-h1"></h1>'
+        + '<button type="button" class="fr-q" aria-label="¿Qué es esta pantalla?" aria-expanded="false" aria-controls="fr-g">?</button></div>';
+      pe.insertBefore(tit, h);
+      eti = tit.querySelector('.fr-eti'); h1 = tit.querySelector('.fr-h1'); q = tit.querySelector('.fr-q');
+      [orig.h1, orig.eti].concat(orig.ps).forEach(function (x) { if (x) x.classList.add('fr-oculto'); });
+      glo = document.createElement('div'); glo.id = 'fr-g'; glo.className = 'fr-g'; glo.setAttribute('role', 'tooltip'); glo.hidden = true;
+      band.appendChild(glo);
+      if (getComputedStyle(band).position === 'static') { band.style.position = 'relative'; band.style.zIndex = '6'; }
+      band.classList.add('fr-lista');
+      q.addEventListener('click', function () { if (!glo.hidden && fijo) cierra(); else abre(true); });
+      [q, glo].forEach(function (x) {
+        x.addEventListener('mouseenter', function () { if (conMouse()) { clearTimeout(quita); abre(false); } });
+        x.addEventListener('mouseleave', function () { if (conMouse() && !fijo) { clearTimeout(quita); quita = setTimeout(cierra, 220); } });
+      });
+      document.addEventListener('click', function (e) { if (!glo.hidden && !q.contains(e.target) && !glo.contains(e.target)) cierra(); }, true);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !glo.hidden) { cierra(); try { q.focus(); } catch (x) { /* nada */ } } });
+      document.addEventListener(EV_MENU, function (e) { if (e.detail !== MENU) cierra(); });
+      // la página sigue escribiendo sus títulos y su explicación (según el puesto o la sección): se vuelve a pintar
+      if (window.MutationObserver) {
+        new MutationObserver(function () { pinta(); }).observe(pe, { childList: true, subtree: true, characterData: true });
+        if (orig.eti && !pe.contains(orig.eti)) new MutationObserver(function () { pinta(); }).observe(orig.eti, { childList: true, subtree: true, characterData: true });
+      }
+      return true;
+    }
+    function arranca() {
+      if (!arma()) return;
+      OP = miOpcion(); pinta();
+      // el menú de afuera puede tardar en saber las opciones de quien entró: se vuelve a preguntar un rato
+      var n = 0;
+      (function otra() { if (OP || ++n > 24) return; setTimeout(function () { OP = miOpcion(); if (OP) pinta(); else otra(); }, 500); })();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
+  })();
 
   P.usuarioLimpio = function (u) {
     return String(u || '').split('@')[0].normalize('NFD').replace(/[̀-ͯ]/g, '')
