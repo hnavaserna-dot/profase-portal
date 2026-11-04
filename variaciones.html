@@ -585,6 +585,18 @@ table.vtab{min-width:1500px}
 .pct.mu{opacity:.5;font-weight:500}
 .pt{display:block;width:7px;height:7px;border-radius:50%;background:var(--orange-2);flex:none}
 .pt.ok{background:var(--up)}
+/* Movimientos: cada mes se abre (4-nov-2026): la pastilla del hallazgo con el color de su estatus y el globito de comentarios */
+button.hzb,button.vcb{font:inherit;color:inherit;text-align:right}
+.hzb.pend{background:var(--orange-soft);border-color:rgba(242,122,43,.45)}
+.hzb.quo{background:var(--quo-soft);border-color:var(--quo)}
+.hzb.ok{background:color-mix(in srgb, var(--up) 14%, transparent);border-color:color-mix(in srgb, var(--up) 45%, transparent)}
+.vcb{display:inline-flex;align-items:center;gap:5px;border:1px dashed transparent;background:none;border-radius:8px;padding:3px 7px;cursor:pointer;transition:.13s}
+.vcb:hover,.vcb:focus-visible{border-color:var(--accent);background:var(--tile-2);outline:none}
+.cglob{display:inline-flex;align-items:center;gap:2px;font-size:10.5px;font-weight:700;color:var(--accent-3);background:var(--accent-soft);
+  border-radius:999px;padding:0 6px;line-height:16px}
+.cglob svg{width:11px;height:11px}
+.crev{margin-top:4px;white-space:nowrap}
+@media (max-width:767px){.vtab .hzb,.vtab .vcb{min-height:34px;padding:5px 9px}}
 .vleg{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:11px;color:var(--ink-3)}
 .vleg span{display:inline-flex;align-items:center;gap:6px}
 .vacio-c{padding:28px 20px;text-align:center;color:var(--ink-3);font-size:13px}
@@ -673,7 +685,7 @@ table.rtab{min-width:1200px}
 .cmp{display:flex;flex-direction:column;gap:3px;width:120px}
 .cmp i{display:block;height:6px;border-radius:3px}
 .cmp i.a{background:var(--orange-2)} .cmp i.b{background:var(--up)}
-.vtab .hzb{cursor:default}
+.vtab .hzb{cursor:pointer}
 #tb tr.gcta{cursor:pointer}
 #tb tr.gcta > td{background:var(--tile-2);padding:10px 14px}
 #tb tr.gcta:hover > td{background:var(--surface-3)}
@@ -1891,6 +1903,7 @@ function resueltasDe(y){
     const anio = g[5] ? +g[5] : BASE.anioBase; if(anio!==y) continue;
     const e = lee(rid), f = PORRID.get(rid), foto = REV[rid].foto || null;
     if(f && !cerrado(e)) continue;
+    if(!f && !EST[rid] && foto && foto.celda) continue;   // comentarios de un mes que no es hallazgo (Movimientos)
     const rfc = g[1], mes = +g[2], cta = g[3];
     const cl = BASE.clientes.find(c=>c[1]===rfc), cu = BASE.cuentas.find(c=>c[0]===cta);
     out.push({rid, rfc, mes, anio, cta, e,
@@ -2098,6 +2111,7 @@ function pintarCuentas(){
     const cuerpo = `<span class="pct ${cls}">+${esc(money(x.v))}</span><span class="xt">${esc(BASE.clientes[x.ci][0])} · ${esc(mesCorto(x.m))}</span>`;
     return cuerpo;
   };
+  const ts0 = document.querySelector("#ctb tr.cdrow .tscroll"), x0 = ts0 ? ts0.scrollLeft : 0;   // al guardar, la tabla se queda donde estaba
   document.getElementById("ctb").innerHTML = filas.length ? filas.map(f=>`
     <tr data-ct="${f.c.ct}"${SC.sel===f.c.ct?' class="csel"':""}>
       <td><span class="cta">${esc(f.c.cta)}</span><br><span style="font-size:12.5px">${esc(f.c.nombre)}</span></td>
@@ -2109,6 +2123,7 @@ function pintarCuentas(){
         return `<td class="cm${SC.orden==="m"+m?" ord":""}" title="${esc(tit)}" style="${n?`background:color-mix(in srgb, var(--accent) ${Math.round(6+n/tope*34)}%, transparent)`:""}">${va||vp?`<span class="${va<0?"neg":""}">${esc(money(va))}</span>${signo(va,vp)}`:'<span style="color:var(--ink-4)">·</span>'}${avisoCuenta(tt.av)}</td>`; }).join("")}
       <td class="r">${extremo(f.max,"up")}</td></tr>${SC.sel===f.c.ct ? `<tr class="cdrow"><td colspan="${meses.length+4}">${detalleCuentaHTML(datos, meses)}</td></tr>` : ""}`).join("")
     : `<tr><td colspan="${meses.length+4}"><div class="vacio">Ninguna cuenta cumple estos filtros.</div></td></tr>`;
+  if(x0){ const ts1 = document.querySelector("#ctb tr.cdrow .tscroll"); if(ts1) ts1.scrollLeft = x0; }
   const totH = filas.reduce((a,f)=>a+f.nH,0), totAv = filas.reduce((a,f)=>a+f.nAv,0);
   document.getElementById("csub").textContent = filas.length
     ? `${fNum.format(filas.length)} cuentas · ${fNum.format(totH)} hallazgos en ${S.anio}`+(verSaldo() && totAv ? ` · ⚠️ ${fNum.format(totAv)} ${totAv===1?"saldo inicial que no cuadra":"saldos iniciales que no cuadran"} con el mes anterior` : "")
@@ -2116,6 +2131,48 @@ function pintarCuentas(){
   document.querySelectorAll("#cVer button").forEach(b=>{ const on = b.dataset.v===SC.ver; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); b.disabled = b.dataset.v==="saldo" && !BASE.sal; });
   document.getElementById("cdet").innerHTML = "";
   pintarGrafica();
+}
+
+/* ---------- Movimientos: el seguimiento de cada mes (4-nov-2026, pedido de Fernando Cadengo; «sí, así es») ----------
+   En la cuenta abierta, cada mes con importe se abre: si es hallazgo, su «Seguimiento de revisión»; si no, «Comentarios del
+   mes» (la misma ventana, mSeguimiento, sin estatus), con la misma plática (218 y 221: la llave del mes, RFC_mes_cuenta[_año],
+   así si después se vuelve hallazgo conserva lo platicado). ‹ › y «Guardar y siguiente ›» pasan por todos los meses con
+   importe de la cuenta, empresa por empresa y mes por mes, en el orden en que se ven (NAV_CTA). Quién ve y quién comenta, lo
+   de siempre de Variaciones. */
+let NAV_CTA = [];
+function celdaF(ct, ci, m){
+  const c = variacionesAnio(S.anio).get(ct); if(!c) return null;
+  const x = (c.emp.get(ci) || new Map()).get(m); if(!x) return null;
+  const [nom, rfc, cont, , grupo] = BASE.clientes[ci];
+  return {celda:true, rid:x.rid, x, ct, ci, mes:m, mesN:MESES.get(m)||"", anio:S.anio, cliente:nom, rfc, cta:c.cta, nombre:c.nombre,
+          grupo:grupo||"—", contador:cont||""};
+}
+// un hallazgo (aunque su cuenta esté excluida) abre su seguimiento; un mes que no lo es, «Comentarios del mes»
+const itemCelda = (ct, ci, m, x) => x.hall ? {rid:x.hall.rid} : {rid:x.rid, celda:()=>celdaF(ct, ci, m)};
+const abreDeCuenta = it => { if(!it) return; const f = it.celda ? it.celda() : null;
+  if(!f && !PORRID.has(it.rid)) return; mSeguimiento(it.rid, {f, lista:NAV_CTA, donde:"en esta cuenta"}); };
+function abreCelda(ci, m){
+  const c = variacionesAnio(S.anio).get(SC.sel), x = c && (c.emp.get(ci) || new Map()).get(m); if(!x) return;
+  const r = itemCelda(c.ct, ci, m, x).rid;
+  abreDeCuenta(NAV_CTA.find(it=>it.rid===r) || itemCelda(c.ct, ci, m, x));
+}
+// «Revisar ›»: el primer hallazgo que falta por revisar de esa empresa, en el orden de los meses
+function revisaEmpresa(ci){
+  const c = variacionesAnio(S.anio).get(SC.sel), cel = c && c.emp.get(ci); if(!cel) return;
+  for(const m of mesesAnio(S.anio).map(([n])=>n)){ const x = cel.get(m);
+    if(x && esHall(x) && !cerrado(lee(x.hall.rid))){ abreCelda(ci, m); return; } }
+}
+// abrir un mes por su llave (desde un aviso o la Bitácora): el hallazgo, o el mes en Movimientos con su cuenta abierta
+function abreRid(rid){
+  if(PORRID.has(rid)){ const f = PORRID.get(rid); S.anio = f.anio; mostrarVista("mov"); mSeguimiento(rid); return true; }
+  const g = RID_RE.exec(String(rid||"")); if(!g || g[4]) return false;
+  const anio = g[5] ? +g[5] : BASE.anioBase, ci = BASE.clientes.findIndex(c=>c[1]===g[1]), ct = BASE.cuentas.findIndex(c=>c[0]===g[3]);
+  if(ci<0 || ct<0) return false;
+  S.anio = anio; SC.sel = ct; SC.solo = false;
+  const f = celdaF(ct, ci, +g[2]); if(!f) return false;
+  mostrarVista("cta");
+  mSeguimiento(rid, {f});
+  return true;
 }
 
 /* El desglose de la cuenta elegida se dibuja justo debajo de su renglón. */
@@ -2136,20 +2193,26 @@ function detalleCuentaHTML(datos, meses){
   const enMes = m => { let u=0,d=0; filas.forEach(f=>{ const x=f.cel.get(m); if(x && esHall(x)) (x.v!==null && x.v<0) ? d++ : u++; }); return {u,d}; };
   const total = [...empV.keys()].filter(empPasa).length;
   const conAviso = verSaldo() ? [...empV].filter(([ci,cel])=>empPasa(ci) && [...cel.values()].some(x=>x.aviso)).length : 0;
-  const celda = (x, m) => {
+  const celda = (x, m, ci) => {
     if(!x) return `<td class="vc"><span style="color:var(--ink-4)">·</span></td>`;
     const [va, vp] = importeDe(x), av = avisoCelda(x, m);
     const tit = `Saldo final ${money(x.sf)} (mes anterior ${money(x.sfAnt)})\nMovimiento del mes ${money(x.act)} (mes anterior ${money(x.ant)})`
       + (x.acr ? `\nCargos ${money(x.car)} · Abonos ${money(x.abo)} · ${sentidoDe(x.aum)}${x.v!==null?" "+pct(x.v)+" sobre el saldo inicial":""}${x.sf<0?"\nSaldo contrario a su naturaleza":""}` : "");
     if(!va && !vp && !esHall(x)) return `<td class="vc" title="${esc(tit)}"><span style="color:var(--ink-4)">·</span>${av}</td>`;
     const imp = `<span class="mny">${esc(money(va))}</span>${signo(va, vp)}${av}`;
+    // cada mes con importe se abre (4-nov-2026): el hallazgo, su seguimiento; los demás, «Comentarios del mes»
+    const it = itemCelda(c.ct, ci, m, x), nc = hiloDe(it.rid).length;
+    const glob = nc ? `<span class="cglob" title="${nc} ${nc===1?"comentario":"comentarios"}">${ico("chat","")}${nc}</span>` : "";
     if(esHall(x)){
-      const e = lee(x.rid), ok = cerrado(e);
-      return `<td class="vc"><span class="hzb" title="${esc(tit+" · hallazgo · "+tI(e.i))}">
-        ${imp}<i class="pt${ok?" ok":""}"></i></span></td>`;
+      const e = lee(it.rid), cls = cerrado(e) ? "ok" : e.i==="modif_quo" ? "quo" : "pend";
+      return `<td class="vc"><button type="button" class="hzb ${cls}" data-cel="${ci}|${m}" title="${esc(tit+"\nHallazgo · "+tI(e.i)+" · abrir su seguimiento")}">${imp}${glob}</button></td>`;
     }
-    return `<td class="vc" title="${esc(tit)}">${imp}</td>`;
+    return `<td class="vc"><button type="button" class="vcb" data-cel="${ci}|${m}" title="${esc(tit+"\nComentar este mes")}">${imp}${glob}</button></td>`;
   };
+  // ‹ › y «Guardar y siguiente ›» dentro de la cuenta: todos los meses con importe, empresa por empresa y mes por mes
+  NAV_CTA = [];
+  for(const f of filas) for(const m of meses){ const x = f.cel.get(m); if(!x) continue; const [va, vp] = importeDe(x);
+    if(va || vp || esHall(x)) NAV_CTA.push(itemCelda(c.ct, f.ci, m, x)); }
   return `<div class="dhd">
       <div><h3><span class="cta">${esc(c.cta)}</span> ${esc(c.nombre)}</h3>
         <p>${fNum.format(total)} empresas tienen la cuenta en ${S.anio}; ${fNum.format(filas.filter(f=>f.nh).length)} con hallazgo.${conAviso ? ` ⚠️ ${fNum.format(conAviso)} ${conAviso===1?"empresa tiene":"empresas tienen"} algún mes cuyo saldo inicial no cuadra con el cierre del mes anterior${SC.solo?" (con «Todas las empresas» se ven todas)":""}.` : ""}</p></div>
@@ -2163,8 +2226,9 @@ function detalleCuentaHTML(datos, meses){
       <th class="r">Hallazgos</th><th class="r">Revisados</th></tr></thead>
       <tbody>${filas.length ? filas.map(f=>{ const [nom,rfc,cont,,grupo] = BASE.clientes[f.ci];
         return `<tr><td class="cli">${esc(nom)}<br><span class="grp" style="font-weight:400">${esc(grupo||"—")} · ${esc(SIGLA(cont))}</span></td>
-          ${meses.map(m=>celda(f.cel.get(m), m)).join("")}
-          <td class="r mny">${fNum.format(f.nh)}</td><td class="r mny">${f.nh?fNum.format(f.rev)+" / "+fNum.format(f.nh):"—"}</td></tr>`; }).join("")
+          ${meses.map(m=>celda(f.cel.get(m), m, f.ci)).join("")}
+          <td class="r mny">${fNum.format(f.nh)}</td><td class="r mny">${f.nh?fNum.format(f.rev)+" / "+fNum.format(f.nh):"—"}${
+            dbNS && !soloLectura && f.rev<f.nh && (puedeEst() || puedeCom(rfc)) ? `<br><button type="button" class="lnk crev" data-rev="${f.ci}" title="Abre el primer hallazgo que falta por revisar de esta empresa">Revisar ›</button>` : ""}</td></tr>`; }).join("")
         : `<tr><td colspan="${meses.length+3}"><div class="vacio">Ninguna empresa con hallazgo en esta cuenta. Prueba «Todas las empresas».</div></td></tr>`}</tbody></table></div>`;
 }
 
@@ -2418,6 +2482,10 @@ const critVal = v => v===true ? "Sí" : v===false ? "No" : v===null || v===undef
 // un hallazgo que ya no viene con el criterio de hoy: su cuenta y su mes salen de la llave (RFC_mes_cuenta…)
 const sinHallazgo = k => { const p = String(k||"").split("_"); const m = MESES.get(p[1]) || MESES.get(+p[1]);
   return p[2] ? "Cuenta "+p[2]+(m ? " · "+m : "")+" · ya no sale con el criterio de hoy" : "Hallazgo "+k; };
+// los comentarios de un mes de Movimientos que no es hallazgo (221): su cuenta y su mes, y se abren en Movimientos
+const esMesCom = k => !PORRID.has(k) && !!(COMS[k] && COMS[k].foto && COMS[k].foto.celda);
+const mesComTxt = k => { const p = String(k||"").split("_"), m = MESES.get(+p[1]) || MESES.get(p[1]);
+  return "Cuenta "+p[2]+(m ? " · "+m : "")+" · comentarios del mes (no es hallazgo)"; };
 function filaBitVar(b){
   const a = b.antes || {}, d = b.despues || {};
   const f = PORRID.get(b.llave);
@@ -2425,8 +2493,9 @@ function filaBitVar(b){
   const cl = f ? f.cliente : ((CLIENTES.find(c=>c.rfc===rfc)||{}).cliente || (CLIENTES.find(c=>c.rfc===rfc)||{}).nombre || "");
   const base = {id:b.id, hora:b.hora, quien:b.quien, rfc, cliente:cl, previo:b.previo,
     objeto: f ? `${f.cta} ${f.nombre} · ${f.mesN} ${f.anio}` : b.col==="var_criterios" ? "Criterios de la bitácora"
-      : b.col==="var_casos" ? "Cuenta "+(d.cta||a.cta||String(d.caso||a.caso||"").split("|").slice(/^x\|/.test(d.caso||a.caso||"")?2:1).join(" · "))+((d.alcance||a.alcance)==="todos"?" · todos los clientes":"") : sinHallazgo(b.llave),
-    abre: f ? ()=>{ S.anio = f.anio; mSeguimiento(f.rid); } : null};
+      : b.col==="var_casos" ? "Cuenta "+(d.cta||a.cta||String(d.caso||a.caso||"").split("|").slice(/^x\|/.test(d.caso||a.caso||"")?2:1).join(" · "))+((d.alcance||a.alcance)==="todos"?" · todos los clientes":"")
+      : esMesCom(b.llave) ? mesComTxt(b.llave) : sinHallazgo(b.llave),
+    abre: f ? ()=>{ S.anio = f.anio; mSeguimiento(f.rid); } : esMesCom(b.llave) ? ()=>abreRid(b.llave) : null};
   if(b.que==="estatus") return Object.assign(base, {tipo:"estatus", tipoTxt:"Estatus",
     cambio:(b.antes ? tI(okI(a.invit)) : "Sin revisión")+" → "+tI(okI(d.invit)),
     detalle:[d.rol==="gc" ? "Lo puso la Gerencia Contable" : d.rol==="contador" ? "Lo puso un contador del cliente" : "",
@@ -2461,8 +2530,13 @@ function abreBitacora(nota){
 /* desde un aviso de «Nuevos cambios» (ver:bitacora): la abre con la nota de qué es lo nuevo */
 window.PROFASE_ABRE_VAR = x => {
   /* desde el aviso de «Consulta con Gerencia» (210_variaciones_estatus.sql): el hallazgo, o la lista de los consultados */
-  if(/^hall:/.test(String(x||""))){ const f = PORRID.get(String(x).slice(5)); if(!f) return false;
-    S.anio = f.anio; mostrarVista("mov"); mSeguimiento(f.rid); return true; }
+  if(/^hall:/.test(String(x||""))) return abreRid(String(x).slice(5));   // el hallazgo, o un mes de Movimientos (221)
+  /* Movimientos: cada mes se abre (4-nov-2026, 221): la pestaña con la cuenta de más hallazgos desplegada y la nota */
+  if(String(x||"")==="ver:"+'movimientos-meses'){ mostrarVista("cta");
+    if(SC.sel===null){ const c = CTA_VIS.slice().sort((a,b)=>b.f.nH-a.f.nH)[0]; if(c){ SC.sel = c.f.c.ct; pintarCuentas(); } }
+    const d = document.querySelector("#ctb tr.cdrow"); if(d) d.scrollIntoView({block:"start"});
+    if(window.PORTAL && window.PORTAL.toast) window.PORTAL.toast("Nuevo: pica cualquier mes de la cuenta. El hallazgo abre su seguimiento y los demás meses, «Comentarios del mes».");
+    return true; }
   /* la ventana de seguimiento compacta y su plática (4-nov-2026): abre el primer hallazgo de la lista con la nota */
   if(String(x||"")==="ver:"+'seguimiento'){ mostrarVista("mov"); pintar(); const rid = NAV[0]; if(!rid) return false;
     mSeguimiento(rid, {nota:"Nuevo: los comentarios van como plática (cada uno con quién y a qué hora; el tuyo lo corriges o borras 10 minutos), los estatus en pastillas y «Guardar y siguiente ›» para pasar al que sigue sin cerrar la ventana."});
@@ -2526,6 +2600,10 @@ document.getElementById("cVer").addEventListener("click", e=>{
 document.getElementById("ctb").addEventListener("click", e=>{
   const s = e.target.closest("#cSolo .chip");
   if(s){ SC.solo = s.dataset.v==="1"; pintarCuentas(); return; }
+  const cb = e.target.closest("[data-cel]");
+  if(cb){ const [ci, m] = cb.dataset.cel.split("|").map(Number); abreCelda(ci, m); return; }
+  const rv = e.target.closest("[data-rev]");
+  if(rv){ revisaEmpresa(+rv.dataset.rev); return; }
   if(e.target.closest("tr.cdrow")) return;
   const tr = e.target.closest("tr[data-ct]"); if(!tr) return;
   const ct = +tr.dataset.ct;
@@ -2916,16 +2994,18 @@ if(!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname))
   window.__varPrueba = {pon:(rid, d)=>{ COMS[rid] = d; juntaRev(); }, yo:()=>userId};
 
 function mSeguimiento(rid, op){
-  const f = PORRID.get(rid); if(!f) return;
   op = op || {};
+  // op.f: un mes de Movimientos que no es hallazgo (celdaF): la misma ventana, «Comentarios del mes», sin estatus
+  const f = op.f || PORRID.get(rid); if(!f) return;
+  const cel = !!f.celda, cx = cel ? f.x : null;
   const e = lee(rid);
   const est = {c:e.c, i:e.i};
-  const bI = !puedeI(rid), bCom = !puedeComV(rid);
-  const exHall = exclusionDe(f);
-  const caso = CASOS.get(f.caso);
-  const espera = (e.i===DEF_I && e.iso)
+  const bI = cel || !puedeI(rid), bCom = !puedeComV(rid);
+  const exHall = cel ? null : exclusionDe(f);
+  const caso = cel ? null : CASOS.get(f.caso);
+  const espera = (!cel && e.i===DEF_I && e.iso)
     ? Math.max(0, Math.round((Date.now()-new Date(e.iso).getTime())/86400000)) : 0;
-  const ocur = caso ? caso.ocur : [f];
+  const ocur = cel ? [] : caso ? caso.ocur : [f];
   const hist = ocur.map(o=>{
     const oe = lee(o.rid), aqui = o.rid===rid;
     const dentro = `<span class="m">${esc(o.mesN)}</span>
@@ -2938,21 +3018,32 @@ function mSeguimiento(rid, op){
         MESES_PER_DE(f.anio).filter(x=>x>caso.ocur[caso.ocur.length-1].mes).length
           ? "No rebasa el umbral en "+MESES_PER_DE(f.anio).filter(x=>x>caso.ocur[caso.ocur.length-1].mes).map(x=>MESES.get(x)).join(", ")
           : "Es el último mes del periodo"}</span></div>` : "");
-  // ‹ › y «Guardar y siguiente»: solo si el hallazgo está en la lista de la tabla y no vienes brincando entre meses
-  const pos = SALTOS.length ? -1 : NAV.indexOf(rid);
-  const lista = pos>=0 ? NAV.slice() : [];
+  // ‹ › y «Guardar y siguiente»: solo si está en la lista de la tabla y no vienes brincando entre meses. La lista es la de
+  // la tabla de hallazgos (NAV) o, desde Movimientos, los meses de la cuenta abierta (op.lista = NAV_CTA, «en esta cuenta»)
+  const navL = op.lista || NAV.map(r=>({rid:r})), donde = op.donde || "en tu lista";
+  const pos = SALTOS.length ? -1 : navL.findIndex(it=>it.rid===rid);
+  const lista = pos>=0 ? navL : [];
   const sig = pos>=0 && pos<lista.length-1 ? lista[pos+1] : null, ant = pos>0 ? lista[pos-1] : null;
+  const abreItem = it => { if(!it) return; const g = it.celda ? it.celda() : null; if(!g && !PORRID.has(it.rid)) return;
+    mSeguimiento(it.rid, {f:g, lista:op.lista, donde:op.donde}); };
   const quien = e.por ? esc(nombreReal(e.por))+esc(rolTxt(e.rol))+(e.ts?" · "+esc(e.ts):"") : "Sin cambios de estatus todavía";
-  S.sel = rid; marcaSel(rid);
+  if(!cel){ S.sel = rid; marcaSel(rid); }
   let tic = null;
+  const nCuantos = pos>=0 ? " · "+fNum.format(pos+1)+" de "+fNum.format(lista.length)+" "+donde : "";
   const {scrim,cerrar} = modal({
-    alCerrar: ()=>{ if(tic) clearInterval(tic); S.sel=null; marcaSel(null); },
-    ancho:true, kick:"Hallazgo #"+f.num+(pos>=0 ? " · "+fNum.format(pos+1)+" de "+fNum.format(lista.length)+" en tu lista" : ""),
-    titulo:"Seguimiento de revisión",
-    nav: pos>=0 ? `<button class="x seg-fl" data-nav="-1" title="Hallazgo anterior"${ant?"":" disabled"} aria-label="Hallazgo anterior">‹</button>
-      <button class="x seg-fl" data-nav="1" title="Hallazgo siguiente"${sig?"":" disabled"} aria-label="Hallazgo siguiente">›</button>` : "",
+    alCerrar: ()=>{ if(tic) clearInterval(tic); if(!cel){ S.sel=null; marcaSel(null); } },
+    ancho:true, kick:(cel ? "Movimiento" : "Hallazgo #"+f.num)+nCuantos,
+    titulo: cel ? "Comentarios del mes" : "Seguimiento de revisión",
+    nav: pos>=0 ? `<button class="x seg-fl" data-nav="-1" title="Anterior"${ant?"":" disabled"} aria-label="Anterior">‹</button>
+      <button class="x seg-fl" data-nav="1" title="Siguiente"${sig?"":" disabled"} aria-label="Siguiente">›</button>` : "",
     cuerpo:(op.nota ? `<p class="seg-nuevo">${esc(op.nota)}</p>` : "")
       +(SALTOS.length ? `<div class="salto"><span class="lb" style="margin:0">Revisando otro mes</span><span class="acts">${saltoBotones()}</span></div>` : "")+`
+      ${cel ? `<div class="seg-res">
+        <div class="r1"><h3>${esc(f.cliente)}</h3><span class="big${(verSaldo()?cx.sf:cx.act)<0?" neg":""}">${esc(money(verSaldo()?cx.sf:cx.act))}</span></div>
+        <p>${esc(f.cta)} · ${esc(f.nombre)} · ${esc(f.mesN)} ${f.anio} · ${verSaldo()?"saldo final":"movimiento del mes"}</p>
+        <p>Saldo final ${esc(money(cx.sf))} (mes anterior ${esc(money(cx.sfAnt))}) · movimiento del mes ${esc(money(cx.act))} (mes anterior ${esc(money(cx.ant))})</p>
+        <div class="seg-chips"><span class="seg-act sin"><i></i>No es hallazgo</span><span class="seg-quien">Se puede comentar; no lleva estatus</span></div>
+      </div>` : `
       <div class="seg-res">
         <div class="r1"><h3>${esc(f.cliente)}</h3><span class="big pct ${f.v>0?"up":"down"}">${pctF(f)}</span></div>
         <p>${esc(f.cta)} · ${esc(f.nombre)} · ${esc(f.mesN)} ${f.anio}</p>
@@ -2965,8 +3056,8 @@ function mSeguimiento(rid, op){
           ${exHall?`<span class="seg-tag" style="cursor:default">Cuenta excluida</span>`:""}
         </div>
         ${f.cero?`<p class="hint" data-cero-txt hidden style="margin-top:8px">El mes anterior no tuvo movimiento en esta cuenta: se compara contra $0 y la variación puede verse muy alta.</p>`:""}
-      </div>
-      ${colHTML(rid,est.i)}
+      </div>`}
+      ${cel ? "" : colHTML(rid,est.i)}
       <div class="seg-sec"><b>Comentarios · <span data-ncom>${fNum.format(hiloDe(rid).length)}</span></b><span class="hint">del más viejo al más nuevo</span></div>
       <div data-hilo>${hiloHTML(rid, false)}</div>
       ${bCom ? `<p class="hint" style="margin-top:10px">Comentan quienes son responsables, autorizan o son contador asignado de este cliente en el WorkFlow, y la Gerencia Contable.</p>`
@@ -2975,10 +3066,26 @@ function mSeguimiento(rid, op){
         <textarea class="inp" id="sCom" rows="2" placeholder="Qué se revisó, qué soporte se pidió o se tiene y a qué conclusión se llegó"></textarea>
       </div>
       <p class="hint" style="margin-top:6px">Se guarda con tu nombre y la hora. El tuyo lo puedes corregir o borrar ${MIN_EDITA} minutos.${window.PORTAL && typeof window.PORTAL.conTeclado==="function" && window.PORTAL.conTeclado() ? " Ctrl+Enter guarda." : ""}</p>`}
+      ${cel ? "" : `
       <details class="det"${SALTOS.length || op.historial?" open":""}><summary>Historial del caso · ${fNum.format(ocur.length)} ${ocur.length===1?"mes":"meses"}</summary>
         <p class="hint" style="margin-top:6px">Pica un mes para ver sus saldos y su detalle; arriba sale «Regresar» para volver aquí.</p>
         <div class="hist">${hist}</div>
-      </details>
+      </details>`}
+      ${cel ? `<details class="det"${op.detalle?" open":""}><summary>Detalle del movimiento</summary>
+        <dl class="dl">
+          <dt>Grupo</dt><dd class="txt">${esc(f.grupo)}</dd>
+          <dt>Contador</dt><dd class="txt">${esc(f.contador||"—")}</dd>
+          <dt>RFC</dt><dd>${esc(f.rfc)}</dd>
+          <dt>Saldo final</dt><dd${cx.sf<0?' class="neg"':""}>${money(cx.sf)}</dd>
+          <dt>Saldo del mes anterior</dt><dd>${money(cx.sfAnt)}</dd>
+          <dt>Movimiento del mes</dt><dd>${money(cx.act)}</dd>
+          <dt>Movimiento del mes anterior</dt><dd>${money(cx.ant)}</dd>${cx.acr && (cx.car!==null || cx.abo!==null) ? `
+          <dt>Cargos del mes</dt><dd>${cx.car===null?"—":money(cx.car)}</dd>
+          <dt>Abonos del mes</dt><dd>${cx.abo===null?"—":money(cx.abo)}</dd>` : ""}
+          <dt>Hallazgo</dt><dd class="txt">No: con los criterios de hoy, este mes no es hallazgo</dd>
+        </dl>
+        ${cx.aviso ? `<p class="hint" style="margin:-4px 0 0">⚠️ ${esc(avisoTexto(cx, f.mes))}</p>` : ""}
+      </details>` : `
       <details class="det"${op.detalle?" open":""}><summary>Detalle del movimiento</summary>
         <dl class="dl">
           <dt>Grupo</dt><dd class="txt">${esc(f.grupo)}</dd>
@@ -3001,8 +3108,8 @@ function mSeguimiento(rid, op){
             : f.esPago ? "Balanza en SQL · (pago − provisión) ÷ |provisión|" : "Balanza en SQL · (actual − anterior) ÷ |anterior|"}</dd>
         </dl>
         ${f.tag?`<p class="hint" style="margin:-4px 0 0">${esc(f.tag)}</p>`:""}
-      </details>
-      ${puedeEst()?`<details class="det"><summary>Excluir esta cuenta · solo Gerencia Contable</summary><div style="margin-top:12px" id="xBox">
+      </details>`}
+      ${!cel && puedeEst()?`<details class="det"><summary>Excluir esta cuenta · solo Gerencia Contable</summary><div style="margin-top:12px" id="xBox">
           <p class="hint" style="margin:0 0 8px">${exHall ? "Excluida: "+esc(exclTexto(f))+"." : "No está excluida."}</p>
           <div class="chips" id="xAlc">
             <button class="chip${!exHall||exHall.alcance!=="todos"?" on":""}" data-v="cli">Solo este cliente</button>
@@ -3067,7 +3174,8 @@ function mSeguimiento(rid, op){
     }
   });
   const sb = scrim.querySelector(".salto");
-  scrim.querySelector(".hist").addEventListener("click", ev=>{
+  const hb = scrim.querySelector(".hist");
+  if(hb) hb.addEventListener("click", ev=>{
     const b = ev.target.closest("[data-salto]"); if(b) saltaAMes(b.dataset.salto, rid); });
   if(sb) sb.addEventListener("click", ev=>{
     const b = ev.target.closest("[data-o]"); if(b) regresaSalto(b.dataset.o==="inicio"); });
@@ -3114,7 +3222,8 @@ function mSeguimiento(rid, op){
     if(cambiaI){ const r = await guardar([rid], {invit:est.i}); if(r!==true) return r; }
     if(texto){
       const r = await comenta({op:"agrega", rids:[rid], texto, de: cambiaI ? e.i : undefined,
-                               fotos: COMS[rid] ? undefined : {[rid]:fotoDe(rid)}});
+                               fotos: COMS[rid] ? undefined : {[rid]: cel ? {celda:true, cliente:f.cliente, rfc:f.rfc, cta:f.cta,
+                                 nombre:f.nombre, mes:f.mes, anio:f.anio} : fotoDe(rid)}});
       if(typeof r==="string") return cambiaI ? "El estatus se guardó, pero el comentario no: "+r : r;
       await avisar([rid], {invit:"", comentario:texto}, {c:0, i:0, com:1});
     }
@@ -3128,7 +3237,7 @@ function mSeguimiento(rid, op){
     ocupado = false;
     if(r!==true){ av.textContent = r; [ok, sg].forEach(b=>{ if(b) b.disabled = false; }); return; }
     cerrar(); pintar();
-    if(siguiente && PORRID.has(siguiente)) mSeguimiento(siguiente);
+    if(siguiente) abreItem(siguiente);
   };
   if(ok) ok.addEventListener("click", ()=>corre(null));
   if(sg) sg.addEventListener("click", ()=>corre(sig));
@@ -3137,7 +3246,7 @@ function mSeguimiento(rid, op){
     const ir = +b.dataset.nav>0 ? sig : ant; if(!ir) return;
     if(sucio() && !avisado){ avisado = true;
       av.textContent = "Tienes cambios sin guardar: pica otra vez la flecha para dejarlos, o usa «Guardar y siguiente ›»."; return; }
-    cerrar(); pintar(); mSeguimiento(ir);
+    cerrar(); pintar(); abreItem(ir);
   }));
   repinta();
 }
