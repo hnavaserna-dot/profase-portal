@@ -681,6 +681,14 @@ td.ab{width:40px;padding-left:4px}
 .aplg .rfc{font-family:var(--f-num);font-size:11px;color:var(--ink-3)}
 .aplg .n{margin-left:auto;font-size:11.5px;color:var(--ink-2)}
 @media (max-width:819px){.aplbar,.aplg{padding-left:14px;padding-right:14px}.aplg .n{margin-left:0;flex-basis:100%}}
+/* ── Lo de Centauro: las canceladas en el SAT (3-nov-2026) ── */
+.satnota{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:11px 14px;margin-bottom:14px;
+  border-color:color-mix(in srgb,var(--crit) 45%,var(--line));background:color-mix(in srgb,var(--crit) 6%,var(--surface))}
+.satnota .t{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;font-size:13px;color:var(--ink-2);min-width:0}
+.satnota .t b{color:var(--crit);font-family:var(--f-num);font-weight:600}
+.satnota.ilumina{box-shadow:0 0 0 3px color-mix(in srgb,var(--crit) 40%,transparent)}
+.satbox{border-color:color-mix(in srgb,var(--crit) 45%,var(--line))}
+.satbox > .k{color:var(--crit)}
 </style>
 
 <main class="main">
@@ -727,8 +735,8 @@ const TER=6, MODS_BASE=[0,1,2,3,4,5];
 const MOD_SHORT=['CXC','CXP','ANT CLIEN','ANT PROV','NTC CLIEN','NTC PROV','TERCEROS'];
 const MOD_VAR=['--cli','--prov','--cli-2','--prov-2','--cli-3','--prov-3','--ink-3'];
 const ES_CLI=[true,false,true,false,true,false,false];
-const FAM={todos:MODS_BASE,fac:[0,1],ant:[2,3],ntc:[4,5],ter:[TER],apl:[]};
-const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones']];
+const FAM={todos:MODS_BASE,fac:[0,1],ant:[2,3],ntc:[4,5],ter:[TER],apl:[],can:MODS_BASE};
+const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones'],['can','Canceladas']];
 /* tarjetas por rubro del resumen; cada una abre su lista */
 const RUBROS=[
   {k:'cxc',lab:'Cuentas por cobrar',mods:[0],tab:'fac',lado:'cli',iva:'emi',dot:'--cli'},
@@ -962,6 +970,7 @@ async function cargaUuids(rfcs){
     listos.add(id);
   }
   rfcs.forEach(r=>{ if(['k|','p|'].every(t=>!RANGO[t+r]||listos.has(t+r))) UUID_OK.add(r); });
+  if(listos.size&&typeof satAplica==='function') satAplica();   // con los folios fiscales se reconocen las canceladas en el SAT
   if(listos.size&&typeof aplLimpia==='function') aplLimpia();   // con los folios fiscales se reconoce lo que ya se decidió
   if(viejo) setTimeout(()=>arranca(true).catch(()=>{}),0);
   return true;
@@ -983,6 +992,7 @@ async function arranca(recarga){
   aplica(r.meta,r.filas,r.extra); prep(!!recarga); CARGADA=r.meta.id; TODOS_UUID=null;
   await cargaMarcas(); aplicaMarcas();
   await cargaApl();
+  await cargaSat();
   if(!recarga) restauraFiltros();
   // con datos nuevos cambian los números de las contrapartes: el filtro de cliente o proveedor de la ventana se quita
   if(abierto){ const i=D.cli.findIndex(c=>c[2]===abierto); S.cliente=i>=0?i:null; S.doc=null; if(S.mf) S.mf.cps=new Set(); quitaVF();
@@ -1047,7 +1057,7 @@ function prep(conserva){
       mif:r[27]||null,rol:dic('rol',r[28]),
       // lo que antes se subía con el Excel del Tablero QUO y ya viene de la base
       cc:dic('cc',r[29]),proy:dic('proy',r[30]),conta:r[31]===1,cic:r[32]||null,ieps:r[33],dsc:r[34],
-      parte:(D.parte&&D.parte[ix])||'k',st:'normal',mk:null,rg:null,por:null,mot:null};
+      parte:(D.parte&&D.parte[ix])||'k',st:'normal',mk:null,rg:null,por:null,mot:null,satCan:null};
   });
   S.sel=new Set(); aplicaMarcas();
   document.getElementById('m-corte').textContent=fmtD(M.generado)+' · '+M.hora;
@@ -1098,8 +1108,9 @@ const age4De=r=>r.age==null?null:(AGE4.find(a=>a.ks.includes(r.age))||AGE4[3]).k
    CFDI), fuera del reporte (el estatus de la cartera) o cancelado. Por omisión se ven y suman los dos primeros, como
    antes. En la ventana de cada empresa lo cancelado lo decide su propio filtro (Plantilla › Estatus). */
 const EST_DEF=['dentro','origen'];
-const EST_LAB={dentro:'Dentro del reporte',origen:'Revisar en el origen',fuera:'Fuera del reporte',can:'Cancelados'};
-const catDe=(r,ven)=>(!ven&&r.est==='Cancelada')?'can':r.st==='fuera'?'fuera':r.alerta?'origen':'dentro';
+const EST_LAB={dentro:'Dentro del reporte',origen:'Revisar en el origen',fuera:'Fuera del reporte',sat:'Canceladas en el SAT',can:'Cancelados'};
+// «Canceladas en el SAT» (214, de Centauro): vigentes en QUO pero canceladas en el SAT; por omisión no suman (como lo cancelado)
+const catDe=(r,ven)=>(!ven&&r.est==='Cancelada')?'can':(!ven&&r.satCan)?'sat':r.st==='fuera'?'fuera':r.alerta?'origen':'dentro';
 // persona física (RFC de 13) o moral (de 12), por el RFC de la empresa
 const personaDe=rfc=>{ const n=String(rfc||'').trim().length; return n===13?'F':n===12?'M':'—'; };
 const RUBRO_LAB=['Cuentas por cobrar','Cuentas por pagar','Anticipos de clientes','Anticipos a proveedores',
@@ -1266,6 +1277,7 @@ function render(){
   if(FB) FB.pinta();
   const v=document.getElementById('vista'); v.innerHTML='';
   const so=sumaIva(rows); v.appendChild(cajasIva(so)); v.appendChild(cajaIsr(so));
+  const sn=satNota(); if(sn) v.appendChild(sn);
   v.appendChild(modulos(base));
   v.appendChild(antig(ROWS.filter(r=>pasa(r,{sinAge:true}))));
   v.appendChild(tablaEmpresas(rows));
@@ -1435,7 +1447,9 @@ function abreCliente(ci,o){
 function abreModal(){
   const m=el('div','modal'); m.id='modal'; abreOv(m,()=>{S.cliente=null;S.doc=null;quitaVF();});
   const rfc=D.cli[S.cliente][2];
-  if(!UUID_OK.has(rfc)) cargaUuids([rfc]).then(()=>{ if(S.cliente!=null&&D.cli[S.cliente][2]===rfc) pintaModal(); }).catch(()=>{});
+  const ci0=S.cliente;
+  (UUID_OK.has(rfc)?Promise.resolve():cargaUuids([rfc])).then(()=>cargaRelSat(ci0)).then(cambio=>{
+    if(cambio) render(); else if(S.cliente!=null&&D.cli[S.cliente][2]===rfc) pintaModal(); }).catch(()=>{});
   if(flotante()){
     document.getElementById('ov').classList.add('flota'); document.body.style.overflow='';
     document.getElementById('ovbox').removeAttribute('aria-modal');   // flotante: no tapa la pantalla
@@ -1513,8 +1527,9 @@ function mfGuardado(){
     } }catch(e){}
   return f;
 }
-function pasaMF(r){
-  const f=S.mf; if(!f) return true;
+function pasaMF(r,conSat){
+  const f=S.mf; if(!f) return conSat===true||!r.satCan;
+  if(r.satCan&&conSat!==true&&!f.est.has('SAT')) return false;   // no suma: solo en «Canceladas» o con su estatus
   if(f.cps.size&&!f.cps.has(r.cp)) return false;
   const a=Math.abs(r.saldo), s1=numMF(f.smin), s2=numMF(f.smax);
   if(s1!=null&&!(a>s1)) return false;
@@ -1523,7 +1538,7 @@ function pasaMF(r){
   if(f.desde&&(!r.fecha||r.fecha<f.desde)) return false;
   if(f.hasta&&(!r.fecha||r.fecha>f.hasta)) return false;
   if(f.pl.size&&!f.pl.has(r.pl||'—')) return false;
-  if(f.est.size&&!f.est.has(r.est==='Cancelada'?'Cancelada':'Vigente')) return false;
+  if(f.est.size&&conSat!==true&&!f.est.has(r.est==='Cancelada'?'Cancelada':r.satCan?'SAT':'Vigente')) return false;
   if(r.mod===TER){
     if(f.trol.size&&!f.trol.has(rolGrupo(r))) return false;
     if(f.tnat.size&&!f.tnat.has(naturaleza(r))) return false;
@@ -1557,7 +1572,7 @@ function gruposVentana(conTer){
     {t:'Plantilla',campos:[
       Object.assign({k:'pl',t:'Plantilla',tipo:'varios',lista:true,
         opciones:()=>{ const o=cuentaPor(r=>r.pl||'—',base()); return Object.keys(o).sort((a,b)=>a.localeCompare(b,'es')).map(k=>({v:k,t:k==='—'?'Sin plantilla':k,n:n(o[k])})); }},sets('pl')),
-      Object.assign({k:'est',t:'Estatus',tipo:'varios',opciones:()=>[{v:'Vigente',t:'Vigente'},{v:'Cancelada',t:'Cancelada'}]},sets('est'))]}
+      Object.assign({k:'est',t:'Estatus',tipo:'varios',opciones:()=>[{v:'Vigente',t:'Vigente'},{v:'Cancelada',t:'Cancelada'},{v:'SAT',t:'Cancelada en el SAT'}]},sets('est'))]}
   ];
   if(conTer) g.push({t:'Terceros',campos:[
     Object.assign({k:'trol',t:'Rol',tipo:'varios',
@@ -1623,9 +1638,9 @@ function pintaModal(){
   if(ESTC.ok){ const be=el('button','minibtn xlbtn','Estatus: '+estEmpresaTxt(S.cliente)+' ▾'); be.type='button'; be.dataset.estEmpresa='1';
     be.title='Estatus de la empresa'; be.onclick=()=>menuEmpresa(S.cliente); wb.prepend(be); }
   const bx=el('button','minibtn xlbtn','Excel'); bx.type='button'; bx.setAttribute('data-excel','Excel');   // marca.js le pone su «PDF» al lado
-  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes y Proveedores (demostrativo)':'Lo que está seleccionado en la ventana, con el formato del reporte CXC CXP';
+  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes y Proveedores (demostrativo)':S.tab==='can'?'Las canceladas en el SAT que QUO trae vigentes':'Lo que está seleccionado en la ventana, con el formato del reporte CXC CXP';
   bx.onclick=async()=>{ bx.disabled=true; bx.textContent='Generando…';
-    try{ bx.textContent=S.tab==='apl'?await exportaAplicaciones(S.cliente):await exportaReporteCxcCxp(S.cliente); }
+    try{ bx.textContent=S.tab==='apl'?await exportaAplicaciones(S.cliente):S.tab==='can'?await exportaCanceladas(S.cliente):await exportaReporteCxcCxp(S.cliente); }
     catch(e){ bx.textContent='No se pudo exportar'; bx.title=String(e&&e.message||e); }
     setTimeout(()=>{ bx.disabled=false; bx.textContent='Excel'; },2500); };
   wb.prepend(bx);
@@ -1656,11 +1671,16 @@ function pintaModal(){
     const b=el('button'); b.type='button'; b.setAttribute('role','tab'); b.setAttribute('aria-selected',S.tab===k); b.dataset.tab=k;
     b.appendChild(document.createTextNode(lab));
     if(k==='apl') b.appendChild(el('span','cnt',F.int.format(todos.filter(r=>{ const F2=aplF(r); return F2&&F2.rels.length; }).length)));
+    else if(k==='can') b.appendChild(el('span','cnt',F.int.format(base.filter(r=>r.satCan&&pasaMF(r,true)).length)));
     else b.appendChild(el('span','cnt',F.int.format(todos.filter(r=>FAM[k].includes(r.mod)).length)));
     b.onclick=()=>{S.tab=k; S.doc=null; S.dsort=null; pintaModal();};
     tb.appendChild(b);
   });
   row.appendChild(tb);
+  // en el celular la tira de pestañas se desliza: la escogida (Aplicaciones, Canceladas…) queda siempre a la vista
+  requestAnimationFrame(()=>{ const s=tb.querySelector('[aria-selected="true"]'); if(!s||tb.scrollWidth<=tb.clientWidth) return;
+    const r=s.getBoundingClientRect(), q=tb.getBoundingClientRect();
+    if(r.left<q.left||r.right>q.right) tb.scrollLeft+=r.left-q.left-Math.max(0,(q.width-r.width)/2); });
   const lt=el('div','track'); lt.style.marginLeft='auto'; lt.style.marginBottom='7px';
   [['todos','Todos'],['cli','Clientes'],['prov','Proveedores']].forEach(([k,lab])=>{
     const b=el('button',null,lab); b.type='button';
@@ -1677,6 +1697,8 @@ function pintaModal(){
   N_VEN=0;
   if(S.tab==='apl'){
     S.sel=new Set(); pestanaApl(todos,lista,m);
+  } else if(S.tab==='can'){
+    S.sel=new Set(); pestanaCan(base.filter(r=>r.satCan&&pasaMF(r,true)),lista,m);
   } else {
     const cols=TABCOLS[S.tab]||TABCOLS.todos, srt=ordenDocs();
     const docs=docsDeTab(todos), conSel=S.tab==='fac'&&yoMarco(), vistos=docs.slice(0,500);
@@ -1834,6 +1856,7 @@ function celdaDoc(k,d){
 }
 function pillEstatus(d){
   if(d.est==='Cancelada') return el('span','pill p-can','Cancelada');
+  if(d.satCan) return el('span','pill p-can','Cancelada en el SAT');
   const p=el('span','pill');
   if(d.dias==null){p.className='pill p-cl'; p.textContent='Sin fecha'; return p;}
   const a=AGES.find(x=>d.dias>=x.lo&&d.dias<=x.hi)||AGES[AGES.length-1];
@@ -1859,6 +1882,7 @@ function panelDoc(){
   sb.appendChild(el('div','k',d.mod===2||d.mod===3?'Por aplicar':'Saldo'));
   const v=el('div','v',F.mxn2.format(d.saldo)); v.appendChild(el('span','u',d.mon));
   sb.appendChild(v); s.appendChild(sb);
+  if(d.satCan) s.appendChild(bloqueSat(d));
   if(d.mod>=0&&d.mod<=5) s.appendChild(bloqueRel(d));
   if(ESTC.ok) s.appendChild(bloqueEstatus(d));
   const g=el('div','sgrid');
@@ -1909,7 +1933,7 @@ function panelDoc(){
     campo('UUID',d.uuid||(UUID_OK.has(D.cli[d.cli][2])?'—':'Cargando…'),'num',true);
     sep();
     campo('Método de pago',d.mp==='—'?'—':d.mp);
-    campo('Estatus',d.est==='—'?'Vigente':d.est);
+    campo('Estatus',d.satCan?'Vigente en QUO · cancelada en el SAT':d.est==='—'?'Vigente':d.est);
     campo('Moneda',d.mon+(d.mon!=='MXN'&&d.tc?' @ '+F.dec.format(d.tc):''));
     if(d.mon!=='MXN'&&d.tme) campo('Importe en '+d.mon,new Intl.NumberFormat('es-MX',{style:'currency',currency:d.mon}).format(d.tme),'num');
     campo('Clasificación',d.cl||'—');
@@ -2405,6 +2429,13 @@ const NUEVOS={'cartera-filtros':()=>{ cierraOv(); if(FB){ window.scrollTo({top:0
   'cartera-aplicaciones':()=>{ cierraOv(); const i=D.cli.findIndex((c,k)=>!OCU(c[2])&&aplHay(k));
     if(i>=0){ abreCliente(i,{tab:'apl'}); avisaArriba('Nuevo: cada factura con los anticipos y notas de crédito a favor que la cerrarían o reducirían. Es solo de muestra: no cambia saldos.'); }
     else { const x=document.querySelector('#vista .mod.apl'); if(x) x.scrollIntoView({block:'center'}); } },
+  // lo de Centauro (214): las canceladas en el SAT y la «Confirmada (CFDI)»
+  'cartera-centauro':()=>{ cierraOv(); const n=document.getElementById('car-sat');
+    if(n){ n.scrollIntoView({block:'center'}); n.classList.add('ilumina'); setTimeout(()=>n.classList.remove('ilumina'),4000);
+      avisaArriba('Nuevo: las facturas que el SAT ya canceló y QUO trae vigentes salen aparte y no suman; corrígelas en QUO.'); return; }
+    const i=D.cli.findIndex((c,k)=>!OCU(c[2])&&ROWS.some(r=>r.cli===k&&r.satCan));
+    if(i>=0){ abreCliente(i,{tab:'can'}); avisaArriba('Nuevo: las facturas que el SAT ya canceló y QUO trae vigentes, en su pestaña «Canceladas».'); }
+    else avisaArriba('Nuevo: las facturas que el SAT ya canceló salen aparte («Canceladas en el SAT») y las notas de crédito que su XML relaciona, como «Confirmada (CFDI)». Hoy no hay ninguna en tus empresas.'); },
   'bitacora':()=>abreBitacora('Nuevo: aquí ves quién marcó, aprobó, regresó o quitó cada estatus de la cartera y quién prendió o apagó una regla, con la fecha y la hora. Filtra por periodo, persona o movimiento y bájala en Excel o PDF.'),
   'cartera-estatus':()=>abreExcluidos('fuera',{nota:'Cada factura, o la empresa entera, puede ser «Estrategia fiscal» o «Fuera del reporte». '+
   'Aquí ves lo que no suma, la estrategia fiscal (con su reporte) y las reglas automáticas; '+(yoApruebo()?'tú apruebas y regresas.':'lo aprueban la dirección y quienes ven toda la cartera.')})};
@@ -2412,7 +2443,7 @@ const NUEVOS={'cartera-filtros':()=>{ cierraOv(); if(FB){ window.scrollTo({top:0
 function abreDesdeAviso(x){
   const s=String(x||'');
   const v=/^ver:([a-z0-9-]{1,40})$/.exec(s);
-  if(v&&(v[1]==='cartera-filtros'||v[1]==='cartera-aplicaciones')){ NUEVOS[v[1]](); return; }   // no dependen del estatus de la cartera
+  if(v&&(v[1]==='cartera-filtros'||v[1]==='cartera-aplicaciones'||v[1]==='cartera-centauro')){ NUEVOS[v[1]](); return; }   // no dependen del estatus de la cartera
   if(!ESTC.ok) return;
   if(v){ (NUEVOS[v[1]]||NUEVOS['cartera-estatus'])(); return; }
   if(/^\d{1,12}$/.test(s)){
@@ -2425,6 +2456,159 @@ function abreDesdeAviso(x){
 }
 window.__carAbre=function(x){ if(!CARGADA){ ABRE_PEND=x; return true; } abreDesdeAviso(x); return true; };
 
+/* ── Lo de Centauro en la Cartera (3-nov-2026; petición 20261103-1755-cartera-centauro de Fernando Cadengo con la idea de
+   Gabriel Cavazos; la puerta y esta pantalla, el chat «CENTAURO» de Héctor Daniel). Una sola puerta, cartera_sat (213 y
+   214), solo de las empresas que ve quien entró, sin importes ni el XML, y lo reservado solo a la dirección:
+     · «Canceladas en el SAT»: las facturas que el SAT ya canceló y QUO trae vigentes con saldo. En el resumen salen aparte
+       (la nota arriba y FILTROS › Estatus) y no suman; en la ventana de cada empresa, en su pestaña «Canceladas» (y en las
+       listas solo si se escoge «Cancelada en el SAT» en sus FILTROS); y no reciben aplicaciones. Con la factura que la
+       sustituyó, si se sabe, para llevar ahí lo que ya se había pagado. Hay que corregirlas en QUO; la Cartera no cambia QUO.
+     · «Confirmada (CFDI)»: lo que dice el XML de una nota de crédito o de un anticipo (sus CFDI relacionados) va antes que lo
+       que sugiere la Cartera. Se lee al abrir la ventana de cada empresa.
+   Lo que todavía no se revisa en el SAT sigue sumando como siempre. ── */
+const SAT={ok:false,can:new Map(),rel:new Map(),sust:new Map(),relDe:new Map()};
+const REL_APL=new Set(['01','02','03','07']);   // nota de crédito, de débito, devolución y aplicación de anticipo
+async function cargaSat(){
+  let q; try{ q=await SB.rpc('cartera_sat',{p:{modo:'canceladas'}}); }catch(e){ q={error:e}; }
+  if(!q||q.error||!q.data){ SAT.ok=false; return false; }
+  SAT.ok=true; SAT.can=new Map();
+  (q.data.canceladas||[]).forEach(x=>{ let m=SAT.can.get(x.rfc); if(!m) SAT.can.set(x.rfc,m=new Map()); m.set(String(x.uuid||'').toUpperCase(),x); });
+  // los folios fiscales solo de las empresas con canceladas (para reconocer cada factura)
+  const rs=[...SAT.can.keys()].filter(r=>!UUID_OK.has(r)&&(RANGO['k|'+r]||RANGO['p|'+r]));
+  if(rs.length){ try{ await cargaUuids(rs); }catch(e){} }
+  satAplica();
+  return true;
+}
+function satAplica(){
+  let n=0;
+  ROWS.forEach(r=>{ const m=SAT.can.get(r.rfcCli), x=m&&r.uuid?m.get(r.uuid.toUpperCase()):null, v=x&&r.est!=='Cancelada'?x:null;
+    if(v!==r.satCan){ r.satCan=v; n++; } });
+  if(n&&typeof aplLimpia==='function') aplLimpia();
+  return n;
+}
+// las relaciones de los XML de una empresa (y lo cancelado que traiga); true si cambió algo que se suma en el resumen
+async function cargaRelSat(ci){
+  if(ci==null||!D.cli[ci]) return false;
+  const rfc=D.cli[ci][2];
+  const us=[...new Set(ROWS.filter(r=>r.cli===ci&&r.uuid&&r.mod!==TER).map(r=>r.uuid.toUpperCase()))].slice(0,20000);
+  const k=us.length+'|'+(us[0]||'')+'|'+(us[us.length-1]||'');
+  if(!us.length||SAT.relDe.get(rfc)===k) return false;
+  let q; try{ q=await SB.rpc('cartera_sat',{p:{rfc,uuids:us}}); }catch(e){ q={error:e}; }
+  if(!q||q.error||!q.data) return false;
+  const m=new Map(), sust=new Map(), add=(a,b)=>{ a=String(a||'').toUpperCase(); b=String(b||'').toUpperCase(); if(!a||!b) return;
+    (m.get(a)||m.set(a,new Set()).get(a)).add(b); (m.get(b)||m.set(b,new Set()).get(b)).add(a); };
+  let can=SAT.can.get(rfc);
+  (q.data.docs||[]).forEach(d=>{
+    (d.rel||[]).forEach(x=>{ if(REL_APL.has(x.tipo)) add(d.uuid,x.uuid); });
+    (d.por||[]).forEach(x=>{ if(REL_APL.has(x.tipo)) add(d.uuid,x.uuid); else if(x.tipo==='04') sust.set(String(d.uuid).toUpperCase(),String(x.uuid).toUpperCase()); });
+    if(d.estado==='cancelada'){ if(!can) SAT.can.set(rfc,can=new Map());
+      if(!can.has(String(d.uuid).toUpperCase())) can.set(String(d.uuid).toUpperCase(),{rfc,uuid:d.uuid,cancelada_el:d.cancelada_el,detectada:d.detectada,sustituida_por:d.sustituida_por}); }
+  });
+  const antes=SAT.rel.get(rfc);
+  SAT.rel.set(rfc,m); SAT.sust.set(rfc,sust); SAT.relDe.set(rfc,k);
+  const n=satAplica(); APL.cache.delete(ci);
+  return n>0||m.size>0||!!(antes&&antes.size);
+}
+// la nota del resumen: cuántas canceladas en el SAT hay con los filtros puestos (no suman) y «Verlas»
+function satNota(){
+  if(!SAT.ok) return null;
+  const rs=ROWS.filter(r=>r.satCan&&pasa(r,{sinEst:true})&&S.mod.has(r.mod));
+  if(!rs.length) return null;
+  const on=S.estc.has('sat');
+  const c=el('div','card satnota'); c.id='car-sat';
+  const t=el('div','t');
+  t.appendChild(el('b',null,plural(rs.length,'factura cancelada en el SAT','facturas canceladas en el SAT')+' · '+F.mxn.format(rs.reduce((a,r)=>a+Math.abs(r.saldo||0),0))));
+  t.appendChild(el('span',null,on?'Las estás viendo con FILTROS › Estatus.':'QUO todavía las trae vigentes con saldo: no suman en la Cartera. Corrígelas en QUO.'));
+  c.appendChild(t);
+  c.appendChild(boton(on?'Regresar a como estaba':'Verlas','l',()=>{ S.estc=on?new Set(EST_DEF):new Set(['sat']); S.doc=null; guardaFiltros(); render(); }));
+  return c;
+}
+// la factura que sustituyó a una cancelada (si se sabe y está en la cartera con saldo)
+function sustitutaDe(d){
+  const x=d.satCan; let u=x&&x.sustituida_por?String(x.sustituida_por).toUpperCase():'';
+  if(!u&&d.uuid){ const m=SAT.sust.get(d.rfcCli); if(m) u=m.get(d.uuid.toUpperCase())||''; }
+  if(!u) return null;
+  return {uuid:u,r:ROWS.find(z=>z.cli===d.cli&&z.uuid&&z.uuid.toUpperCase()===u&&!z.satCan)||null};
+}
+const fechaSat=x=>x?(x.cancelada_el?fmtD(String(x.cancelada_el).slice(0,10)):x.detectada?'se supo el '+fmtD(String(x.detectada).slice(0,10)):'—'):'—';
+// en el detalle de un documento cancelado en el SAT
+function bloqueSat(d){
+  const x=d.satCan, box=el('div','aplbox satbox'); box.id='satbox';
+  box.appendChild(el('div','k','Cancelada en el SAT'));
+  box.appendChild(el('div','l',(x.cancelada_el?'El SAT la tiene cancelada desde el '+fmtD(String(x.cancelada_el).slice(0,10))
+    :'El SAT la tiene cancelada (se supo el '+fmtD(String(x.detectada||'').slice(0,10))+')')+'. QUO la trae vigente: no suma en la Cartera; hay que corregirla en QUO.'));
+  const su=sustitutaDe(d);
+  if(su){ const l=el('div','l');
+    if(su.r){ l.appendChild(el('b',null,'La sustituyó la factura '+folioDe(su.r)));
+      l.appendChild(document.createTextNode(' · '+(su.r.fecha||'sin fecha')+' · saldo '+F.mxn2.format(su.r.saldo)+'. Si ya tenía pagos o aplicaciones, van contra esa.'));
+      const v=el('button','lnk','Ver'); v.type='button'; v.onclick=()=>{ S.doc=su.r; pintaModal(); }; l.appendChild(v); }
+    else l.textContent='La sustituyó el CFDI '+su.uuid+' (no está en la cartera con saldo).';
+    box.appendChild(l); }
+  const n=el('div','l'); n.appendChild(el('span','dm','De Centauro (lo que dice el SAT)')); box.appendChild(n);
+  return box;
+}
+// la pestaña «Canceladas» de la ventana
+function pestanaCan(rows,lista,m){
+  N_VEN=rows.length;
+  const bar=el('div','aplbar');
+  bar.appendChild(el('span','aplnota',SAT.ok?'Las facturas que el SAT ya canceló y QUO trae vigentes con saldo (de Centauro). No suman en la Cartera: corrígelas en QUO.'
+    :'No se pudo saber qué está cancelado en el SAT; vuelve a intentar en un momento.'));
+  lista.appendChild(bar);
+  const hd=el('div','dhead apl'), AW=[0,110,130,190,0];
+  [['Documento','g'],['Saldo','r'],['Cancelada en el SAT','p3'],['La sustituyó','p2'],['','ch']].forEach(([t,c],i)=>{ const x=el('span','dc '+c,t);
+    if(AW[i]) x.style.setProperty('--w',AW[i]+'px'); hd.appendChild(x); });
+  lista.appendChild(hd);
+  if(!rows.length){ lista.appendChild(el('div','empty','Ninguna factura de esta empresa está cancelada en el SAT y vigente en QUO.')); return; }
+  const mo=(v,c,w)=>{ const x=el('div','dc '+(c||''),v); x.style.setProperty('--w',(w||110)+'px'); return x; };
+  rows.slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))).slice(0,500).forEach(d=>{
+    const b=el('button','drow apl'); b.type='button'; b.setAttribute('aria-current',!!(S.doc&&S.doc===d));
+    const c0=el('div','dc g dmain'), t2=el('div','dtx');
+    t2.appendChild(el('div','dt1',modLab(d.mod)+' '+folioDe(d)));
+    t2.appendChild(el('div','dt2',[(D.cp[d.cp]||[])[1]||(D.cp[d.cp]||[])[0]||'—',d.fecha||'sin fecha',d.mon].filter(Boolean).join(' · ')));
+    c0.appendChild(t2); b.appendChild(c0);
+    b.appendChild(mo(F.mxn.format(d.saldo),'mo b'));
+    b.appendChild(mo(fechaSat(d.satCan),'p3',130));
+    const su=sustitutaDe(d), cs=mo('','p2',190);
+    if(su&&su.r){ cs.appendChild(el('div','aplo','Factura '+folioDe(su.r))); cs.appendChild(el('div','aplq','saldo '+F.mxn.format(su.r.saldo))); }
+    else cs.appendChild(el('span','aplsin',su?'No está en la cartera':'—'));
+    b.appendChild(cs);
+    b.appendChild(el('span','chev ch','›'));
+    b.onclick=()=>{ if(!flotante()) SCR_LISTA=m.scrollTop; S.doc=d; pintaModal(); };
+    lista.appendChild(b);
+  });
+  if(rows.length>500) lista.appendChild(el('div','empty','Se ven las primeras 500; el Excel trae todas.'));
+  const tt=el('div','dtots'), tr=el('div','dtot');
+  tr.appendChild(el('div','dc g k','Total · '+plural(rows.length,'factura','facturas')));
+  tr.appendChild(mo(F.mxn.format(rows.reduce((a,d)=>a+(d.saldo||0),0)),'mo'));
+  tr.appendChild(mo('','p3',130)); tr.appendChild(mo('','p2',190)); tr.appendChild(el('span','ch',''));
+  tt.appendChild(tr); lista.appendChild(tt);
+}
+// su Excel (con su PDF al lado, js/marca.js)
+async function exportaCanceladas(ci){
+  const EX=await cargaExcelJS();
+  await cargaUuids([D.cli[ci][2]]);
+  const c=D.cli[ci], MK=window.PROFASE_MARCA;
+  const rows=docsVentana(ci).filter(r=>LADO[S.lado].includes(r.mod)&&r.satCan&&pasaMF(r,true))
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  const cols=['Tipo','Cliente o proveedor','RFC','Serie y folio','Fecha','UUID','Saldo en QUO','Total','Moneda','Cancelada en el SAT','La sustituyó (UUID)','La sustituyó (folio)'];
+  const wb=MK.libro(EX,'Canceladas en el SAT · '+c[1]), ws=wb.addWorksheet('Canceladas en el SAT');
+  [16,40,16,16,12,38,15,15,8,18,38,16].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const f0=MK.encabezado(wb,ws,cols.length,{titulo:'Canceladas en el SAT que QUO trae vigentes',lineas:[c[1]+' · '+c[2],
+    'Corte del Tablero QUO: '+fmtD(M.generado)+' '+M.hora,'No suman en la Cartera: hay que corregirlas en QUO. Lo del SAT sale de Centauro.']});
+  ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,cols.length,{derecha:[7,8]});
+  rows.forEach((d,i)=>{ const su=sustitutaDe(d), cp=D.cp[d.cp]||['',''], x=d.satCan, fc=x.cancelada_el||x.detectada;
+    ws.getRow(f0+1+i).values=[modLab(d.mod),cp[1]||'',cp[0]||'',folioDe(d),d.fecha?xd(d.fecha):'',d.uuid||'',cent(d.saldo),cent(d.total),d.mon||'',
+      fc?xd(String(fc).slice(0,10)):'',su?su.uuid:'',su&&su.r?folioDe(su.r):''];
+    [7,8].forEach(k=>ws.getCell(f0+1+i,k).numFmt=RCX_MON); [5,10].forEach(k=>ws.getCell(f0+1+i,k).numFmt='dd/mm/yyyy'); });
+  if(rows.length){ MK.cuerpo(ws,f0+1,f0+rows.length,1,cols.length);
+    ws.getRow(f0+rows.length+1).values=['Total · '+plural(rows.length,'factura','facturas'),'','','','','',cent(rows.reduce((a,d)=>a+(d.saldo||0),0))];
+    ws.getCell(f0+rows.length+1,7).numFmt=RCX_MON; ws.getRow(f0+rows.length+1).font={bold:true}; }
+  else ws.getRow(f0+1).values=['Ninguna factura de esta empresa está cancelada en el SAT y vigente en QUO.'];
+  MK.impresion(ws,{});
+  const mm=String(TODAY.getMonth()+1).padStart(2,'0');
+  return descargaXlsx(wb,(mm+' Canceladas SAT '+c[1]).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx');
+}
+
 /* ── Aplicaciones de anticipos y notas de crédito (4-nov-2026; pedido de Fernando Cadengo con la idea y el ejemplo de
    Gabriel Cavazos; nivel 1). TODO ES DEMOSTRATIVO: nada cambia saldos en QUO ni en la Cartera; «quedaría» solo enseña
    cómo quedaría la factura si se aplica en QUO. Con lo que la página ya recibe, se sugiere qué anticipos y notas de
@@ -2436,8 +2620,9 @@ window.__carAbre=function(x){ if(!CARGADA){ ABRE_PEND=x; return true; } abreDesd
        genérico, solo con importe exacto). Lo «Quitado» por el contador no se aplica;
      · solo a facturas vigentes con saldo; lo aplicado nunca pasa del saldo del anticipo o de la nota.
    Lo que decide el contador (aplicar, quitar, «Solo esta») lo guarda la base (208_cartera_aplicaciones.sql) con quién y
-   cuándo, y sale en la Bitácora. «Confirmada (CFDI)» y las canceladas en el SAT salen de Centauro y esperan el «sí» de
-   Daniel (petición 20261103-1755-cartera-centauro): el lugar ya está («conf»), sin datos todavía. ── */
+   cuándo, y sale en la Bitácora. «Confirmada (CFDI)» y las canceladas en el SAT salen de Centauro por la puerta cartera_sat
+   (213 y 214; petición 20261103-1755-cartera-centauro, Héctor Daniel: «Sí, la arma CENTAURO (b)»; la pantalla, 19:28: «nosotros
+   publicamos la pantalla de cartera»): ver «Lo de Centauro», abajo. ── */
 const APL={ok:false,puede:{},dec:new Map(),firma:null,cache:new Map()};
 let APL_IDX=null;
 const APL_T={conf:'Confirmada (CFDI)',acep:'Aceptada',auto:'Automática',sug:'Sugerida',suma:'Sugerida · suma',rev:'Revisar · otro nombre',quit:'Quitada'};
@@ -2453,7 +2638,7 @@ const nomLimpio=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLower
   .split(' ').filter(w=>w&&!SUF_NOM.has(w)).join(' ');
 const ladoFac=r=>r.mod===0?0:r.mod===1?1:-1;            // 0: clientes; 1: proveedores
 const ladoDoc=r=>(r.mod===2||r.mod===4)?0:(r.mod===3||r.mod===5)?1:-1;
-const aplVig=r=>r.est!=='Cancelada'&&r.st!=='fuera';
+const aplVig=r=>r.est!=='Cancelada'&&r.st!=='fuera'&&!r.satCan;
 const esFacApl=r=>ladoFac(r)>=0&&aplVig(r)&&r.saldo>0.005;
 const esDocApl=r=>ladoDoc(r)>=0&&aplVig(r)&&r.saldo<-0.005;
 const cpRfc=r=>String((D.cp[r.cp]||[])[0]||'').toUpperCase().trim();
@@ -2510,10 +2695,15 @@ function aplEmp(ci){
     rels.push(rl); R.fac.get(f).rels.push(rl); docs.forEach(d=>R.doc.get(d).rels.push(rl));
     return rl;
   };
+  // Confirmada (CFDI) (214, de Centauro): el XML de la nota de crédito o del anticipo relaciona esta factura (o al revés)
+  const conf=new Map(), relX=SAT.rel.get(D.cli[ci][2]), yaConf=(f,d)=>!!(conf.get(f)&&conf.get(f).has(d));
+  if(relX) R.fac.forEach((F2,f)=>{ const rs=f.uuid?relX.get(f.uuid.toUpperCase()):null; if(!rs) return;
+    R.doc.forEach((X,d)=>{ if(d.uuid&&ladoDoc(d)===ladoFac(f)&&rs.has(d.uuid.toUpperCase())){
+      nueva(f,[d],'conf'); (conf.get(f)||conf.set(f,new Set()).get(f)).add(d); } }); });
   G.forEach(g=>{
     if(!g.f.length||!g.d.length) return;
     g.f.forEach(f=>{
-      const c=g.d.map(d=>({d,dif:Math.abs(-d.saldo-f.saldo),dias:diasEntre(f.fecha,d.fecha)}));
+      const c=g.d.filter(d=>!yaConf(f,d)).map(d=>({d,dif:Math.abs(-d.saldo-f.saldo),dias:diasEntre(f.fecha,d.fecha)}));
       const ex=c.filter(x=>x.dif<=0.01).sort((a,b)=>a.dias-b.dias);
       ex.forEach(x=>nueva(f,[x.d],'auto'));
       const ot=c.filter(x=>x.dif>0.01).sort((a,b)=>a.dif-b.dif||a.dias-b.dias);
@@ -2525,7 +2715,7 @@ function aplEmp(ci){
   // otro nombre con el mismo RFC genérico: solo con importe exacto, para revisar
   const gen=[...G.values()].filter(g=>RFC_GEN.has(g.rfc));
   gen.forEach(g=>g.f.forEach(f=>gen.forEach(h=>{ if(h===g||h.lado!==g.lado||h.rfc!==g.rfc) return;
-    h.d.forEach(d=>{ if(Math.abs(-d.saldo-f.saldo)<=0.01) nueva(f,[d],'rev'); }); })));
+    h.d.forEach(d=>{ if(!yaConf(f,d)&&Math.abs(-d.saldo-f.saldo)<=0.01) nueva(f,[d],'rev'); }); })));
   // lo que se aplicaría: lo aceptado, luego lo exacto (uno a uno, por fecha), luego una sugerida por factura y lo de revisar
   const qF=f=>R.fac.get(f), qD=d=>R.doc.get(d), libre=d=>qD(d).usado<0.005, tocada=f=>qF(f).apl.length>0;
   const pon=rl=>{
@@ -2535,6 +2725,8 @@ function aplEmp(ci){
     if(rl.monto>0.005){ rl.on=true; const F2=qF(rl.fac); F2.apl.push(rl); F2.aplicado+=rl.monto; F2.queda-=rl.monto; }
   };
   rels.filter(x=>x.dec==='aplicada').sort((a,b)=>a.dias-b.dias).forEach(pon);
+  // lo que dice el XML va antes que lo que sugiere la Cartera (una factura puede llevar varias notas confirmadas)
+  rels.filter(x=>!x.dec&&x.tipo==='conf').sort((a,b)=>a.dias-b.dias).forEach(x=>{ if(x.docs.every(libre)) pon(x); });
   rels.filter(x=>!x.dec&&x.tipo==='auto').sort((a,b)=>a.dias-b.dias).forEach(x=>{ if(!tocada(x.fac)&&x.docs.every(libre)) pon(x); });
   ['sug','rev'].forEach(fase=>R.fac.forEach(F2=>{
     if(F2.apl.length) return;
@@ -2622,6 +2814,7 @@ function tarjetaRel(rl,desde){
   w.appendChild(q);
   if(rl.quien) w.appendChild(el('div','qn',(t==='quit'?'La quitó ':'La aplicó ')+rl.quien.por+' · '+cuando(rl.quien.en)));
   if(t==='rev') w.appendChild(el('div','qn','Mismo RFC genérico, otro nombre: revisa que sea el mismo cliente o proveedor.'));
+  if(t==='conf') w.appendChild(el('div','qn','Lo dice el XML: en sus «CFDI relacionados» la '+docNom(rl.docs[0])+' relaciona esta factura (de Centauro).'));
   // lo que puede hacer quien marca en la Cartera de esa empresa (solo consulta, nada)
   if(yoApl()){
     const a=el('div','acts');
@@ -2649,7 +2842,7 @@ function bloqueRel(d){
   const hd=el('div','k','Relaciones posibles'); box.appendChild(hd);
   const fac=ladoFac(d)>=0, X=aplX(d);
   if(!X){
-    box.appendChild(el('div','l',d.est==='Cancelada'?'Está cancelada: no se aplica.':d.st==='fuera'?'Está fuera del reporte: no se aplica.'
+    box.appendChild(el('div','l',d.est==='Cancelada'?'Está cancelada: no se aplica.':d.satCan?'Está cancelada en el SAT: no se aplica.':d.st==='fuera'?'Está fuera del reporte: no se aplica.'
       :fac?'Esta factura no tiene saldo por aplicar.':'Solo se aplican anticipos y notas de crédito a favor (saldo negativo).'));
     return box;
   }
@@ -2865,7 +3058,7 @@ function filaRCX(cols,r,c,n){
   const v={'GRUPO':c[3]||'Sin grupo','Grupo':c[3]||'Sin grupo','CLIENTE':c[1],'Cliente':c[1],'CLIENTE RFC':c[2],'Cliente RFC':c[2],'QUO ID':id,'Id':id,'RFC':cp[0],'RAZON SOCIAL':cp[1],'Nombre':cp[1],
     'Tercero':r.ter?'SI':'','TIPO':sinGuion(r.tipo),'Tipo':sinGuion(r.tipo),'TOTAL CFDI':r.total,'Total':r.total,
     'SALDO CFDI':r.saldo,'Saldo':r.saldo,'FECHA CFDI':f,'Fecha':f,'DIAS DE ATRASO':atraso,'Días de Atraso':atraso,
-    'MÉTODO DE PAGO':sinGuion(r.mp),'Estatus':sinGuion(r.est),'FechaCancelacion':null,'UUID':r.uuid,'uuid':r.uuid,
+    'MÉTODO DE PAGO':sinGuion(r.mp),'Estatus':r.satCan?'Cancelada en el SAT (vigente en QUO)':sinGuion(r.est),'FechaCancelacion':r.satCan&&(r.satCan.cancelada_el||r.satCan.detectada)?xd(String(r.satCan.cancelada_el||r.satCan.detectada).slice(0,10)):null,'UUID':r.uuid,'uuid':r.uuid,
     'Nombre del mes':f?MESES[f.getUTCMonth()]:'','Año':f?f.getUTCFullYear():null,
     'Version xml':r.ver||'','Tipo de Comprobante':r.mod===0||r.mod===1?'INGRESO':'EGRESO','Plantilla Poliza':r.pl||'',
     'satTQ_MiFecha':r.mif?xd(r.mif):null,'Rol Tercer':r.rol||'',

@@ -279,6 +279,19 @@ tr.total td{background:var(--surface-2)}
   <!-- Bóveda XML -->
   <section id="s-boveda" hidden>
     <div class="nota info" id="b-prueba"></div>
+    <!-- 215: los clientes a los que no se les pudieron bajar sus XML, con su grupo y el porqué -->
+    <div class="card" id="b-sin" hidden>
+      <header><div><h2 id="b-sinT">No se pudieron bajar</h2><div class="sub" id="b-sinSub"></div></div>
+        <div class="acciones"><button class="btn" type="button" id="b-sinVer" aria-expanded="false" aria-controls="b-sinCu">Ver la lista</button>
+          <button class="btn" type="button" data-excel id="x-sin">Excel</button></div></header>
+      <div class="tot" id="b-sinTot"></div>
+      <div id="b-sinCu" hidden>
+        <div class="filtros"><div class="lados" id="b-sinFil" role="group" aria-label="Por qué no se pudo"></div>
+          <input type="search" class="busca" id="b-sinQ" placeholder="Buscar grupo, cliente o contador" aria-label="Buscar grupo, razón social, RFC o contador"></div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Grupo</th><th>Razón social</th><th>Por qué no se pudo</th><th>Qué hacer</th><th>Contador</th><th>Qué falta</th></tr></thead>
+          <tbody id="b-sinLista"></tbody></table></div>
+      </div>
+    </div>
     <div class="card">
       <header><div><h2>Clientes en la bóveda</h2><div class="sub" id="b-clisub">Pica uno para ver solo sus XML; pícale otra vez para ver todos.</div></div></header>
       <div class="clibusca busca" id="b-cliBox" hidden></div>
@@ -569,8 +582,71 @@ tr.total td{background:var(--surface-2)}
           }).join('') + '</div>' : '');
     }
     pintaClientes();
+    cargaSinBajar();
     await listaB(true);
   }
+  /* 215: a quiénes no se les pudieron bajar sus XML, con su grupo, el porqué y qué hacer (Héctor Daniel, 3-nov-2026) */
+  var SB = { filas: [], k: '', q: '', abierta: false };
+  var SB_MOT = { sin_efirma: 'No tienen e.firma', sin_archivos: 'Faltan los archivos', sin_clave: 'Falta la contraseña',
+    clave_mala: 'La contraseña no abre', no_es_fiel: 'Son sellos, no e.firma', vencida: 'E.firma vencida', rfc_distinto: 'E.firma de otro RFC',
+    sat: 'El SAT no la aceptó', error: 'El SAT no los entregó', ya_sirve: 'Ya tiene una que sirve' };
+  var SB_TOT = { sin_efirma: 'no tienen e.firma', sin_archivos: 'les faltan los archivos de la e.firma', sin_clave: 'les falta la contraseña',
+    clave_mala: 'la contraseña no abre la llave', no_es_fiel: 'tienen sellos en lugar de e.firma', vencida: 'tienen la e.firma vencida',
+    rfc_distinto: 'tienen la e.firma de otro RFC', sat: 'el SAT no aceptó su e.firma', error: 'el SAT no entregó sus XML', ya_sirve: 'ya tienen una e.firma que sirve' };
+  var SB_ORD = ['sin_efirma', 'sin_archivos', 'sin_clave', 'clave_mala', 'no_es_fiel', 'vencida', 'rfc_distinto', 'sat', 'error', 'ya_sirve'];
+  function sbAnios(f) {
+    var a = (f.anios || []).slice().sort(), t = !a.length ? '' : a.length === 1 ? String(a[0])
+      : a[a.length - 1] - a[0] === a.length - 1 && a.length > 2 ? a[0] + ' a ' + a[a.length - 1] : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1];
+    var l = f.lados || [], lt = l.length === 2 ? 'emitidas y recibidas' : l[0] === 'emitida' ? 'solo emitidas' : 'solo recibidas';
+    return t + ', ' + lt;
+  }
+  function sbSin(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function sbPasa(f) {
+    if (SB.k && f.k !== SB.k) return false;
+    if (!SB.q) return true;
+    var h = sbSin([f.grupo, f.cliente, f.rfc, (f.contadores || []).join(' ')].join(' '));
+    return sbSin(SB.q).split(/\s+/).every(function (w) { return h.indexOf(w) >= 0; });
+  }
+  async function cargaSinBajar() {
+    var r;
+    try { r = await rpc('cen_xml_sin_bajar'); } catch (e) { $('b-sin').hidden = true; return; }
+    SB.filas = (r && r.filas) || [];
+    $('b-sin').hidden = !SB.filas.length;
+    if (!SB.filas.length) return;
+    var pm = (r && r.por_motivo) || {}, ks = SB_ORD.filter(function (k) { return pm[k]; });
+    $('b-sinT').textContent = 'No se pudieron bajar: ' + cuenta(SB.filas.length, 'cliente', 'clientes');
+    $('b-sinSub').textContent = 'Casi siempre falta la e.firma o no sirve. El CRM lo vuelve a intentar solo cada semana; en cuanto la e.firma sirva, se bajan.';
+    $('b-sinTot').innerHTML = ks.map(function (k) { return '<span><b>' + (+pm[k]).toLocaleString('es-MX') + '</b> ' + esc(SB_TOT[k]) + '</span>'; }).join('');
+    $('b-sinFil').innerHTML = '<button type="button" data-sk="" aria-pressed="' + (!SB.k) + '">Todos (' + SB.filas.length + ')</button>'
+      + ks.map(function (k) { return '<button type="button" data-sk="' + k + '" aria-pressed="' + (SB.k === k) + '">' + esc(SB_MOT[k]) + ' (' + pm[k] + ')</button>'; }).join('');
+    $('b-sinFil').querySelectorAll('[data-sk]').forEach(function (b) {
+      b.onclick = function () { SB.k = b.getAttribute('data-sk'); $('b-sinFil').querySelectorAll('[data-sk]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); pintaSinBajar(); };
+    });
+    pintaSinBajar();
+  }
+  function pintaSinBajar() {
+    var fs = SB.filas.filter(sbPasa);
+    $('b-sinLista').innerHTML = fs.map(function (f) {
+      return '<tr><td data-l="Grupo">' + (f.grupo ? '<span class="rs">' + esc(f.grupo) + '</span>' : '<span class="mut">Sin grupo en la ficha</span>') + '</td>'
+        + '<td data-l="Razón social"><span class="rs">' + esc(f.cliente) + '</span><div class="mut mono">' + esc(f.rfc) + '</div></td>'
+        + '<td data-l="Por qué no se pudo">' + chip(SB_MOT[f.k] || 'No se pudo', f.k === 'ya_sirve' ? 'ok' : f.k === 'error' ? 'ojo' : 'mal') + '<div>' + esc(f.motivo) + '</div></td>'
+        + '<td data-l="Qué hacer">' + esc(f.que_hacer) + (f.siguiente ? '<div class="mut">El CRM lo vuelve a intentar el ' + esc(fecha(f.siguiente)) + '</div>' : '') + '</td>'
+        + '<td data-l="Contador">' + ((f.contadores || []).length ? esc(f.contadores.join(', ')) : '<span class="mut">Sin contador</span>') + '</td>'
+        + '<td data-l="Qué falta">' + esc(sbAnios(f)) + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="vacio">Nadie con ese filtro.</td></tr>';
+  }
+  $('b-sinVer').onclick = function () {
+    SB.abierta = !SB.abierta; $('b-sinCu').hidden = !SB.abierta; $('b-sinTot').hidden = SB.abierta;   // abierta, los números van en los filtros
+    this.setAttribute('aria-expanded', SB.abierta ? 'true' : 'false'); this.textContent = SB.abierta ? 'Esconder la lista' : 'Ver la lista';
+  };
+  var tSB = null;
+  $('b-sinQ').addEventListener('input', function () { var v = this.value; clearTimeout(tSB); tSB = setTimeout(function () { SB.q = v.trim(); pintaSinBajar(); }, 200); });
+  $('x-sin').onclick = function () {
+    var fs = SB.filas.filter(sbPasa);
+    excel(this, 'No se pudieron bajar', ['Grupo', 'Razón social', 'RFC', 'Por qué no se pudo', 'Qué hacer', 'Contador', 'Qué falta', 'Se vuelve a intentar'],
+      fs.map(function (f) { return [f.grupo || '', f.cliente, f.rfc, f.motivo, f.que_hacer, (f.contadores || []).join(', '), sbAnios(f), f.siguiente ? fecha(f.siguiente) : '']; }),
+      [26, 36, 15, 40, 46, 24, 26, 14], ['Centauro · Bóveda XML · ' + cuenta(fs.length, 'cliente', 'clientes') + (SB.k ? ' · ' + SB_MOT[SB.k] : '')]);
+  };
   var tB = null;
   function enCambioB() { clearTimeout(tB); tB = setTimeout(function () { listaB(true); }, 300); }
   document.querySelectorAll('[data-lado]').forEach(function (b) {
