@@ -1,0 +1,670 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · TDC DECOMSA</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/marca.js?v=2584e29945"></script>
+<style>
+/* Portal PROFASE · Tesorería › TDC DECOMSA (Héctor Daniel Nava, 4-nov-2026, 12:59 a 13:09; portal/sql/248_tdc_decomsa.sql).
+   Los cargos de la tarjeta de crédito de DECOMSA, en lugar del Excel «COMPRAS TDC DECOMSA». Eva Rangel captura cada cargo
+   (fecha, concepto del banco y monto) y, al terminar, pica «Listo, ya los capturé»: a Héctor Daniel Nava le llega un solo
+   aviso. Él pone qué se compró y a quién va cada gasto y, al terminar, «Listo, ya los clasifiqué»: a Eva le llega un solo
+   aviso. Héctor Nava Ramos (solo consulta) y Dora Montalvo solo ven. La base decide todo (tdc_estado()); la página solo
+   llama sus funciones tdc_*. Las empresas y personas de «a quién va» llegan con los datos. Excel y PDF con la marca. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.band .acts .btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.band .acts .btn[disabled]{opacity:.55}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:4px 9px;font-size:12px}
+.lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:root[data-theme="dark"] .lnk{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.lnk:focus-visible,.tabs button:focus-visible,tr.click:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden;min-width:0}
+.card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h2{font-size:18px;font-weight:700}
+.card .sub{color:var(--muted);font-size:12.5px}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
+.filtros input[type="search"]{width:300px}
+.tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink);font-size:11.5px;line-height:18px;text-align:center}
+.tabs button[aria-selected="true"] .cta{background:var(--accent);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:0 0 16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-family:var(--f-display);font-size:24px;font-weight:750;overflow-wrap:anywhere}
+.kpi .s{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.monto{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.con{font-weight:600;overflow-wrap:anywhere;min-width:180px}
+.que{overflow-wrap:anywhere;min-width:160px}
+.neg{color:var(--ok)}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+.chip.dest{white-space:normal;overflow-wrap:anywhere;border-radius:10px}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--navy-soft)}
+tr.tot td{font-weight:700;background:var(--surface-2)}
+.vacio{padding:20px 14px;color:var(--muted)}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px}
+/* Ventanas (a la derecha; en el celular, pantalla completa) */
+.velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
+.ficha{background:var(--bg);width:min(560px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
+.ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cuerpo{padding:14px 16px 96px;display:grid;gap:12px;min-width:0}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.sec>h3{font-size:15px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line)}
+.sec .in{padding:12px 14px;display:grid;gap:10px;min-width:0}
+.campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo.ancho{grid-column:1/-1}
+.campos.uno{grid-template-columns:minmax(0,1fr)}
+td.fe{white-space:nowrap}
+.campo label{font-size:12px;font-weight:600;color:var(--muted)}
+.campo input,.campo select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;width:100%;min-width:0}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.bien{background:var(--ok-soft);color:var(--ok)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:6px 14px;align-items:baseline}
+.dl>span:nth-child(odd){color:var(--muted)}
+.dl>span:nth-child(even){overflow-wrap:anywhere}
+.hist{display:grid;gap:8px}
+.hist>div{border-left:3px solid var(--line-strong);padding:2px 0 2px 10px;font-size:13px;overflow-wrap:anywhere}
+.hist .mut{display:block}
+.destinos{display:grid;gap:6px}
+.destinos>div{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:0}
+.destinos .nom{font-weight:600;overflow-wrap:anywhere;min-width:0}
+.destinos .off .nom{color:var(--muted);text-decoration:line-through}
+.agrega{display:flex;gap:8px;flex-wrap:wrap}
+.agrega input{flex:1 1 200px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:13.5px;min-width:0}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta p{margin:0 0 10px;font-weight:600;overflow-wrap:anywhere}
+.pregunta .mut{margin:0 0 12px;display:block}
+.pregunta .acciones{justify-content:flex-end}
+.dos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:900px){.dos{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){
+  input,select,textarea,.filtros input,.filtros select,.campo input,.campo select,.agrega input{font-size:16px}
+  .filtros>*,.filtros input[type="search"]{width:100%}
+  .campos{grid-template-columns:minmax(0,1fr)}
+  table.resp thead{display:none}
+  table.resp tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
+  table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  table.resp td.w{grid-column:1/-1}
+  table.resp td.vacio{grid-column:1/-1}
+  table.resp tr.tot{background:var(--surface-2)}
+  .con,.que{min-width:0}
+  .kpis>.kpi:first-child{grid-column:1/-1}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .band h1{font-size:22px}
+  .ficha .fcab h2{font-size:18px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Tesorería</div>
+      <h1 id="titulo">TDC DECOMSA</h1>
+      <p id="subt">Los cargos de la tarjeta de crédito de DECOMSA: Eva Rangel los captura y Héctor Daniel Nava dice qué se compró y a quién va cada gasto.</p>
+    </div>
+  </div>
+  <div class="acts" id="acts"></div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota" id="consulta" hidden><strong>Solo consulta:</strong> puedes ver todo, pero no cambiar nada.</div>
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <div class="tabs" role="tablist" aria-label="Qué ver" id="tabs"></div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section id="s-lista">
+      <div class="card">
+        <header><div><h2 id="h-lista">Cargos</h2><div class="sub" id="lista-sub"></div></div>
+          <div class="acciones"><button class="btn" type="button" data-excel id="x-lista">Excel</button></div></header>
+        <div class="filtros">
+          <label class="mut" for="f-mes">Mes</label><select id="f-mes"></select>
+          <label class="mut" for="f-dest">A quién va</label><select id="f-dest"></select>
+          <input type="search" id="f-q" placeholder="Buscar concepto o qué se compró" aria-label="Buscar concepto o qué se compró">
+        </div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Concepto del banco</th><th class="monto">Monto</th><th>Qué se compró</th><th>A quién va</th></tr></thead>
+          <tbody id="lista"></tbody></table></div>
+      </div>
+      <p class="pie" id="pie-lista">Pica un cargo para ver su detalle y su historial.</p>
+    </section>
+
+    <section id="s-res" hidden>
+      <div class="dos">
+        <div class="card">
+          <header><div><h2>Por a quién va</h2><div class="sub" id="res-a-sub"></div></div>
+            <div class="acciones"><button class="btn" type="button" data-excel id="x-res-a">Excel</button></div></header>
+          <div class="tabla"><table class="resp"><thead><tr><th>A quién va</th><th class="monto">Cargos</th><th class="monto">Total</th></tr></thead>
+            <tbody id="res-a"></tbody></table></div>
+        </div>
+        <div class="card">
+          <header><div><h2>Por mes</h2><div class="sub" id="res-m-sub"></div></div>
+            <div class="acciones"><button class="btn" type="button" data-excel id="x-res-m">Excel</button></div></header>
+          <div class="tabla"><table class="resp"><thead><tr><th>Mes</th><th class="monto">Cargos</th><th class="monto">Total</th><th class="monto">Por clasificar</th></tr></thead>
+            <tbody id="res-m"></tbody></table></div>
+        </div>
+      </div>
+      <p class="pie">El resumen toma el mes y la opción de «a quién va» que escojas arriba, en «Cargos».</p>
+    </section>
+  </div>
+</div>
+
+<div class="velo" id="velo" hidden><div class="ficha" id="ficha" role="dialog" aria-modal="true" aria-labelledby="v-tit"></div></div>
+<div class="pregunta" id="preg" hidden><div role="alertdialog" aria-modal="true" aria-labelledby="preg-t"><p id="preg-t"></p><span class="mut" id="preg-s"></span>
+  <div class="acciones"><button class="btn" type="button" id="preg-no">No</button><button class="btn acento" type="button" id="preg-si">Sí</button></div></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var EST = null, LISTA = [], TAB = '', CAPTURA = false, CLASIFICA = false, ABIERTO = null;
+  var EST_TXT = { captura: 'Capturando', por_clasificar: 'Por clasificar', clasificado: 'Clasificado' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function mesTxt(m) { var p = String(m || '').split('-'); return p.length < 2 ? '' : MESES_L[+p[1] - 1] + ' ' + p[0]; }
+  function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  var HOY = hoyISO();
+
+  /* ---------- Pregunta (Sí / No), en lugar de las del navegador ---------- */
+  function pregunta(t, s, si) {
+    return new Promise(function (ok) {
+      $('preg-t').textContent = t; $('preg-s').textContent = s || ''; $('preg-si').textContent = si || 'Sí';
+      $('preg').hidden = false; try { $('preg-no').focus(); } catch (e) {}
+      function fin(v) { $('preg').hidden = true; $('preg-si').onclick = $('preg-no').onclick = null; document.removeEventListener('keydown', tecla, true); ok(v); }
+      function tecla(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fin(false); } }
+      document.addEventListener('keydown', tecla, true);
+      $('preg-si').onclick = function () { fin(true); }; $('preg-no').onclick = function () { fin(false); };
+    });
+  }
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  async function excel(b, nombre, titulo, lineas, head, filas, monedas, anchos) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\\/?*\[\]:]/g, ' '));
+      ws.columns = anchos.map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+      (monedas || []).forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00;-$#,##0.00'; });
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, nombre + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+
+  /* ---------- ventana ---------- */
+  function abre(titulo, sub, cuerpo) {
+    $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
+      + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
+    $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    try { P.escribiendo && P.escribiendo('tdc', true); } catch (e) {}
+  }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; ABIERTO = null; try { P.escribiendo && P.escribiendo('tdc', false); } catch (e) {} }
+  $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('velo').hidden && $('preg').hidden) cierra(); });
+
+  /* ---------- filtros ---------- */
+  function destinos() { return EST && EST.destinos || []; }
+  function activos() { return destinos().filter(function (d) { return d.activo; }); }
+  function pintaFiltros() {
+    var mes = $('f-mes').value, dest = $('f-dest').value;
+    var ms = {}; LISTA.forEach(function (c) { ms[String(c.fecha).slice(0, 7)] = 1; });
+    var L = Object.keys(ms).sort().reverse();
+    $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + L.map(function (m) { return '<option value="' + m + '">' + esc(mesTxt(m)) + '</option>'; }).join('');
+    if (mes && ms[mes]) $('f-mes').value = mes;
+    $('f-dest').innerHTML = '<option value="">Todos</option><option value="-">Sin clasificar</option>'
+      + destinos().filter(function (d) { return d.activo || d.usos > 0; }).map(function (d) { return '<option value="' + d.id + '">' + esc(d.nombre) + (d.activo ? '' : ' (ya no está en la lista)') + '</option>'; }).join('');
+    if (dest) $('f-dest').value = dest;
+  }
+  function filtrada(sinTab) {
+    var mes = $('f-mes').value, dest = $('f-dest').value, q = norm($('f-q').value);
+    return LISTA.filter(function (c) {
+      if (!sinTab && TAB && TAB !== 'todos' && TAB !== 'res' && c.estado !== TAB) return false;
+      if (mes && String(c.fecha).slice(0, 7) !== mes) return false;
+      if (dest === '-' && c.destino_id) return false;
+      if (dest && dest !== '-' && String(c.destino_id) !== dest) return false;
+      if (q && norm([c.concepto, c.que, c.destino].join(' ')).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function filtrosTxt() {
+    var t = [];
+    if ($('f-mes').value) t.push(mesTxt($('f-mes').value));
+    if ($('f-dest').value) t.push($('f-dest').value === '-' ? 'Sin clasificar' : $('f-dest').selectedOptions[0].textContent);
+    if ($('f-q').value.trim()) t.push('«' + $('f-q').value.trim() + '»');
+    return t.join(' · ');
+  }
+
+  /* ---------- pestañas ---------- */
+  function cuenta(e) { return LISTA.filter(function (c) { return c.estado === e; }).length; }
+  var TABS = { captura: ['Capturando', 'Lo que estás capturando. Nadie más lo ve hasta que picas «Listo, ya los capturé».'],
+    por_clasificar: ['Por clasificar', 'Los cargos que faltan de decir qué se compró y a quién va el gasto.'],
+    clasificado: ['Clasificados', 'Los cargos que ya dicen qué se compró y a quién va el gasto.'],
+    todos: ['Todos', 'Todos los cargos de la tarjeta.'], res: ['Resumen', ''] };
+  function pintaTabs() {
+    var t = (CAPTURA ? ['captura'] : []).concat(['por_clasificar', 'clasificado', 'todos', 'res']);
+    $('tabs').innerHTML = t.map(function (k) {
+      var n = k === 'captura' || k === 'por_clasificar' ? cuenta(k) : null;
+      return '<button type="button" role="tab" data-t="' + k + '" aria-selected="' + (TAB === k) + '">' + esc(TABS[k][0]) + (n != null ? ' <span class="cta">' + n + '</span>' : '') + '</button>';
+    }).join('');
+    $('tabs').querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { TAB = b.getAttribute('data-t'); pinta(); }; });
+  }
+
+  /* ---------- botones de arriba ---------- */
+  function pintaActs() {
+    var h = '';
+    if (CAPTURA) {
+      var n = cuenta('captura');
+      h += '<button class="btn acento" type="button" id="b-nuevo">+ Nuevo cargo</button>'
+        + '<button class="btn" type="button" id="b-manda"' + (n ? '' : ' disabled') + '>Listo, ya los capturé' + (n ? ' (' + n + ')' : '') + '</button>';
+    }
+    if (CLASIFICA) {
+      var a = EST.por_avisar || 0;
+      h += '<button class="btn acento" type="button" id="b-listo"' + (a ? '' : ' disabled') + '>Listo, ya los clasifiqué' + (a ? ' (' + a + ')' : '') + '</button>'
+        + '<button class="btn" type="button" id="b-dest">A quién va</button>';
+    }
+    $('acts').innerHTML = h;
+    if ($('b-nuevo')) $('b-nuevo').onclick = function () { formCargo(null); };
+    if ($('b-manda')) $('b-manda').onclick = manda;
+    if ($('b-listo')) $('b-listo').onclick = listo;
+    if ($('b-dest')) $('b-dest').onclick = listaDestinos;
+  }
+
+  /* ---------- la lista ---------- */
+  function pintaKpis() {
+    var L = filtrada(true), tot = 0; L.forEach(function (c) { tot += Number(c.monto || 0); });
+    var por = L.filter(function (c) { return c.estado === 'por_clasificar'; }).length, cla = L.filter(function (c) { return c.estado === 'clasificado'; }).length;
+    $('kpis').innerHTML = '<div class="kpi"><div class="l">Cargos</div><div class="v">' + esc(dinero(tot)) + '</div><div class="s">' + L.length + (L.length === 1 ? ' cargo' : ' cargos') + (filtrosTxt() ? ' · ' + esc(filtrosTxt()) : '') + '</div></div>'
+      + '<div class="kpi"><div class="l">Por clasificar</div><div class="v">' + por + '</div><div class="s">' + (por === 1 ? 'cargo' : 'cargos') + '</div></div>'
+      + '<div class="kpi"><div class="l">Clasificados</div><div class="v">' + cla + '</div><div class="s">' + (cla === 1 ? 'cargo' : 'cargos') + '</div></div>';
+  }
+  function fila(c, i) {
+    var est = c.estado === 'clasificado' ? '' : chip(EST_TXT[c.estado] || c.estado, c.estado === 'captura' ? 'az' : 'ojo');
+    return '<tr class="click" tabindex="0" data-i="' + i + '"><td data-l="Fecha" class="fe">' + esc(fecha(c.fecha)) + '</td>'
+      + '<td data-l="Concepto del banco" class="w"><div class="con">' + esc(c.concepto) + '</div></td>'
+      + '<td data-l="Monto" class="monto"><b' + (Number(c.monto) < 0 ? ' class="neg"' : '') + '>' + esc(dinero(c.monto)) + '</b></td>'
+      + '<td data-l="Qué se compró" class="w"><div class="que">' + (c.que ? esc(c.que) : '<span class="mut">—</span>') + '</div></td>'
+      + '<td data-l="A quién va">' + (c.destino ? chip(c.destino, 'ok dest') : est) + '</td></tr>';
+  }
+  function pintaLista() {
+    var L = filtrada(false), tot = 0; L.forEach(function (c) { tot += Number(c.monto || 0); });
+    $('h-lista').textContent = TABS[TAB][0]; $('lista-sub').textContent = TABS[TAB][1];
+    $('lista').innerHTML = L.length ? L.map(fila).join('') + '<tr class="tot"><td data-l="" class="w">Total</td><td data-l=""></td><td data-l="Total" class="monto">' + esc(dinero(tot)) + '</td><td data-l=""></td><td data-l="">' + L.length + (L.length === 1 ? ' cargo' : ' cargos') + '</td></tr>'
+      : '<tr><td colspan="5" class="vacio">' + (TAB === 'por_clasificar' ? 'No falta nada por clasificar.' : TAB === 'captura' ? 'No estás capturando nada. Pica «+ Nuevo cargo».' : 'Nada con esos filtros.') + '</td></tr>';
+    $('lista').querySelectorAll('[data-i]').forEach(function (tr) {
+      var c = L[+tr.getAttribute('data-i')];
+      tr.onclick = function () { ficha(c.id); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ficha(c.id); } };
+    });
+  }
+  $('x-lista').onclick = function () {
+    var L = filtrada(false);
+    excel(this, 'TDC DECOMSA ' + TABS[TAB][0] + ' ' + HOY, 'TDC DECOMSA', [TABS[TAB][0] + (filtrosTxt() ? ' · ' + filtrosTxt() : ''), 'Exportado el ' + fecha(HOY)],
+      ['Fecha', 'Concepto del banco', 'Monto', 'Qué se compró', 'A quién va', 'Estado'],
+      L.map(function (c) { return [fecha(c.fecha), c.concepto, Number(c.monto || 0), c.que || '', c.destino || '', EST_TXT[c.estado] || c.estado]; }),
+      [3], [13, 40, 14, 40, 24, 16]);
+  };
+
+  /* ---------- resumen ---------- */
+  function pintaRes() {
+    var L = filtrada(true);
+    var porD = {}, tot = 0;
+    L.forEach(function (c) { var k = c.destino || 'Sin clasificar'; porD[k] = porD[k] || { n: 0, t: 0 }; porD[k].n++; porD[k].t += Number(c.monto || 0); tot += Number(c.monto || 0); });
+    var orden = destinos().map(function (d) { return d.nombre; }).concat(['Sin clasificar']);
+    var ks = Object.keys(porD).sort(function (a, b) { return orden.indexOf(a) - orden.indexOf(b); });
+    $('res-a-sub').textContent = filtrosTxt() || 'Todos los meses';
+    $('res-a').innerHTML = ks.length ? ks.map(function (k) { return '<tr><td data-l="A quién va" class="w">' + (k === 'Sin clasificar' ? chip(k, 'ojo') : '<b>' + esc(k) + '</b>') + '</td><td data-l="Cargos" class="monto">' + porD[k].n + '</td><td data-l="Total" class="monto">' + esc(dinero(porD[k].t)) + '</td></tr>'; }).join('')
+      + '<tr class="tot"><td data-l="" class="w">Total</td><td data-l="Cargos" class="monto">' + L.length + '</td><td data-l="Total" class="monto">' + esc(dinero(tot)) + '</td></tr>'
+      : '<tr><td colspan="3" class="vacio">Nada con esos filtros.</td></tr>';
+    var porM = {};
+    L.forEach(function (c) { var m = String(c.fecha).slice(0, 7); porM[m] = porM[m] || { n: 0, t: 0, p: 0 }; porM[m].n++; porM[m].t += Number(c.monto || 0); if (c.estado !== 'clasificado') porM[m].p++; });
+    var ms = Object.keys(porM).sort().reverse();
+    $('res-m-sub').textContent = $('f-dest').value ? $('f-dest').selectedOptions[0].textContent : 'A quién va: todos';
+    $('res-m').innerHTML = ms.length ? ms.map(function (m) { return '<tr><td data-l="Mes" class="w"><b>' + esc(mesTxt(m)) + '</b></td><td data-l="Cargos" class="monto">' + porM[m].n + '</td><td data-l="Total" class="monto">' + esc(dinero(porM[m].t)) + '</td><td data-l="Por clasificar" class="monto">' + (porM[m].p ? chip(String(porM[m].p), 'ojo') : '0') + '</td></tr>'; }).join('')
+      : '<tr><td colspan="4" class="vacio">Nada con esos filtros.</td></tr>';
+    return { porD: porD, ks: ks, porM: porM, ms: ms, tot: tot, n: L.length };
+  }
+  $('x-res-a').onclick = function () {
+    var r = pintaRes();
+    excel(this, 'TDC DECOMSA por a quién va ' + HOY, 'TDC DECOMSA por a quién va', [filtrosTxt() || 'Todos los meses', 'Exportado el ' + fecha(HOY)],
+      ['A quién va', 'Cargos', 'Total'], r.ks.map(function (k) { return [k, r.porD[k].n, r.porD[k].t]; }).concat([['Total', r.n, r.tot]]), [3], [32, 12, 16]);
+  };
+  $('x-res-m').onclick = function () {
+    var r = pintaRes();
+    excel(this, 'TDC DECOMSA por mes ' + HOY, 'TDC DECOMSA por mes', [$('f-dest').value ? $('f-dest').selectedOptions[0].textContent : 'A quién va: todos', 'Exportado el ' + fecha(HOY)],
+      ['Mes', 'Cargos', 'Total', 'Por clasificar'], r.ms.map(function (m) { return [mesTxt(m), r.porM[m].n, r.porM[m].t, r.porM[m].p]; }), [3], [20, 12, 16, 16]);
+  };
+
+  function pinta() {
+    pintaTabs(); pintaActs(); pintaKpis();
+    var res = TAB === 'res';
+    $('s-lista').hidden = res; $('s-res').hidden = !res;
+    if (res) pintaRes(); else pintaLista();
+  }
+  ['f-mes', 'f-dest'].forEach(function (id) { $(id).onchange = pinta; });
+  $('f-q').oninput = pinta;
+
+  /* ---------- un cargo ---------- */
+  function siguiente(id) {
+    var L = filtrada(true).filter(function (c) { return c.estado === 'por_clasificar' && c.id !== id; });
+    return L.length ? L[L.length - 1] : null;   // el más viejo primero
+  }
+  async function ficha(id) {
+    var c;
+    try { c = await rpc('tdc_ficha', { p_id: id }); } catch (e) { error(falla(e)); return; }
+    ABIERTO = id;
+    var dl = '<span>Fecha</span><span>' + esc(fecha(c.fecha)) + '</span>'
+      + '<span>Concepto del banco</span><span>' + esc(c.concepto) + '</span>'
+      + '<span>Monto</span><span><b>' + esc(dinero(c.monto)) + '</b></span>'
+      + '<span>Lo capturó</span><span>' + esc(c.capturo || '') + (c.origen === 'excel' ? ' (venía en el Excel)' : '') + '</span>'
+      + '<span>Estado</span><span>' + esc(EST_TXT[c.estado] || c.estado) + (c.clasifico ? ' · ' + esc(c.clasifico) + ', ' + esc(fechaHora(c.clasificado_en)) : '') + '</span>';
+    var h = '<div class="sec"><h3>El cargo</h3><div class="in"><div class="dl">' + dl + '</div></div></div>';
+    // Eva corrige o borra lo que no está clasificado
+    if (CAPTURA && c.estado !== 'clasificado') {
+      h += '<div class="sec"><h3>Corregir</h3><div class="in"><div class="campos uno">'
+        + '<div class="campo"><label for="c-fecha">Fecha de operación</label><input type="date" id="c-fecha" value="' + esc(String(c.fecha).slice(0, 10)) + '" max="' + HOY + '"></div>'
+        + '<div class="campo"><label for="c-con">Concepto del banco</label><input type="text" id="c-con" maxlength="200" value="' + esc(c.concepto) + '" autocomplete="off"></div>'
+        + '<div class="campo"><label for="c-monto">Monto</label><input type="text" inputmode="decimal" id="c-monto" value="' + esc(Number(c.monto).toFixed(2)) + '" autocomplete="off"></div>'
+        + '</div><div class="msg mal" id="c-msg" hidden></div>'
+        + '<div class="acciones"><button class="btn acento" type="button" id="c-guarda">Guardar</button><button class="btn peligro" type="button" id="c-borra">Borrar</button></div></div></div>';
+    } else if (CAPTURA && c.estado === 'clasificado') {
+      h += '<div class="msg ojo">Ya está clasificado. Si hay que corregirlo, pídele a Héctor Daniel Nava que le quite la clasificación.</div>';
+    }
+    // qué es
+    if (CLASIFICA) {
+      h += '<div class="sec"><h3>Qué es</h3><div class="in"><div class="campos">'
+        + '<div class="campo ancho"><label for="k-que">Qué se compró</label><input type="text" id="k-que" maxlength="200" value="' + esc(c.que || '') + '" autocomplete="off" placeholder="Por ejemplo, «Teclado para la laptop»"></div>'
+        + '<div class="campo ancho"><label for="k-dest">A quién va</label><select id="k-dest"><option value="">Escoge…</option>'
+        + activos().concat(destinos().filter(function (d) { return !d.activo && d.id === c.destino_id; })).map(function (d) { return '<option value="' + d.id + '"' + (d.id === c.destino_id ? ' selected' : '') + '>' + esc(d.nombre) + '</option>'; }).join('')
+        + '</select><button class="lnk" type="button" id="k-otro" style="align-self:flex-start;margin-top:4px">+ Agregar otra empresa o persona</button></div>'
+        + '<div class="campo ancho" id="k-otro-c" hidden><label for="k-otro-n">Nombre nuevo</label><div class="agrega"><input type="text" id="k-otro-n" maxlength="60" autocomplete="off"><button class="btn" type="button" id="k-otro-g">Agregar</button></div></div>'
+        + '</div><div class="msg mal" id="k-msg" hidden></div>'
+        + '<div class="acciones"><button class="btn acento" type="button" id="k-guarda">Guardar</button>'
+        + (siguiente(c.id) ? '<button class="btn" type="button" id="k-sig">Guardar y siguiente</button>' : '')
+        + (c.estado === 'clasificado' ? '<button class="btn peligro" type="button" id="k-quita">Quitar clasificación</button>' : '') + '</div></div></div>';
+    } else if (c.estado !== 'captura') {
+      h += '<div class="sec"><h3>Qué es</h3><div class="in"><div class="dl"><span>Qué se compró</span><span>' + (c.que ? esc(c.que) : '<span class="mut">Falta</span>') + '</span>'
+        + '<span>A quién va</span><span>' + (c.destino ? esc(c.destino) : '<span class="mut">Falta</span>') + '</span></div></div></div>';
+    }
+    // historial
+    var hi = (c.historial || []).map(function (x) {
+      var d = x.despues || {}, a = x.antes || {}, det = [];
+      if (d.que || d.destino) det.push((d.que ? '«' + d.que + '»' : '') + (d.destino ? ' → ' + d.destino : ''));
+      if (x.que === 'corrigió') ['fecha', 'concepto', 'monto'].forEach(function (k) { if (String(a[k]) !== String(d[k])) det.push(k + ': ' + (k === 'monto' ? dinero(a[k]) + ' → ' + dinero(d[k]) : k === 'fecha' ? fecha(a[k]) + ' → ' + fecha(d[k]) : a[k] + ' → ' + d[k])); });
+      if (x.que === 'quitó la clasificación' && (a.que || a.destino)) det.push('antes: «' + (a.que || '') + '» → ' + (a.destino || ''));
+      return '<div><b>' + esc(x.quien) + '</b> ' + esc(x.que) + (det.length ? ': ' + esc(det.join(' · ')) : '') + '<span class="mut">' + esc(fechaHora(x.en)) + '</span></div>';
+    }).join('');
+    h += '<div class="sec"><h3>Historial</h3><div class="in"><div class="hist">' + (hi || '<span class="mut">Sin movimientos.</span>') + '</div></div></div>';
+    abre(c.concepto, fecha(c.fecha) + ' · ' + dinero(c.monto), h);
+    // Eva
+    if ($('c-guarda')) $('c-guarda').onclick = async function () {
+      var b = this, m = $('c-msg'); m.hidden = true; b.disabled = true;
+      try { await rpc('tdc_guarda', { p: { id: c.id, fecha: $('c-fecha').value, concepto: $('c-con').value, monto: $('c-monto').value } }); avisa('Se corrigió el cargo.'); await recarga(); ficha(c.id); }
+      catch (e) { m.textContent = falla(e); m.hidden = false; b.disabled = false; }
+    };
+    if ($('c-borra')) $('c-borra').onclick = async function () {
+      if (!(await pregunta('¿Borrar este cargo?', c.concepto + ' · ' + fecha(c.fecha) + ' · ' + dinero(c.monto), 'Borrar'))) return;
+      try { await rpc('tdc_borra', { p_id: c.id }); cierra(); avisa('Se borró el cargo.'); await recarga(); } catch (e) { $('c-msg').textContent = falla(e); $('c-msg').hidden = false; }
+    };
+    // Héctor Daniel Nava
+    if ($('k-otro')) $('k-otro').onclick = function () { $('k-otro-c').hidden = false; $('k-otro-n').focus(); };
+    if ($('k-otro-g')) $('k-otro-g').onclick = async function () {
+      var b = this, m = $('k-msg'); m.hidden = true; b.disabled = true;
+      try {
+        var d = await rpc('tdc_destino_guarda', { p_nombre: $('k-otro-n').value });
+        EST = await rpc('tdc_estado');
+        var s = $('k-dest'); if (!s.querySelector('option[value="' + d.id + '"]')) { var o = document.createElement('option'); o.value = d.id; o.textContent = d.nombre; s.appendChild(o); }
+        s.value = String(d.id); $('k-otro-n').value = ''; $('k-otro-c').hidden = true; b.disabled = false;
+        pintaFiltros();
+      } catch (e) { m.textContent = falla(e); m.hidden = false; b.disabled = false; }
+    };
+    async function guarda(sig) {
+      var m = $('k-msg'); m.hidden = true;
+      var que = $('k-que').value.trim(), dest = $('k-dest').value;
+      if (!que) { m.textContent = 'Escribe qué se compró.'; m.hidden = false; $('k-que').focus(); return; }
+      if (!dest) { m.textContent = 'Escoge a quién va el gasto.'; m.hidden = false; $('k-dest').focus(); return; }
+      try {
+        var nx = sig ? siguiente(c.id) : null;
+        await rpc('tdc_clasifica', { p_id: c.id, p_que: que, p_destino: +dest });
+        await recarga();
+        if (nx) { ficha(nx.id); } else { cierra(); avisa('Listo. Cuando termines, pica «Listo, ya los clasifiqué» para que a Eva le llegue el aviso.'); }
+      } catch (e) { m.textContent = falla(e); m.hidden = false; }
+    }
+    if ($('k-guarda')) $('k-guarda').onclick = function () { guarda(false); };
+    if ($('k-sig')) $('k-sig').onclick = function () { guarda(true); };
+    if ($('k-que')) $('k-que').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); $('k-dest').focus(); } };
+    if ($('k-quita')) $('k-quita').onclick = async function () {
+      if (!(await pregunta('¿Quitarle la clasificación?', 'Regresa a «Por clasificar» y Eva ya lo puede corregir.', 'Quitar'))) return;
+      try { await rpc('tdc_clasifica', { p_id: c.id, p_que: null, p_destino: null }); await recarga(); ficha(c.id); } catch (e) { $('k-msg').textContent = falla(e); $('k-msg').hidden = false; }
+    };
+    try { (CLASIFICA && c.estado !== 'clasificado' ? $('k-que') : $('v-cierra')).focus(); } catch (e) {}
+  }
+
+  /* ---------- Eva: un cargo nuevo ---------- */
+  function formCargo() {
+    var h = '<div class="sec"><h3>El cargo</h3><div class="in"><div class="campos uno">'
+      + '<div class="campo"><label for="n-fecha">Fecha de operación</label><input type="date" id="n-fecha" value="' + HOY + '" max="' + HOY + '"></div>'
+      + '<div class="campo"><label for="n-con">Concepto del banco</label><input type="text" id="n-con" maxlength="200" autocomplete="off" placeholder="Como viene en el estado de cuenta"></div>'
+      + '<div class="campo"><label for="n-monto">Monto</label><input type="text" inputmode="decimal" id="n-monto" autocomplete="off" placeholder="0.00"></div>'
+      + '</div><div class="msg mal" id="n-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="n-guarda">Guardar</button><button class="btn" type="button" id="n-otro">Guardar y capturar otro</button></div>'
+      + '<span class="mut">Con Enter en el monto se guarda y queda listo el siguiente. Se queda en «Capturando» (solo tú lo ves); cuando termines de subir los de esta vez, pica «Listo, ya los capturé» y a Héctor Daniel Nava le llega un solo aviso.</span></div></div>';
+    abre('Nuevo cargo', 'Tarjeta de crédito de DECOMSA', h);
+    async function guarda(otro) {
+      var m = $('n-msg'); m.hidden = true;
+      var p = { fecha: $('n-fecha').value, concepto: $('n-con').value, monto: $('n-monto').value };
+      if (!p.fecha) { m.textContent = 'Falta la fecha de operación.'; m.hidden = false; return; }
+      if (!String(p.concepto).trim()) { m.textContent = 'Falta el concepto del banco.'; m.hidden = false; $('n-con').focus(); return; }
+      if (!String(p.monto).trim()) { m.textContent = 'Falta el monto.'; m.hidden = false; $('n-monto').focus(); return; }
+      ['n-guarda', 'n-otro'].forEach(function (id) { $(id).disabled = true; });
+      try {
+        await rpc('tdc_guarda', { p: p });
+        await recarga();
+        if (otro) { $('n-con').value = ''; $('n-monto').value = ''; $('n-con').focus(); avisa('Se guardó. Captura el siguiente.'); ['n-guarda', 'n-otro'].forEach(function (id) { $(id).disabled = false; }); }
+        else { cierra(); avisa('Se guardó el cargo.'); }
+      } catch (e) { m.textContent = falla(e); m.hidden = false; ['n-guarda', 'n-otro'].forEach(function (id) { $(id).disabled = false; }); }
+    }
+    $('n-monto').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); guarda(true); } };
+    $('n-guarda').onclick = function () { guarda(false); };
+    $('n-otro').onclick = function () { guarda(true); };
+    try { $('n-con').focus(); } catch (e) {}
+  }
+
+  async function manda() {
+    var n = cuenta('captura');
+    if (!(await pregunta('¿Ya terminaste de subir los cargos?', 'Se le mandan a Héctor Daniel Nava los ' + n + (n === 1 ? ' cargo' : ' cargos') + ' que estás capturando, con un solo aviso.', 'Sí, mandarlos'))) return;
+    try { var r = await rpc('tdc_manda'); avisa('Listo: a Héctor Daniel Nava le llegó el aviso de ' + r.n + (r.n === 1 ? ' cargo' : ' cargos') + '.'); TAB = 'por_clasificar'; await recarga(); }
+    catch (e) { error(falla(e)); }
+  }
+  async function listo() {
+    var a = EST.por_avisar || 0, f = cuenta('por_clasificar');
+    if (!(await pregunta('¿Ya terminaste de clasificar?', 'A Eva le llega un solo aviso: clasificaste ' + a + (a === 1 ? ' cargo' : ' cargos') + (f ? ' y faltan ' + f + '.' : ' y ya no falta ninguno.'), 'Sí, avisarle'))) return;
+    try { var r = await rpc('tdc_listo'); avisa('Listo: a Eva le llegó el aviso de ' + r.n + (r.n === 1 ? ' cargo clasificado.' : ' cargos clasificados.')); await recarga(); }
+    catch (e) { error(falla(e)); }
+  }
+
+  /* ---------- la lista de «a quién va» ---------- */
+  function listaDestinos() {
+    function pintaD() {
+      $('d-lista').innerHTML = destinos().map(function (d) {
+        return '<div class="' + (d.activo ? '' : 'off') + '"><span class="nom">' + esc(d.nombre) + '</span><span class="acciones"><span class="mut">' + d.usos + (d.usos === 1 ? ' cargo' : ' cargos') + '</span>'
+          + (d.activo ? '<button class="btn chico" type="button" data-q="' + d.id + '">Quitar de la lista</button>' : '<button class="btn chico" type="button" data-r="' + esc(d.nombre) + '">Regresar a la lista</button>') + '</span></div>';
+      }).join('');
+      $('d-lista').querySelectorAll('[data-q]').forEach(function (b) {
+        b.onclick = async function () {
+          var d = destinos().filter(function (x) { return String(x.id) === b.getAttribute('data-q'); })[0];
+          if (!(await pregunta('¿Quitar «' + d.nombre + '» de la lista?', 'Ya no sale para clasificar. Lo que ya está clasificado con esta opción no cambia.', 'Quitar'))) return;
+          try { await rpc('tdc_destino_quita', { p_id: d.id }); EST = await rpc('tdc_estado'); pintaD(); pintaFiltros(); pinta(); } catch (e) { $('d-msg').textContent = falla(e); $('d-msg').hidden = false; }
+        };
+      });
+      $('d-lista').querySelectorAll('[data-r]').forEach(function (b) {
+        b.onclick = async function () {
+          try { await rpc('tdc_destino_guarda', { p_nombre: b.getAttribute('data-r') }); EST = await rpc('tdc_estado'); pintaD(); pintaFiltros(); pinta(); } catch (e) { $('d-msg').textContent = falla(e); $('d-msg').hidden = false; }
+        };
+      });
+    }
+    abre('A quién va', 'Las empresas y personas para clasificar los cargos',
+      '<div class="sec"><h3>Agregar</h3><div class="in"><div class="agrega"><input type="text" id="d-nuevo" maxlength="60" autocomplete="off" aria-label="Nombre de la empresa o persona" placeholder="Nombre nuevo"><button class="btn acento" type="button" id="d-agrega">Agregar</button></div>'
+      + '<div class="msg mal" id="d-msg" hidden></div></div></div>'
+      + '<div class="sec"><h3>La lista</h3><div class="in"><div class="destinos" id="d-lista"></div></div></div>');
+    pintaD();
+    $('d-agrega').onclick = async function () {
+      var m = $('d-msg'); m.hidden = true;
+      try { await rpc('tdc_destino_guarda', { p_nombre: $('d-nuevo').value }); $('d-nuevo').value = ''; EST = await rpc('tdc_estado'); pintaD(); pintaFiltros(); pinta(); }
+      catch (e) { m.textContent = falla(e); m.hidden = false; }
+    };
+    $('d-nuevo').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); $('d-agrega').click(); } };
+    try { $('d-nuevo').focus(); } catch (e) {}
+  }
+
+  /* ---------- arranque ---------- */
+  async function recarga() {
+    var r = await Promise.all([rpc('tdc_estado'), rpc('tdc_lista')]);
+    EST = r[0]; LISTA = r[1] || [];
+    pintaFiltros(); pinta();
+  }
+  // desde el Inicio (la pila «TDC DECOMSA»): un cargo por clasificar o, a Eva, lo que tiene sin mandar
+  window.PROFASE_ABRE_TDC = function (x) {
+    var s = String(x == null ? '' : x);
+    if (!EST) { setTimeout(function () { window.PROFASE_ABRE_TDC(s); }, 300); return; }
+    if (s === 'mandar' && CAPTURA) { TAB = 'captura'; pinta(); return; }
+    if (/^\d{1,12}$/.test(s)) { TAB = CLASIFICA ? 'por_clasificar' : 'todos'; pinta(); ficha(+s); }
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var p = await P.listo; if (!p) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('tdc_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para Héctor Daniel Nava, Héctor Nava Ramos, Eva Rangel y Dora Montalvo.');
+      var consulta = !!P.consulta || !!EST.consulta;
+      CAPTURA = !!EST.captura && !consulta; CLASIFICA = !!EST.clasifica && !consulta;
+      $('consulta').hidden = !consulta;
+      LISTA = await rpc('tdc_lista') || [];
+      TAB = CAPTURA && cuenta('captura') ? 'captura' : (CLASIFICA && cuenta('por_clasificar') ? 'por_clasificar' : 'todos');
+      $('cargando').hidden = true;
+      pintaFiltros(); pinta();
+      $('todo').hidden = false;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  // al volver a la pestaña, lo más nuevo (sin preguntar mientras no se ve ni con una ventana abierta)
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || !EST || !EST.ve || !$('velo').hidden) return;
+    recarga().catch(function () {});
+  });
+  arranca();
+})();
+</script>
+</body></html>
