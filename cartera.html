@@ -3261,10 +3261,21 @@ function pestanaApl(todos,lista,m){
    (pestaña Aplicaciones de su ventana) y para el de varias («Excel de aplicaciones» de la pantalla principal, 4-nov-2026,
    pedido de Fernando): las mismas cuentas (aplEmp, aplStats) y las mismas columnas; con varias empresas, además el grupo
    y la empresa en cada renglón y un subtotal por empresa. ── */
+// los datos de cada anticipo o nota (fecha, UUID, total del CFDI y saldo a favor), después de «Documentos relacionados»
+// (4-nov-2026, pedido de Fernando: «como sé cuál es la nota de crédito 6?» y «cuánto vale»)
 const APL_XCOLS=['Cliente o proveedor','RFC','Factura','Fecha','UUID','Saldo real','Relación','Estado de la relación',
-  'Documentos relacionados','Se aplica','Saldo de la factura quedaría (demostrativo)','Le queda al anticipo o nota'];
-const APL_XANCHO=[44,16,16,12,38,15,24,20,30,15,22,30];
-const APL_XMON=[6,10,11];   // columnas con dinero (sin el grupo y la empresa)
+  'Documentos relacionados','Fecha del anticipo o nota','UUID del anticipo o nota','Total del CFDI (anticipo o nota)',
+  'Saldo a favor (anticipo o nota)','Se aplica','Saldo de la factura quedaría (demostrativo)','Le queda al anticipo o nota'];
+const APL_XANCHO=[44,16,16,12,38,15,24,30,30,14,38,18,18,15,22,30];
+const APL_XMON=[6,14,15];   // columnas que suman (sin el grupo y la empresa): saldo real, se aplica y quedaría
+const APL_XDOC=[12,13];     // total y saldo a favor de los anticipos o notas: con dinero, pero no suman
+// por qué una relación no se aplica: el anticipo o nota ya se usa en otra factura
+function aplPorQue(rl){
+  const en=new Set();
+  rl.docs.forEach(d=>{ const X=aplD(d); if(!X) return;
+    X.rels.forEach(o=>{ if(o!==rl&&o.on&&o.parte.has(d)&&o.fac!==rl.fac) en.add(folioDe(o.fac)); }); });
+  return en.size?' · ya se usa en la factura '+[...en].join(', '):'';
+}
 const aplCpNom=x=>String((D.cp[x.r.cp]||[])[1]||'');
 // las facturas de un conjunto de documentos, con sus aplicaciones, en el orden del Excel (cliente o proveedor y saldo)
 const aplFacsDe=rows=>rows.filter(r=>ladoFac(r)>=0).map(aplF).filter(Boolean)
@@ -3277,7 +3288,7 @@ function aplStats(facs){
     sin:facs.filter(x=>!x.rels.length).length,apl:s.tot,queda:facs.reduce((a,x)=>a+(x.aplicado>0.005?x.queda:x.r.saldo),0),
     conf:s.n.conf,acep:s.n.acep,auto:s.n.auto,sug:s.n.sug,rev:s.n.rev};
 }
-const aplValor=(F2,i)=>i===6?F2.r.saldo:i===10?(F2.aplicado>0.005?F2.aplicado:0):(F2.aplicado>0.005?F2.queda:F2.r.saldo);
+const aplValor=(F2,i)=>i===APL_XMON[0]?F2.r.saldo:i===APL_XMON[1]?(F2.aplicado>0.005?F2.aplicado:0):(F2.aplicado>0.005?F2.queda:F2.r.saldo);
 // op: {gen: true, lineas: [...]} con varias empresas (facs ya en el orden de la pantalla)
 function hojaApl(wb,nombre,facs,c,corte,op){
   op=op||{};
@@ -3286,18 +3297,26 @@ function hojaApl(wb,nombre,facs,c,corte,op){
   (gen?[22,40]:[]).concat(APL_XANCHO).forEach((w,i)=>ws.getColumn(i+1).width=w);
   const f0=MK.encabezado(wb,ws,nc,{titulo:'Aplicaciones · '+nombre,lineas:(gen?op.lineas:[c[1]+' · '+c[2],
     'Corte del Tablero QUO: '+fmtD(M.generado)+' '+M.hora]).concat(['Demostrativo: no cambia saldos en QUO ni en la Cartera.'])});
-  ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,nc,{derecha:mon});
+  const monDoc=APL_XDOC.map(i=>i+sx);
+  ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,nc,{derecha:mon.concat(monDoc)});
   let n=f0+1;
   const fila=F2=>{
     const d=F2.r, cp=D.cp[d.cp]||['',''], rl=F2.prim, t=rl?relTipo(rl):null, e=D.cli[d.cli];
-    const docs=F2.apl.flatMap(x=>x.docs);
+    const docs=F2.apl.flatMap(x=>x.docs), rel=F2.apl.length?docs:rl?rl.docs:[];
+    // de un solo anticipo o nota, fecha y montos como fecha y número; de 2 o 3, en texto, en el mismo orden, con « + »
+    const uno=rel.length===1, dd=uno?rel[0]:null;
     ws.getRow(n).values=(gen?[e[3]||'Sin grupo',e[1]]:[]).concat([cp[1]||'',cp[0]||'',folioDe(d),d.fecha?xd(d.fecha):null,d.uuid||'',cent(d.saldo),
       rl?APL_T[t]+(F2.rels.length>1?' (+'+(F2.rels.length-1)+' más)':''):'Sin relación',
-      F2.est?(F2.est==='cancela'?'Se cancela':'Se reduce'):rl?(t==='quit'?'Quitada':'No se aplica'):'—',
-      (F2.apl.length?docs:rl?rl.docs:[]).map(x=>docNom(x)+' '+folioDe(x)).join(' + '),
+      F2.est?(F2.est==='cancela'?'Se cancela':'Se reduce'):rl?(t==='quit'?'Quitada':'No se aplica'+aplPorQue(rl)):'—',
+      rel.map(x=>docNom(x)+' '+folioDe(x)).join(' + '),
+      uno?(dd.fecha?xd(dd.fecha):null):rel.map(x=>x.fecha?fmtD(x.fecha):'sin fecha').join(' + '),
+      rel.map(x=>x.uuid||'').join(' + '),
+      uno?cent(Math.abs(dd.total||0)):rel.map(x=>F.mxn2.format(Math.abs(x.total||0))).join(' + '),
+      uno?cent(-dd.saldo):rel.map(x=>F.mxn2.format(-x.saldo)).join(' + '),
       F2.aplicado>0.005?cent(F2.aplicado):0,cent(F2.aplicado>0.005?F2.queda:d.saldo),
       docs.map(x=>{ const X=aplD(x); return folioDe(x)+': '+F.mxn2.format(X?X.queda:0); }).join(' · ')]);
     ws.getCell(n,4+sx).numFmt='dd/mm/yyyy'; mon.forEach(i=>ws.getCell(n,i).numFmt=RCX_MON);
+    if(uno){ ws.getCell(n,10+sx).numFmt='dd/mm/yyyy'; monDoc.forEach(i=>ws.getCell(n,i).numFmt=RCX_MON); }
     n++;
   };
   // SUBTOTAL(109) de Excel no cuenta otros SUBTOTAL: el total de abajo no suma dos veces los de cada empresa
