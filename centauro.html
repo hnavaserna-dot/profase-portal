@@ -213,6 +213,12 @@ tr.total td{background:var(--surface-2)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
 .clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:12px 14px}
 tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel td{background:var(--navy-soft)}
+/* 253: la opinión de cumplimiento arriba de las declaraciones de un cliente */
+.opi{padding:10px 18px;border-bottom:1px solid var(--line)}
+.opi-c{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:4px 0}
+.opi-c>div:first-child{min-width:0;flex:1 1 260px;overflow-wrap:anywhere}
+.opi-t{font-weight:700;margin-bottom:2px}
+.opi-ant{margin-top:6px}.opi-ant summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .cli{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;min-width:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cli:hover{border-color:var(--navy)}
 .cli[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -399,11 +405,12 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         <label>Año <select id="d-anio" aria-label="Año"></select></label>
         <label>Tipo <select id="d-tipo" aria-label="Tipo"><option value="">Todas</option><option value="normal">Normales</option><option value="comp">Complementarias</option></select></label>
       </div>
+      <div class="opi" id="d-opi" hidden></div>
       <div class="tot" id="d-tot" hidden></div>
-      <div class="tabla"><table class="resp"><thead><tr><th>Presentada</th><th>Periodo</th><th>Tipo</th><th>Obligaciones</th><th>Número de operación</th><th>Estado</th><th></th></tr></thead>
+      <div class="tabla"><table class="resp"><thead><tr><th>Presentada</th><th>Periodo</th><th>Tipo</th><th>Obligaciones</th><th>Número de operación</th><th>Pago</th><th>Estado</th><th></th></tr></thead>
         <tbody id="d-lista"></tbody></table></div>
     </div>
-    <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT.</p>
+    <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT. «Pago» es la prueba del pago que da el SAT («Información registrada de pagos de contribuciones federales», con el pago recibido en el banco) y arriba sale la última opinión de cumplimiento; las dos también se suben solas a su actividad del WorkFlow (sin terminarla) si el contador no subió ya un documento.</p>
   </section>
 
   <!-- Reportes -->
@@ -548,7 +555,10 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   }
 
   /* =============================== Declaraciones (247) =============================== */
-  var D = { clis: [], cli: '', filas: [], cliente: '', seq: 0 }, bD = null, VD = null;
+  var D = { clis: [], cli: '', filas: [], ops: [], cliente: '', seq: 0 }, bD = null, VD = null;
+  var SENT = { positiva: ['ok', 'Positiva'], negativa: ['mal', 'Negativa'], suspenso: ['ojo', 'En suspenso'], sin_obligaciones: ['', 'Inscrito sin obligaciones'],
+               no_inscrito: ['mal', 'No inscrito'], otro: ['ojo', 'Revisar'] };
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var DECL_K = { hecho: ['ok', 'ya está', ' ✓'], falta: ['', 'por bajar', ' …'], tomado: ['az', 'bajándose', ' …'],
                  sin: ['mal', 'no se pudo', ' ✕'], error: ['mal', 'no se pudo', ' ✕'], fuera: ['', 'no aplica', ''] };
   async function bytesDecl(d) {
@@ -603,6 +613,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       sa.innerHTML = '<option value="">Todos los años</option>' + [2026, 2025, 2024, 2023, 2022].map(function (y) { return '<option>' + y + '</option>'; }).join('');
       sa.onchange = function () { pintaD(); }; $('d-tipo').onchange = function () { pintaD(); };
     }
+    var pide = ''; try { pide = sessionStorage.getItem('cen-decl-abre') || ''; sessionStorage.removeItem('cen-decl-abre'); } catch (e) { pide = ''; }
+    if (pide && D.clis.some(function (c) { return c.rfc === pide; })) { D.cli = pide; if (bD && bD.pon) bD.pon([pide]); }   // 253: desde el aviso de su opinión
     pintaClientesD();
     if (D.cli) await listaD();
   }
@@ -610,11 +622,36 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     var mi = ++D.seq;
     $('d-card').hidden = !D.cli;
     if (!D.cli) return;
-    $('d-lista').innerHTML = '<tr><td colspan="7" class="vacio">Cargando…</td></tr>';
-    var r = await rpc('cen_decl_lista', { p: { rfc: D.cli } }) || { filas: [] };
+    $('d-lista').innerHTML = '<tr><td colspan="8" class="vacio">Cargando…</td></tr>';
+    var dos = await Promise.all([rpc('cen_decl_lista', { p: { rfc: D.cli } }), rpc('cen_decl_opiniones', { p: { rfc: D.cli } })]);
     if (mi !== D.seq) return;
-    D.filas = r.filas || []; D.cliente = r.cliente || D.cli;
-    pintaD();
+    var r = dos[0] || { filas: [] };
+    D.filas = r.filas || []; D.cliente = r.cliente || D.cli; D.ops = dos[1] || [];
+    pintaOpi(); pintaD();
+    try { $('d-card').scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  }
+  // 253: la última opinión de cumplimiento del SAT (y las de antes), con «Ver» y «Bajar» (con la marca o el original)
+  function docOpi(o) { return o && o.ruta ? { ruta: o.ruta, nombre: 'Opinión de cumplimiento ' + o.folio + '.pdf' } : null; }
+  function pintaOpi() {
+    var box = $('d-opi'), o = D.ops[0];
+    if (!o) { box.hidden = true; box.innerHTML = ''; return; }
+    var k = SENT[o.sentido] || SENT.otro, ant = D.ops.slice(1);
+    var linea = function (x) {
+      return 'Folio ' + esc(x.folio) + (x.emitida ? ' · emitida el ' + esc(fechaHora(x.emitida)) : '')
+        + (x.mes ? ' · para el mes contable ' + esc(MESES_L[x.mes - 1] + ' de ' + x.ejercicio) : '');
+    };
+    box.innerHTML = '<div class="opi-c"><div><div class="opi-t">Opinión de cumplimiento del SAT ' + chip(k[1], k[0]) + '</div>'
+      + '<div class="mut">' + linea(o) + '</div>'
+      + (o.sentido !== 'positiva' ? '<div class="mut">El CRM la vuelve a pedir cada semana hasta que salga positiva y avisa al contador, a su gerente y a los de Centauro.</div>' : '')
+      + '</div><div class="acciones"><button class="btn chico" type="button" data-over="0">Ver</button><button class="btn chico" type="button" data-obaja="0">Bajar</button></div></div>'
+      + (ant.length ? '<details class="opi-ant"><summary>Ver las anteriores (' + ant.length + ')</summary>' + ant.map(function (x, i) {
+          var kx = SENT[x.sentido] || SENT.otro;
+          return '<div class="opi-c"><div>' + chip(kx[1], kx[0]) + ' <span class="mut">' + linea(x) + '</span></div><div class="acciones">'
+            + '<button class="btn chico" type="button" data-over="' + (i + 1) + '">Ver</button><button class="btn chico" type="button" data-obaja="' + (i + 1) + '">Bajar</button></div></div>';
+        }).join('') + '</details>' : '');
+    box.hidden = false;
+    box.querySelectorAll('[data-over]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docOpi(D.ops[+b.getAttribute('data-over')]), b); }; });
+    box.querySelectorAll('[data-obaja]').forEach(function (b) { b.onclick = function () { visorDecl().baja(docOpi(D.ops[+b.getAttribute('data-obaja')]), b); }; });
   }
   function visiblesD() {
     var a = $('d-anio').value, t = $('d-tipo').value;
@@ -625,8 +662,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     });
   }
   function docDe(f, k) {
-    var ruta = k === 'acuse' ? f.acuse : f.decl;
-    return ruta ? { ruta: ruta, nombre: (k === 'acuse' ? 'Acuse ' : 'Declaración ') + (f.periodo || '') + ' ' + f.ejercicio + ' ' + f.numero + '.pdf' } : null;
+    var ruta = k === 'acuse' ? f.acuse : k === 'pago' ? f.pago : f.decl;
+    return ruta ? { ruta: ruta, nombre: (k === 'acuse' ? 'Acuse ' : k === 'pago' ? 'Pago ' : 'Declaración ') + (f.periodo || '') + ' ' + f.ejercicio + ' ' + f.numero + '.pdf' } : null;
   }
   function pintaD() {
     var l = visiblesD(), tb = $('d-lista');
@@ -636,7 +673,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     $('d-tot').innerHTML = '<span><b>' + cuenta(l.length, 'declaración', 'declaraciones') + '</b></span>' + (comp ? '<span>' + chip(cuenta(comp, 'complementaria', 'complementarias'), 'ojo') + '</span>' : '');
     $('d-tot').hidden = false;
     $('x-decl').disabled = !l.length;
-    if (!l.length) { vacio(tb, 7, D.filas.length ? 'Nada con estos filtros.' : 'Todavía no hay declaraciones de este cliente: el robot las está bajando.'); return; }
+    if (!l.length) { vacio(tb, 8, D.filas.length ? 'Nada con estos filtros.' : 'Todavía no hay declaraciones de este cliente: el robot las está bajando.'); return; }
     tb.innerHTML = l.map(function (f, i) {
       var c = /complement/i.test(f.tipo || '');
       return '<tr><td data-l="Presentada" class="nowrap">' + esc(f.presentada ? fechaHora(f.presentada) : '') + (f.vence ? '<div class="mut">Vencía el ' + esc(fecha(f.vence)) + '</div>' : '') + '</td>'
@@ -644,20 +681,23 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         + '<td data-l="Tipo">' + chip(f.tipo || '—', c ? 'ojo' : 'az') + (f.tipo_comp ? '<div class="mut">' + esc(f.tipo_comp) + '</div>' : '') + '</td>'
         + '<td data-l="Obligaciones">' + ((f.obligaciones || []).map(function (o) { return '<div>' + esc(o) + '</div>'; }).join('') || '<span class="mut">—</span>') + '</td>'
         + '<td data-l="Número de operación" class="mono">' + esc(f.numero) + '</td>'
+        + '<td data-l="Pago">' + (f.pago ? chip('Pagada' + (f.pago_fecha ? ' el ' + fecha(f.pago_fecha) : ''), 'ok') : '<span class="mut">—</span>') + '</td>'
         + '<td data-l="Estado">' + esc(f.estado || '') + '</td>'
         + '<td data-l=""><div class="acciones">'
         + (f.decl ? '<button class="btn chico" type="button" data-dver="' + i + '">Ver</button><button class="btn chico" type="button" data-dbaja="' + i + '">Bajar</button>' : '')
-        + (f.acuse ? '<button class="btn chico" type="button" data-dacuse="' + i + '">Acuse</button>' : '') + '</div></td></tr>';
+        + (f.acuse ? '<button class="btn chico" type="button" data-dacuse="' + i + '">Acuse</button>' : '')
+        + (f.pago ? '<button class="btn chico" type="button" data-dpago="' + i + '">Pago</button>' : '') + '</div></td></tr>';
     }).join('');
     tb.querySelectorAll('[data-dver]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dver')], 'decl'), b); }; });
     tb.querySelectorAll('[data-dbaja]').forEach(function (b) { b.onclick = function () { visorDecl().baja(docDe(l[+b.getAttribute('data-dbaja')], 'decl'), b); }; });
     tb.querySelectorAll('[data-dacuse]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dacuse')], 'acuse'), b); }; });
+    tb.querySelectorAll('[data-dpago]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dpago')], 'pago'), b); }; });
   }
   $('x-decl').onclick = function () {
     var l = visiblesD();
-    excel(this, 'Declaraciones', ['Cliente', 'RFC', 'Ejercicio', 'Periodo', 'Periodicidad', 'Tipo', 'Tipo de complementaria', 'Presentada', 'Vencía', 'Obligaciones', 'Número de operación', 'Estado'],
-      l.map(function (f) { return [D.cliente, D.cli, f.ejercicio, f.periodo || '', f.periodicidad || '', f.tipo || '', f.tipo_comp || '', fechaHora(f.presentada), fecha(f.vence), (f.obligaciones || []).join(' · '), f.numero, f.estado || '']; }),
-      [30, 15, 9, 12, 12, 14, 24, 18, 12, 44, 18, 20], [D.cliente + ' (' + D.cli + ') · ' + ($('d-anio').value || 'todos los años')]);
+    excel(this, 'Declaraciones', ['Cliente', 'RFC', 'Ejercicio', 'Periodo', 'Periodicidad', 'Tipo', 'Tipo de complementaria', 'Presentada', 'Vencía', 'Obligaciones', 'Número de operación', 'Pagada el', 'Estado'],
+      l.map(function (f) { return [D.cliente, D.cli, f.ejercicio, f.periodo || '', f.periodicidad || '', f.tipo || '', f.tipo_comp || '', fechaHora(f.presentada), fecha(f.vence), (f.obligaciones || []).join(' · '), f.numero, f.pago ? (f.pago_fecha ? fecha(f.pago_fecha) : 'Sí') : '', f.estado || '']; }),
+      [30, 15, 9, 12, 12, 14, 24, 18, 12, 44, 18, 12, 20], [D.cliente + ' (' + D.cli + ') · ' + ($('d-anio').value || 'todos los años')]);
   };
 
   /* =============================== Bóveda XML =============================== */
