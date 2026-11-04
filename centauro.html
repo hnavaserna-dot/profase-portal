@@ -194,6 +194,8 @@ tr.click:hover td{background:var(--navy-soft)}
 }
 /* Centauro */
 .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.total td{background:var(--surface-2)}
+.tot>span{min-width:0;overflow-wrap:anywhere}.tot .chip{white-space:normal}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
 .clis{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:12px 14px}
 .cli{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;min-width:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
@@ -320,6 +322,8 @@ tr.click:hover td{background:var(--navy-soft)}
     <div class="tabs" role="tablist" aria-label="Reportes">
       <button type="button" role="tab" data-rep="mes" aria-selected="true">Resumen por mes</button>
       <button type="button" role="tab" data-rep="rel" aria-selected="false">CFDI relacionados</button>
+      <button type="button" role="tab" data-rep="datos" aria-selected="false">XML Datos 4.0</button>
+      <button type="button" role="tab" data-rep="nomina" aria-selected="false">Nómina 1.2 Extendido</button>
     </div>
     <div class="card">
       <header><div><h2 id="r-h">Resumen por mes</h2><div class="sub" id="r-sub"></div></div>
@@ -327,10 +331,15 @@ tr.click:hover td{background:var(--navy-soft)}
       <div class="filtros">
         <div class="busca" id="r-cliBox"></div>
         <label id="r-anioL">Año <select id="r-anio"></select></label>
+        <label id="r-mesL" hidden>Mes <select id="r-mes"></select></label>
+        <div class="lados" id="r-lados" hidden role="group" aria-label="Emitidos o recibidos">
+          <button type="button" data-rlado="emitida" aria-pressed="true">Emitidos</button><button type="button" data-rlado="recibida" aria-pressed="false">Recibidos</button>
+        </div>
       </div>
+      <div class="tot" id="r-tot" hidden></div>
       <div class="tabla"><table class="resp" id="r-tabla"><thead id="r-cab"></thead><tbody id="r-lista"></tbody></table></div>
     </div>
-    <p class="pie">Salen de los XML de la bóveda. Aquí se irán sumando los demás reportes que hoy se sacan del programa de la bóveda de la oficina.</p>
+    <p class="pie">Salen de los XML de la bóveda. «XML Datos 4.0» y «Nómina 1.2 Extendido» son de un cliente a la vez: en pantalla ves una vista previa y el Excel (y su PDF) trae todo. Aquí se irán sumando los demás reportes que hoy se sacan del programa de la bóveda de la oficina.</p>
   </section>
 </div>
 
@@ -349,7 +358,7 @@ tr.click:hover td{background:var(--navy-soft)}
     boveda: ['Bóveda XML', 'Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.'],
     canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y cómo están en QUO: las que siguen activas en QUO hay que cancelarlas.'],
     '69b': ['Lista 69-B', 'Los proveedores de los clientes que el SAT publica como presuntos o definitivos en la lista del artículo 69-B del CFF.'],
-    reportes: ['Reportes', 'Lo que sale de los XML de la bóveda: el resumen por mes y los CFDI relacionados.']
+    reportes: ['Reportes', 'Lo que sale de los XML de la bóveda: el resumen por mes, los CFDI relacionados, XML Datos 4.0 y Nómina 1.2 Extendido.']
   };
   var TIPOS = { I: 'Ingreso', E: 'Egreso', P: 'Pago', N: 'Nómina', T: 'Traslado' };
   var RELACION = { '01': 'Nota de crédito', '02': 'Nota de débito', '03': 'Devolución de mercancía', '04': 'Sustitución', '05': 'Traslados facturados antes', '06': 'Factura de traslados', '07': 'Aplicación de anticipo' };
@@ -375,17 +384,27 @@ tr.click:hover td{background:var(--navy-soft)}
   function vacio(tb, cols, t) { tb.innerHTML = '<tr><td colspan="' + cols + '" class="vacio">' + esc(t) + '</td></tr>'; }
 
   /* ---------- Excel (y su PDF al lado, con la marca PROFASE) ---------- */
-  async function excel(btn, titulo, head, filas, anchos, lineas) {
+  function excel(btn, titulo, head, filas, anchos, lineas) {
+    return libroExcel(btn, titulo, [{ nombre: titulo, head: head, filas: filas, anchos: anchos }], lineas);
+  }
+  /* un libro con una o varias hojas: {nombre, head, filas, anchos, formatos: {col: numFmt}, pdfDeja: [columnas que van al PDF]}.
+     Con muchos renglones no se le pone el estilo celda por celda (sería muy lento); la cabecera y la marca, siempre. */
+  async function libroExcel(btn, titulo, hojas, lineas) {
     btn.disabled = true;
     try {
-      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
-      ws.columns = anchos.map(function (w) { return { width: w }; });
-      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: (lineas || []).concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
-      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
-      filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
-      if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
-      ws.views = [{ state: 'frozen', ySplit: f0 }];
-      MK.impresion(ws, { repetir: f0 });
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo);
+      hojas.forEach(function (h) {
+        var ws = wb.addWorksheet(h.nombre.slice(0, 31)), head = h.head, filas = h.filas;
+        ws.columns = head.map(function (_, i) { return { width: (h.anchos && h.anchos[i]) || 14 }; });
+        var f0 = MK.encabezado(wb, ws, head.length, { titulo: h.titulo || titulo, lineas: (lineas || []).concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
+        ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+        filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+        Object.keys(h.formatos || {}).forEach(function (c) { ws.getColumn(+c + 1).numFmt = h.formatos[c]; });
+        if (filas.length && filas.length <= 5000) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+        ws.views = [{ state: 'frozen', ySplit: f0 }];
+        MK.impresion(ws, { repetir: f0 });
+        if (h.pdfDeja) ws.__pdf = { sin: head.filter(function (x) { return h.pdfDeja.indexOf(x) < 0; }) };
+      });
       await MK.guardar(wb, titulo + '.xlsx');
     } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
     btn.disabled = false;
@@ -673,11 +692,32 @@ tr.click:hover td{background:var(--navy-soft)}
   };
 
   /* =============================== Reportes =============================== */
-  var R = { rep: 'mes', cli: '', clis: [], filas: [] };
+  var R = { rep: 'mes', cli: '', clis: [], filas: [], lado: 'emitida', res: null };
+  var SAT_P = { '001': 'Sueldos, salarios, rayas y jornales', '002': 'Gratificación anual (aguinaldo)', '003': 'PTU', '004': 'Reembolso de gastos médicos',
+    '005': 'Fondo de ahorro', '006': 'Caja de ahorro', '009': 'Contribuciones a cargo del trabajador pagadas por el patrón', '010': 'Premios por puntualidad',
+    '011': 'Prima de seguro de vida', '012': 'Seguro de gastos médicos mayores', '013': 'Cuotas sindicales pagadas por el patrón', '014': 'Subsidios por incapacidad',
+    '015': 'Becas', '019': 'Horas extra', '020': 'Prima dominical', '021': 'Prima vacacional', '022': 'Prima por antigüedad', '023': 'Pagos por separación',
+    '024': 'Seguro de retiro', '025': 'Indemnizaciones', '026': 'Reembolso por funeral', '027': 'Cuotas de seguridad social pagadas por el patrón',
+    '028': 'Comisiones', '029': 'Vales de despensa', '030': 'Vales de restaurante', '031': 'Vales de gasolina', '032': 'Vales de ropa', '033': 'Ayuda para renta',
+    '034': 'Ayuda para artículos escolares', '035': 'Ayuda para anteojos', '036': 'Ayuda para transporte', '037': 'Ayuda para gastos de funeral',
+    '038': 'Otros ingresos por salarios', '039': 'Jubilaciones, pensiones o haberes de retiro', '044': 'Jubilaciones, pensiones o haberes de retiro en parcialidades',
+    '045': 'Ingresos en acciones o títulos valor', '046': 'Ingresos asimilados a salarios', '047': 'Alimentación', '048': 'Habitación',
+    '049': 'Premios por asistencia', '050': 'Viáticos' };
+  var SAT_D = { '001': 'Seguridad social', '002': 'ISR', '003': 'Aportaciones a retiro, cesantía y vejez', '004': 'Otros', '005': 'Aportaciones a fondo de vivienda',
+    '006': 'Descuento por incapacidad', '007': 'Pensión alimenticia', '008': 'Renta', '009': 'Préstamos del Fondo Nacional de la Vivienda',
+    '010': 'Pago por crédito de vivienda', '011': 'Pago de abonos INFONACOT', '012': 'Anticipo de salarios', '013': 'Pagos hechos con exceso al trabajador',
+    '014': 'Errores', '015': 'Pérdidas', '016': 'Averías', '017': 'Adquisición de artículos producidos por la empresa', '018': 'Cuotas para cooperativas y cajas de ahorro',
+    '019': 'Cuotas sindicales', '020': 'Ausencia (ausentismo)', '021': 'Cuotas obrero patronales', '022': 'Impuestos locales', '023': 'Aportaciones voluntarias',
+    '101': 'ISR retenido de ejercicio anterior', '107': 'Ajuste al subsidio causado' };
+  var SAT_O = { '001': 'Reintegro de ISR pagado en exceso', '002': 'Subsidio para el empleo', '003': 'Viáticos', '004': 'Aplicación de saldo a favor por compensación anual',
+    '005': 'Reintegro de ISR retenido en exceso de ejercicio anterior', '006': 'Alimentos en bienes', '007': 'ISR ajustado por subsidio',
+    '008': 'Subsidio efectivamente entregado que no correspondía', '009': 'Reembolso de descuentos para crédito de vivienda', '999': 'Pagos distintos a los listados' };
+  var TOPE_EXCEL = 100000;
   function anios() {
     var hoy = new Date().getFullYear(), de = +String(EST.desde || hoy).slice(0, 4) || hoy, s = $('r-anio'), h = '';
     for (var a = hoy; a >= Math.min(de, hoy); a--) h += '<option value="' + a + '">' + a + '</option>';
     s.innerHTML = h;
+    $('r-mes').innerHTML = '<option value="">Todo el año</option>' + MESES_L.map(function (m, i) { return '<option value="' + String(i + 1).padStart(2, '0') + '">' + m + '</option>'; }).join('');
   }
   function cabR(cols) { $('r-cab').innerHTML = '<tr>' + cols.map(function (c) { return '<th' + (c[1] ? ' class="num"' : '') + '>' + esc(c[0]) + '</th>'; }).join('') + '</tr>'; }
   function porMes(filas) {
@@ -688,14 +728,40 @@ tr.click:hover td{background:var(--navy-soft)}
     });
     return Object.keys(m).sort().map(function (k) { return m[k]; });
   }
+  /* el periodo escogido (año y mes) y su nombre */
+  function periodo() {
+    var a = +$('r-anio').value, m = $('r-mes').value;
+    if (!m) return { desde: a + '-01-01', hasta: a + '-12-31', t: String(a) };
+    var fin = new Date(Date.UTC(a, +m, 0)).getUTCDate();
+    return { desde: a + '-' + m + '-01', hasta: a + '-' + m + '-' + String(fin).padStart(2, '0'), t: MESES_L[+m - 1] + ' ' + a };
+  }
+  function nomCli() { return R.cli ? (R.clis.filter(function (c) { return c.rfc === R.cli; })[0] || {}).cliente || R.cli : 'Todos los clientes'; }
+  function n0(v) { return v == null || v === '' || isNaN(+v) ? 0 : +v; }
+  function num(v) { return v == null || v === '' || isNaN(+v) ? '' : +v; }
+  function pesos(f, v) { var x = n0(v); return f.moneda && f.moneda !== 'MXN' && f.moneda !== 'XXX' ? x * n0(f.tipo_cambio) : x; }
+  /* una fecha del CFDI (hora de Monterrey, sin zona) como fecha de Excel */
+  function fechaX(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(s || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0))) : '';
+  }
+  function contraparte(f) { return f.lado === 'emitida' ? [f.nombre_receptor, f.rfc_receptor] : [f.nombre_emisor, f.rfc_emisor]; }
+  function pintaLados() {
+    document.querySelectorAll('[data-rlado]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-rlado') === R.lado ? 'true' : 'false'); });
+    var b = document.querySelector('[data-rlado="emitida"]'), c = document.querySelector('[data-rlado="recibida"]');
+    b.textContent = R.rep === 'nomina' ? 'Que timbró (como patrón)' : 'Emitidos';
+    c.textContent = R.rep === 'nomina' ? 'Que recibió' : 'Recibidos';
+  }
   async function listaR() {
-    var tb = $('r-lista');
+    var tb = $('r-lista'), dos = R.rep === 'datos' || R.rep === 'nomina';
+    $('r-anioL').hidden = R.rep === 'rel'; $('r-mesL').hidden = !dos; $('r-lados').hidden = !dos; $('r-tot').hidden = true;
+    $('x-reportes').disabled = false;
+    if (dos) pintaLados();
     try {
       if (R.rep === 'mes') {
-        $('r-h').textContent = 'Resumen por mes'; $('r-anioL').hidden = false;
+        $('r-h').textContent = 'Resumen por mes';
         cabR([['Mes'], ['Emitidas o recibidas'], ['Ingresos', 1], ['Egresos', 1], ['Pagos', 1], ['Nómina', 1], ['Canceladas en el SAT', 1]]);
         R.filas = porMes(await rpc('cen_xml_resumen', { p: { rfc: R.cli, anio: +$('r-anio').value } }) || []);
-        $('r-sub').textContent = (R.cli ? (R.clis.filter(function (c) { return c.rfc === R.cli; })[0] || {}).cliente || R.cli : 'Todos los clientes') + ' · ' + $('r-anio').value + ' · solo lo que está en pesos suma';
+        $('r-sub').textContent = nomCli() + ' · ' + $('r-anio').value + ' · solo lo que está en pesos suma';
         if (!R.filas.length) { vacio(tb, 7, 'No hay XML de este año.'); return; }
         tb.innerHTML = R.filas.map(function (x) {
           function cel(t, l, conM) { return '<td data-l="' + l + '" class="num">' + (t[0] ? t[0].toLocaleString('es-MX') + (conM ? '<div class="mut">' + dinero(t[1]) + '</div>' : '') : '<span class="mut">0</span>') + '</td>'; }
@@ -703,8 +769,8 @@ tr.click:hover td{background:var(--navy-soft)}
             + cel(x.I, 'Ingresos', true) + cel(x.E, 'Egresos', true) + cel(x.P, 'Pagos', false) + cel(x.N, 'Nómina', true)
             + '<td data-l="Canceladas" class="num">' + (x.k ? chip(String(x.k), 'mal') : '<span class="mut">0</span>') + '</td></tr>';
         }).join('');
-      } else {
-        $('r-h').textContent = 'CFDI relacionados'; $('r-anioL').hidden = true;
+      } else if (R.rep === 'rel') {
+        $('r-h').textContent = 'CFDI relacionados';
         cabR([['Fecha'], ['El CFDI'], ['De / para'], ['Relación'], ['CFDI relacionado'], ['Cómo está']]);
         R.filas = await rpc('cen_xml_relacionados', { p: { rfc: R.cli } }) || [];
         $('r-sub').textContent = cuenta(R.filas.length, 'CFDI que relaciona a otros', 'CFDI que relacionan a otros');
@@ -721,8 +787,180 @@ tr.click:hover td{background:var(--navy-soft)}
             + '<td data-l="Relación" colspan="2"><div class="rel">' + rel + '</div></td>'
             + '<td data-l="Cómo está"><div class="rel">' + como + '</div></td></tr>';
         }).join('');
+      } else if (R.rep === 'datos') {
+        $('r-h').textContent = 'XML Datos 4.0';
+        cabR([['Fecha'], ['El CFDI'], ['De / para'], ['Subtotal', 1], ['IVA', 1], ['Total', 1]]);
+        if (!R.cli) { R.res = null; $('r-sub').textContent = 'Un renglón por CFDI con todos sus datos'; vacio(tb, 6, 'Escoge un cliente para ver su reporte.'); $('x-reportes').disabled = true; return; }
+        var pe = periodo();
+        R.res = await rpc('cen_xml_datos', { p: { rfc: R.cli, lado: R.lado, desde: pe.desde, hasta: pe.hasta, max: 100 } }) || { total: 0, filas: [] };
+        $('r-sub').textContent = nomCli() + ' · ' + (R.lado === 'emitida' ? 'emitidos' : 'recibidos') + ' · ' + pe.t;
+        totDatos(R.res);
+        if (!R.res.total) { vacio(tb, 6, 'No hay XML en este periodo.'); $('x-reportes').disabled = true; return; }
+        tb.innerHTML = R.res.filas.map(function (f) {
+          var cp = contraparte(f), d = f.d || {};
+          return '<tr><td data-l="Fecha" class="nowrap">' + esc(fecha(f.fecha)) + '</td>'
+            + '<td data-l="El CFDI">' + chip(TIPOS[f.tipo] || f.tipo, f.lado === 'emitida' ? 'na' : 'az') + ' ' + esc([f.serie, f.folio].filter(Boolean).join('-'))
+            + (f.cancelada ? ' ' + chip('Cancelado en el SAT', 'mal') : '') + '<div class="mono mut">' + esc(f.uuid) + '</div></td>'
+            + '<td data-l="De / para"><span class="rs">' + esc(cp[0] || cp[1]) + '</span><div class="mut">' + esc(cp[1]) + '</div></td>'
+            + '<td data-l="Subtotal" class="num">' + dinero(f.subtotal, f.moneda) + '</td>'
+            + '<td data-l="IVA" class="num">' + (f.d ? dinero(n0(d.i16) + n0(d.i8), f.moneda) : '<span class="mut">—</span>') + '</td>'
+            + '<td data-l="Total" class="num"><b>' + dinero(f.total, f.moneda) + '</b></td></tr>';
+        }).join('') + (R.res.total > R.res.filas.length ? '<tr><td colspan="6" class="vacio">Aquí ves los primeros ' + R.res.filas.length + ' de ' + n0(R.res.total).toLocaleString('es-MX') + '. El Excel (y su PDF) trae todos, con todas sus columnas.</td></tr>' : '');
+      } else {
+        $('r-h').textContent = 'Nómina 1.2 Extendido';
+        cabR([['Mes de pago'], ['Recibos', 1], ['Percepciones', 1], ['Otros pagos', 1], ['Deducciones', 1], ['ISR retenido', 1], ['Subsidio', 1], ['Neto', 1]]);
+        if (!R.cli) { R.res = null; $('r-sub').textContent = 'Cada recibo con sus percepciones, deducciones y otros pagos'; vacio(tb, 8, 'Escoge un cliente para ver su reporte.'); $('x-reportes').disabled = true; return; }
+        var pn = periodo();
+        R.res = await rpc('cen_xml_nomina', { p: { rfc: R.cli, lado: R.lado, desde: pn.desde, hasta: pn.hasta, max: 1 } }) || { total: 0, meses: [] };
+        $('r-sub').textContent = nomCli() + ' · ' + (R.lado === 'emitida' ? 'los que timbró como patrón' : 'los que recibió') + ' · ' + pn.t;
+        totNomina(R.res);
+        var ms = R.res.meses || [];
+        if (!R.res.total) { vacio(tb, 8, 'No hay recibos de nómina en este periodo.'); $('x-reportes').disabled = true; return; }
+        if (!ms.length) { vacio(tb, 8, 'Los recibos de este periodo todavía no tienen sus datos de nómina; se completan solos en unos minutos.'); return; }
+        var T = { recibos: 0, percepciones: 0, otros_pagos: 0, deducciones: 0, isr: 0, subsidio: 0, neto: 0 };
+        tb.innerHTML = ms.map(function (x) {
+          Object.keys(T).forEach(function (k) { T[k] += n0(x[k]); });
+          return filaNom(mes(x.mes), x, false);
+        }).join('') + (ms.length > 1 ? filaNom('Total', T, true) : '');
       }
     } catch (e) { error(falla(e)); }
+  }
+  function filaNom(t, x, tot) {
+    function c(k, l) { return '<td data-l="' + l + '" class="num">' + (tot ? '<b>' + dinero(x[k]) + '</b>' : dinero(x[k])) + '</td>'; }
+    return '<tr' + (tot ? ' class="total"' : '') + '><td data-l="Mes" class="nowrap"><b>' + esc(t) + '</b></td>'
+      + '<td data-l="Recibos" class="num">' + n0(x.recibos).toLocaleString('es-MX') + '</td>'
+      + c('percepciones', 'Percepciones') + c('otros_pagos', 'Otros pagos') + c('deducciones', 'Deducciones') + c('isr', 'ISR retenido') + c('subsidio', 'Subsidio') + c('neto', 'Neto') + '</tr>';
+  }
+  function totDatos(r) {
+    var h = '<span><b>' + cuenta(r.total, 'CFDI', 'CFDI') + '</b></span>';
+    if (r.total) h += '<span>Subtotal ' + dinero(r.subtotal) + '</span><span>IVA ' + dinero(r.iva) + '</span><span>Total ' + dinero(r.total_pesos) + '</span>'
+      + '<span class="mut">en pesos, sin los cancelados en el SAT</span>';
+    if (r.canceladas) h += '<span>' + chip(cuenta(r.canceladas, 'cancelado en el SAT', 'cancelados en el SAT'), 'mal') + '</span>';
+    if (r.sin_datos) h += '<span>' + chip(cuenta(r.sin_datos, 'todavía sin datos (se completan solos)', 'todavía sin datos (se completan solos)'), 'ojo') + '</span>';
+    $('r-tot').innerHTML = h; $('r-tot').hidden = false;
+  }
+  function totNomina(r) {
+    var h = '<span><b>' + cuenta(r.total, 'recibo de nómina', 'recibos de nómina') + '</b></span>';
+    if (r.canceladas) h += '<span>' + chip(cuenta(r.canceladas, 'cancelado en el SAT (no suma)', 'cancelados en el SAT (no suman)'), 'mal') + '</span>';
+    if (r.sin_datos) h += '<span>' + chip(cuenta(r.sin_datos, 'todavía sin datos (se completan solos)', 'todavía sin datos (se completan solos)'), 'ojo') + '</span>';
+    $('r-tot').innerHTML = h; $('r-tot').hidden = false;
+  }
+  /* todos los renglones del reporte, de página en página (hasta 100,000), diciendo cómo va */
+  async function todas(pide, p, total) {
+    var out = [], de = 0, sub = $('r-sub'), antes = sub.textContent;
+    try {
+      while (out.length < total) {
+        sub.textContent = 'Juntando ' + out.length.toLocaleString('es-MX') + ' de ' + n0(total).toLocaleString('es-MX') + '…';
+        var r = await pide(Object.assign({}, p, { desde_n: de, max: 2000 })) || {}, f = r.filas || [];
+        out = out.concat(f); de += f.length;
+        if (f.length < 2000) break;
+      }
+    } finally { sub.textContent = antes; }
+    return out;
+  }
+  var COLS_DATOS = ['Estado', 'Emitida o recibida', 'Tipo', 'Versión', 'Fecha de emisión', 'Año', 'Mes', 'Día', 'Fecha de timbrado', 'Serie', 'Folio', 'UUID',
+    'RFC emisor', 'Nombre emisor', 'Régimen fiscal emisor', 'RFC receptor', 'Nombre receptor', 'Régimen fiscal receptor', 'C.P. receptor', 'Uso CFDI',
+    'Residencia fiscal', 'Núm. reg. id. trib.', 'Lugar de expedición (C.P.)', 'Exportación', 'Moneda', 'Tipo de cambio', 'Forma de pago', 'Método de pago',
+    'Condiciones de pago', 'Subtotal', 'Descuento', 'Base IVA 16%', 'IVA 16%', 'Base IVA 8%', 'IVA 8%', 'Base IVA 0%', 'Base exenta', 'IEPS',
+    'Total impuestos trasladados', 'ISR retenido', 'IVA retenido', 'IEPS retenido', 'Total impuestos retenidos', 'Impuestos locales trasladados',
+    'Impuestos locales retenidos', 'Total', 'Total en pesos', 'Núm. de conceptos', 'Clave prod. o serv. (primer concepto)', 'Conceptos', 'CFDI relacionados',
+    'Complementos', 'Fecha de pago (complemento)', 'Forma de pago (complemento)', 'Monto pagado (complemento)', 'Documentos pagados', 'RFC del PAC'];
+  function filaDatos(f) {
+    var d = f.d || {}, pg = d.pag || {}, fe = String(f.fecha || ''), rel = (f.relacionados || []).map(function (r) { return r.tipo + ' ' + r.uuid; }).join('; ');
+    return [f.cancelada ? 'Cancelado en el SAT' : 'Vigente', f.lado === 'emitida' ? 'Emitida' : 'Recibida', TIPOS[f.tipo] || f.tipo, f.version, fechaX(fe),
+      fe ? +fe.slice(0, 4) : '', fe ? +fe.slice(5, 7) : '', fe ? +fe.slice(8, 10) : '', fechaX(f.fecha_timbrado), f.serie, f.folio, f.uuid,
+      f.rfc_emisor, f.nombre_emisor, d.rf_e || '', f.rfc_receptor, f.nombre_receptor, d.rf_r || '', d.cp_r || '', f.uso_cfdi,
+      d.res || '', d.nrit || '', d.lugar || '', d.exp || '', f.moneda, num(f.tipo_cambio), f.forma_pago, f.metodo_pago,
+      d.cond || '', num(f.subtotal), num(f.descuento), num(d.b16), num(d.i16), num(d.b8), num(d.i8), num(d.b0), num(d.bex), num(d.ieps),
+      num(d.tt), num(d.r_isr), num(d.r_iva), num(d.r_ieps), num(d.tr), num(d.l_t), num(d.l_r), num(f.total), pesos(f, f.total),
+      num(d.nc), d.cps || '', d.conc || '', rel, (f.complementos || []).join(', '), fechaX(pg.f), pg.fp || '', num(pg.total != null ? pg.total : pg.monto),
+      pg.docs ? pg.docs.length : '', d.pac || ''];
+  }
+  async function excelDatos(btn) {
+    var r = R.res, pe = periodo();
+    if (!r || !r.total) return;
+    if (r.total > TOPE_EXCEL) { error('Son ' + n0(r.total).toLocaleString('es-MX') + ' CFDI: escoge un mes para bajarlos (el Excel aguanta hasta 100,000).'); return; }
+    var p = { rfc: R.cli, lado: R.lado, desde: pe.desde, hasta: pe.hasta };
+    btn.disabled = true;
+    var filas;
+    try { filas = await todas(function (q) { return rpc('cen_xml_datos', { p: q }); }, p, r.total); } catch (e) { btn.disabled = false; error(falla(e)); return; }
+    var dinero_ = '#,##0.00', fmt = {};
+    ['Tipo de cambio', 'Subtotal', 'Descuento', 'Base IVA 16%', 'IVA 16%', 'Base IVA 8%', 'IVA 8%', 'Base IVA 0%', 'Base exenta', 'IEPS', 'Total impuestos trasladados',
+     'ISR retenido', 'IVA retenido', 'IEPS retenido', 'Total impuestos retenidos', 'Impuestos locales trasladados', 'Impuestos locales retenidos', 'Total',
+     'Total en pesos', 'Monto pagado (complemento)'].forEach(function (c) { fmt[COLS_DATOS.indexOf(c)] = dinero_; });
+    ['Fecha de emisión', 'Fecha de timbrado', 'Fecha de pago (complemento)'].forEach(function (c) { fmt[COLS_DATOS.indexOf(c)] = 'dd/mm/yyyy hh:mm:ss'; });
+    var anchos = COLS_DATOS.map(function (c) { return /UUID|Conceptos|relacionados/.test(c) ? 38 : /Nombre/.test(c) ? 32 : /Fecha/.test(c) ? 19 : 14; });
+    await libroExcel(btn, 'XML Datos 4.0', [{ nombre: 'XML Datos 4.0', head: COLS_DATOS, filas: filas.map(filaDatos), anchos: anchos, formatos: fmt,
+      pdfDeja: ['Estado', 'Tipo', 'Fecha de emisión', 'Serie', 'Folio', 'UUID', 'RFC emisor', 'Nombre emisor', 'RFC receptor', 'Nombre receptor', 'Subtotal', 'IVA 16%', 'Total'] }],
+      [nomCli() + ' (' + R.cli + ') · ' + (R.lado === 'emitida' ? 'emitidos' : 'recibidos') + ' · ' + pe.t, cuenta(filas.length, 'CFDI', 'CFDI') + ' · salen de los XML que entrega el SAT']);
+  }
+  function nomCat(cat, tipo, conceptos) {
+    if (cat[tipo]) return tipo + ' · ' + cat[tipo];
+    var c = conceptos[tipo] || {}, mejor = '', n = 0;
+    Object.keys(c).forEach(function (k) { if (c[k] > n) { n = c[k]; mejor = k; } });
+    return tipo + (mejor ? ' · ' + mejor : '');
+  }
+  async function excelNomina(btn) {
+    var r = R.res, pe = periodo();
+    if (!r || !r.total) return;
+    if (r.total > TOPE_EXCEL) { error('Son ' + n0(r.total).toLocaleString('es-MX') + ' recibos: escoge un mes para bajarlos (el Excel aguanta hasta 100,000).'); return; }
+    var p = { rfc: R.cli, lado: R.lado, desde: pe.desde, hasta: pe.hasta };
+    btn.disabled = true;
+    var rec;
+    try { rec = await todas(function (q) { return rpc('cen_xml_nomina', { p: q }); }, p, r.total); } catch (e) { btn.disabled = false; error(falla(e)); return; }
+    // cada recibo (si trae varias nóminas, se suman) y qué percepciones, deducciones y otros pagos hay en el periodo
+    var TP = {}, TD = {}, TO = {}, CP = {}, CD = {}, CO = {};
+    function cuentaC(C, t, c) { if (!c) return; C[t] = C[t] || {}; C[t][c] = (C[t][c] || 0) + 1; }
+    var filas = rec.map(function (f) {
+      var ns = f.nom || [], x = { p: {}, d: {}, o: {}, sub: 0, tp: 0, td: 0, to: 0, tg: 0, te: 0, n: ns[0] || {} };
+      ns.forEach(function (n) {
+        x.tp += n0(n.tp); x.td += n0(n.td); x.to += n0(n.to); x.tg += n0(n.tg); x.te += n0(n.te);
+        (n.p || []).forEach(function (q) { TP[q[0]] = 1; cuentaC(CP, q[0], q[2]); x.p[q[0]] = (x.p[q[0]] || 0) + n0(q[3]) + n0(q[4]); });
+        (n.d || []).forEach(function (q) { TD[q[0]] = 1; cuentaC(CD, q[0], q[2]); x.d[q[0]] = (x.d[q[0]] || 0) + n0(q[3]); });
+        (n.o || []).forEach(function (q) { TO[q[0]] = 1; cuentaC(CO, q[0], q[2]); x.o[q[0]] = (x.o[q[0]] || 0) + n0(q[3]); x.sub += n0(q[4]); });
+      });
+      return [f, x];
+    });
+    var tp = Object.keys(TP).sort(), td = Object.keys(TD).sort(), to = Object.keys(TO).sort();
+    var cP = tp.map(function (t) { return 'Percepción ' + nomCat(SAT_P, t, CP); }), cD = td.map(function (t) { return 'Deducción ' + nomCat(SAT_D, t, CD); }),
+        cO = to.map(function (t) { return 'Otro pago ' + nomCat(SAT_O, t, CO); });
+    var fijos = ['Estado', 'Fecha de pago', 'Fecha de emisión', 'Serie', 'Folio', 'UUID', 'RFC del trabajador', 'Nombre', 'CURP', 'NSS', 'Núm. de empleado', 'Puesto',
+      'Departamento', 'Tipo de nómina', 'Periodicidad', 'Fecha inicial de pago', 'Fecha final de pago', 'Días pagados', 'Salario base de cotización',
+      'Salario diario integrado', 'Registro patronal'];
+    var head = fijos.concat(cP, ['Total gravado', 'Total exento', 'Total percepciones'], cO, ['Subsidio causado', 'Total otros pagos'], cD, ['Total deducciones', 'Neto', 'Total del CFDI']);
+    var cuerpo = filas.map(function (fx) {
+      var f = fx[0], x = fx[1], n = x.n, tr = f.lado === 'emitida' ? [f.rfc_receptor, f.nombre_receptor] : [f.rfc_emisor, f.nombre_emisor];
+      return [f.cancelada ? 'Cancelado en el SAT' : 'Vigente', fechaX(n.fp), fechaX(f.fecha), f.serie, f.folio, f.uuid, tr[0], tr[1], n.curp || '', n.nss || '', n.num || '',
+        n.puesto || '', n.depto || '', n.tipo === 'E' ? 'Extraordinaria' : n.tipo === 'O' ? 'Ordinaria' : (n.tipo || ''), n.per || '', fechaX(n.fi), fechaX(n.ff),
+        num(n.dias), num(n.sbc), num(n.sdi), n.rp || '']
+        .concat(tp.map(function (t) { return x.p[t] != null ? x.p[t] : ''; }), [x.tg, x.te, x.tp],
+                to.map(function (t) { return x.o[t] != null ? x.o[t] : ''; }), [x.sub || '', x.to],
+                td.map(function (t) { return x.d[t] != null ? x.d[t] : ''; }), [x.td, x.tp + x.to - x.td, num(f.total)]);
+    });
+    // por mes de pago, sin los cancelados en el SAT
+    var M = {};
+    filas.forEach(function (fx, i) {
+      var f = fx[0]; if (f.cancelada) return;
+      var k = String(fx[1].n.fp || f.fecha || '').slice(0, 7) || '?', m = M[k] || (M[k] = { n: 0, v: {} });
+      m.n++;
+      head.forEach(function (h, j) { if (j >= fijos.length && typeof cuerpo[i][j] === 'number') m.v[j] = (m.v[j] || 0) + cuerpo[i][j]; });
+    });
+    var headM = ['Mes de pago', 'Recibos'].concat(head.slice(fijos.length)), sumas = {};
+    var cuerpoM = Object.keys(M).sort().map(function (k) {
+      return [mes(k), M[k].n].concat(head.slice(fijos.length).map(function (_, j) { var v = M[k].v[j + fijos.length]; if (v) sumas[j] = (sumas[j] || 0) + v; return v || 0; }));
+    });
+    if (cuerpoM.length > 1) cuerpoM.push(['Total', cuerpoM.reduce(function (a, r) { return a + r[1]; }, 0)].concat(head.slice(fijos.length).map(function (_, j) { return sumas[j] || 0; })));
+    var fmtR = {}, fmtM = {};
+    head.forEach(function (h, j) { if (j >= fijos.length || /Salario/.test(h)) fmtR[j] = '#,##0.00'; if (/^Fecha/.test(h)) fmtR[j] = 'dd/mm/yyyy'; });
+    headM.forEach(function (h, j) { if (j >= 2) fmtM[j] = '#,##0.00'; });
+    var lin = [nomCli() + ' (' + R.cli + ') · ' + (R.lado === 'emitida' ? 'los que timbró como patrón' : 'los que recibió') + ' · ' + pe.t,
+      cuenta(rec.length, 'recibo de nómina', 'recibos de nómina') + ' · «Por mes» no suma los cancelados en el SAT'];
+    await libroExcel(btn, 'Nómina 1.2 Extendido', [
+      { nombre: 'Por recibo', titulo: 'Nómina 1.2 Extendido · por recibo', head: head, filas: cuerpo, formatos: fmtR,
+        anchos: head.map(function (h) { return /UUID/.test(h) ? 38 : /Nombre|Puesto|Departamento/.test(h) ? 28 : /^(Percepción|Deducción|Otro pago)/.test(h) ? 18 : 14; }),
+        pdfDeja: ['Estado', 'Fecha de pago', 'RFC del trabajador', 'Nombre', 'Total percepciones', 'Total otros pagos', 'Total deducciones', 'Neto'] },
+      { nombre: 'Por mes', titulo: 'Nómina 1.2 Extendido · por mes de pago', head: headM, filas: cuerpoM, formatos: fmtM,
+        anchos: headM.map(function (h, j) { return j === 0 ? 18 : j === 1 ? 10 : 18; }) }], lin);
   }
   var bR = null;
   async function cargaReportes() {
@@ -734,8 +972,12 @@ tr.click:hover td{background:var(--navy-soft)}
   document.querySelectorAll('[data-rep]').forEach(function (b) {
     b.onclick = function () { R.rep = b.getAttribute('data-rep'); document.querySelectorAll('[data-rep]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); }); listaR(); };
   });
+  document.querySelectorAll('[data-rlado]').forEach(function (b) { b.onclick = function () { R.lado = b.getAttribute('data-rlado'); listaR(); }; });
   $('r-anio').addEventListener('change', listaR);
+  $('r-mes').addEventListener('change', listaR);
   $('x-reportes').onclick = function () {
+    if (R.rep === 'datos') return excelDatos(this);
+    if (R.rep === 'nomina') return excelNomina(this);
     if (R.rep === 'mes') {
       excel(this, 'Resumen por mes', ['Mes', 'Emitidas o recibidas', 'Ingresos', 'Ingresos en pesos', 'Egresos', 'Egresos en pesos', 'Pagos', 'Nómina', 'Nómina en pesos', 'Canceladas en el SAT'],
         R.filas.map(function (x) { return [mes(x.mes), x.lado === 'emitida' ? 'Emitidas' : 'Recibidas', x.I[0], x.I[1], x.E[0], x.E[1], x.P[0], x.N[0], x.N[1], x.k]; }),
