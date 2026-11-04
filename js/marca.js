@@ -444,7 +444,7 @@
     }
     lee(false);
     if (!hubo) lee(true);   // hojas armadas sin cabecera(): el primer renglón con varias columnas es la cabecera
-    return { titulo: mk.titulo || '', lineas: mk.lineas || [], bloques: out };
+    return { titulo: mk.titulo || '', lineas: mk.lineas || [], bloques: out, imagen: (ws.__pdf && ws.__pdf.imagen) || null };
   }
   /* El PDF de un libro de Excel ya armado (todas sus hojas visibles), con la marca PROFASE */
   async function pdfDeLibro(wb) {
@@ -479,6 +479,13 @@
         }));
         y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 14;
       });
+      // una gráfica de la hoja (por ejemplo, la del Tablero anual de Centauro): {png, w, h}, debajo de su tabla
+      if (h.imagen && h.imagen.png) {
+        try {
+          var iw = Math.min(ancho, h.imagen.w || ancho), ih = iw * (h.imagen.h || 1) / (h.imagen.w || 1);
+          cabe(ih + 6); doc.addImage(h.imagen.png, 'PNG', M, y, iw, ih); y += ih + 14;
+        } catch (e) {}
+      }
     });
     var total = doc.internal.getNumberOfPages();
     for (var p = 1; p <= total; p++) {

@@ -129,7 +129,7 @@
       { k: 'centauro-boveda', v: 'cenb', t: 'Bóveda XML', d: 'Los XML de cada cliente: búscalos, velos y bájalos tal cual.' },
       { k: 'centauro-canceladas', v: 'cenc', t: 'Canceladas SAT vs QUO', d: 'Lo cancelado en el SAT que sigue activo en QUO, por cliente.' },
       { k: 'centauro-69b', v: 'cen9', t: 'Lista 69-B', d: 'Los proveedores de cada cliente en la lista 69-B del SAT.' },
-      { k: 'centauro-reportes', v: 'cenr', t: 'Reportes', d: 'Lo que sale de los XML: resumen por mes, relacionados, XML Datos 4.0 y Nómina 1.2.' }] },
+      { k: 'centauro-reportes', v: 'cenr', t: 'Reportes', d: 'Lo que sale de los XML: resumen por mes, XML Datos 4.0, Nómina 1.2, método de pago, tablero anual y pagos.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
