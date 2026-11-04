@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Cartera</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=bc8b94bad2"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/ocultos.js?v=7ceb4e4aa3"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Cartera</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=bc8b94bad2"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/ocultos.js?v=7ceb4e4aa3"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1448,6 +1448,8 @@ function abreModal(){
   const m=el('div','modal'); m.id='modal'; abreOv(m,()=>{S.cliente=null;S.doc=null;quitaVF();});
   const rfc=D.cli[S.cliente][2];
   const ci0=S.cliente;
+  if(SEG.rfc!==rfc){ SEG.ok=false; SEG.rfc=rfc; }
+  cargaSeg(rfc).then(ok=>{ if(ok&&S.cliente!=null&&D.cli[S.cliente][2]===rfc) pintaModal(); });
   (UUID_OK.has(rfc)?Promise.resolve():cargaUuids([rfc])).then(()=>cargaRelSat(ci0)).then(cambio=>{
     if(cambio) render(); else if(S.cliente!=null&&D.cli[S.cliente][2]===rfc) pintaModal(); }).catch(()=>{});
   if(flotante()){
@@ -1848,7 +1850,11 @@ function celdaDoc(k,d){
     case 'ivr': return din(retSaldo(d));
     case 'isr': return din(isrSaldo(d));
     case 'est': x.classList.add('c-est'); x.appendChild(pillEstatus(d)); if(d.alerta) x.appendChild(el('span','pill p-can','Saldo > total'));
-      if(d.st&&d.st!=='normal') x.appendChild(el('span','pill '+ST_CLS[d.st],ST_LAB[d.st])); return x;
+      if(d.st&&d.st!=='normal') x.appendChild(el('span','pill '+ST_CLS[d.st],ST_LAB[d.st]));
+      { const sr=segDe(d), nc=segComDe(d).length;
+        if(sr&&sr.estatus!=='sin_respuesta') x.appendChild(segPill(sr.estatus,nc?PROFASE_SEG.t(sr.estatus)+' · '+nc:''));
+        else if(nc) x.appendChild(el('span','pill p-cl',plural(nc,'comentario','comentarios'))); }
+      return x;
     case 'rel': x.classList.add('c-rel'); return celdaRel(x,d);
     case 'apc': { const p=aplicacion(d)==='Sin aplicar'; x.appendChild(el('span','pill '+(p?'p-ppd':'p-pue'),aplicacion(d))); return x; }
   }
@@ -1884,6 +1890,7 @@ function panelDoc(){
   sb.appendChild(v); s.appendChild(sb);
   if(d.satCan) s.appendChild(bloqueSat(d));
   if(d.mod>=0&&d.mod<=5) s.appendChild(bloqueRel(d));
+  if(segSe(d)) s.appendChild(bloqueSeg(d));
   if(ESTC.ok) s.appendChild(bloqueEstatus(d));
   const g=el('div','sgrid');
   const campo=(k,val,cls,wide)=>{
@@ -2021,6 +2028,7 @@ function aplicaMarcas(){
 }
 async function recargaMarcas(){
   await cargaMarcas(); aplicaMarcas(); render();
+  if(SEG.cu) SEG.cu();
   if(EXC&&document.getElementById('exc')) pintaExcluidos();
 }
 // la huella cambia cuando alguien marca, aprueba, regresa o cambia una regla: cada minuto (y al volver a la pestaña)
@@ -2113,6 +2121,7 @@ function barraSel(sel){
   const b2=boton('Fuera del reporte…','',()=>pideMotivo('Sacar del reporte',plural(sel.length,'factura','facturas')+' · '+F.mxn.format(tot),'',
     (m,c)=>marcaDocs(sel,'fuera',m,c)));
   [b1,b2].forEach(b=>{ b.disabled=!listo; bar.appendChild(b); });
+  if(segPuedo()){ const b3=boton('Comentar…','l',()=>comentaVarias(sel)); b3.disabled=!listo; b3.title='Un comentario (y, si quieres, el estatus de revisión) en las '+plural(sel.length,'factura','facturas'); bar.appendChild(b3); }
   const quitar=sel.filter(r=>r.por==='factura'&&r.mk&&r.mk.estatus!=='normal'&&quitaMarca(r.mk));
   if(quitar.length){ const b=boton('Quitar estatus','l',()=>hazCon(b,()=>marcaDocs(quitar,'normal'),err)); b.title='Regresa '+plural(quitar.length,'factura','facturas')+' a como estaban'; bar.appendChild(b); }
   const cuentan=yoApruebo()?sel.filter(r=>r.st==='fuera'&&r.por!=='factura'):[];
@@ -2125,7 +2134,7 @@ function barraSel(sel){
 }
 // el estatus de un documento, en su detalle (y, en las facturas, para cambiarlo ahí mismo)
 function bloqueEstatus(d){
-  const b=el('div','estbox'); b.appendChild(el('div','k','Estatus en la cartera'));
+  const b=el('div','estbox'); b.appendChild(el('div','k','¿Cuenta en el reporte?'));
   const t=el('div'); t.style.marginTop='6px'; t.appendChild(el('span','pill '+ST_CLS[d.st||'normal'],ST_LAB[d.st||'normal'])); b.appendChild(t);
   const l=x=>{ b.appendChild(el('div','l',x)); };
   if(d.por==='regla') l('Lo saca la regla automática «'+REGLAS_DEF[d.rg].lab+'». No suma en los saldos ni en el IVA.');
@@ -2172,6 +2181,14 @@ function menuEmpresa(ci){
   } else p.appendChild(el('div','l','Suma como siempre.'));
   if(inactiva(ci)&&(!m||m.estatus!=='fuera')) p.appendChild(el('div','l','En la Base de clientes ya no está activa. Si ya no es cliente, sácala del reporte.'));
   body.appendChild(p);
+  if(SEG.ok&&SEG.rfc===c[2]){
+    const sb=el('div','estbox'); sb.appendChild(el('div','k','Seguimiento de la empresa'));
+    const r=SEG.rev.get(segK('','k')), n=(SEG.com.get(segK('','k'))||[]).length;
+    const t2=el('div'); t2.style.marginTop='6px'; t2.appendChild(segPill(r?r.estatus:'sin_respuesta')); sb.appendChild(t2);
+    sb.appendChild(el('div','l',(r&&r.quien?'Lo puso '+r.quien+' · '+(r.ts||'')+' · ':'')+(n?plural(n,'comentario','comentarios'):'Sin comentarios')));
+    const a=el('div','acts'); a.appendChild(boton('Abrir seguimiento ›','o',()=>{ cierraOv2(); abreSegEmpresa(ci); })); sb.appendChild(a);
+    body.appendChild(sb);
+  }
   const err=el('p','eerr'); err.hidden=true;
   if(yoMarco()){
     if(inactiva(ci)&&(!m||m.estatus!=='fuera')){
@@ -2216,6 +2233,173 @@ function botonExcluidos(){
   b.onclick=()=>abreExcluidos('fuera',n?{solo:'por_aprobar'}:{});
   return b;
 }
+/* ── Seguimiento y comentarios (4-nov-2026, pedido de Fernando Cadengo: «hay que unificar una sola pantalla para
+   comentarios y seguimiento»). La misma ventana de Variaciones y Activo fijo (js/seguimiento.js, PROFASE_SEG): los mismos
+   cinco estatus de revisión con sus reglas y la misma plática, en cada factura y en la empresa completa. Es aparte de
+   «¿Cuenta en el reporte?» (Suma normal / Estrategia fiscal / Fuera del reporte), que no cambia. Todo lo decide la base
+   (230: cartera_seg, cartera_seg_guarda, cartera_seg_com): ve y comenta quien ve la cartera de la empresa; la parte que
+   solo ve la dirección, solo la dirección; la Gerencia Contable recibe las consultas. ── */
+const SEG={rfc:null,ok:false,puede:{},rev:new Map(),com:new Map(),cu:null};
+const segK=(u,p)=>String(u||'').toUpperCase()+'|'+(p||'k');
+async function cargaSeg(rfc){
+  if(!window.PROFASE_SEG||!rfc) return false;
+  let q; try{ q=await SB.rpc('cartera_seg',{p:{rfc}}); }catch(e){ q={error:e}; }
+  if(SEG.rfc!==rfc&&S.cliente!=null&&D.cli[S.cliente][2]!==rfc) return false;
+  if(!q||q.error||!q.data){ SEG.ok=false; return false; }
+  const d=q.data; SEG.rfc=rfc; SEG.ok=true; SEG.puede=d.puede||{}; SEG.rev=new Map(); SEG.com=new Map();
+  (d.rev||[]).forEach(r=>SEG.rev.set(segK(r.uuid,r.parte),r));
+  (d.com||[]).forEach(c=>{ const k=segK(c.uuid,c.parte); if(!SEG.com.has(k)) SEG.com.set(k,[]); SEG.com.get(k).push(c); });
+  return true;
+}
+const segListo=d=>SEG.ok&&!!d&&SEG.rfc===rfcDe(d);
+const segSe=d=>segListo(d)&&!!d.uuid&&d.mod!==TER;
+const segDe=d=>segSe(d)?SEG.rev.get(segK(d.uuid,d.parte))||null:null;
+const segComDe=d=>segSe(d)?SEG.com.get(segK(d.uuid,d.parte))||[]:[];
+function segPill(id,txt){ const w=document.createElement('span'); w.innerHTML=PROFASE_SEG.pill(id,txt); return w.firstChild; }
+// ¿cambia el estatus y comenta? (la base lo vuelve a revisar): quien ve la cartera de la empresa, nunca de solo consulta;
+// lo que solo ve la dirección, solo la dirección
+const segPuedo=parte=>SEG.ok&&!!SEG.puede.marca&&!SEG.puede.consulta&&!(window.PORTAL&&window.PORTAL.consulta)&&(parte!=='p'||!!SEG.puede.dir);
+const segItem=d=>({uuid:d.uuid,tipo:d.tipo,rfc_cp:D.cp[d.cp][0]||'',contraparte:D.cp[d.cp][1]||'',folio:[d.serie,d.folio].filter(Boolean).join(' ')});
+const segHilo=k=>(SEG.com.get(k)||[]).map(c=>({id:c.id,por:c.por||'',porNombre:c.porNombre||'',ts:c.ts||'',tsISO:c.tsISO||'',
+  texto:c.texto||'',editado:!!c.editado,de:c.de,est:c.est}));
+const segQuien=r=>!r||!r.quien?'Nadie la ha revisado todavía'
+  :PROFASE_SEG.esc(r.quien)+(r.rol==='gc'?' (Gerencia Contable)':r.rol==='contador'?' (contador)':'')+(r.ts?' · '+PROFASE_SEG.esc(r.ts):'');
+// lo que se guarda: el estatus de revisión y el comentario (de una o varias facturas, o de la empresa)
+async function segGuarda(rfc,items,c){
+  let q; try{ q=await SB.rpc('cartera_seg_guarda',{p:{rfc,items,estatus:c.estatus||null,texto:c.texto||'',de:c.de||null}}); }catch(e){ return msgErr(e); }
+  if(q.error) return msgErr(q.error);
+  const r=q.data||{};
+  await cargaSeg(rfc); if(S.cliente!=null) pintaModal();
+  if(!r.ok) return r.msg||'No se pudo guardar.';
+  const sal=Object.keys(r.saltos||{});
+  if(sal.length) return (c.texto?'El comentario se guardó, pero el estatus no: ':'')+sal.join('; ');
+  return true;
+}
+async function segCom(op,id,texto){
+  let q; try{ q=await SB.rpc('cartera_seg_com',{p:{op,id,texto:texto||''}}); }catch(e){ return msgErr(e); }
+  if(q.error) return msgErr(q.error);
+  if(!q.data||!q.data.ok) return (q.data&&q.data.msg)||'No se pudo.';
+  await cargaSeg(SEG.rfc); if(S.cliente!=null) pintaModal();
+  return true;
+}
+const segEstatus=(actual,parte)=>({actual,puede:segPuedo(parte),gc:!!SEG.puede.gc,
+  ayudaPie:'El estatus lo cambian quienes ven la cartera de esta empresa y la Gerencia Contable, menos «Modificación Exitosa», que se pone solo después de «Modificación QUO». Es aparte de «¿Cuenta en el reporte?». A quienes ya comentaron les llega el aviso.',
+  nota:(a,pu)=>!pu?(SEG.puede.consulta?'Solo consulta: ves el seguimiento, pero no lo cambias.':'El seguimiento lo llevan quienes ven la cartera de esta empresa.')
+    :a==='modif_quo'?PROFASE_SEG.MSJ.quo+'.':a==='resuelto'&&!SEG.puede.gc?PROFASE_SEG.MSJ.fijo+'.'
+    :'«Consulta con Gerencia» le avisa a la Gerencia Contable; «Justificado» o «Modificación Exitosa» la dan por revisada.'});
+const segPlatica=(k,parte)=>({hilo:segHilo(k),puede:segPuedo(parte),yo:SEG.puede.yo||'',ph:'Qué revisaste, qué falta o con quién lo validaste',
+  noPuede:SEG.puede.consulta||(window.PORTAL&&window.PORTAL.consulta)?'Tu usuario es de solo consulta: ves los comentarios, pero no comentas.':'Aquí solo se ve.'});
+// las facturas de la lista que se ve (en su orden), para ‹ › y «Guardar y siguiente ›»
+function segLista(){
+  if(S.cliente==null||!FAM[S.tab]) return [];
+  const todos=docsCliente().filter(r=>LADO[S.lado].includes(r.mod)).filter(pasaMF);
+  return docsDeTab(todos).slice(0,500).filter(segSe);
+}
+/* la ventana de una factura: d es su renglón; si ya no está en la cartera (pagada o cancelada), lo que guardó la base */
+function abreSeg(d,op){
+  op=op||{}; if(!window.PROFASE_SEG||!d) return;
+  const esc=PROFASE_SEG.esc, rfc=op.rfc||rfcDe(d), parte=d.parte||'k', k=segK(d.uuid,parte);
+  const r=SEG.rev.get(k)||null, est=r?r.estatus:'sin_respuesta';
+  const lista=op.lista||segLista(), pos=lista.indexOf(d);
+  const ant=pos>0?lista[pos-1]:null, sig=pos>=0&&pos<lista.length-1?lista[pos+1]:null;
+  const suelto=!!d.suelto, cpN=suelto?d.contraparte:(D.cp[d.cp][1]||''), folio=suelto?d.folio:[d.serie,d.folio].filter(Boolean).join(' ');
+  const dl=(t,v)=>'<dt>'+esc(t)+'</dt><dd>'+(v||'—')+'</dd>';
+  const cu=el('div'); const pintaCu=()=>{ cu.innerHTML=''; if(!suelto&&ESTC.ok) cu.appendChild(bloqueEstatus(d)); };
+  pintaCu();
+  SEG.cu=suelto?null:pintaCu;
+  PROFASE_SEG.abre({
+    kick:suelto?'Factura':d.mod===TER?'Tercero':modLab(d.mod), titulo:'Seguimiento de la factura',
+    nav:pos>=0?{pos:pos+1,total:lista.length,donde:'en esta empresa',ant:!!ant,sig:!!sig,
+      ir:dir=>{ const x=dir>0?sig:ant; if(!x) return; S.doc=x; pintaModal(); abreSeg(x,{lista}); }}:null,
+    nota:op.nota||'',
+    resumen:'<div class="r1"><h3>'+esc(cpN||'—')+'</h3>'+(suelto?'':'<span class="big">'+esc(F.mxn2.format(d.saldo))+' '+esc(d.mon||'')+'</span>')+'</div>'
+      +'<p>'+esc([folio||'Sin folio',suelto?'Ya no está en la cartera':d.fecha||'Sin fecha',!suelto&&d.dias!=null?F.int.format(d.dias)+' días':''].filter(Boolean).join(' · '))+'</p>'
+      +'<div class="seg-chips">'+PROFASE_SEG.chip(est)+'<span class="seg-quien">'+segQuien(r)+'</span>'
+      +(!suelto&&ESTC.ok&&d.st&&d.st!=='normal'?'<span class="seg-tag" style="cursor:default">'+esc(ST_LAB[d.st]||'')+'</span>':'')+'</div>',
+    estatus:segEstatus(est,parte),
+    despues:suelto||!ESTC.ok?null:cu,
+    platica:segPlatica(k,parte),
+    detalles:suelto?'':'<details class="det"><summary>Detalle de la factura</summary><dl class="sg-dl">'
+      +dl('RFC',esc(D.cp[d.cp][0]||''))+dl('Total',esc(F.mxn2.format(d.total||0))+' '+esc(d.mon||''))+dl('IVA del saldo',esc(F.mxn2.format(ivaSaldo(d)||0)))
+      +dl('Método de pago',esc(d.mp&&d.mp!=='—'?d.mp:''))+dl('Fecha',esc(d.fecha||''))
+      +dl('Folio fiscal (UUID)','<span class="uuid">'+esc(d.uuid)+'</span>')+'</dl></details>',
+    guarda:c=>segGuarda(rfc,[suelto?{uuid:d.uuid,tipo:'',rfc_cp:'',contraparte:d.contraparte||'',folio:d.folio||''}:segItem(d)],c),
+    corrige:(id,t)=>segCom('corrige',id,t),
+    borra:id=>segCom('borra',id),
+    hiloDe:()=>segHilo(k),
+    alCerrar:()=>{ SEG.cu=null; }
+  });
+}
+/* la ventana de la empresa completa */
+function abreSegEmpresa(ci,op){
+  op=op||{}; if(!window.PROFASE_SEG) return;
+  const esc=PROFASE_SEG.esc, c=D.cli[ci], k=segK('','k'), r=SEG.rev.get(k)||null, est=r?r.estatus:'sin_respuesta';
+  const m=ESTC.ok?ESTC.porRfc.get(c[2]):null;
+  SEG.cu=null;
+  PROFASE_SEG.abre({
+    kick:'Empresa completa', titulo:'Seguimiento de la empresa', nota:op.nota||'',
+    resumen:'<div class="r1"><h3>'+esc(c[1])+'</h3></div><p>'+esc(c[2]+' · '+(c[3]||'Sin grupo'))+'</p>'
+      +'<div class="seg-chips">'+PROFASE_SEG.chip(est)+'<span class="seg-quien">'+segQuien(r)+'</span>'
+      +(m?'<span class="seg-tag" style="cursor:default">Empresa: '+esc(ST_LAB[stDe(m)]||'')+'</span>':'')+'</div>',
+    estatus:segEstatus(est,'k'),
+    platica:segPlatica(k,'k'),
+    guarda:cm=>segGuarda(c[2],[{uuid:'',tipo:'',rfc_cp:'',contraparte:'',folio:''}],cm),
+    corrige:(id,t)=>segCom('corrige',id,t),
+    borra:id=>segCom('borra',id),
+    hiloDe:()=>segHilo(k)
+  });
+}
+/* desde un aviso o la Bitácora: abre la empresa y, ya con su seguimiento, la factura (o la empresa) */
+async function abreSegDesde(rfc,uuid,parte,empresa){
+  const ci=D.cli.findIndex(c=>c[2]===rfc);
+  if(ci<0){ avisaArriba('Esa empresa no está en tu cartera.'); return; }
+  abreCliente(ci,{tab:uuid?'todos':'fac'});
+  try{ if(!UUID_OK.has(rfc)) await cargaUuids([rfc]); }catch(e){}
+  if(!await cargaSeg(rfc)){ avisaArriba('No se pudo abrir su seguimiento; intenta en un momento.'); return; }
+  pintaModal();
+  if(empresa||!uuid){ if(empresa) return; abreSegEmpresa(ci); return; }
+  const d=ROWS.find(x=>x.cli===ci&&x.uuid&&String(x.uuid).toUpperCase()===uuid&&(x.parte||'k')===parte);
+  if(d){ S.doc=d; pintaModal(); abreSeg(d); return; }
+  // ya no está en la cartera (se pagó o se canceló): su seguimiento, con lo que guardó la base
+  const k=segK(uuid,parte), r=SEG.rev.get(k), cs=SEG.com.get(k)||[], x=r||cs[cs.length-1];
+  if(!x){ avisaArriba('Esa factura ya no está en la cartera.'); return; }
+  abreSeg({suelto:true,uuid,parte,folio:x.folio||'',contraparte:x.contraparte||''},{rfc,lista:[]});
+}
+/* «Comentar…» en las facturas escogidas: un comentario (y, si se quiere, el estatus) en todas */
+function comentaVarias(sel){
+  const rows=sel.filter(segSe);
+  if(!rows.length){ avisaArriba('Todavía se están cargando sus folios fiscales; intenta en un momento.'); return; }
+  const body=el('div');
+  const g=el('label','fmot'); g.appendChild(el('span','k','Estatus de revisión (opcional)'));
+  const sl=el('select'); sl.id='segv-est'; sl.appendChild(new Option('Dejarlo como está',''));
+  PROFASE_SEG.opciones().forEach(e=>sl.appendChild(new Option(e.t,e.id))); g.appendChild(sl); body.appendChild(g);
+  const c=el('label','fmot'); c.appendChild(el('span','k','Comentario'));
+  const t=el('textarea'); t.id='segv-com'; t.rows=3; t.maxLength=8000; c.appendChild(t); body.appendChild(c);
+  body.appendChild(el('p','enota','El mismo comentario queda en cada factura, con tu nombre y la hora. Si alguna no puede pasar a ese estatus (por sus reglas), se queda como está.'));
+  const err=el('p','eerr'); err.hidden=true; body.appendChild(err);
+  const pie=el('div','sheet-f');
+  const si=boton('Guardar','',async()=>{
+    const est=sl.value, tx=t.value.trim();
+    if(!est&&!tx){ err.textContent='Escoge un estatus o escribe un comentario.'; err.hidden=false; return; }
+    si.disabled=true; si.textContent='Guardando…';
+    const r=await segGuarda(rfcDe(rows[0]),rows.map(segItem),{estatus:est,texto:tx});
+    if(r===true){ cierraOv2(); S.sel=new Set(); pintaModal(); avisaArriba('Listo: '+plural(rows.length,'factura','facturas')+' con su seguimiento.'); return; }
+    err.textContent=r; err.hidden=false; si.disabled=false; si.textContent='Guardar';
+  });
+  pie.appendChild(boton('Cancelar','g',cierraOv2)); pie.appendChild(si);
+  abreOv2(sheet2('Comentar',plural(rows.length,'factura escogida','facturas escogidas'),body,pie));
+  setTimeout(()=>t.focus(),40);
+}
+// el seguimiento en el detalle de un documento
+function bloqueSeg(d){
+  const b=el('div','estbox'); b.appendChild(el('div','k','Seguimiento'));
+  const r=segDe(d), n=segComDe(d).length;
+  const t=el('div'); t.style.marginTop='6px'; t.appendChild(segPill(r?r.estatus:'sin_respuesta')); b.appendChild(t);
+  b.appendChild(el('div','l',(r&&r.quien?'Lo puso '+r.quien+(r.ts?' · '+r.ts:'')+' · ':'')+(n?plural(n,'comentario','comentarios'):'Sin comentarios')));
+  const a=el('div','acts'); const x=boton('Abrir seguimiento ›','o',()=>abreSeg(d)); x.id='seg-abre'; a.appendChild(x); b.appendChild(a);
+  return b;
+}
+
 /* ── Bitácora (3-nov-2026, pedido de Fernando Cadengo): quién marcó, aprobó, regresó o quitó cada estatus y quién
    prendió o apagó una regla, con cuándo y el antes y el después. Sale de lo que la base ya guarda (car_marcas nunca
    borra); quién ve qué lo decide cartera_bitacora() con la regla de siempre (lo que solo ve la dirección, solo a ella).
@@ -2226,7 +2410,8 @@ function botonBitacora(){
   b.onclick=()=>abreBitacora();
   return b;
 }
-const BIT_TIPOS=[{k:'estatus',t:'Estatus'},{k:'aprobo',t:'Aprobaciones'},{k:'regreso',t:'Regresos'},{k:'regla',t:'Reglas'},{k:'aplica',t:'Aplicaciones'}];
+const BIT_TIPOS=[{k:'estatus',t:'Estatus'},{k:'aprobo',t:'Aprobaciones'},{k:'regreso',t:'Regresos'},{k:'regla',t:'Reglas'},{k:'aplica',t:'Aplicaciones'},
+  {k:'revision',t:'Revisión'},{k:'comentario',t:'Comentarios'}];
 const APL_BIT={aplicada:'Aplicada',quitada:'Quitada',sugerida:'Lo que sugiere el CRM'};
 const stTxt=k=>k==='normal'?'Que cuente':(ST_LAB[k]||k||'Sin estatus');
 function filaBitacora(f){
@@ -2238,6 +2423,17 @@ function filaBitacora(f){
   if(f.que==='aplica') return Object.assign(base,{objeto:'Factura '+(f.folio||'')+' · '+(f.doc||'')+(f.contraparte?' · '+f.contraparte:''),
     tipo:'aplica',tipoTxt:f.despues==='aplicada'?'Aplicó':f.despues==='quitada'?'Quitó':'Regresó a lo sugerido',
     cambio:(APL_BIT[f.antes]||f.antes)+' → '+(APL_BIT[f.despues]||f.despues),detalle:'Demostrativo: no cambia saldos'});
+  // la revisión y la plática (230): el estatus de revisión, cada comentario, su corrección y su borrado
+  if(f.que==='revision'||/^comentario/.test(f.que)){
+    const ab=D.cli.some(c=>c[2]===f.rfc)?()=>{ cierraOv(); abreDesdeAviso('seg:'+f.rfc+'|'+(f.uuid||'')+'|'+(f.parte||'k')); }:null;
+    const cita=x=>'«'+String(x||'').slice(0,300)+(String(x||'').length>300?'…':'')+'»';
+    if(f.que==='revision') return Object.assign(base,{tipo:'revision',tipoTxt:'Cambió la revisión',
+      cambio:PROFASE_SEG.t(f.antes||'sin_respuesta')+' → '+PROFASE_SEG.t(f.despues),abre:ab});
+    if(f.que==='comentario') return Object.assign(base,{tipo:'comentario',tipoTxt:'Comentó',cambio:'',detalle:cita(f.despues),abre:ab});
+    if(f.que==='comentario_corregido') return Object.assign(base,{tipo:'comentario',tipoTxt:'Corrigió su comentario',cambio:'',
+      detalle:cita(f.antes)+' → '+cita(f.despues),abre:ab});
+    return Object.assign(base,{tipo:'comentario',tipoTxt:'Borró su comentario',cambio:'',detalle:cita(f.antes),abre:ab});
+  }
   if(f.que==='regla') return Object.assign(base,{tipo:'regla',tipoTxt:f.activa?'Prendió regla':'Apagó regla',cambio:f.activa?'Apagada → Prendida':'Prendida → Apagada'});
   const ver=D.cli.some(c=>c[2]===f.rfc)?()=>verMarca({rfc:f.rfc,uuid:f.uuid,parte:f.parte||'k',estado:'regresada',estatus:'normal'}):null;
   if(f.que==='aprobo') return Object.assign(base,{tipo:'aprobo',tipoTxt:'Aprobó',cambio:'Fuera · por aprobar → Fuera del reporte',
@@ -2436,6 +2632,11 @@ const NUEVOS={'cartera-filtros':()=>{ cierraOv(); if(FB){ window.scrollTo({top:0
     const i=D.cli.findIndex((c,k)=>!OCU(c[2])&&ROWS.some(r=>r.cli===k&&r.satCan));
     if(i>=0){ abreCliente(i,{tab:'can'}); avisaArriba('Nuevo: las facturas que el SAT ya canceló y QUO trae vigentes, en su pestaña «Canceladas».'); }
     else avisaArriba('Nuevo: las facturas que el SAT ya canceló salen aparte («Canceladas en el SAT») y las notas de crédito que su XML relaciona, como «Confirmada (CFDI)». Hoy no hay ninguna en tus empresas.'); },
+  'seguimiento':()=>{
+    const i=D.cli.findIndex((c,k)=>!OCU(c[2])&&ROWS.some(r=>r.cli===k&&(r.mod===0||r.mod===1)));
+    if(i<0){ avisaArriba('Nuevo: cada factura y cada empresa tienen su seguimiento, con los mismos estatus y la misma plática de Variaciones y Activo fijo.'); return; }
+    abreCliente(i,{tab:'fac'});
+    avisaArriba('Nuevo: escoge una factura y pica «Abrir seguimiento ›»: los mismos estatus y la misma plática de Variaciones y Activo fijo. La empresa completa, en «Estatus ▾».'); },
   'bitacora':()=>abreBitacora('Nuevo: aquí ves quién marcó, aprobó, regresó o quitó cada estatus de la cartera y quién prendió o apagó una regla, con la fecha y la hora. Filtra por periodo, persona o movimiento y bájala en Excel o PDF.'),
   'cartera-estatus':()=>abreExcluidos('fuera',{nota:'Cada factura, o la empresa entera, puede ser «Estrategia fiscal» o «Fuera del reporte». '+
   'Aquí ves lo que no suma, la estrategia fiscal (con su reporte) y las reglas automáticas; '+(yoApruebo()?'tú apruebas y regresas.':'lo aprueban la dirección y quienes ven toda la cartera.')})};
@@ -2444,6 +2645,9 @@ function abreDesdeAviso(x){
   const s=String(x||'');
   const v=/^ver:([a-z0-9-]{1,40})$/.exec(s);
   if(v&&(v[1]==='cartera-filtros'||v[1]==='cartera-aplicaciones'||v[1]==='cartera-centauro')){ NUEVOS[v[1]](); return; }   // no dependen del estatus de la cartera
+  if(v&&v[1]==='seguimiento'){ NUEVOS.seguimiento(); return; }
+  const sg=/^seg:([A-Z0-9&Ñ]{9,14})\|([0-9A-Za-z-]{0,40})\|([kp])$/i.exec(s), em=/^emp:([A-Z0-9&Ñ]{9,14})$/i.exec(s);
+  if(sg||em){ abreSegDesde((sg||em)[1].toUpperCase(),sg?sg[2].toUpperCase():'',sg?sg[3]:'k',!!em); return; }
   if(!ESTC.ok) return;
   if(v){ (NUEVOS[v[1]]||NUEVOS['cartera-estatus'])(); return; }
   if(/^\d{1,12}$/.test(s)){
