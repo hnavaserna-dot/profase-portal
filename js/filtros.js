@@ -250,15 +250,101 @@
       }
       ajusta();
     }
-    // En computadora y tableta la ventana nunca pasa del borde derecho: su ancho llega, como mucho, hasta 16 px antes
-    // del borde, contando desde donde empieza (en tableta la barra puede empezar ya recorrida a la derecha)
-    function ajusta() {
-      var pan = raiz.querySelector('.pf-pan');
-      if (!abierto || celular() || !pan) return;
-      pan.style.maxWidth = '';
-      var libre = document.documentElement.clientWidth - pan.getBoundingClientRect().left - 16;
-      pan.style.maxWidth = Math.max(240, Math.floor(libre)) + 'px';
+    // En computadora y tableta la ventana va pegada al botón pero fija en la pantalla (position:fixed), para que ningún
+    // recuadro de la página la corte (Héctor Daniel, 4-nov-2026, con la captura de Clientes › Claves SAT y renovaciones:
+    // al escoger un cliente la lista quedaba de un renglón y su recuadro, que no deja salir nada, cortaba la ventana).
+    // Abre hacia abajo; si abajo no cabe y arriba hay más lugar, hacia arriba. Nunca pasa de los bordes de la pantalla
+    // (a lo ancho, 16 px antes del borde derecho; a lo alto, 8 px y debajo de un encabezado pegado arriba): si es más
+    // alta que el lugar, su cuerpo se desliza por dentro. Sigue al botón si la página o un recuadro se deslizan, y se
+    // cierra si el botón ya no se ve. Si algo de la página hace que «fixed» no cuente desde la pantalla (un recuadro con
+    // transform), lo mide y lo corrige.
+    function tope() {
+      var t = 8, h = document.querySelector('header.band');
+      if (h && !raiz.closest('header.band')) {
+        var cs = getComputedStyle(h);
+        if ((cs.position === 'sticky' || cs.position === 'fixed') && h.getClientRects().length) t = Math.max(t, h.getBoundingClientRect().bottom + 8);
+      }
+      return t;
     }
+    // ¿Se ve el botón? (dentro de la pantalla y de los recuadros que lo podrían esconder)
+    function seVe(el) {
+      if (!el || !el.getClientRects().length) return false;
+      var r = el.getBoundingClientRect(), a = r.top, b = r.bottom, iz = r.left, de = r.right;
+      for (var p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        var cs = getComputedStyle(p);
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+        var q = p.getBoundingClientRect();
+        a = Math.max(a, q.top); b = Math.min(b, q.bottom); iz = Math.max(iz, q.left); de = Math.min(de, q.right);
+      }
+      a = Math.max(a, 0); b = Math.min(b, window.innerHeight); iz = Math.max(iz, 0); de = Math.min(de, document.documentElement.clientWidth);
+      return b - a > 1 && de - iz > 1;
+    }
+    // Los avisos chicos de abajo (PORTAL.avisoChico, en la página de más arriba) flotan encima de todo, también del
+    // marco de esta pantalla: la ventana se queda arriba de ellos («Menús y submenús siempre a la vista»: nada la tapa,
+    // ni los avisos flotantes; en la revisión de este cambio «… te pide autorizar 1 cambio al portal» tapaba su botón
+    // de abajo). Regresa dónde empiezan, en pixeles de esta página, o null si no hay o no tocan ese tramo a lo ancho.
+    function avisosArriba(iz, de) {
+      try {
+        var w = window, dx = 0, dy = 0;
+        while (w !== w.top) {
+          var fe = w.frameElement; if (!fe) return null;
+          var rf = fe.getBoundingClientRect(); dx += rf.left + fe.clientLeft; dy += rf.top + fe.clientTop; w = w.parent;
+        }
+        var c = w.document.getElementById('pa-avisos');
+        if (!c || !c.children.length) return null;
+        var cs = w.getComputedStyle(c);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+        var a = c.getBoundingClientRect();
+        if (!a.height || a.right - dx <= iz || a.left - dx >= de) return null;
+        return a.top - dy;
+      } catch (e) { return null; }
+    }
+    // celular: la hoja desde abajo deja libre lo que ocupan los avisos (su botón de abajo queda arriba de ellos)
+    function ajustaHoja() {
+      var pan = capa.querySelector('.pf-pan');
+      if (!pan) return;
+      var av = avisosArriba(0, document.documentElement.clientWidth);
+      pan.style.paddingBottom = av != null ? Math.ceil(window.innerHeight - av + 8) + 'px' : '';
+    }
+    function ajusta() {
+      if (abierto && celular()) return ajustaHoja();
+      var pan = raiz.querySelector('.pf-pan'), btn = raiz.querySelector('.pf-btn');
+      if (!abierto || !pan || !btn) return;
+      if (!seVe(btn)) return abre(false);
+      var vw = document.documentElement.clientWidth, vh = window.innerHeight, t0 = tope();
+      var b = btn.getBoundingClientRect(), r0 = raiz.getBoundingClientRect(), s = pan.style;
+      s.position = 'fixed'; s.right = 'auto'; s.top = '0px'; s.bottom = 'auto'; s.left = '0px';
+      // a lo ancho: empieza donde la barra y llega, como mucho, a 16 px del borde derecho
+      var izq = Math.max(8, Math.min(r0.left, vw - 16 - 240));
+      s.maxWidth = Math.max(240, Math.floor(vw - izq - 16)) + 'px';
+      // a lo alto: su alto natural (hasta 620 px) contra el lugar de abajo (sin pasar de los avisos) y el de arriba
+      var av = avisosArriba(izq, izq + pan.getBoundingClientRect().width), piso = vh - 8;
+      if (av != null) piso = Math.min(piso, av - 8);
+      s.maxHeight = Math.max(160, Math.min(620, vh - t0 - 8)) + 'px';
+      var alto = pan.getBoundingClientRect().height;
+      var abajo = piso - (b.bottom + 6), arriba = (b.top - 6) - t0;
+      var haciaAbajo = abajo >= alto || abajo >= 320 || abajo >= arriba;
+      s.maxHeight = Math.max(160, Math.floor(Math.min(620, haciaAbajo ? abajo : arriba))) + 'px';
+      if (haciaAbajo) { s.top = (b.bottom + 6) + 'px'; s.bottom = 'auto'; } else { s.top = 'auto'; s.bottom = (vh - (b.top - 6)) + 'px'; }
+      s.left = izq + 'px';
+      // si un recuadro de la página cambia desde dónde cuenta «fixed», se corrige con lo que de verdad quedó
+      var r = pan.getBoundingClientRect(), dx = izq - r.left;
+      if (Math.abs(dx) > 0.5) s.left = (izq + dx) + 'px';
+      if (haciaAbajo) { var dy = (b.bottom + 6) - r.top; if (Math.abs(dy) > 0.5) s.top = (b.bottom + 6 + dy) + 'px'; }
+      else { var db = r.bottom - (b.top - 6); if (Math.abs(db) > 0.5) s.bottom = (vh - (b.top - 6) + db) + 'px'; }
+    }
+    // la sigue al deslizar la página o un recuadro (una vez por cuadro) y si la página cambia de tamaño
+    var cuadro = 0;
+    function sigue(e) {
+      if (!abierto || cuadro) return;
+      var pan = raiz.querySelector('.pf-pan');
+      if (e && e.target && e.target.nodeType === 1 && pan && pan.contains(e.target)) return;   // sus propias listas
+      cuadro = requestAnimationFrame(function () { cuadro = 0; ajusta(); });
+    }
+    var docAv = null;   // la página de más arriba avisa cuando llega o se va un aviso chico
+    try { docAv = window.top.document; docAv.addEventListener('profase-avisos', sigue); } catch (e) { docAv = null; }
+    var obs = null;
+    try { obs = new ResizeObserver(function () { sigue(); }); obs.observe(document.documentElement); if (document.body) obs.observe(document.body); } catch (e) { obs = null; }
     // Al escribir en un buscador solo se vuelve a pintar su lista, para no perder el cursor
     function zona() { return capa.parentNode ? capa : raiz; }
     function pintaLista(i) {
@@ -333,9 +419,14 @@
     document.addEventListener('mousedown', fuera);
     document.addEventListener('profase-menu', otro);
     window.addEventListener('resize', tam);
+    document.addEventListener('scroll', sigue, { capture: true, passive: true });
     function destruye() {
       document.removeEventListener('mousedown', fuera); document.removeEventListener('profase-menu', otro);
       window.removeEventListener('resize', tam);
+      document.removeEventListener('scroll', sigue, { capture: true, passive: true });
+      if (obs) { try { obs.disconnect(); } catch (e) { /* nada */ } }
+      if (docAv) { try { docAv.removeEventListener('profase-avisos', sigue); } catch (e) { /* nada */ } }
+      if (cuadro) cancelAnimationFrame(cuadro);
       if (capa.parentNode) capa.parentNode.removeChild(capa);
       if (raiz.parentNode) raiz.parentNode.removeChild(raiz);
     }
