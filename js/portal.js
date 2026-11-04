@@ -179,6 +179,57 @@
   };
   document.addEventListener('pointerdown', function () { menuAMarcos('afuera'); menuAFuera(); }, true);
 
+  /* ---- Con el dedo, se desliza el recuadro que flota, nunca la pantalla de abajo (Héctor Daniel, 4-nov-2026, 6:49, con
+     una captura de su iPhone con la campanita abierta: «al querer subir y bajar … en el centro de notificaciones, se
+     mueve la pantalla de abajo no como tal el menú de notificaciones»). En el iPhone y el iPad, cuando el dedo iba sobre
+     una parte del recuadro que no se desliza (su título, sus pestañas, «Ver todas») o la lista ya estaba hasta arriba o
+     hasta abajo, el movimiento se iba de largo a la pantalla de abajo (o al rebote del iPhone) y el recuadro se quedaba
+     quieto. P.deslizaDentro(recuadro) lo arregla, para lo de hoy y lo nuevo: con el dedo dentro del recuadro solo se
+     desliza lo que, bajo el dedo, todavía puede deslizarse hacia ese lado; si nada puede, no se mueve nada. Lo usan la
+     campanita, la Ayuda, el menú de la foto y el ☰ del celular (con su fondo oscuro); un recuadro flotante nuevo que se
+     desliza lo llama una vez al crearse y a su lista le pone overscroll-behavior: contain (una sola versión: no hagas
+     otra). No toca dos dedos (acercar con los dedos sigue igual), la pantalla ya acercada ni los campos de texto, y no
+     hace más lento nada: solo revisa mientras el dedo está dentro del recuadro. construir.py (exige_desliza_dentro())
+     lo cuida y herramientas/pruebas/pantallas/prueba_desliza_dentro.py (en profase-datos) lo comprueba. ---- */
+  function puedeIr(n, tope, dx, dy) {
+    for (; n && n.nodeType === 1; n = n.parentElement) {
+      var cs = n.ownerDocument.defaultView.getComputedStyle(n);
+      if (dy && /(auto|scroll|overlay)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1
+        && (dy > 0 ? n.scrollTop > 0.5 : n.scrollTop + n.clientHeight < n.scrollHeight - 1)) return true;
+      if (dx && /(auto|scroll|overlay)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 1
+        && (dx > 0 ? n.scrollLeft > 0.5 : n.scrollLeft + n.clientWidth < n.scrollWidth - 1)) return true;
+      if (n === tope) break;
+    }
+    return false;
+  }
+  function acercada() { try { var v = window.visualViewport; return !!(v && v.scale > 1.01); } catch (e) { return false; } }
+  P.deslizaDentro = function (el) {
+    if (!el || el.__ptDentro) return el;
+    el.__ptDentro = true;
+    // Se decide una sola vez por toque, cuando el dedo ya se movió 6 px (un temblor del dedo no cuenta): hacia dónde
+    // va, y si bajo el dedo hay algo que pueda deslizarse hacia allá. Si no lo hay, ese toque no mueve nada.
+    var x0 = 0, y0 = 0, decide = 0;   // 0: aún no; 1: que se deslice lo de adentro; 2: no se mueve nada
+    el.addEventListener('touchstart', function (e) {
+      var t = e.touches[0];
+      x0 = t ? t.clientX : 0; y0 = t ? t.clientY : 0;
+      decide = e.touches.length !== 1 || acercada()
+        || !!(e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) ? 1 : 0;
+    }, { passive: true });
+    el.addEventListener('touchmove', function (e) {
+      if (e.touches.length !== 1) decide = 1;
+      if (decide === 1) return;
+      if (!decide) {
+        var t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        var ver = Math.abs(dy) >= Math.abs(dx);
+        decide = puedeIr(e.target, el, ver ? 0 : dx, ver ? dy : 0) ? 1 : 2;
+        if (decide === 1) return;
+      }
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    return el;
+  };
+
   /* ---- El signo PROFASE lleva al Inicio (regla de Daniel, 31-oct-2026, 16:18 y 16:23: «si desde ahí le pico al logo de
      profase; me mandes a home… ponlo para todo lo nuevo y todo lo viejo»; «y también en la ipad y laptop»). En cualquier
      pantalla (celular, iPad, computadora), picar el signo de arriba de una vista (o su «PROFASE · Asesoría Contable, Legal y
@@ -2479,6 +2530,7 @@
     }
     botonTema(pu);
     var btn = document.getElementById('pu-btn'), dd = document.getElementById('pu-dd');
+    P.deslizaDentro(dd);   // con el dedo se desliza el menú, nunca la pantalla de abajo (4-nov-2026)
     function despliega(o) {
       // en celular el menú se pega a la orilla derecha, justo abajo de la foto
       if (o) document.documentElement.style.setProperty('--pu-top', Math.round(btn.getBoundingClientRect().bottom + 8) + 'px');

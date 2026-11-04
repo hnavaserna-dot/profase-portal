@@ -216,7 +216,7 @@
     + '.pm-side{position:fixed;left:0;top:var(--pm-top);bottom:0;width:var(--pm-sw);background:var(--navy,#1F3864);color:#DCE5F3;display:flex;flex-direction:column;z-index:30;transition:width .18s ease;font-family:var(--f-body,inherit)}'
     + '.pm-side button{font:inherit}'
     + '.pm-cab{display:none}'
-    + '.pm-lista{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px 8px}'
+    + '.pm-lista{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px 8px;overscroll-behavior:contain}'
     + '.pm-mod{margin-bottom:2px;position:relative}'
     + '.pm-mb{width:100%;display:flex;align-items:center;gap:12px;border:0;background:none;color:#DCE5F3;padding:10px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;text-align:left;white-space:nowrap}'
     + '.pm-mb:hover{background:rgba(255,255,255,.1)}'
@@ -633,6 +633,8 @@
     // el signo del ☰ también lleva al Inicio (el del encabezado ya lo marcó js/portal.js; Daniel, 31-oct-2026)
     if (window.PORTAL && window.PORTAL.signoInicio) window.PORTAL.signoInicio(side.querySelector('.pm-cab'));
     scrim.onclick = function () { abre(false); };
+    // con el dedo se desliza el menú, nunca la pantalla de abajo; sobre el fondo oscuro no se mueve nada (4-nov-2026; js/portal.js)
+    if (window.PORTAL && window.PORTAL.deslizaDentro) { window.PORTAL.deslizaDentro(side); window.PORTAL.deslizaDentro(scrim); }
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (document.body.classList.contains('pm-abierto')) abre(false);
