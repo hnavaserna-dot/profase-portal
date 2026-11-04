@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=89ca228e76"></script><script src="js/cobranza.js?v=b47fa91e3f"></script>
 <style>
 /* Portal PROFASE · Inicio (30-oct-2026, pedido de Daniel). Una sola página de tarjetas que contesta «¿qué necesita mi
    atención hoy?» y cambia según quién entra:
@@ -111,6 +111,12 @@ button{font:inherit;color:inherit}
 .k .v{font-family:var(--f-display);font-weight:760;font-size:clamp(18px,4.6vw,23px);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .k .s{font-size:12px;color:var(--muted);margin-top:1px}
 .k.mal .v{color:var(--red)} .k.ojo .v{color:var(--amber)} .k.bien .v{color:var(--ok)}
+/* las pilas de Cobranza se pican: abren su resumen (Héctor Daniel Nava, 4-nov-2026: «quiero que me des un resumen de
+   las pilas cuando le clic a las de cobranza»; la ventana es la de js/cobranza.js) */
+button.k{display:block;width:100%;text-align:left;font:inherit;color:inherit;border:1px solid transparent;cursor:pointer}
+button.k:hover{border-color:var(--line-strong)}
+button.k:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 .barra{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
 .barra i{display:block;height:100%;background:var(--ok);border-radius:4px}
 
@@ -522,10 +528,13 @@ button{font:inherit;color:inherit}
 
   /* ---------- pintar ---------- */
   function k(t, v, s, cls) { return '<div class="k' + (cls ? ' ' + cls : '') + '"><div class="t">' + esc(t) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
+  // una pila que se pica (las de Cobranza: abren su resumen)
+  function kb(at, t, v, s, cls) { return '<button type="button" class="k' + (cls ? ' ' + cls : '') + '" ' + at + '><span class="t" style="display:block">' + esc(t) + '</span><span class="v" style="display:block">' + v + '</span>' + (s ? '<span class="s" style="display:block">' + s + '</span>' : '') + '</button>'; }
   function fila(o) {
     // o: {pt, a, b, n, ncls, liga, notif}
     var at = o.liga ? ' data-liga="' + esc(o.liga) + '"' : '';
     if (o.notif) at += ' data-notif="' + esc(o.notif) + '"';
+    if (o.cxc) at += ' data-cxc="' + esc(o.cxc) + '"';
     return '<li><button type="button" class="fila' + (o.liga ? '' : ' quieta') + '"' + at + (o.liga ? '' : ' tabindex="-1"') + '><span class="pt ' + (o.pt || '') + '" aria-hidden="true"></span><span class="tx"><span class="a">' + o.a + '</span>'
       + (o.b ? '<span class="b">' + o.b + '</span>' : '') + '</span>' + (o.n != null && o.n !== '' ? '<span class="n ' + (o.ncls || '') + '">' + o.n + '</span>' : '') + '</button></li>';
   }
@@ -635,15 +644,16 @@ button{font:inherit;color:inherit}
       orden.forEach(function (n) {
         var c = cias[n];
         if (dos) h += '<h3 class="cia">' + esc(n) + '</h3>';
-        h += '<div class="kp">' + k('Por cobrar', fm(c.saldo), 'con IVA') + k('Vencido', fm(c.ven), 'facturas de meses anteriores', c.ven > 0 ? 'mal' : 'bien')
-          + k('Mes en curso', fm(c.curso), 'por vencer') + k('Cobrado en ' + mesTxt, fm(c.cobrado), '', 'bien') + '</div>';
+        var at = function (p) { return 'data-cxc="' + esc(n) + '|' + p + '" aria-label="Resumen: ' + esc(n) + ', ' + p + '"'; };
+        h += '<div class="kp">' + kb(at('tot'), 'Por cobrar', fm(c.saldo), 'con IVA') + kb(at('ven'), 'Vencido', fm(c.ven), 'facturas de meses anteriores', c.ven > 0 ? 'mal' : 'bien')
+          + kb(at('curso'), 'Mes en curso', fm(c.curso), 'por vencer') + kb(at('cob'), 'Cobrado en ' + mesTxt, fm(c.cobrado), '', 'bien') + '</div>';
         Object.keys(c.grupos).forEach(function (g) { var x = c.grupos[g]; x.cia = n; top.push(x); });
       });
       top.sort(function (a, b) { return b.ven - a.ven; });
       if (top.length) {
         h += '<p class="tl">Los que más deben de meses anteriores</p>' + lista(top.slice(0, 5).map(function (x) {
           return { pt: x.max >= 3 ? 'mal' : 'ojo', a: esc(x.grp || 'Sin grupo'), b: (dos ? esc(x.cia) + ' · ' : '') + 'la más vieja es de hace ' + x.max + ' meses',
-                   n: fm(x.ven), ncls: x.max >= 3 ? 'mal' : 'ojo', liga: 'cobranza' };
+                   n: fm(x.ven), ncls: x.max >= 3 ? 'mal' : 'ojo', liga: 'cobranza', cxc: x.cia + '|ven|' + x.grp };
         }));
       } else h += aldia('Nadie debe facturas de meses anteriores.');
       h += '<p class="nota">' + datosAl(C.D) + 'Amarillo: 2 meses; rojo: 3 o más.</p>';
@@ -1474,7 +1484,28 @@ button{font:inherit;color:inherit}
     if (VEO_EQ) TARJETAS.splice(PERFIL === 'direccion' ? 1 : Math.max(0, TARJETAS.length - 1), 0, tConectados());
   }
 
+  /* Cobranza (Héctor Daniel Nava, 4-nov-2026): la pila abre su resumen (PROFASE_CXC.resumen, js/cobranza.js: la misma
+     cuenta de la pantalla de Cobranza) con «Ver en Cobranza», que abre la pantalla ya con esa compañía y esa pila
+     (PROFASE_ABRE.cobranza de la vista); un grupo de «Los que más deben…» abre la Cobranza en ese grupo. */
+  var CXP = null;
+  function abreCobranza(x) {
+    abre('cobranza', x);
+  }
   document.addEventListener('click', function (e) {
+    var c = e.target.closest('[data-cxc]');
+    if (c && window.PROFASE_CXC) {
+      var p = String(c.getAttribute('data-cxc')).split('|');
+      if (c.classList.contains('k')) {
+        e.preventDefault(); e.stopPropagation();
+        cargaCXC().then(function (C) {
+          if (!C) return;
+          if (!CXP || CXP.D !== C.D) CXP = window.PROFASE_CXC.prepara(C.D);
+          window.PROFASE_CXC.resumen(CXP, { cia: p[0], pila: p[1], ver: ve('cobranza') ? abreCobranza : null });
+        });
+        return;
+      }
+      if (ve('cobranza')) { e.preventDefault(); e.stopPropagation(); abreCobranza('cia:' + p[0] + '|pila:' + p[1] + '|grp:' + p.slice(2).join('|')); return; }
+    }
     var b = e.target.closest('[data-liga],[data-equipo]'); if (!b) return;
     if (b.hasAttribute('data-equipo') || b.closest('#c-conectados')) { abreEquipo(); return; }
     var id = b.getAttribute('data-notif');
