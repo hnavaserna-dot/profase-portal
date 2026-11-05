@@ -716,6 +716,30 @@ td.ab{width:40px;padding-left:4px}
 .aplbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line-2)}
 .aplbar .track{flex-wrap:wrap}
 .aplnota{font-size:11.5px;color:var(--ink-3)}
+.aplpp{font-size:11.5px;color:var(--accent-ink,var(--ink-2));background:var(--surface-2);border-radius:8px;padding:3px 9px}
+.aplago{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.aplago .btn{padding:6px 12px;font-size:12.5px}
+/* la ventana de «Agotar anticipos y notas» (263) */
+.ago-reglas{font-size:12.5px;color:var(--ink-2)}
+.ago-reglas summary{font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.ago-reglas ol{margin:6px 0 0;padding-left:20px;display:grid;gap:3px}
+.ago-ojo{margin:0;font-size:12px;color:var(--warn-ink,var(--ink-2));background:var(--surface-2);border-radius:9px;padding:8px 11px}
+.ago-pp{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.ago-pp input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--brand);flex:none}
+.ago-pp small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+.ago-tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.ago-tot .c{background:var(--surface-2);border-radius:10px;padding:8px 10px;min-width:0}
+.ago-tot .c.si{background:var(--navy-soft,var(--surface-2))}
+.ago-tot .k{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.ago-tot .v{font-family:var(--f-num);font-weight:700;font-size:14px;margin-top:2px;overflow-wrap:anywhere}
+.ago-nf{font-size:12.5px;color:var(--ink-2)}
+.ago-lista{display:grid;gap:8px}
+.ago-g{border:1px solid var(--line-2);border-radius:10px;padding:8px 11px;background:var(--surface-3,var(--surface));min-width:0}
+.ago-g .h{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.ago-g .h b{font-size:13px;overflow-wrap:anywhere}
+.ago-g .rfc{font-size:11px;color:var(--ink-3)}
+.ago-g .l{font-size:12px;color:var(--ink-2);margin-top:3px;overflow-wrap:anywhere}
+.ago-g .mot{font-size:11.5px;color:var(--ink-3);margin-top:3px;padding-left:10px;border-left:2px solid var(--line);overflow-wrap:anywhere}
 .aplg{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;padding:10px 20px 7px;background:var(--surface-2);
   border-bottom:1px solid var(--line-2);font-size:12.5px}
 .aplg b{overflow-wrap:anywhere}
@@ -2996,7 +3020,7 @@ async function exportaCanceladas(ci){
    cuándo, y sale en la Bitácora. «Confirmada (CFDI)» y las canceladas en el SAT salen de Centauro por la puerta cartera_sat
    (213 y 214; petición 20261103-1755-cartera-centauro, Héctor Daniel: «Sí, la arma CENTAURO (b)»; la pantalla, 19:28: «nosotros
    publicamos la pantalla de cartera»): ver «Lo de Centauro», abajo. ── */
-const APL={ok:false,puede:{},dec:new Map(),firma:null,cache:new Map()};
+const APL={ok:false,puede:{},dec:new Map(),firma:null,cache:new Map(),pp:new Set(),porRfc:new Map()};
 let APL_IDX=null;
 const APL_T={conf:'Confirmada (CFDI)',acep:'Aceptada',auto:'Automática',sug:'Sugerida',suma:'Sugerida · suma',rev:'Revisar · otro nombre',quit:'Quitada'};
 const APL_C={conf:'p-pue',acep:'p-ok',auto:'p-me',sug:'p-pap',suma:'p-pap',rev:'p-can',quit:'p-fue'};
@@ -3089,15 +3113,36 @@ function aplEmp(ci){
   const gen=[...G.values()].filter(g=>RFC_GEN.has(g.rfc));
   gen.forEach(g=>g.f.forEach(f=>gen.forEach(h=>{ if(h===g||h.lado!==g.lado||h.rfc!==g.rfc) return;
     h.d.forEach(d=>{ if(!yaConf(f,d)&&Math.abs(-d.saldo-f.saldo)<=0.01) nueva(f,[d],'rev'); }); })));
+  // lo aceptado que ninguna de las de arriba trae (lo que repartió «Agotar» con su factura relacionada de otro nombre, o si
+  // el XML todavía no llega): su propia relación, para que se vea y cuente igual que en la ventana de «Agotar»
+  const yaAcep=APL.porRfc.get(D.cli[ci][2]);
+  if(yaAcep&&yaAcep.length){
+    const uF=new Map(), uD=new Map(), hay=new Map();
+    R.fac.forEach((x,f)=>{ if(f.uuid) uF.set(f.uuid.toUpperCase(),f); });
+    R.doc.forEach((x,d)=>{ if(d.uuid) uD.set(d.uuid.toUpperCase(),d); });
+    rels.forEach(rl=>{ let s=hay.get(rl.fac); if(!s) hay.set(rl.fac,s=new Set()); rl.docs.forEach(d=>s.add(d)); });
+    yaAcep.forEach(([parte,fu,du])=>{ const f=uF.get(fu), d=uD.get(du);
+      if(!f||!d||f.parte!==parte||ladoFac(f)!==ladoDoc(d)) return;
+      let s=hay.get(f); if(!s) hay.set(f,s=new Set()); if(s.has(d)) return;
+      s.add(d); nueva(f,[d],'sug'); });
+  }
   // lo que se aplicaría: lo aceptado, luego lo exacto (uno a uno, por fecha), luego una sugerida por factura y lo de revisar
   const qF=f=>R.fac.get(f), qD=d=>R.doc.get(d), libre=d=>qD(d).usado<0.005, tocada=f=>qF(f).apl.length>0;
+  const usaPar=new Map();   // por factura y anticipo o nota: cuánto ya se aplicó entre todas sus relaciones
   const pon=rl=>{
     let resta=qF(rl.fac).queda;
-    rl.docs.forEach(d=>{ const x=qD(d), m=Math.min(x.queda,resta); if(m<=0.005) return;
+    let up=usaPar.get(rl.fac); if(!up) usaPar.set(rl.fac,up=new Map());
+    rl.docs.forEach(d=>{ const x=qD(d), dc=rl.dec==='aplicada'?aplDec(rl.fac,d):null;
+      // con monto guardado (263), esa pareja nunca pasa de su monto aunque salga en dos relaciones (una suma y la suya)
+      const m=Math.min(x.queda,resta,dc&&dc.m!=null?dc.m-(up.get(d)||0):Infinity); if(m<=0.005) return;
+      up.set(d,(up.get(d)||0)+m);
       rl.parte.set(d,m); x.queda-=m; x.usado+=m; resta-=m; rl.monto+=m; });
     if(rl.monto>0.005){ rl.on=true; const F2=qF(rl.fac); F2.apl.push(rl); F2.aplicado+=rl.monto; F2.queda-=rl.monto; }
   };
-  rels.filter(x=>x.dec==='aplicada').sort((a,b)=>a.dias-b.dias).forEach(pon);
+  // lo aceptado: primero lo de a mano (lo que alcance, como siempre) y luego lo que trae su monto («Agotar», 263)
+  const conM=rl=>rl.docs.some(d=>{ const x=aplDec(rl.fac,d); return !!(x&&x.m!=null); });
+  const acep=rels.filter(x=>x.dec==='aplicada').sort((a,b)=>a.dias-b.dias);
+  acep.filter(x=>!conM(x)).forEach(pon); acep.filter(conM).forEach(pon);
   // lo que dice el XML va antes que lo que sugiere la Cartera (una factura puede llevar varias notas confirmadas)
   rels.filter(x=>!x.dec&&x.tipo==='conf').sort((a,b)=>a.dias-b.dias).forEach(x=>{ if(x.docs.every(libre)) pon(x); });
   rels.filter(x=>!x.dec&&x.tipo==='auto').sort((a,b)=>a.dias-b.dias).forEach(x=>{ if(!tocada(x.fac)&&x.docs.every(libre)) pon(x); });
@@ -3135,9 +3180,14 @@ function aplSuma(rows){
 const yoApl=()=>APL.ok&&!!APL.puede.cambiar&&!(window.PORTAL&&window.PORTAL.consulta);
 async function cargaApl(){
   let q; try{ q=await SB.rpc('cartera_apl'); }catch(e){ q={error:e}; }
-  if(!q||q.error||!q.data){ APL.ok=false; APL.dec=new Map(); aplLimpia(); return false; }
-  const d=q.data; APL.ok=true; APL.puede=d.puede||{}; APL.firma=d.firma||null; APL.dec=new Map();
-  (d.rel||[]).forEach(x=>APL.dec.set(x.rfc+'|'+x.parte+'|'+String(x.f).toUpperCase()+'|'+String(x.d).toUpperCase(),{e:x.e,por:x.por,en:x.en}));
+  if(!q||q.error||!q.data){ APL.ok=false; APL.dec=new Map(); APL.pp=new Set(); APL.porRfc=new Map(); aplLimpia(); return false; }
+  const d=q.data; APL.ok=true; APL.puede=d.puede||{}; APL.firma=d.firma||null; APL.dec=new Map(); APL.porRfc=new Map();
+  // 263: m = cuánto se aplica en esa relación (lo guardó «Agotar»; sin m, lo que alcance) y o = 'agotar'; pp = las empresas
+  // de los grupos cuyos anticipos son pagos parciales (sin regla de fecha)
+  APL.pp=new Set((d.pp||[]).map(x=>String(x).toUpperCase()));
+  (d.rel||[]).forEach(x=>{ const fu=String(x.f).toUpperCase(), du=String(x.d).toUpperCase();
+    APL.dec.set(x.rfc+'|'+x.parte+'|'+fu+'|'+du,{e:x.e,por:x.por,en:x.en,m:x.m!=null?+x.m:null,o:x.o||null});
+    if(x.e==='aplicada'){ let a=APL.porRfc.get(x.rfc); if(!a) APL.porRfc.set(x.rfc,a=[]); a.push([x.parte,fu,du]); } });
   // para reconocer lo que ya se decidió, los folios fiscales de esas empresas
   if(ROWS.length){
     const rs=[...new Set((d.rel||[]).map(x=>x.rfc))].filter(r=>!UUID_OK.has(r)&&(RANGO['k|'+r]||RANGO['p|'+r]));
@@ -3261,6 +3311,7 @@ function pestanaApl(todos,lista,m){
     b.setAttribute('aria-pressed',(S.aplF||'rel')===k); b.onclick=()=>{ S.aplF=k; S.doc=null; pintaModal(); }; tr.appendChild(b); });
   bar.appendChild(tr);
   bar.appendChild(el('span','aplnota','Demostrativo: no cambia saldos en QUO ni en la Cartera.'));
+  agotarBarra(bar,S.cliente);
   lista.appendChild(bar);
   const filas=aplFilas(todos);
   N_VEN=filas.length;
@@ -3307,6 +3358,231 @@ function pestanaApl(todos,lista,m){
     const x=el('div','dc mo '+c,F.mxn.format(v)); x.style.setProperty('--w','110px'); tr2.appendChild(x); });
   const xr=el('div','dc p2',''); xr.style.setProperty('--w','200px'); tr2.appendChild(xr); tr2.appendChild(el('span','ch',''));
   tt.appendChild(tr2); lista.appendChild(tt);
+}
+
+/* ── «Agotar anticipos y notas» (5-nov-2026; pedido de Fernando Cadengo: «aplicarlo directamente hasta acabarme los mas de
+   +70 cuidando las fechas de facturas y anticipos o notas»; a las reglas: «si asi es»; 263_cartera_agotar.sql). En la pestaña
+   Aplicaciones de la ventana de una empresa: reparte, en centavos, lo que les queda a sus anticipos y notas de crédito a favor
+   contra sus facturas vigentes con saldo del mismo cliente o proveedor, hasta acabarlos:
+     1. lo que ya aceptó un contador se queda (con lo que le toca, como en la pestaña); lo decidido a mano no se toca;
+     2. la nota o el anticipo con factura relacionada en su XML (Centauro) va solo contra esa factura; si ya no tiene saldo,
+        está cancelada o se quitó esa relación, se queda sin aplicar y dice por qué (no se pasa a otra);
+     3. las notas sin relación, contra facturas de su misma fecha o anteriores, de la más cercana hacia atrás;
+     4. los anticipos sin relación, contra facturas de su misma fecha o posteriores, de la más vieja a la más nueva; en los
+        grupos marcados «los anticipos son pagos parciales» (APL.pp, en la base), sin importar la fecha;
+     5. nunca canceladas (en QUO o en el SAT), otro cliente o proveedor, ni más del saldo (esFacApl/esDocApl de siempre).
+   Antes de guardar enseña el resumen por cliente o proveedor y por qué se queda algo sin aplicar. Guarda «Aceptada» con
+   su monto y origen 'agotar' (de 300 en 300); «Deshacer lo de Agotar» regresa todo eso a lo sugerido. Demostrativo. ── */
+const esNota=r=>r.mod===4||r.mod===5;
+const fch=r=>r&&r.fecha?String(r.fecha).slice(0,10):'';
+const AGO={lado:'2'};
+function agotarPlan(ci,lado){
+  const R=aplEmp(ci), rfc=D.cli[ci][2], pp=APL.pp.has(String(rfc).toUpperCase()), relX=SAT.rel.get(rfc)||null;
+  const cen=v=>Math.round(v*100);
+  const rF=new Map(), rD=new Map(), yaF=new Map(), yaD=new Map(), nuF=new Map(), nuD=new Map(), porque=new Map(), pares=[];
+  R.fac.forEach((F2,f)=>{ if(lado==null||ladoFac(f)===lado) rF.set(f,cen(f.saldo)); });
+  R.doc.forEach((X,d)=>{ if(lado==null||ladoDoc(d)===lado) rD.set(d,cen(-d.saldo)); });
+  // 1. lo que ya aceptó un contador se queda
+  R.fac.forEach(F2=>F2.apl.forEach(rl=>{ if(rl.dec!=='aplicada') return;
+    rl.parte.forEach((m,d)=>{ const v=cen(m);
+      if(rF.has(rl.fac)){ rF.set(rl.fac,Math.max(0,rF.get(rl.fac)-v)); yaF.set(rl.fac,(yaF.get(rl.fac)||0)+v); }
+      if(rD.has(d)){ rD.set(d,Math.max(0,rD.get(d)-v)); yaD.set(d,(yaD.get(d)||0)+v); } }); }));
+  const lleva=(d,f)=>f&&rF.get(f)>0&&!!f.uuid&&ladoFac(f)===ladoDoc(d)&&!aplDec(f,d);
+  const da=(f,d,v)=>{ rF.set(f,rF.get(f)-v); rD.set(d,rD.get(d)-v); nuF.set(f,(nuF.get(f)||0)+v); nuD.set(d,(nuD.get(d)||0)+v); pares.push({f,d,m:v/100}); };
+  const toma=(d,f)=>{ if(rD.get(d)>0&&lleva(d,f)) da(f,d,Math.min(rD.get(d),rF.get(f))); };
+  const fOrd=(a,b)=>{ const x=fch(a)||'9999', y=fch(b)||'9999'; return x<y?-1:x>y?1:0; };
+  const byU=new Map(); ROWS.forEach(r=>{ if(r.cli===ci&&r.uuid) byU.set(r.uuid.toUpperCase(),r); });
+  const docs=[];
+  [...rD.keys()].forEach(d=>{ if(rD.get(d)<=0) return; if(!d.uuid){ porque.set(d,'Sin folio fiscal (UUID)'); return; } docs.push(d); });
+  docs.sort((a,b)=>fOrd(a,b)||rD.get(b)-rD.get(a));
+  // 2. con factura relacionada en su XML: solo contra esa
+  const conRel=new Set();
+  docs.forEach(d=>{
+    const us=relX?relX.get(d.uuid.toUpperCase()):null; if(!us||!us.size) return;
+    const fs=[...us].map(u=>byU.get(u)||null).filter(r=>!r||r.mod===0||r.mod===1);
+    if(!fs.length) return;
+    conRel.add(d);
+    const antes=rD.get(d);
+    fs.filter(Boolean).sort(fOrd).forEach(f=>toma(d,f));
+    if(rD.get(d)<=0) return;
+    const ds=fs.filter(Boolean).map(f=>aplDec(f,d)).filter(Boolean);
+    porque.set(d,rD.get(d)<antes||(yaD.get(d)||0)>0||ds.some(x=>x.e==='aplicada')?'Lo que sobra es de su factura relacionada (no se pasa a otra)'
+      :fs.some(f=>f&&(f.est==='Cancelada'||f.satCan))?'Su factura relacionada está cancelada'
+      :ds.some(x=>x.e==='quitada')?'Quitaron a mano su relación con su factura'
+      :fs.some(f=>f&&f.st==='fuera')?'Su factura relacionada está fuera del reporte'
+      :'Su factura relacionada ya no tiene saldo');
+  });
+  // el mismo cliente o proveedor (y lado): sus facturas con saldo, de la más vieja a la más nueva
+  const gk=r=>(ladoFac(r)>=0?ladoFac(r):ladoDoc(r))+'#'+cpKey(r);
+  const facsDe=new Map();
+  rF.forEach((v,f)=>{ if(!f.uuid) return; const k=gk(f); let a=facsDe.get(k); if(!a) facsDe.set(k,a=[]); a.push(f); });
+  facsDe.forEach(a=>a.sort((x,y)=>fOrd(x,y)||(x.uuid<y.uuid?-1:x.uuid>y.uuid?1:0)));
+  const ini=new Map();   // por lista: la primera factura que todavía tiene saldo (las de antes ya se acabaron)
+  const vivo=a=>{ let i=ini.get(a)||0; while(i<a.length&&!(rF.get(a[i])>0)) i++; ini.set(a,i); return i; };
+  const conFecha=a=>{ let n=a.length; while(n>0&&!fch(a[n-1])) n--; return n; };   // las sin fecha van al final
+  const primeroDesde=(a,fd,n)=>{ let lo=0, hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(fch(a[m])<fd) lo=m+1; else hi=m; } return lo; };
+  const sinFacturas='Este cliente o proveedor no tiene facturas con saldo';
+  // 3. notas sin relación: contra facturas de su misma fecha o anteriores, de la más cercana hacia atrás
+  docs.filter(d=>esNota(d)&&!conRel.has(d)).forEach(d=>{
+    const a=facsDe.get(gk(d));
+    if(!a||!a.length){ porque.set(d,sinFacturas); return; }
+    const fd=fch(d); if(!fd){ porque.set(d,'La nota no tiene fecha'); return; }
+    const n=conFecha(a), hasta=primeroDesde(a,fd+'~',n), desde=vivo(a);   // «~» va después de cualquier fecha: entra el mismo día
+    for(let i=hasta-1;i>=desde&&rD.get(d)>0;i--) toma(d,a[i]);
+    if(rD.get(d)>0) porque.set(d,hasta>0?'Ya no quedan facturas con saldo de su fecha o anteriores':'Sus facturas con saldo son posteriores a la nota');
+  });
+  // 4. anticipos sin relación: de su fecha en adelante (en un grupo de pagos parciales, sin importar la fecha)
+  docs.filter(d=>!esNota(d)&&!conRel.has(d)).forEach(d=>{
+    const a=facsDe.get(gk(d));
+    if(!a||!a.length){ porque.set(d,sinFacturas); return; }
+    if(pp){
+      for(let i=vivo(a);i<a.length&&rD.get(d)>0;i++) toma(d,a[i]);
+      if(rD.get(d)>0) porque.set(d,'Ya no quedan facturas con saldo de este cliente o proveedor');
+      return;
+    }
+    const fd=fch(d); if(!fd){ porque.set(d,'El anticipo no tiene fecha'); return; }
+    const n=conFecha(a), desde=Math.max(primeroDesde(a,fd,n),vivo(a));
+    for(let i=desde;i<n&&rD.get(d)>0;i++) toma(d,a[i]);
+    if(rD.get(d)>0) porque.set(d,primeroDesde(a,fd,n)<n?'Ya no quedan facturas con saldo de su fecha en adelante':'Sus facturas con saldo son anteriores al anticipo');
+  });
+  // el resumen por cliente o proveedor
+  const G=new Map();
+  const gr=r=>{ const k=gk(r); let x=G.get(k); if(!x) G.set(k,x={k,lado:ladoFac(r)>=0?ladoFac(r):ladoDoc(r),cp:r.cp,favor:0,ya:0,nuevo:0,queda:0,
+    nd:0,cancela:0,reduce:0,mot:new Map()}); return x; };
+  rD.forEach((v,d)=>{ const x=gr(d); x.favor+=cen(-d.saldo); x.ya+=yaD.get(d)||0; x.nuevo+=nuD.get(d)||0; x.queda+=Math.max(0,v); x.nd++;
+    if(v>0){ const t=porque.get(d)||sinFacturas, m=x.mot.get(t)||{n:0,v:0}; m.n++; m.v+=v; x.mot.set(t,m); } });
+  nuF.forEach((v,f)=>{ const x=gr(f); if(rF.get(f)<=0) x.cancela++; else x.reduce++; });
+  const grupos=[...G.values()].filter(x=>x.favor>0).sort((a,b)=>b.favor-a.favor);
+  const tot={favor:0,ya:0,nuevo:0,queda:0,cancela:0,reduce:0};
+  G.forEach(x=>['favor','ya','nuevo','queda','cancela','reduce'].forEach(k=>{ tot[k]+=x[k]; }));
+  return {pares,grupos,tot,pp,relOk:!!relX||SAT.ok,conRel:conRel.size};
+}
+// cuántas relaciones guardó «Agotar» en una empresa (las que siguen siendo suyas)
+const nAgotar=rfc=>{ let n=0; const k0=rfc+'|'; APL.dec.forEach((v,k)=>{ if(v.o==='agotar'&&k.startsWith(k0)) n++; }); return n; };
+function agotarBarra(bar,ci){
+  if(ci==null||!D.cli[ci]) return;
+  const rfc=D.cli[ci][2];
+  if(APL.pp.has(String(rfc).toUpperCase())) bar.appendChild(el('span','aplpp','En este grupo los anticipos son pagos parciales: «Agotar» los aplica sin importar la fecha.'));
+  if(!yoApl()) return;
+  let docs=0; aplEmp(ci).doc.forEach(()=>{ docs++; });
+  const ago=nAgotar(rfc), w=el('span','aplago');
+  if(docs){ const b=boton('Agotar anticipos y notas','',()=>ventanaAgotar(ci)); b.id='apl-agotar';
+    b.title='Reparte los anticipos y notas de crédito a favor contra las facturas con saldo hasta acabarlos (demostrativo)'; w.appendChild(b); }
+  if(ago){ const b=boton('Deshacer lo de Agotar · '+F.int.format(ago),'l',()=>ventanaDeshaz(ci,ago)); b.id='apl-deshaz'; w.appendChild(b); }
+  if(w.childNodes.length) bar.appendChild(w);
+}
+async function ventanaAgotar(ci){
+  if(!yoApl()) return;
+  const rfc=D.cli[ci][2];
+  const body=el('div','xapl ago'), pie=el('div','sheet-f');
+  const s=sheet2('Agotar anticipos y notas',D.cli[ci][1]+' · '+rfc,body,pie);
+  body.appendChild(el('div','xapl-van','Revisando los folios fiscales y las facturas relacionadas en los XML (Centauro)…'));
+  pie.appendChild(boton('Cancelar','g',cierraOv2));
+  abreOv2(s);
+  try{ await cargaUuids([rfc]); }catch(e){}
+  if(!SAT.ok){ try{ await cargaSat(); }catch(e){} }
+  try{ await relApl(ci); }catch(e){}
+  if(!document.getElementById('ov2box').contains(s)) return;   // la cerraron mientras tanto
+  pintaAgotar(ci,body,pie);
+}
+function pintaAgotar(ci,body,pie){
+  const sb=body.closest('.sheet-b'), scr=sb?sb.scrollTop:0;
+  body.innerHTML=''; pie.innerHTML='';
+  const rfc=D.cli[ci][2], lado=AGO.lado==='2'?null:+AGO.lado, P=agotarPlan(ci,lado), mx=v=>F.mxn.format(v/100);
+  const van=el('div','xapl-van');
+  van.appendChild(el('b',null,'Reparte los anticipos y notas de crédito a favor contra las facturas con saldo del mismo cliente o proveedor, hasta acabarlos.'));
+  van.appendChild(el('div',null,'Demostrativo: no cambia saldos en QUO ni en la Cartera. Lo que se aplica queda «Aceptada» con tu nombre; el cruce de verdad se hace en QUO.'));
+  body.appendChild(van);
+  // cuánto (arriba: es lo que se viene a ver)
+  const tt=el('div','ago-tot');
+  [['A favor',P.tot.favor],['Ya aceptado',P.tot.ya],['Se aplica ahora',P.tot.nuevo,'si'],['Queda sin aplicar',P.tot.queda]].forEach(([t,v,c])=>{
+    const x=el('div','c'+(c?' '+c:'')); x.appendChild(el('div','k',t)); x.appendChild(el('div','v',mx(v))); tt.appendChild(x); });
+  body.appendChild(tt);
+  body.appendChild(el('div','ago-nf',P.pares.length?plural(P.pares.length,'relación nueva','relaciones nuevas')+' · '+plural(P.tot.cancela,'factura se cancela','facturas se cancelan')
+    +' · '+plural(P.tot.reduce,'se reduce','se reducen'):'No hay nada nuevo que aplicar con estas reglas.'));
+  if(!SAT.ok) body.appendChild(el('p','ago-ojo','No se pudo revisar Centauro: no se conocen las facturas relacionadas en los XML ni las canceladas en el SAT, así que todo va por las fechas.'));
+  // el lado
+  const R=aplEmp(ci); let n0=0, n1=0; R.doc.forEach((x,d)=>{ if(ladoDoc(d)===0) n0++; else n1++; });
+  const fs=el('fieldset','xapl-op'); fs.appendChild(el('legend',null,'Lado'));
+  [['2','Clientes y proveedores'],['0','Solo clientes',plural(n0,'anticipo o nota','anticipos y notas')],['1','Solo proveedores',plural(n1,'anticipo o nota','anticipos y notas')]].forEach(([v,t,sub])=>{
+    const l=el('label'), i=el('input'); i.type='radio'; i.name='ago-lado'; i.id='ago-lado-'+v; i.value=v; i.checked=AGO.lado===v;
+    i.onchange=()=>{ AGO.lado=v; pintaAgotar(ci,body,pie); }; l.appendChild(i);
+    const sp=el('span',null,t); if(sub) sp.appendChild(el('small',null,sub)); l.appendChild(sp); fs.appendChild(l); });
+  body.appendChild(fs);
+  // la marca del grupo (la dirección y quienes ven toda la cartera)
+  if(APL.puede.aprueba&&!(window.PORTAL&&window.PORTAL.consulta)){
+    const l=el('label','ago-pp'), i=el('input'); i.type='checkbox'; i.id='ago-pp'; i.checked=P.pp;
+    i.onchange=async()=>{ i.disabled=true;
+      let q; try{ q=await SB.rpc('cartera_apl_pp_pon',{p:{rfc,prendida:i.checked}}); }catch(e){ q={error:e}; }
+      if(q.error) avisaArriba('No se pudo cambiar la regla del grupo: '+msgErr(q.error));
+      await cargaApl(); render(); pintaAgotar(ci,body,pie); };
+    l.appendChild(i);
+    const sp=el('span',null,'Los anticipos del grupo '+(D.cli[ci][3]||'(sin grupo)')+' son pagos parciales');
+    sp.appendChild(el('small',null,'En QUO se capturaron como anticipo pagos a facturas que ya existían: se aplican sin importar la fecha. Vale para todas las razones sociales del grupo; la cambian la dirección y quienes ven toda la cartera.'));
+    l.appendChild(sp); body.appendChild(l);
+  } else if(P.pp) body.appendChild(el('p','ago-ojo','En este grupo los anticipos son pagos parciales: se aplican sin importar la fecha.'));
+  // por cliente o proveedor
+  if(P.grupos.length){
+    const ls=el('div','ago-lista');
+    P.grupos.slice(0,300).forEach(g=>{
+      const cp=D.cp[g.cp]||['',''], w=el('div','ago-g');
+      const h=el('div','h'); h.appendChild(el('b',null,cp[1]||cp[0]||'—'));
+      h.appendChild(el('span','pill '+(g.lado===0?'p-me':'p-pap'),g.lado===0?'Cliente':'Proveedor')); if(cp[0]) h.appendChild(el('span','rfc',cp[0]));
+      w.appendChild(h);
+      w.appendChild(el('div','l','A favor '+mx(g.favor)+(g.ya?' · ya aceptado '+mx(g.ya):'')+' · se aplica '+mx(g.nuevo)+' · queda '+mx(g.queda)));
+      if(g.cancela||g.reduce) w.appendChild(el('div','l',plural(g.cancela,'factura se cancela','facturas se cancelan')+' · '+plural(g.reduce,'se reduce','se reducen')));
+      g.mot.forEach((m,t)=>w.appendChild(el('div','mot',t+' · '+plural(m.n,'documento','documentos')+' · '+mx(m.v))));
+      ls.appendChild(w); });
+    if(P.grupos.length>300) ls.appendChild(el('div','empty','Se ven los 300 de más saldo a favor; «Aplicar todo» guarda todos.'));
+    body.appendChild(ls);
+  }
+  // las reglas, al final y plegadas
+  const rg=el('details','ago-reglas'); rg.appendChild(el('summary',null,'Cómo se reparte'));
+  const ul=el('ol');
+  ['Lo que ya aceptó un contador se queda; lo que alguien quitó no se toca.',
+   'Una nota o anticipo con factura relacionada en su XML va solo contra esa factura; si ya no tiene saldo, se queda sin aplicar y dice por qué.',
+   'Notas sin relación: contra facturas de su misma fecha o anteriores, de la más cercana hacia atrás.',
+   P.pp?'Anticipos sin relación: en este grupo son pagos parciales, así que van contra las facturas más viejas sin importar la fecha.'
+       :'Anticipos sin relación: contra facturas de su misma fecha o posteriores, de la más vieja a la más nueva.',
+   'Nunca contra facturas canceladas (en QUO o en el SAT), de otro cliente o proveedor, ni más del saldo.'].forEach(t=>ul.appendChild(el('li',null,t)));
+  rg.appendChild(ul); body.appendChild(rg);
+  pie.appendChild(boton('Cancelar','g',cierraOv2));
+  const b=boton(P.pares.length?'Aplicar todo · '+plural(P.pares.length,'relación','relaciones'):'Nada que aplicar','',()=>guardaAgotar(ci,P,b));
+  b.id='ago-aplica'; b.disabled=!P.pares.length; pie.appendChild(b);
+  if(sb) sb.scrollTop=scr;
+}
+async function guardaAgotar(ci,P,b){
+  if(!yoApl()||!P.pares.length) return;
+  const rfc=D.cli[ci][2];
+  const items=P.pares.map(x=>{ const cp=D.cp[x.f.cp]||['',''];
+    return {parte:x.f.parte,tipo:x.f.tipo,rfc_cp:cp[0],contraparte:cp[1],fac:x.f.uuid,doc:x.d.uuid,folio_fac:folioDe(x.f),
+      folio_doc:folioDe(x.d),accion:'aplicar',monto:x.m,origen:'agotar'}; });
+  b.disabled=true; let hechos=0, err=null;
+  for(let i=0;i<items.length;i+=300){
+    b.textContent='Guardando… '+F.int.format(i)+' de '+F.int.format(items.length);
+    let q; try{ q=await SB.rpc('cartera_apl_pon',{p:{rfc,items:items.slice(i,i+300)}}); }catch(e){ q={error:e}; }
+    if(q.error){ err=q.error; break; }
+    hechos+=Math.min(300,items.length-i);
+  }
+  cierraOv2();
+  await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+  avisaArriba(err?'Se guardaron '+F.int.format(hechos)+' de '+F.int.format(items.length)+' relaciones; lo demás no se pudo ('+msgErr(err)+'). Vuelve a picar «Agotar» para seguir.'
+    :'Listo: '+plural(items.length,'relación aceptada','relaciones aceptadas')+' (demostrativo). Se deshace con «Deshacer lo de Agotar».');
+}
+function ventanaDeshaz(ci,n){
+  if(!yoApl()) return;
+  const rfc=D.cli[ci][2], body=el('div','xapl');
+  body.appendChild(el('p',null,'Se regresan a lo sugerido '+plural(n,'relación','relaciones')+' que guardó «Agotar» en esta empresa. Lo que alguien aplicó o quitó a mano se queda.'));
+  body.appendChild(el('p','enota','Queda en la Bitácora. Demostrativo: no cambia saldos en QUO.'));
+  const pie=el('div','sheet-f'); pie.appendChild(boton('Cancelar','g',cierraOv2));
+  const b=boton('Deshacer','',async()=>{ b.disabled=true; b.textContent='Deshaciendo…';
+    let q; try{ q=await SB.rpc('cartera_apl_deshaz_agotar',{p:{rfc}}); }catch(e){ q={error:e}; }
+    if(q.error){ b.disabled=false; b.textContent='Deshacer'; avisaArriba('No se pudo deshacer: '+msgErr(q.error)); return; }
+    cierraOv2(); await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+    const k=(q.data&&q.data.cambios)||0;
+    avisaArriba('Listo: '+plural(k,'relación regresó','relaciones regresaron')+' a lo sugerido.'); });
+  b.id='ago-deshaz'; pie.appendChild(b);
+  abreOv2(sheet2('Deshacer lo de «Agotar»',D.cli[ci][1]+' · '+rfc,body,pie));
 }
 
 /* ── Excel de las aplicaciones (con su PDF al lado, js/marca.js): Resumen, Clientes y Proveedores. Cada factura vigente

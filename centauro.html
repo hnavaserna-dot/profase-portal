@@ -120,6 +120,22 @@ button,select,input,textarea{font:inherit;color:inherit}
 .kpi .kd .kb{grid-column:1/-1;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .kpi .kd .kb i{display:block;height:100%;background:var(--accent)}
 .kpi .ks{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+/* 264: las tablas de conceptos por mes y de nómina (meses en columnas; el concepto se queda fijo al deslizar) */
+.dvis{padding:0 14px 10px}
+.mat{border-collapse:collapse;width:100%;min-width:980px;font-size:12.5px}
+.mat th,.mat td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.mat th{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2)}
+.mat th:first-child,.mat td:first-child{text-align:left;white-space:normal;min-width:220px;max-width:320px;position:sticky;left:0;background:var(--surface);z-index:1}
+.mat th:first-child{background:var(--surface-2)}
+.mat tr.sec td,.mat tr.sub td{text-align:left;position:static}
+.mat tr.sec td{background:var(--navy-soft);color:var(--ink);font-weight:700}
+.mat tr.sec td:first-child{background:var(--navy-soft)}
+.mat tr.sec td span,.mat tr.sub td span{position:sticky;left:8px;display:inline-block;max-width:min(560px,calc(100vw - 72px));white-space:normal}
+.mat td.dif{color:var(--accent-ink);font-weight:700}
+.mat td.cero{color:var(--muted)}
+.dconst{padding:10px 14px}
+.dconst summary{font-weight:600;cursor:pointer}
+.dconst table{margin-top:8px}
 /* 261: lo nuevo que abre un aviso */
 .luz{outline:3px solid var(--accent);outline-offset:3px;border-radius:10px}
 .nota-nueva{flex-basis:100%;font-size:13px;color:var(--ink);background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;padding:8px 12px}
@@ -411,10 +427,26 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         <label>Año <select id="d-anio" aria-label="Año"></select></label>
         <label>Tipo <select id="d-tipo" aria-label="Tipo"><option value="">Todas</option><option value="normal">Normales</option><option value="comp">Complementarias</option></select></label>
       </div>
-      <div class="opi" id="d-opi" hidden></div>
-      <div class="tot" id="d-tot" hidden></div>
-      <div class="tabla"><table class="resp"><thead><tr><th>Presentada</th><th>Periodo</th><th>Tipo</th><th>Obligaciones</th><th>Número de operación</th><th>Pago</th><th>Estado</th><th></th></tr></thead>
-        <tbody id="d-lista"></tbody></table></div>
+      <div class="lados dvis" id="d-vista" role="group" aria-label="Qué ver">
+        <button type="button" data-dvista="decl" aria-pressed="true">Declaraciones</button><button type="button" data-dvista="con" aria-pressed="false">Conceptos por mes</button><button type="button" data-dvista="nom" aria-pressed="false">Nómina: SAT contra XML</button>
+      </div>
+      <div id="d-vdecl">
+        <div class="opi" id="d-opi" hidden></div>
+        <div class="tot" id="d-tot" hidden></div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Presentada</th><th>Periodo</th><th>Tipo</th><th>Obligaciones</th><th>Número de operación</th><th>Pago</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="d-lista"></tbody></table></div>
+      </div>
+      <!-- 264: la tabla de conceptos por mes (de cada obligación, la última declaración presentada que la trae) -->
+      <div id="d-vcon" hidden>
+        <div class="tot" id="d-ctot"></div>
+        <div class="tabla"><table class="mat" id="d-con"></table></div>
+      </div>
+      <!-- 264: la nómina según el visor del SAT contra los XML de la bóveda y lo declarado -->
+      <div id="d-vnom" hidden>
+        <div class="tot" id="d-ntot"></div>
+        <div class="tabla"><table class="mat" id="d-nom"></table></div>
+        <details class="dconst" id="d-nconst" hidden><summary>La constancia del acumulado anual del visor del SAT</summary><div id="d-nconstb"></div></details>
+      </div>
     </div>
     <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT. «Pago» es la prueba del pago que da el SAT («Información registrada de pagos de contribuciones federales», con el pago recibido en el banco) y arriba sale la última opinión de cumplimiento; las dos también se suben solas a su actividad del WorkFlow (sin terminarla) si el contador no subió ya un documento.</p>
   </section>
@@ -565,7 +597,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   }
 
   /* =============================== Declaraciones (247) =============================== */
-  var D = { clis: [], cli: '', filas: [], ops: [], cliente: '', seq: 0 }, bD = null, VD = null;
+  var D = { clis: [], cli: '', filas: [], ops: [], cliente: '', seq: 0, seq2: 0, vista: 'decl' }, bD = null, VD = null;
   var SENT = { positiva: ['ok', 'Positiva'], negativa: ['mal', 'Negativa'], suspenso: ['ojo', 'En suspenso'], sin_obligaciones: ['', 'Inscrito sin obligaciones'],
                no_inscrito: ['mal', 'No inscrito'], otro: ['ojo', 'Revisar'] };
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -621,7 +653,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     var sa = $('d-anio');
     if (!sa.options.length) {
       sa.innerHTML = '<option value="">Todos los años</option>' + [2026, 2025, 2024, 2023, 2022].map(function (y) { return '<option>' + y + '</option>'; }).join('');
-      sa.onchange = function () { pintaD(); }; $('d-tipo').onchange = function () { pintaD(); };
+      sa.onchange = function () { pintaVista(); }; $('d-tipo').onchange = function () { pintaD(); };
+      document.querySelectorAll('[data-dvista]').forEach(function (b) { b.onclick = function () { D.vista = b.getAttribute('data-dvista'); pintaVista(); }; });
     }
     var pide = ''; try { pide = sessionStorage.getItem('cen-decl-abre') || ''; sessionStorage.removeItem('cen-decl-abre'); } catch (e) { pide = ''; }
     if (pide && D.clis.some(function (c) { return c.rfc === pide; })) { D.cli = pide; if (bD && bD.pon) bD.pon([pide]); }   // 253: desde el aviso de su opinión
@@ -637,7 +670,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     if (mi !== D.seq) return;
     var r = dos[0] || { filas: [] };
     D.filas = r.filas || []; D.cliente = r.cliente || D.cli; D.ops = dos[1] || [];
-    pintaOpi(); pintaD();
+    pintaOpi(); pintaVista();
     try { $('d-card').scrollIntoView({ block: 'nearest' }); } catch (e) {}
   }
   // 253: la última opinión de cumplimiento del SAT (y las de antes), con «Ver» y «Bajar» (con la marca o el original)
@@ -712,7 +745,147 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     tb.querySelectorAll('[data-dacuse]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dacuse')], 'acuse'), b); }; });
     tb.querySelectorAll('[data-dpago]').forEach(function (b) { b.onclick = function () { visorDecl().ver(docDe(l[+b.getAttribute('data-dpago')], 'pago'), b); }; });
   }
+  /* 264: conceptos por mes y la nómina del SAT contra los XML (un año a la vez: el escogido o el más reciente) */
+  var MES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  function anioVista() {
+    var a = $('d-anio').value;
+    if (a) return +a;
+    var ys = D.filas.map(function (f) { return +f.ejercicio; }).filter(Boolean);
+    return ys.length ? Math.max.apply(null, ys) : new Date().getFullYear();
+  }
+  function pintaVista() {
+    var v = D.vista || 'decl';
+    document.querySelectorAll('[data-dvista]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-dvista') === v ? 'true' : 'false'); });
+    $('d-vdecl').hidden = v !== 'decl'; $('d-vcon').hidden = v !== 'con'; $('d-vnom').hidden = v !== 'nom';
+    $('d-tipo').parentNode.hidden = v !== 'decl';
+    if (v === 'con') return listaCon();
+    if (v === 'nom') return listaNom();
+    pintaD();
+  }
+  function numTxt(n) { var r = Math.round(n * 100) / 100; return r.toLocaleString('es-MX', Number.isInteger(r) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function celNum(v, dif) {
+    if (v == null || v === '' || isNaN(+v)) return '<td class="cero">—</td>';
+    var n = +v;
+    return '<td' + (dif && Math.abs(n) >= 1 ? ' class="dif"' : n === 0 ? ' class="cero"' : '') + '>' + esc(numTxt(n)) + '</td>';
+  }
+  async function listaCon() {
+    var mi = ++D.seq2, a = anioVista(), t = $('d-con');
+    $('d-h').textContent = 'Conceptos por mes de ' + D.cliente; $('d-sub2').textContent = D.cli + ' · ' + a;
+    $('d-ctot').innerHTML = '<span class="mut">Cargando…</span>'; t.innerHTML = '';
+    var r = await rpc('cen_decl_conceptos', { p: { rfc: D.cli, ejercicio: a } }) || { filas: [] };
+    if (mi !== D.seq2) return;
+    D.con = r; D.conAnio = a;
+    var fs = r.filas || [], comp = (r.meses || []).filter(function (m) { return /complement/i.test(m.tipo || ''); }).length;
+    $('d-ctot').innerHTML = '<span><b>' + cuenta(fs.length, 'concepto', 'conceptos') + '</b> de ' + a + '</span>'
+      + '<span class="mut">de cada obligación y mes, la última declaración presentada (la vigente)</span>'
+      + (comp ? '<span>' + chip(cuenta(comp, 'mes y obligación sale de una complementaria', 'meses y obligaciones salen de una complementaria'), 'ojo') + '</span>' : '');
+    $('x-decl').disabled = !fs.length;
+    if (!fs.length) { t.innerHTML = '<tbody><tr><td class="vacio">' + esc('Todavía no hay declaraciones mensuales de ' + a + ' con conceptos que leer.') + '</td></tr></tbody>'; return; }
+    var h = '<thead><tr><th>Concepto</th>' + MES_C.map(function (m) { return '<th>' + m + '</th>'; }).join('') + '</tr></thead><tbody>', sec = null;
+    fs.forEach(function (f) {
+      if (f.seccion !== sec) { sec = f.seccion; h += '<tr class="sec"><td colspan="13"><span>' + esc(sec || 'Datos generales de la declaración') + '</span></td></tr>'; }
+      h += '<tr><td>' + esc(f.concepto) + '</td>' + MES_C.map(function (_, i) { return celNum((f.m || {})[String(i + 1)]); }).join('') + '</tr>';
+    });
+    t.innerHTML = h + '</tbody>';
+  }
+  // los renglones de la nómina: lo del visor del SAT, lo de los XML, lo declarado y las diferencias ({sec} o {c, v: [total, 12 meses], dif})
+  function nomFilas(r) {
+    var out = [], vis = r.visor || {}, mens = (vis.estado === 'hecho' || vis.estado === 'error') ? (vis.mensual || []) : [];
+    function fila(c, meses, dif) { var v = meses.slice(0, 12), hay = v.some(function (x) { return x != null; }); return { c: c, v: [hay ? v.reduce(function (s, x) { return s + (x || 0); }, 0) : null].concat(v), dif: dif }; }
+    function vacios() { return [null, null, null, null, null, null, null, null, null, null, null, null]; }
+    var vISR = null, vComp = null;
+    if (mens.length) {
+      out.push({ sec: 'Según el visor de nómina del SAT' });
+      mens.forEach(function (m) {
+        if (m.titulo || !Array.isArray(m.meses)) { out.push({ sub: m.concepto }); return; }
+        out.push({ c: m.concepto, v: [m.total].concat(m.meses) });
+        if (/^isr retenido$/i.test(m.concepto)) vISR = m.meses;
+        if (/^comprobantes emitidos/i.test(m.concepto)) vComp = m.meses;
+      });
+    }
+    var X = { recibos: vacios(), percepciones: vacios(), otros_pagos: vacios(), isr: vacios(), subsidio: vacios() };
+    (r.xml || []).forEach(function (m) { Object.keys(X).forEach(function (k) { X[k][m.mes - 1] = +m[k] || 0; }); });
+    if ((r.xml || []).length) {
+      out.push({ sec: 'Según los XML de nómina de la bóveda (por fecha de pago, sin los cancelados en el SAT)' });
+      [['recibos', 'Recibos de nómina'], ['percepciones', 'Percepciones'], ['otros_pagos', 'Otros pagos'], ['isr', 'ISR retenido (deducción 002)'], ['subsidio', 'Subsidio para el empleo causado']]
+        .forEach(function (k) { out.push(fila(k[1], X[k[0]])); });
+    }
+    var DC = {}, orden = [];
+    (r.declarado || []).forEach(function (d) { if (!DC[d.concepto]) { DC[d.concepto] = vacios(); orden.push(d.concepto); } DC[d.concepto][d.mes - 1] = +d.valor; });
+    if (orden.length) {
+      out.push({ sec: 'Según lo declarado en «ISR retenciones por salarios»' });
+      orden.forEach(function (c) { out.push(fila(c, DC[c])); });
+    }
+    var dISR = DC['ISR RETENIDO POR SUELDOS'], hayX = (r.xml || []).length;
+    function resta(a, b) { return a.map(function (x, i) { return x == null || b[i] == null ? null : (x || 0) - (b[i] || 0); }); }
+    var difs = [];
+    if (vISR && hayX) difs.push(fila('ISR retenido: visor del SAT menos XML', resta(vISR, X.isr), true));
+    if (dISR && hayX) difs.push(fila('ISR retenido: declarado menos XML', resta(dISR, X.isr), true));
+    if (vComp && hayX) difs.push(fila('Comprobantes: visor del SAT menos XML', resta(vComp, X.recibos), true));
+    if (difs.length) { out.push({ sec: 'Diferencias (más de $1 en naranja)' }); out = out.concat(difs); }
+    return out;
+  }
+  async function listaNom() {
+    var mi = ++D.seq2, a = anioVista(), t = $('d-nom');
+    $('d-h').textContent = 'Nómina de ' + D.cliente + ': el SAT contra los XML'; $('d-sub2').textContent = D.cli + ' · ' + a;
+    $('d-ntot').innerHTML = '<span class="mut">Cargando…</span>'; t.innerHTML = ''; $('d-nconst').hidden = true;
+    var r = await rpc('cen_decl_nomina', { p: { rfc: D.cli, ejercicio: a } }) || {};
+    if (mi !== D.seq2) return;
+    D.nom = r; D.nomAnio = a;
+    var vis = r.visor, fs = nomFilas(r);
+    var est = !vis ? chip('El robot todavía no lee el visor de nómina de ' + a, '')
+      : vis.estado === 'sin_nomina' ? chip('El visor del SAT no trae nómina de ' + a, '')
+      : vis.estado === 'error' && !(vis.mensual || []).length ? chip('No se pudo leer el visor del SAT' + (vis.mensaje ? ': ' + vis.mensaje : ''), 'ojo')
+      : chip('Visor del SAT revisado el ' + fechaHora(vis.revisado), 'ok');
+    var ndif = fs.filter(function (f) { return f.dif && f.v.slice(1).some(function (x) { return x != null && Math.abs(x) >= 1; }); }).length;
+    $('d-ntot').innerHTML = '<span>' + est + '</span>' + (ndif ? '<span>' + chip(cuenta(ndif, 'diferencia por revisar', 'diferencias por revisar'), 'mal') + '</span>' : fs.some(function (f) { return f.dif; }) ? '<span>' + chip('Sin diferencias de más de $1', 'ok') + '</span>' : '')
+      + '<span class="mut">montos en pesos</span>';
+    $('x-decl').disabled = !fs.length;
+    if (!fs.length) { t.innerHTML = '<tbody><tr><td class="vacio">' + esc('No hay nómina de ' + a + ' en el visor del SAT, en los XML ni en lo declarado.') + '</td></tr></tbody>'; }
+    else {
+      var h = '<thead><tr><th>Concepto</th><th>Total</th>' + MES_C.map(function (m) { return '<th>' + m + '</th>'; }).join('') + '</tr></thead><tbody>';
+      fs.forEach(function (f) {
+        if (f.sec) { h += '<tr class="sec"><td colspan="14"><span>' + esc(f.sec) + '</span></td></tr>'; return; }
+        if (f.sub) { h += '<tr class="sub"><td colspan="14" class="mut"><span>' + esc(f.sub) + '</span></td></tr>'; return; }
+        h += '<tr><td>' + esc(f.c) + '</td>' + f.v.map(function (x) { return celNum(x, f.dif); }).join('') + '</tr>';
+      });
+      t.innerHTML = h + '</tbody>';
+    }
+    var tabs = vis && Array.isArray(vis.acumulado) ? vis.acumulado.filter(function (x) { return (x.filas || []).length; }) : [];
+    $('d-nconst').hidden = !tabs.length;
+    $('d-nconstb').innerHTML = tabs.map(function (x) {
+      return '<div class="tabla"><table class="mat"><thead><tr>' + (x.encabezados || []).map(function (e) { return '<th>' + esc(e) + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + (x.filas || []).map(function (f) { return '<tr>' + f.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+    }).join('');
+  }
+  async function excelCon(btn) {
+    var r = D.con || {}, fs = r.filas || [];
+    if (!fs.length) return;
+    await libroExcel(btn, 'Conceptos por mes', [
+      { nombre: 'Conceptos por mes', titulo: 'Conceptos de las declaraciones por mes · ' + D.conAnio, head: ['Obligación', 'Concepto'].concat(MES_C),
+        filas: fs.map(function (f) { return [f.seccion || 'Datos generales de la declaración', f.concepto].concat(MES_C.map(function (_, i) { var x = (f.m || {})[String(i + 1)]; return x == null ? '' : +x; })); }),
+        formatos: (function () { var o = {}; for (var i = 2; i < 14; i++) o[i] = '#,##0.00'; return o; })(), anchos: [30, 46].concat(MES_C.map(function () { return 13; })) },
+      { nombre: 'De qué declaración', titulo: 'De qué declaración sale cada mes y obligación', head: ['Mes', 'Obligación', 'Número de operación', 'Tipo', 'Presentada'],
+        filas: (r.meses || []).map(function (m) { return [MESES_L[m.mes - 1], m.seccion || '', m.numero, m.tipo || '', fechaHora(m.presentada)]; }), anchos: [12, 34, 18, 16, 18] }],
+      [D.cliente + ' (' + D.cli + ') · ' + D.conAnio, 'De cada obligación y mes, la última declaración presentada (la vigente)']);
+  }
+  async function excelNom(btn) {
+    var r = D.nom || {}, fs = nomFilas(r);
+    if (!fs.length) return;
+    var hojas = [{ nombre: 'Nómina SAT contra XML', titulo: 'Nómina: el visor del SAT, los XML y lo declarado · ' + D.nomAnio, head: ['Concepto', 'Total'].concat(MES_C),
+      filas: fs.map(function (f) { return f.sec || f.sub ? [f.sec || f.sub] : [f.c].concat(f.v.map(function (x) { return x == null ? '' : +x; })); }),
+      formatos: (function () { var o = {}; for (var i = 1; i < 14; i++) o[i] = '#,##0.00'; return o; })(), anchos: [52].concat([14]).concat(MES_C.map(function () { return 12; })) }];
+    var tabs = r.visor && Array.isArray(r.visor.acumulado) ? r.visor.acumulado.filter(function (x) { return (x.filas || []).length; }) : [];
+    if (tabs.length) {
+      var fl = [];
+      tabs.forEach(function (x, i) { if (i) fl.push(['']); fl.push(x.encabezados || []); (x.filas || []).forEach(function (f) { fl.push(f); }); });
+      hojas.push({ nombre: 'Constancia', titulo: 'La constancia del acumulado anual del visor del SAT', head: ['', '', '', '', '', '', ''], filas: fl, anchos: [34, 18, 18, 18, 18, 18, 18] });
+    }
+    await libroExcel(btn, 'Nómina SAT contra XML', hojas, [D.cliente + ' (' + D.cli + ') · ' + D.nomAnio, 'XML por su fecha de pago, sin los cancelados en el SAT; lo declarado, de la última declaración del mes con «ISR retenciones por salarios»']);
+  }
   $('x-decl').onclick = function () {
+    if (D.vista === 'con') return excelCon(this);
+    if (D.vista === 'nom') return excelNom(this);
     var l = visiblesD();
     excel(this, 'Declaraciones', ['Cliente', 'RFC', 'Ejercicio', 'Periodo', 'Periodicidad', 'Tipo', 'Tipo de complementaria', 'Presentada', 'Vencía', 'Obligaciones', 'Número de operación', 'Pagada el', 'Estado'],
       l.map(function (f) { return [D.cliente, D.cli, f.ejercicio, f.periodo || '', f.periodicidad || '', f.tipo || '', f.tipo_comp || '', fechaHora(f.presentada), fecha(f.vence), (f.obligaciones || []).join(' · '), f.numero, f.pago ? (f.pago_fecha ? fecha(f.pago_fecha) : 'Sí') : '', vigTxt(f)]; }),
