@@ -107,6 +107,13 @@ button,select,input,textarea{font:inherit;color:inherit}
 .kpi .l{display:block;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .kpi .v{display:block;font-family:var(--f-display);font-size:24px;font-weight:750}
 .kpi.ojo .v{color:var(--accent-ink)}
+.kpi.mal .v{color:var(--red)}
+/* 280: Riesgos fiscales */
+.fanio{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.fanio select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;color:var(--ink)}
+#f-lista td{min-width:0}
+#f-lista .hz{min-width:240px}
+#f-lista .rx{min-width:180px}
 /* 251: la tarjeta de activas en QUO, partida según dónde está en QUO (cada renglón filtra la lista) */
 .kpi.ancha{grid-column:span 2;cursor:default}
 @media (max-width:520px){.kpi.ancha{grid-column:1/-1}}
@@ -467,6 +474,22 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT. «Pago» es la prueba del pago que da el SAT («Información registrada de pagos de contribuciones federales», con el pago recibido en el banco) y arriba sale la última opinión de cumplimiento; las dos también se suben solas a su actividad del WorkFlow (sin terminarla) si el contador no subió ya un documento.</p>
   </section>
 
+  <!-- Riesgos fiscales (280; Héctor Daniel, 5-nov-2026, 09:45: «hay forma de ver todos estos riesgos; algún submenú o algo?»):
+       lo que encontró la revisión fiscal de cada cliente y año, de todos los clientes, en una sola lista -->
+  <section id="s-riesgos" hidden>
+    <div class="nota info" id="f-nota"></div>
+    <div class="kpis" id="f-kpis"></div>
+    <div class="card">
+      <header><div><h2 id="f-h">Riesgos fiscales</h2><div class="sub" id="f-sub"></div></div>
+        <div class="acciones"><label class="fanio">Año <select id="f-anio" aria-label="Año"></select></label><button class="btn" type="button" data-excel id="x-riesgos">Excel</button></div></header>
+      <div class="cfil" id="f-fil"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Riesgo</th><th>Cliente</th><th>Año y mes</th><th>Hallazgo</th><th>Qué puede pasar</th><th>Qué lo resuelve</th><th>Desde</th><th></th></tr></thead>
+        <tbody id="f-lista"></tbody></table></div>
+      <nav class="pgn" id="f-pag" aria-label="Páginas"></nav>
+    </div>
+    <p class="pie">Solo hechos de lo que Centauro trae del SAT (las declaraciones y el visor de nómina) y de la bóveda de XML; nada se le manda al cliente. Cada riesgo sale una sola vez por cliente, año y mes, y se quita solo cuando ya no aparece en la revisión.</p>
+  </section>
+
   <!-- Reportes -->
   <section id="s-reportes" hidden>
     <div class="tabs" role="tablist" aria-label="Reportes">
@@ -540,12 +563,13 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var EST = null, CONSULTA = false;
   var S = new URLSearchParams(location.search).get('s') || 'boveda';
-  if (['boveda', 'canceladas', '69b', 'reportes', 'declaraciones'].indexOf(S) < 0) S = 'boveda';
+  if (['boveda', 'canceladas', '69b', 'reportes', 'declaraciones', 'riesgos'].indexOf(S) < 0) S = 'boveda';
   var TIT = {
     boveda: ['Bóveda XML', 'Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.'],
     canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y cómo están en QUO: las que siguen activas en QUO hay que cancelarlas.'],
     '69b': ['Lista 69-B', 'Los proveedores de los clientes que el SAT publica como presuntos o definitivos en la lista del artículo 69-B del CFF.'],
     declaraciones: ['Declaraciones', 'Las declaraciones provisionales o definitivas de cada cliente (normales y complementarias), con su acuse, tal cual las tiene el SAT.'],
+    riesgos: ['Riesgos fiscales', 'Todo lo que encontró la revisión fiscal de las declaraciones, de todos los clientes, en una sola lista: el riesgo, qué puede pasar y qué lo resuelve.'],
     reportes: ['Reportes', 'Lo que sale de los XML de la bóveda: el resumen por mes, los CFDI relacionados, XML Datos 4.0, Nómina 1.2 Extendido, el método de pago, el tablero anual y los pagos duplicados o con errores.']
   };
   var TIPOS = { I: 'Ingreso', E: 'Egreso', P: 'Pago', N: 'Nómina', T: 'Traslado' };
@@ -2570,12 +2594,157 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     }
   };
 
+  /* ============================ Riesgos fiscales (280) ============================
+     Lo que encontró la revisión fiscal (271) de cada cliente y año, de todos los clientes que cada quien ve, en una sola lista
+     (cen_decl_riesgos: las mismas reglas de Centauro › Declaraciones). Pilas arriba (filtran), FILTROS y páginas comunes,
+     Excel y PDF con la marca; «Abrir» lleva a la revisión fiscal de ese cliente y año. Solo lee. */
+  var F = { anio: null, anios: [], filas: [], vis: [], k: '', semana: null, f: null, cargado: false };
+  var TEMA = { integridad: 'Falta una declaración', extemporanea: 'Fuera de plazo', accesorios: 'Actualización y recargos', nomina: 'Nómina',
+               complementaria: 'Complementarias', iva: 'IVA fuera de lo normal' };
+  function temaTxt(t) { return TEMA[t] || String(t || ''); }
+  function fLimpia() { F.f = { cli: [], grupo: [], cont: [], riesgo: [], tema: [], obl: [], mes: [], q: '', desde: ['', ''] }; }
+  fLimpia();
+  var FF = null, PF = null;
+  function esNuevo(h) { if (!h.desde || !F.semana) return false; var a = new Date(h.desde).getTime(), b = new Date(F.semana).getTime(); return isFinite(a) && isFinite(b) && a >= b; }
+  function visiblesF(sinK) {
+    var g = F.f, q = nfc(g.q);
+    var dentro = function (val, r) { if (!val) return false; var v = String(val).slice(0, 10); return (!r[0] || v >= r[0]) && (!r[1] || v <= r[1]); };
+    return F.filas.filter(function (h) {
+      if (!sinK) { if (F.k === 'nuevos') { if (!esNuevo(h)) return false; } else if (F.k && h.riesgo !== F.k) return false; }
+      if (g.cli.length && g.cli.indexOf(h.rfc) < 0) return false;
+      if (g.grupo.length && g.grupo.indexOf(h.grupo || '') < 0) return false;
+      if (g.cont.length && !g.cont.some(function (c) { return (h.contadores || '').split(', ').indexOf(c) >= 0; })) return false;
+      if (g.riesgo.length && g.riesgo.indexOf(h.riesgo) < 0) return false;
+      if (g.tema.length && g.tema.indexOf(h.tema) < 0) return false;
+      if (g.obl.length && g.obl.indexOf(h.obligacion || '') < 0) return false;
+      if (g.mes.length && g.mes.indexOf(String(h.mes || '')) < 0) return false;
+      if (q && nfc((h.titulo || '') + ' ' + (h.detalle || '') + ' ' + (h.cliente || '') + ' ' + h.rfc).indexOf(q) < 0) return false;
+      if ((g.desde[0] || g.desde[1]) && !dentro(h.desde, g.desde)) return false;
+      return true;
+    });
+  }
+  function filtrosF() {
+    if (FF || !window.PROFASE_FILTROS) return;
+    var opc = function (fn) { return function () { var m = {}; F.filas.forEach(function (h) { fn(h).forEach(function (k) { if (k[0] !== undefined && k[0] !== null && k[0] !== '') m[k[0]] = { v: k[0], t: k[1], n: ((m[k[0]] || {}).n || 0) + 1 }; }); }); return Object.keys(m).map(function (x) { return m[x]; }).sort(function (a, b) { return String(a.t).localeCompare(String(b.t)); }); }; };
+    var campo = function (k, t, tipo, extra) { return Object.assign({ k: k, t: t, tipo: tipo, valor: function () { return F.f[k]; }, pon: function (v) { F.f[k] = v; } }, extra || {}); };
+    FF = window.PROFASE_FILTROS.crea({
+      donde: $('f-fil'),
+      grupos: [
+        { t: 'Cliente', campos: [campo('cli', 'Cliente', 'varios', { opciones: opc(function (h) { return [[h.rfc, (h.cliente || h.rfc) + ' · ' + h.rfc]]; }), buscar: true }),
+                                 campo('grupo', 'Grupo', 'varios', { opciones: opc(function (h) { return [[h.grupo, h.grupo]]; }), buscar: true }),
+                                 campo('cont', 'Contador', 'varios', { opciones: opc(function (h) { return (h.contadores || '').split(', ').filter(Boolean).map(function (c) { return [c, c]; }); }), buscar: true })] },
+        { t: 'Hallazgo', campos: [campo('riesgo', 'Riesgo', 'varios', { lista: true, opciones: function () { return ['alto', 'medio', 'bajo'].map(function (r) { return { v: r, t: RIESGO[r][1], n: F.filas.filter(function (h) { return h.riesgo === r; }).length }; }); } }),
+                                  campo('tema', 'Tema', 'varios', { lista: true, opciones: opc(function (h) { return [[h.tema, temaTxt(h.tema)]]; }) }),
+                                  campo('obl', 'Obligación', 'varios', { lista: true, opciones: opc(function (h) { return [[h.obligacion, h.obligacion]]; }) }),
+                                  campo('q', 'Texto del hallazgo', 'texto')] },
+        { t: 'Fechas', campos: [campo('mes', 'Mes', 'varios', { lista: true, opciones: function () { var m = {}; F.filas.forEach(function (h) { if (h.mes) m[h.mes] = (m[h.mes] || 0) + 1; }); return Object.keys(m).sort(function (a, b) { return a - b; }).map(function (x) { return { v: String(x), t: mesTxt(+x), n: m[x] }; }); } }),
+                                campo('desde', 'Se encontró', 'rango', { entrada: 'fecha', etiquetas: ['Desde', 'Hasta'] })] }],
+      cambio: function () { if (PF) PF.inicio(); pintaF(); },
+      limpiar: function () { fLimpia(); },
+      resultados: function () { var n = visiblesF().length; return 'Ver ' + n.toLocaleString('es-MX') + (n === 1 ? ' riesgo' : ' riesgos'); }
+    });
+    if (window.PROFASE_PAGINAS) PF = window.PROFASE_PAGINAS.crea({ donde: $('f-pag'), clave: 'centauro.riesgos', nombre: 'Riesgos', arriba: $('f-lista').closest('.card'), cambio: function () { pintaF(); } });
+  }
+  function pintaKpisF() {
+    var l = visiblesF(true), cl = function (r) { var m = {}; l.forEach(function (h) { if (!r || h.riesgo === r) m[h.rfc] = 1; }); return Object.keys(m).length; };
+    var n = function (r) { return l.filter(function (h) { return h.riesgo === r; }).length; };
+    var nv = l.filter(esNuevo), nva = nv.filter(function (h) { return h.riesgo === 'alto'; }).length;
+    var K = [['', 'Todos', l.length, cuenta(cl(''), 'cliente', 'clientes'), ''],
+             ['alto', 'Riesgo alto', n('alto'), 'en ' + cuenta(cl('alto'), 'cliente', 'clientes'), 'mal'],
+             ['medio', 'Riesgo medio', n('medio'), 'en ' + cuenta(cl('medio'), 'cliente', 'clientes'), 'ojo'],
+             ['bajo', 'Riesgo bajo', n('bajo'), 'en ' + cuenta(cl('bajo'), 'cliente', 'clientes'), ''],
+             ['nuevos', 'Nuevos esta semana', nv.length, nva ? cuenta(nva, 'de riesgo alto', 'de riesgo alto') : 'desde el lunes', '']];
+    $('f-kpis').innerHTML = K.map(function (x) {
+      return '<button type="button" class="kpi ' + x[4] + '" data-fk="' + x[0] + '" aria-pressed="' + (F.k === x[0]) + '"><span class="l">' + esc(x[1]) + '</span>'
+        + '<span class="v">' + (+x[2] || 0).toLocaleString('es-MX') + '</span><span class="ks">' + esc(x[3]) + '</span></button>';
+    }).join('');
+    $('f-kpis').querySelectorAll('[data-fk]').forEach(function (b) { b.onclick = function () { F.k = b.getAttribute('data-fk'); if (PF) PF.inicio(); pintaKpisF(); pintaF(); }; });
+  }
+  function abreRev(rfc, anio) {
+    var arg = 'rfc:' + rfc + ':rev:' + anio;
+    try { var A = window.top !== window.self ? window.top.PROFASE_ABRE : null; if (A && A['centauro-declaraciones'] && A['centauro-declaraciones'](arg)) return; } catch (e) {}
+    try { sessionStorage.setItem('cen-decl-abre', rfc); sessionStorage.setItem('cen-decl-rev', String(anio)); } catch (e) {}
+    location.search = '?s=declaraciones';
+  }
+  function pintaF() {
+    var tb = $('f-lista'), l = visiblesF();
+    F.vis = l;
+    var x = { '': 'Riesgos fiscales', alto: 'Riesgo alto', medio: 'Riesgo medio', bajo: 'Riesgo bajo', nuevos: 'Nuevos esta semana' };
+    $('f-h').textContent = x[F.k] || 'Riesgos fiscales';
+    var cls = {}; l.forEach(function (h) { cls[h.rfc] = 1; });
+    $('f-sub').textContent = cuenta(l.length, 'riesgo', 'riesgos') + ' en ' + cuenta(Object.keys(cls).length, 'cliente', 'clientes') + ' · ' + (F.anio ? String(F.anio) : 'todos los años');
+    $('x-riesgos').disabled = !l.length;
+    var pag = PF ? PF.corta(l) : l;
+    if (!l.length) { vacio(tb, 8, F.filas.length ? 'Nada con estos filtros.' : (F.cargado ? 'Sin riesgos con lo que trae Centauro' + (F.anio ? ' de ' + F.anio : '') + '.' : 'Cargando…')); return; }
+    tb.innerHTML = pag.map(function (h) {
+      var k = RIESGO[h.riesgo] || ['', h.riesgo];
+      return '<tr><td data-l="Riesgo">' + chip(k[1], k[0]) + (esNuevo(h) ? '<div>' + chip('Nuevo', 'ojo') + '</div>' : '') + '</td>'
+        + '<td data-l="Cliente"><span class="rs">' + esc(h.cliente || h.rfc) + '</span><div class="mut">' + esc(h.rfc + (h.grupo ? ' · ' + h.grupo : '')) + '</div>'
+        + (h.contadores ? '<div class="mut">' + esc(h.contadores) + '</div>' : '') + '</td>'
+        + '<td data-l="Año y mes" class="nowrap">' + esc(String(h.ejercicio)) + (h.mes ? '<div class="mut">' + esc(mesTxt(+h.mes)) + '</div>' : '') + '</td>'
+        + '<td data-l="Hallazgo" class="hz"><b>' + esc(h.titulo) + '</b><div class="mut">' + esc(h.detalle || '') + '</div>'
+        + '<div class="mut">' + esc(temaTxt(h.tema) + (h.obligacion ? ' · ' + h.obligacion : '') + (h.referencia ? ' · en «' + h.referencia + '»' : '')) + '</div></td>'
+        + '<td data-l="Qué puede pasar" class="rx">' + esc(h.reaccion || '') + '</td><td data-l="Qué lo resuelve" class="rx">' + esc(h.resuelve || '') + '</td>'
+        + '<td data-l="Desde" class="nowrap">' + esc(h.desde ? fecha(h.desde) : '') + '</td>'
+        + '<td><button class="btn chico" type="button" data-fabre="' + esc(h.rfc) + '|' + esc(String(h.ejercicio)) + '" title="La revisión fiscal completa de este cliente y año">Abrir</button></td></tr>';
+    }).join('');
+    tb.querySelectorAll('[data-fabre]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-fabre').split('|'); abreRev(v[0], v[1]); }; });
+  }
+  function notaF(r) {
+    var t = 'Lo que encontró la revisión fiscal de cada cliente y año (la de Declaraciones), con lo que Centauro trae del SAT y de la bóveda de XML. '
+      + 'Se revisa sola cuando llega algo nuevo y una vez al día.';
+    if (r.al) t += ' Última revisión: ' + fechaHora(r.al) + '.';
+    if (+r.faltan) t += ' Todavía falta guardar los riesgos de ' + cuenta(r.faltan, 'año revisado antes', 'años revisados antes') + ': se completan solos en unos minutos.';
+    $('f-nota').textContent = t;
+  }
+  async function listaF() {
+    var mi = (F.seq = (F.seq || 0) + 1);
+    vacio($('f-lista'), 8, 'Cargando…');
+    var r = await rpc('cen_decl_riesgos', { p: F.anio ? { ejercicio: F.anio } : {} }) || {};
+    if (mi !== F.seq) return;
+    F.filas = r.filas || []; F.semana = r.semana || null; F.cargado = true;
+    F.anios = (r.anios || []).map(Number);
+    var sel = $('f-anio'), act = F.anio;
+    var lst = F.anios.slice(); if (act && lst.indexOf(act) < 0) { lst.push(act); lst.sort(function (a, b) { return b - a; }); }
+    sel.innerHTML = lst.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('') + '<option value="">Todos los años</option>';
+    sel.value = act ? String(act) : '';
+    notaF(r);
+    filtrosF();
+    if (PF) PF.inicio();
+    if (FF) FF.pinta();
+    pintaKpisF(); pintaF();
+  }
+  async function cargaRiesgos() {
+    var prim = F.anio === null;
+    if (prim) F.anio = +(fechaHoyMty().slice(0, 4)) || new Date().getFullYear();   // la primera vez, el año en curso…
+    await listaF();
+    if (prim && !F.filas.length && F.anios.length && F.anios.indexOf(F.anio) < 0) { F.anio = F.anios[0]; await listaF(); }   // …o el más nuevo que trae la revisión
+  }
+  function fechaHoyMty() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  $('f-anio').onchange = function () { F.anio = this.value ? +this.value : 0; F.k = ''; listaF().catch(function (e) { error(falla(e)); }); };
+  $('x-riesgos').onclick = function () {
+    var l = F.vis || [], btn = this;
+    var por = {}; l.forEach(function (h) { var k = h.rfc + '|' + h.ejercicio; var o = por[k] = por[k] || [h.cliente || h.rfc, h.rfc, h.grupo || '', h.contadores || '', +h.ejercicio, 0, 0, 0]; o[h.riesgo === 'alto' ? 5 : h.riesgo === 'medio' ? 6 : 7]++; });
+    var pc = Object.keys(por).map(function (k) { return por[k]; }).sort(function (a, b) { return b[5] - a[5] || b[6] - a[6] || String(a[0]).localeCompare(String(b[0])) || b[4] - a[4]; });
+    libroExcel(btn, 'Riesgos fiscales', [
+      { nombre: 'Riesgos fiscales', titulo: 'Riesgos fiscales · ' + (F.anio ? F.anio : 'todos los años'),
+        head: ['Riesgo', 'Cliente', 'RFC', 'Grupo', 'Contador', 'Año', 'Mes', 'Tema', 'Obligación', 'Hallazgo', 'Detalle', 'Qué puede pasar', 'Qué lo resuelve', 'Referencia', 'Se encontró'],
+        filas: l.map(function (h) { return [(RIESGO[h.riesgo] || ['', h.riesgo])[1], h.cliente || h.rfc, h.rfc, h.grupo || '', h.contadores || '', +h.ejercicio, h.mes ? mesTxt(+h.mes) : '',
+                                            temaTxt(h.tema), h.obligacion || '', h.titulo || '', h.detalle || '', h.reaccion || '', h.resuelve || '', h.referencia || '', h.desde ? fecha(h.desde) : '']; }),
+        anchos: [9, 30, 15, 22, 24, 7, 11, 20, 30, 46, 60, 36, 44, 28, 12], pdfDeja: ['Riesgo', 'Cliente', 'Año', 'Mes', 'Hallazgo', 'Qué lo resuelve'] },
+      { nombre: 'Por cliente', titulo: 'Cuántos riesgos de cada nivel trae cada cliente y año', head: ['Cliente', 'RFC', 'Grupo', 'Contador', 'Año', 'Altos', 'Medios', 'Bajos'],
+        filas: pc, totales: [5, 6, 7], anchos: [34, 15, 22, 26, 7, 9, 9, 9] }],
+      [cuenta(l.length, 'riesgo', 'riesgos') + ' · ' + (F.anio ? F.anio : 'todos los años') + (F.k ? ' · ' + ({ alto: 'riesgo alto', medio: 'riesgo medio', bajo: 'riesgo bajo', nuevos: 'nuevos esta semana' }[F.k]) : ''),
+       'Solo hechos de lo que trae Centauro del SAT y de la bóveda de XML']);
+  };
+
   /* =============================== Arranque =============================== */
   async function carga() {
     if (S === 'boveda') await cargaBoveda();
     else if (S === 'canceladas') await cargaCanceladas();
     else if (S === '69b') await carga69b();
     else if (S === 'declaraciones') await cargaDecl();
+    else if (S === 'riesgos') await cargaRiesgos();
     else await cargaReportes();
   }
   async function arranca() {
