@@ -443,5 +443,7 @@
     return { ver: ver, baja: baja, bajaVarios: bajaVarios, precarga: precarga, bytes: bytes, cierra: cierraCapa, abierta: function () { return !!CAPA; } };
   }
 
-  window.PROFASE_VISOR = { nuevo: nuevo, nativo: nativo };
+  // pdfjs(): el mismo PDF.js del portal, cargado una sola vez, para quien solo necesita leer un PDF (SuperConta cuenta las
+  // hojas de lo que le adjuntan, 4-nov-2026): una sola versión del cargador
+  window.PROFASE_VISOR = { nuevo: nuevo, nativo: nativo, pdfjs: pdfjs };
 })();

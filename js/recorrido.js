@@ -290,7 +290,7 @@
   // Un recorrido de lo nuevo, una sola vez por persona (31-oct-2026): el flujo de siempre de los recorridos de lo nuevo
   // (después de su ventana de «Nuevos cambios», o al entrar si ya la cerró; nunca encima de otra ventana ni de otro
   // recorrido; visto con recorrido_visto() y, en solo consulta, en su navegador), en un solo lugar para no repetirlo en
-  // cada pestaña. o = { id, liga, laVe: async (PORTAL, perfil) => true|false, pasos: [...] o async () => [...], fin,
+  // cada pestaña. o = { id, liga, laVe: async (PORTAL, perfil) => true|false, pasos: [...] o async () => [...], fin, sinCierre,
   // obligatorio }. Con obligatorio: true (solo cuando Daniel lo pide) va sin «Saltar» ni Esc y solo cuenta como visto al
   // llegar al final: si se interrumpe, vuelve a salir la próxima vez.
   function unaVez(o) {
@@ -330,7 +330,7 @@
         if (ocupado()) return;
         var pasos = typeof o.pasos === 'function' ? await o.pasos() : o.pasos;
         if (!pasos || !pasos.length) return;
-        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio });
+        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio, sinCierre: !!o.sinCierre });
         if (como === 'fin' || (como === 'saltado' && !o.obligatorio)) marcaVisto();
       } catch (e) { /* un recorrido nunca rompe la página */ } finally { esperando = false; }
     }
