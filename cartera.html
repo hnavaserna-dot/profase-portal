@@ -675,6 +675,10 @@ td.ab{width:40px;padding-left:4px}
 .aplr{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;margin-top:9px;background:var(--surface-3)}
 .aplr.on{border-color:color-mix(in srgb,var(--ok) 55%,var(--line));background:color-mix(in srgb,var(--ok) 7%,var(--surface))}
 .aplr.quit{opacity:.8}
+.aplr.usada{opacity:.8;border-style:dashed}
+.aplus{margin-top:12px;padding-top:9px;border-top:1px dashed var(--line-2)}
+.aplus > .k{font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.aplus > .qn{font-size:11.5px;color:var(--ink-3);margin-top:4px;overflow-wrap:anywhere}
 .aplr .t{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .aplr .l{font-size:12px;color:var(--ink-2);margin-top:6px;overflow-wrap:anywhere}
 .aplr .l b{color:var(--ink)}
@@ -3606,6 +3610,7 @@ const relFiltro=rl=>{ const t=relTipo(rl); return t==='suma'?'sug':t; };
 const relsOrden=a=>a.slice().sort((x,y)=>(y.on-x.on)||APL_ORD[relTipo(x)]-APL_ORD[relTipo(y)]||x.dif-y.dif||x.dias-y.dias);
 const folioDe=r=>[r.serie,r.folio].filter(Boolean).join(' ')||(r.quo?'QUO '+r.quo:'s/folio');
 const docNom=r=>r.mod===2||r.mod===3?'anticipo':r.mod===4||r.mod===5?'nota de crédito':'factura';
+const elDoc=r=>(docNom(r)==='anticipo'?'el ':'la ')+docNom(r);   // «el anticipo», «la nota de crédito»
 function aplDec(f,d){
   if(!f.uuid||!d.uuid) return null;
   return APL.dec.get(rfcDe(f)+'|'+f.parte+'|'+f.uuid.toUpperCase()+'|'+d.uuid.toUpperCase())||null;
@@ -3712,6 +3717,19 @@ function aplEmp(ci){
       .sort((a,b)=>APL_ORD[a.tipo]-APL_ORD[b.tipo]||a.dif-b.dif||a.dias-b.dias);
     if(op.length) pon(op[0]);
   }));
+  /* lo que ya no se puede aplicar (5-nov-2026, Fernando Cadengo: «ya se aplicó 1 nota pero la sigue dando como sugerencia en
+     otro, no debería desaparecer la sugerencia?»; escogió la A: «sí, así es»): una sugerencia del CRM (automática, sugerida o
+     para revisar, sin decisión del contador; lo «Confirmado (CFDI)» no, porque lo dice el XML) con un anticipo o nota que ya
+     se usa completo en otra factura (le queda $0) deja de contar: sale de «rels» (las listas, el Excel, los conteos, los
+     filtros y el «+N más») y queda en «usadas», que solo enseña el detalle, en gris, con «✓ Aplicar» por si el contador la
+     prefiere aquí. Si al anticipo o nota todavía le queda algo, se sigue sugiriendo como antes. «todas» trae las dos. */
+  rels.forEach(rl=>{ if(rl.on||rl.dec||rl.tipo==='conf') return;
+    const por=[];
+    rl.docs.forEach(d=>{ const X=qD(d); if(X.queda>0.01) return;
+      X.rels.forEach(o=>{ if(o!==rl&&o.on&&o.parte.has(d)&&o.fac!==rl.fac&&!por.includes(o)) por.push(o); }); });
+    if(por.length) rl.usadaEn=por; });
+  const separa=X=>{ X.todas=X.rels; X.usadas=relsOrden(X.rels.filter(rl=>rl.usadaEn)); X.rels=X.rels.filter(rl=>!rl.usadaEn); };
+  R.fac.forEach(separa); R.doc.forEach(separa);
   R.fac.forEach(F2=>{ F2.queda=Math.max(0,F2.queda); F2.est=F2.aplicado>0.005?(F2.queda<=0.01?'cancela':'reduce'):null;
     F2.orden=relsOrden(F2.rels); F2.prim=F2.apl[0]||F2.orden[0]||null; });
   R.doc.forEach(X=>{ X.orden=relsOrden(X.rels); X.prim=X.orden.find(x=>x.on&&x.parte.has(X.r))||X.orden[0]||null; });
@@ -3773,15 +3791,17 @@ async function aplPon(items,txt){
 // la tarjeta de una relación (en el detalle de una factura, de un anticipo o de una nota)
 function tarjetaRel(rl,desde){
   const fac=desde===rl.fac, t=relTipo(rl);
-  const w=el('div','aplr'+(rl.on?' on':'')+(t==='quit'?' quit':'')); w.dataset.rel=rl.id;
+  const us=rl.usadaEn||null, usEn=us?[...new Set(us.map(o=>folioDe(o.fac)))].join(', '):'';
+  const w=el('div','aplr'+(rl.on?' on':'')+(t==='quit'?' quit':'')+(us?' usada':'')); w.dataset.rel=rl.id;
   const h=el('div','t');
   h.appendChild(el('span','pill '+APL_C[t],APL_T[t]));
-  if(t!=='quit') h.appendChild(el('span','pill '+(rl.on?'p-ok':'p-cl'),rl.on?'Se aplica':'No se aplica'));
+  if(us) h.appendChild(el('span','pill p-cl','Ya se usa en la factura '+usEn));
+  else if(t!=='quit') h.appendChild(el('span','pill '+(rl.on?'p-ok':'p-cl'),rl.on?'Se aplica':'No se aplica'));
   w.appendChild(h);
   const linea=(r,extra)=>{ const l=el('div','l');
     l.appendChild(el('b',null,(r===rl.fac?'Factura ':docNom(r)==='anticipo'?'Anticipo ':'Nota de crédito ')+folioDe(r)));
     l.appendChild(document.createTextNode(' · '+(r.fecha||'sin fecha')+' · '+extra));
-    if(r!==desde){ const v=el('button','lnk','Ver'); v.type='button'; v.title='Ver '+(r===rl.fac?'la factura':'el '+docNom(r));
+    if(r!==desde){ const v=el('button','lnk','Ver'); v.type='button'; v.title='Ver '+(r===rl.fac?'la factura':elDoc(r));
       v.onclick=()=>{ S.doc=r; pintaModal(); }; l.appendChild(v); }
     w.appendChild(l); };
   if(fac) rl.docs.forEach(d=>linea(d,'a favor '+F.mxn2.format(-d.saldo)+(rl.parte.has(d)?' · se aplica '+F.mxn2.format(rl.parte.get(d)):'')));
@@ -3790,14 +3810,20 @@ function tarjetaRel(rl,desde){
   const F2=aplF(rl.fac), si=Math.min(rl.tot,rl.fac.saldo);
   const q=el('div','q');
   if(rl.on){ q.appendChild(document.createTextNode('Se aplica '+F.mxn2.format(rl.monto)+' · la factura quedaría '+F.mxn2.format(F2?F2.queda:0)));
-    rl.docs.forEach(d=>{ const X=aplD(d); if(X) q.appendChild(document.createTextNode(' · al '+docNom(d)+' '+folioDe(d)+' le queda '+F.mxn2.format(X.queda))); }); }
+    rl.docs.forEach(d=>{ const X=aplD(d); if(X) q.appendChild(document.createTextNode(' · a'+(docNom(d)==='anticipo'?'l ':' la ')+docNom(d)+' '+folioDe(d)+' le queda '+F.mxn2.format(X.queda))); }); }
+  else if(us){
+    // ya se usa completo en otra factura: si la aceptaron ahí, hay que quitarla primero; si no, «✓ Aplicar» la pasa aquí
+    const fija=us.some(o=>o.dec==='aplicada');
+    q.appendChild(document.createTextNode('Si se aplica aquí: '+F.mxn2.format(si)+' · la factura quedaría '+F.mxn2.format(Math.max(0,rl.fac.saldo-si))
+      +(fija?' · está aceptada en la factura '+usEn+': para pasarla aquí, primero quítala ahí':' · deja de aplicarse en la factura '+usEn)));
+  }
   else q.appendChild(document.createTextNode('Si se aplica: '+F.mxn2.format(si)+' · la factura quedaría '+F.mxn2.format(Math.max(0,rl.fac.saldo-si))
-    +(t==='quit'?'':' (el '+docNom(rl.docs[0])+' ya se usa en otra factura o la factura ya tiene otra)')));
+    +(t==='quit'?'':' ('+elDoc(rl.docs[0])+' ya se usa en otra factura o la factura ya tiene otra)')));
   q.appendChild(el('span','dm','demostrativo'));
   w.appendChild(q);
   if(rl.quien) w.appendChild(el('div','qn',(t==='quit'?'La quitó ':'La aplicó ')+rl.quien.por+' · '+cuando(rl.quien.en)));
   if(t==='rev') w.appendChild(el('div','qn','Mismo RFC genérico, otro nombre: revisa que sea el mismo cliente o proveedor.'));
-  if(t==='conf') w.appendChild(el('div','qn','Lo dice el XML: en sus «CFDI relacionados» la '+docNom(rl.docs[0])+' relaciona esta factura (de Centauro).'));
+  if(t==='conf') w.appendChild(el('div','qn','Lo dice el XML: en sus «CFDI relacionados» '+elDoc(rl.docs[0])+' relaciona esta factura (de Centauro).'));
   // lo que puede hacer quien marca en la Cartera de esa empresa (solo consulta, nada)
   if(yoApl()){
     const a=el('div','acts');
@@ -3808,11 +3834,12 @@ function tarjetaRel(rl,desde){
     // factura y las demás de ese anticipo o nota quitadas
     const solo=()=>{ const it=todos('aplicar'), ya=new Set();
       const quita=(x,d)=>{ const k=x.fac.quo+'|'+d.quo; if(ya.has(k)) return; ya.add(k); it.push({rl:x,d,accion:'quitar'}); };
-      if(fac) aplF(rl.fac).rels.filter(x=>x!==rl).forEach(x=>x.docs.filter(d=>!rl.docs.includes(d)).forEach(d=>quita(x,d)));
-      else aplD(desde).rels.filter(x=>x!==rl&&x.fac!==rl.fac).forEach(x=>quita(x,desde));
+      if(fac) aplF(rl.fac).todas.filter(x=>x!==rl).forEach(x=>x.docs.filter(d=>!rl.docs.includes(d)).forEach(d=>quita(x,d)));
+      else aplD(desde).todas.filter(x=>x!==rl&&x.fac!==rl.fac).forEach(x=>quita(x,desde));
       aplPon(it,'Listo: solo esta relación.'); };
     if(rl.dec!=='aplicada') b('✓ Aplicar','',()=>aplPon(todos('aplicar'),'Listo: aplicada (demostrativo).'),'Aceptar esta relación');
-    if(rl.dec!=='quitada') b('✕ Quitar','l',()=>aplPon(todos('quitar'),'Listo: quitada.'),'Esta relación no va');
+    // lo que ya se usa completo en otra factura ya no es sugerencia: no hace falta quitarlo
+    if(rl.dec!=='quitada'&&!us) b('✕ Quitar','l',()=>aplPon(todos('quitar'),'Listo: quitada.'),'Esta relación no va');
     if(rl.dec!=='quitada') b('Solo esta','l',solo,'Aplicar esta y quitar las demás');
     if(rl.dec) b('Regresar a lo sugerido','g',()=>aplPon(todos('sugerida'),'Listo: regresó a lo que sugiere el CRM.'));
     w.appendChild(a);
@@ -3834,15 +3861,27 @@ function bloqueRel(d){
     +(X.est?' · '+(X.est==='cancela'?'se cancela':'se reduce'):'');
   else s.innerHTML='A favor <b>'+F.mxn2.format(-d.saldo)+'</b> · se usa <b>'+F.mxn2.format(X.usado)+'</b> · le queda <b>'+F.mxn2.format(X.queda)+'</b>';
   s.appendChild(el('span','dm','demostrativo')); box.appendChild(s);
-  if(!X.rels.length){ box.appendChild(el('div','l',fac?'Sin relación: no hay anticipos ni notas de crédito a favor de este cliente o proveedor.'
+  if(!X.rels.length&&!X.usadas.length){ box.appendChild(el('div','l',fac?'Sin relación: no hay anticipos ni notas de crédito a favor de este cliente o proveedor.'
     :'Sin relación: no hay facturas con saldo de este cliente o proveedor.')); return box; }
+  if(!X.rels.length) box.appendChild(el('div','l',fac?'Sin relación disponible: sus anticipos o notas de crédito posibles ya se usan completos en otra factura.'
+    :'Sin relación disponible.'));
   X.orden.forEach(rl=>box.appendChild(tarjetaRel(rl,d)));
+  // 5-nov-2026 (Fernando, la A): lo que ya se usa completo en otra factura no es sugerencia; se ve aquí por si se prefiere aquí
+  if(X.usadas.length){
+    const u=el('div','aplus'); u.id='aplus';
+    u.appendChild(el('div','k',fac?'Ya se usan en otra factura':'Otras facturas donde podría ir'));
+    const yo=yoApl(), ya=docNom(d)==='anticipo'?'este anticipo ya se usa completo':'esta nota de crédito ya se usa completa';
+    u.appendChild(el('div','qn',fac?'Ya no cuentan como sugerencia: se usan completos en otra factura.'+(yo?' Si prefieres aplicar uno aquí, pica «✓ Aplicar».':'')
+      :'Ya no cuentan como sugerencia: '+ya+'.'+(yo?' Si prefieres una de estas facturas, pica «✓ Aplicar» en ella.':'')));
+    X.usadas.forEach(rl=>u.appendChild(tarjetaRel(rl,d)));
+    box.appendChild(u);
+  }
   return box;
 }
 // la columna «Relación» de las listas: la más exacta y «+N más»; en facturas, cuánto quedaría
 function celdaRel(x,d,sinQ){
   const X=aplX(d);
-  if(!X||!X.rels.length){ x.appendChild(el('span','aplsin',X?'Sin relación':'—')); return x; }
+  if(!X||!X.rels.length){ x.appendChild(el('span','aplsin',!X?'—':X.usadas.length?'Sin relación disponible':'Sin relación')); return x; }
   const rl=X.prim, t=relTipo(rl), top=el('div','aplc');
   top.appendChild(el('span','pill '+APL_C[t],APL_T[t]));
   if(X.rels.length>1) top.appendChild(el('span','mas','+'+(X.rels.length-1)+' más'));
@@ -4195,7 +4234,7 @@ function hojaApl(wb,nombre,facs,c,corte,op){
     // de un solo anticipo o nota, fecha y montos como fecha y número; de 2 o 3, en texto, en el mismo orden, con « + »
     const uno=rel.length===1, dd=uno?rel[0]:null;
     ws.getRow(n).values=(gen?[e[3]||'Sin grupo',e[1]]:[]).concat([cp[1]||'',cp[0]||'',folioDe(d),d.fecha?xd(d.fecha):null,d.uuid||'',cent(d.saldo),
-      rl?APL_T[t]+(F2.rels.length>1?' (+'+(F2.rels.length-1)+' más)':''):'Sin relación',
+      rl?APL_T[t]+(F2.rels.length>1?' (+'+(F2.rels.length-1)+' más)':''):F2.usadas.length?'Sin relación disponible':'Sin relación',
       F2.est?(F2.est==='cancela'?'Se cancela':'Se reduce'):rl?(t==='quit'?'Quitada':'No se aplica'+aplPorQue(rl)):'—',
       rel.map(x=>docNom(x)+' '+folioDe(x)).join(' + '),
       uno?(dd.fecha?xd(dd.fecha):null):rel.map(x=>x.fecha?fmtD(x.fecha):'sin fecha').join(' + '),
