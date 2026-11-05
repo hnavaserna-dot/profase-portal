@@ -28,12 +28,15 @@
      casillas aunque tenga pocas opciones, sin buscador), defecto: [...] (lo que trae puesto sin que cuente como filtro:
      no sale su etiqueta y «Limpiar» lo regresa ahí; sin botón «Todos»);
    - tipo 'rango' con entrada 'numero' o 'fecha' y etiquetas ['Desde', 'Hasta']: dos campos; valor() regresa
-     ['', ''] y pon(['…', '…']) recibe los dos. */
+     ['', ''] y pon(['…', '…']) recibe los dos.
+   La barra nunca es más ancha que su lugar (5-nov-2026: en el celular, una etiqueta larga como «VER SOLO ESTAS CUENTAS: …»
+   o «CLIENTES: …» movía de lado la pantalla de Variaciones): .pf lleva min-width:0 y max-width:100%, la etiqueta se acorta
+   con «…» dentro de su lugar y su texto completo queda en su title. */
 (function () {
   'use strict';
   if (window.PROFASE_FILTROS) return;
 
-  var CSS = '.pf{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;font-family:inherit;--pf-sf:#FFFFFF;--pf-sf2:#F3F5F9;--pf-ln:#D5DCE7;--pf-ink:#132036;--pf-mu:#5A6577;--pf-ac:#F07A1E;--pf-acs:#FDEBDC;--pf-aci:#9A4A0C;--pf-nv:#1F3864}'
+  var CSS = '.pf{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;min-width:0;max-width:100%;font-family:inherit;--pf-sf:#FFFFFF;--pf-sf2:#F3F5F9;--pf-ln:#D5DCE7;--pf-ink:#132036;--pf-mu:#5A6577;--pf-ac:#F07A1E;--pf-acs:#FDEBDC;--pf-aci:#9A4A0C;--pf-nv:#1F3864}'
     + ':root[data-theme="dark"] .pf{--pf-sf:#141C2B;--pf-sf2:#1B2638;--pf-ln:#2C3A55;--pf-ink:#E5EAF2;--pf-mu:#98A3B5;--pf-acs:rgba(240,122,30,.16);--pf-aci:#FFD2AE;--pf-nv:#F07A1E}'
     + '.pf *{box-sizing:border-box}.pf-capa{margin:0}'
     + '.pf-btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:10px;border:0;background:var(--pf-ac);color:#0B1220;font:inherit;font-size:12.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}'
@@ -168,7 +171,7 @@
         var vs = lista(c);
         var txt = c.chip ? c.chip(vs) : c.tipo === 'texto' ? vs[0] : c.tipo === 'rango' ? vs.filter(function (x) { return x; }).join(' a ')
           : vs.length === 1 ? nombreDe(c, vs[0]) : vs.length;
-        h += '<button type="button" class="pf-chip" data-q="' + i + '" title="Quitar este filtro"><span>' + esc(c.t) + ': ' + esc(txt) + '</span><i aria-hidden="true">×</i></button>';
+        h += '<button type="button" class="pf-chip" data-q="' + i + '" title="Quitar este filtro: ' + esc(c.t) + ': ' + esc(txt) + '"><span>' + esc(c.t) + ': ' + esc(txt) + '</span><i aria-hidden="true">×</i></button>';
       });
       if (n) h += '<button type="button" class="pf-lim">' + esc(cfg.limpiarTxt || 'Limpiar todo') + '</button>';
       return h;
