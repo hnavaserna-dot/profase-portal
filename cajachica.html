@@ -43,9 +43,10 @@
    fondo y la lista de gastos, solo para ver. «Por pagar» y los cortes por persona se acabaron. Los gerentes y RH solo
    registran y ven lo suyo; cada gasto se relaciona con un cliente o un grupo de la base (con el buscador de las formas,
    js/buscador.js; no sale en la lista: sale en su detalle y en la justificación).
-   Quién hace qué lo decide la base (11, 15, 39 y 237): capturan los gerentes (los gastos internos de RH y oficina,
-   solo los de caja_rh), autorizan y rechazan Cadengo (y Gabo, por un tiempo), la dirección ve el reporte de montos y el
-   fondo. Fuentes: Public Sans y JetBrains Mono, como las demás pestañas. Colores PROFASE: azul #1F3864 y naranja #F07A1E. */
+   Quién hace qué lo decide la base (11, 15, 39, 237 y 290): las vueltas a cliente las registran los gerentes; los gastos
+   internos de RH y oficina, los de caja_rh (Alex Luna, Elisa Mata, Andrea Reyna y Fernando Cadengo; Elisa y Andrea solo
+   esos); caja_registro() dice qué tipos registra quien entró. Autorizan y rechazan Cadengo (y Gabo, por un tiempo), la
+   dirección ve el reporte de montos y el fondo. Fuentes: Public Sans y JetBrains Mono, como las demás pestañas. Colores PROFASE: azul #1F3864 y naranja #F07A1E. */
 :root{
   --bg:#f3f5f9; --surface:#ffffff; --surface-2:#eef1f6;
   --ink:#131c2b; --ink-2:#4b5a6e; --ink-3:#7a889b;
@@ -651,7 +652,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 
   var state = { periodo: ym(hoy()), movs: [], cortes: [], loaded: false, fTipo:[], fCat:[], fEst:[], fEmp:'todos', fCli:[],
                 tab:'pMes', selAut:{}, fondo:null, fondoErr:'', fondoRol:null };
-  var db=null, dl=null, P=null, uid=null, yo=null, modo=null, esRH=false;   // modo: 'autoriza' | 'captura' | 'reporte' | 'fondo' (Eva: el fondo y la lista, solo para ver)
+  var db=null, dl=null, P=null, uid=null, yo=null, modo=null, esRH=false, puedeVuelta=false;   // modo: 'autoriza' | 'captura' | 'reporte' | 'fondo' (Eva: el fondo y la lista, solo para ver); esRH y puedeVuelta: qué tipos registra (caja_registro(), 290)
   var CLIENTES=[], CLI_BY_NOMBRE={}, GRUPOS=[], editingId=null, formTipo='vuelta', formRel='cliente', rechazoIds=[], toastTimer=null;
   function esAut(){ return modo==='autoriza'; }
   function captura(){ return modo==='autoriza' || modo==='captura'; }
@@ -834,14 +835,15 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     else if(mov && esAut() && mov.autoAutorizado) aviso='Este gasto te lo autorizaste tú: sale marcado para que Eva lo revise antes de depositar.';
     $('avisoEd').textContent=aviso; $('avisoEd').hidden=!aviso;
     $('formMsg').textContent='';
-    var t = mov ? tipoOf(mov) : 'vuelta';
-    // el botón de tipo solo lo ven quienes capturan gastos internos (caja_rh); a los demás les sale «vuelta»
-    $('tipoSeg').hidden = !esRH;
+    var t = mov ? tipoOf(mov) : (puedeVuelta || !esRH ? 'vuelta' : 'interno');
+    // el botón de tipo solo lo ve quien registra los dos tipos; quien solo registra gastos internos (Elisa, Andrea) abre
+    // directo en «Gasto interno» y los demás en «Vuelta a cliente»
+    $('tipoSeg').hidden = !(esRH && puedeVuelta);
     var hoyS=hoy();
     $('fecha').value       = mov ? (mov.fecha||hoyS) : (state.periodo===ym(hoyS) ? hoyS : state.periodo+'-01');
     $('persona').value     = mov ? (mov.persona||mov.porNombre||'') : ((yo&&yo.nombre)||'');
     $('motivo').value      = mov ? (mov.motivo||'') : '';
-    formRel = mov ? relDe(mov) : 'cliente';
+    formRel = mov ? relDe(mov) : (t==='interno' ? '' : 'cliente');
     $('evento').value      = mov ? (mov.evento||'') : '';
     if(mov && mov.eventoId && !EVS.some(function(x){ return x.id===mov.eventoId; })){ var oe=document.createElement('option'); oe.value=mov.eventoId; oe.textContent=mov.evento||'Evento ligado'; $('eventoId').appendChild(oe); }
     $('eventoId').value    = mov ? (mov.eventoId||'') : '';
@@ -879,7 +881,9 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     var persona=$('persona').value.trim();
     if(!persona){ $('formMsg').textContent='Falta quién hizo el gasto.'; return; }
     var interno = formTipo==='interno';
-    if(interno && !esRH && !esAut()){ $('formMsg').textContent='Los gastos internos los capturan Alex Luna y Fernando Cadengo.'; return; }
+    // un gasto nuevo, solo del tipo que le toca (la base lo revisa igual); quien autoriza corrige cualquiera
+    if((!esAut() || !editingId) && interno && !esRH){ $('formMsg').textContent='Tu usuario no registra gastos internos (RH y oficina).'; return; }
+    if((!esAut() || !editingId) && !interno && !puedeVuelta){ $('formMsg').textContent='Las vueltas a cliente las registran los gerentes.'; return; }
     var cat=catOf($('categoria').value), rel=formRel, cli={nombre:'',rfc:'',grupo:''};
     if(rel==='cliente'){ cli=clienteActual(); if(!cli.nombre) rel=''; }
     else if(rel==='grupo'){ var gr=grupoActual(); if(gr) cli={nombre:'',rfc:'',grupo:gr}; else rel=''; }
@@ -1731,8 +1735,9 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
       modo = q.data || null;
       if(!modo){ sinAcceso('Sin acceso a la caja chica','La caja chica la ven los gerentes y la dirección.'); return; }
       if(captura()){
-        // quién captura gastos internos lo dice la base (tabla caja_rh); si la base aún no lo tiene, nadie
-        try{ var rh = await P.sb.rpc('es_caja_rh'); esRH = !rh.error && rh.data===true; }catch(e){ esRH=false; }
+        // qué tipos registra lo dice la base (caja_registro(): vueltas, los gerentes; gastos internos, caja_rh); si no contesta, nada
+        try{ var rg = await P.sb.rpc('caja_registro'); var rd = (!rg.error && rg.data) || {}; esRH = rd.interno===true; puedeVuelta = rd.vuelta===true; }
+        catch(e){ esRH=false; puedeVuelta=false; }
       }
     }catch(e){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
 
@@ -1743,14 +1748,14 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     var b=document.createElement('b'); b.textContent=(yo&&yo.nombre)||'';
     $('whoami').appendChild(b);
     $('whoami').appendChild(document.createTextNode(esAut() ? (state.fondoRol==='maneja' ? ' · autoriza y lleva el fondo' : ' · autoriza gastos')
-      : captura() ? (esRH ? ' · registra vueltas y gastos internos' : ' · registra sus gastos')
+      : captura() ? (esRH && puedeVuelta ? ' · registra vueltas y gastos internos' : esRH ? ' · registra gastos internos (RH y oficina)' : ' · registra sus gastos')
       : modo==='fondo' ? ' · confirma los depósitos del fondo' : ' · reporte de montos'));
     // «Ver: todo / solo lo mío» es de quien autoriza: los demás solo ven lo suyo (o, Eva, todo para ver)
     document.querySelectorAll('.solo-captura').forEach(function(x){ x.hidden=!esAut(); });
     $('vistaCaptura').hidden=!veLista();
     $('tabsAut').hidden=!esAut();
     $('tb-fon').hidden=state.fondoRol!=='maneja';
-    $('newBtn').hidden=!captura();
+    $('newBtn').hidden=!captura() || (!esRH && !puedeVuelta);   // quien autoriza y ya no registra (Gabo, desde el 13-nov) no ve «Nuevo gasto»
     $('vistaReporte').hidden=veLista();
     $('footnote').hidden=!state.fondoRol;
     // los cuadros de abajo (por categoría, vueltas por cliente, gasto interno por evento y por persona), a todos los que
