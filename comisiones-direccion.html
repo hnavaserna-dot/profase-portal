@@ -465,7 +465,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
           <button class="btn acento" type="button" id="d-con-agrega" hidden>Agregar cliente</button>
           <button class="btn acento" type="button" id="d-lis-agrega" hidden>Agregar devolución</button>
           <button class="btn" type="button" id="d-lis-pagar" hidden>Pagar a SV</button>
-          <button class="btn" type="button" id="x-dev" data-excel hidden>Excel</button></div>
+          <button class="btn" type="button" id="x-dev" data-excel hidden>Excel</button>
+          <button class="btn" type="button" id="x-sv" data-excel="Para SV (Excel)" title="Solo cliente, mes devuelto, lo que devolvió el SAT, lo de SV y cuándo se le pagó, para mandárselo a SV" hidden>Para SV (Excel)</button></div>
       </header>
       <div class="ayuda" id="dev-ayuda"></div>
       <div class="in filtros" id="d-sv-fila" hidden><span class="grupo"><label for="d-sv">% SV (sobre el monto devuelto)</label><input class="pct" id="d-sv" inputmode="decimal" autocomplete="off"><button class="btn chico" type="button" id="d-sv-ok" hidden>Guardar %</button></span>
@@ -1420,6 +1421,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('d-lis-pagar').hidden = !(cap && k === 'lista' && ((d.sv_resumen || {}).n_elegibles || 0) > 0);
     $('d-lis-fila').hidden = k !== 'lista';
     $('x-dev').hidden = k !== 'devs' && k !== 'lista' && k !== 'semanas';
+    $('x-sv').hidden = k !== 'lista';
     $('h-dev').textContent = { lista: 'Devoluciones de IVA y su pago a SV', semanas: 'Pagos a SV', devs: 'Devoluciones con su factura', porfac: 'Depositadas, por facturar', cobra: 'Lo que se cobra de cada cliente' }[k];
     $('dev-sub').textContent = { lista: plural((d.lista || []).length, 'devolución', 'devoluciones') + ' · las de antes del WorkFlow y las nuevas', semanas: plural(+((d.sv_resumen || {}).n_elegibles) || 0, 'devolución por pagar', 'devoluciones por pagar') + ' · ' + plural((d.pagos || []).length, 'pago', 'pagos'), devs: plural(L.length, 'devolución', 'devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre', porfac: plural(F.length, 'devolución', 'devoluciones'), cobra: plural(C.length, 'cliente capturado', 'clientes capturados') }[k];
     var cuantos = { lista: (d.lista || []).length, semanas: 1, devs: L.length, porfac: F.length, cobra: C.length }[k];
@@ -1519,8 +1521,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function sumaDev(L, k) { return L.reduce(function (a, x) { return a + (Number(x[k]) || 0); }, 0); }
   function pintaListaDev() {
-    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, T = d.lista || [];
-    var clientes = T.map(function (x) { return x.cliente; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
+    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, TL = d.lista || [];
+    var clientes = TL.map(function (x) { return x.cliente; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
     if (DLIS.cli && clientes.indexOf(DLIS.cli) < 0) DLIS.cli = '';
     $('d-lis-cli').innerHTML = '<option value="">Todos</option>' + clientes.map(function (c) {
       return '<option value="' + esc(c) + '"' + (c === DLIS.cli ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
@@ -1556,7 +1558,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     pintaBarSv();
     if (DEV.tab === 'lista') {
       $('dev-vacia').hidden = L.length > 0;
-      $('dev-vacia').textContent = T.length ? 'No hay devoluciones con ese filtro.' : 'Todavía no hay devoluciones.';
+      $('dev-vacia').textContent = TL.length ? 'No hay devoluciones con ese filtro.' : 'Todavía no hay devoluciones.';
     }
   }
   function excelListaDev(b) {
@@ -1571,6 +1573,24 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       }),
       [3, 5, 7, 8, 9, 15], [30, 12, 16, 9, 14, 11, 14, 15, 15, 14, 14, 16, 18, 13, 14, 30],
       L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), '', sumaDev(L, 'sv'), '', sumaDev(L, 'pf'), sumaDev(L, 'total'), sumaDev(L, 'factura_iva')]] : null);
+  }
+  /* «Para SV»: solo lo que le toca ver a SV (Héctor Daniel, 5-nov-2026, 12:22): cliente, mes devuelto, lo que devolvió el
+     SAT, lo de SV y la fecha en que se le pagó o «Por pagar». Con los filtros de la lista; sin las que no llevan SV. */
+  function excelSv(b) {
+    var L = listaDev().filter(function (x) { return x.estado !== 'no_lleva' && Number(x.sv) > 0; });
+    var pcts = L.map(function (x) { return x.sv_pct == null ? '' : String(Number(x.sv_pct)); }).filter(function (p, i, a) { return a.indexOf(p) === i; });
+    var tSv = pcts.length === 1 && pcts[0] !== '' ? 'SV (' + pctTxt(pcts[0]) + ')' : 'SV';
+    var pag = L.filter(function (x) { return x.estado === 'pagado'; }), por = L.filter(function (x) { return x.estado !== 'pagado'; });
+    var lin = DLIS.cli ? ['Cliente: ' + DLIS.cli] : [];
+    lin.push('Pagado: ' + dinero(sumaDev(pag, 'sv')) + ' · Por pagar: ' + dinero(sumaDev(por, 'sv')));
+    excel(b, 'Devoluciones de IVA para SV PROFASE', 'Devoluciones de IVA y SV', lin,
+      ['Cliente', 'Mes devuelto', 'Cantidad devuelta', tSv, 'Fecha de pago'],
+      L.map(function (x) {
+        return [x.cliente || '', x.mes_txt || '', x.devuelto == null ? '' : Number(x.devuelto), Number(x.sv),
+                x.estado === 'pagado' && x.entregado_el ? fecha(x.entregado_el) : 'Por pagar'];
+      }),
+      [3, 4], [34, 16, 18, 16, 16],
+      L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), sumaDev(L, 'sv'), '']] : null);
   }
   function devHisForma(x) {
     var d = DEV.d || {}, hoy = String(d.hoy || '').slice(0, 10), anioHoy = +hoy.slice(0, 4) || new Date().getFullYear();
@@ -1998,6 +2018,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   $('p-hoy').onclick = function () { cambiaPer(A0, M0); };
   $('p-mes').onchange = function () { cambiaPer(PER.anio, +this.value); };
   $('p-anio').onchange = function () { cambiaPer(+this.value, PER.mes); };
+  $('x-sv').onclick = function () { excelSv(this); };
   $('x-dev').onclick = function () { if (DEV.tab === 'lista') excelListaDev(this); else if (DEV.tab === 'semanas') excelPagosSv(this); else excelDev(this); };
   $('d-lis-agrega').onclick = function () { devHisForma(null); };
   $('d-lis-pagar').onclick = function () { DEV.tab = 'semanas'; pintaDev(); try { $('h-dev').scrollIntoView({ block: 'nearest' }); } catch (er) {} };
