@@ -206,6 +206,23 @@ tr.click:hover td{background:var(--navy-soft)}
 .saldos .v{font-family:var(--f-display);font-size:20px;font-weight:750;overflow-wrap:anywhere}
 @media (max-width:520px){.saldos{grid-template-columns:minmax(0,1fr)}}
 .pie{color:var(--muted);font-size:12.5px;margin:0 0 24px}
+/* 269: los pagos a SV (escoger cuáles, pagadas con su fecha, programar) */
+.svbar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;justify-content:space-between;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.svbar .cuenta{font-size:13.5px;overflow-wrap:anywhere}
+.svbar .cuenta strong{font-size:15px}
+.svh{font-size:15px;font-weight:700;margin:0}
+input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 auto;cursor:pointer}
+:root[data-theme="dark"] input.svck{accent-color:var(--accent)}
+.svcli{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.svcli>span{min-width:0}
+#t-dsel tr.click,#t-dpag tr.click{cursor:pointer}
+#t-dsel tr.sel td{background:var(--navy-soft)}
+.lista.svlis li.ck{grid-template-columns:auto minmax(0,1fr) auto}
+.lista.svlis li .m{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lista.svlis li.no-ok{background:var(--amber-soft)}
+.lista.svlis li.tot .t{text-align:right}
+.lista.svlis input.svck{width:20px;height:20px;padding:0;border:0}
+.lista.svlis label.t{cursor:pointer}
 /* Ventanas (a la derecha; en el celular, pantalla completa) */
 .velo{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:20;display:flex;justify-content:flex-end}
 .ficha{background:var(--bg);width:min(640px,100%);height:100%;overflow-y:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
@@ -283,6 +300,8 @@ tr.click:hover td{background:var(--navy-soft)}
   table.resp td.ac{grid-column:1/-1}
   table.resp td.ac .acciones{justify-content:flex-start}
   #t-phdn tr.sel{background:var(--navy-soft)}
+  #t-dsel tr.sel{background:var(--navy-soft)}
+  #t-dsel tr.sel td{background:transparent}
   #t-phdn tr.sel td,#t-phdn tr td{background:transparent}
   .band h1{font-size:22px}
   .ficha .fcab h2{font-size:18px}
@@ -443,6 +462,7 @@ tr.click:hover td{background:var(--navy-soft)}
         <div class="acciones"><span class="estado" id="dev-estado" aria-live="polite"></span>
           <button class="btn acento" type="button" id="d-con-agrega" hidden>Agregar cliente</button>
           <button class="btn acento" type="button" id="d-lis-agrega" hidden>Agregar devolución</button>
+          <button class="btn" type="button" id="d-lis-pagar" hidden>Pagar a SV</button>
           <button class="btn" type="button" id="x-dev" data-excel hidden>Excel</button></div>
       </header>
       <div class="ayuda" id="dev-ayuda"></div>
@@ -454,7 +474,15 @@ tr.click:hover td{background:var(--navy-soft)}
       <div class="in" style="padding-bottom:0"><h2 id="h-dev" style="font-size:16px">Devoluciones de IVA y su pago a SV</h2><div class="sub" id="dev-sub">&nbsp;</div></div>
       <!-- 260 (4-nov-2026): todas las devoluciones, las de antes del WorkFlow nuevo y las del WorkFlow, con su pago a SV -->
       <div class="tabla" data-dp="lista"><table class="resp" id="t-dlis"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
-      <div class="tabla" data-dp="semanas" hidden><table class="resp" id="t-dsem"><thead></thead><tbody></tbody></table></div>
+      <!-- 269 (4-nov-2026): escoger cuáles se le pagan a SV, registrarlas pagadas con su fecha o programarlas, y cada pago -->
+      <div data-dp="semanas" hidden>
+        <div class="in svbar" id="sv-bar" hidden></div>
+        <div class="tabla"><table class="resp" id="t-dsel"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+        <div class="vacio" id="sv-sel-vacia" hidden>No hay devoluciones por pagar a SV.</div>
+        <div class="in" style="padding-bottom:0;border-top:1px solid var(--line)"><h3 class="svh" id="h-svpag">Pagos registrados</h3><div class="sub" id="sv-pag-sub">&nbsp;</div></div>
+        <div class="tabla"><table class="resp" id="t-dpag"><thead></thead><tbody></tbody></table></div>
+        <div class="vacio" id="sv-pag-vacia" hidden>Todavía no hay pagos a SV.</div>
+      </div>
       <div class="tabla" data-dp="devs" hidden><table class="resp" id="t-ddev"><thead></thead><tbody></tbody></table></div>
       <div class="tabla" data-dp="porfac" hidden><table class="resp" id="t-dpor"><thead></thead><tbody></tbody></table></div>
       <div class="tabla" data-dp="cobra" hidden><table class="resp" id="t-dcon"><thead></thead><tbody></tbody></table></div>
@@ -483,6 +511,7 @@ tr.click:hover td{background:var(--navy-soft)}
   var UTI = { tab: 'nomina', d: null, pide: 0, clave: '' };
   var DEV = { tab: 'lista', d: null, pide: 0 };
   var DLIS = { est: '', cli: '' };   // 260: el filtro de la lista de todas las devoluciones
+  var SVSEL = {};                     // 269: las devoluciones escogidas para pagarle a SV (por su clave)
   var RES = { pide: 0, fac: null, clave: '' };
   var EDITA = null;          // lo que se captura en la ventana
   var PHDN = { d: null, anio: null, pide: 0 };   // 261: el pago de la Comisión HDN de cada mes
@@ -561,11 +590,12 @@ tr.click:hover td{background:var(--navy-soft)}
       await catalogos();
       $('cargando').hidden = true;
       $('barra').hidden = false;
-      // desde la pila «Comisión HDN por pagar» del Inicio: ?ir=com o ?ir=com-AAAA-MM (cdir_tab.js, PROFASE_ABRE)
+      // desde la pila «Comisión HDN por pagar» del Inicio: ?ir=com o ?ir=com-AAAA-MM; desde el aviso de los pagos a SV, ?ir=svp (cdir_tab.js, PROFASE_ABRE)
       var ir = ''; try { ir = new URLSearchParams(location.search).get('ir') || ''; } catch (e) {}
       var mi = /^com(?:-(\d{4})-(\d{2}))?$/.exec(ir);
       if (mi && mi[1] && +mi[2] >= 1 && +mi[2] <= 12) { PER.anio = +mi[1]; PER.mes = +mi[2]; periodos(); }
-      muestra(mi ? 'com' : 'res');
+      if (ir === 'svp') muestra('dev', 'semanas');   // 269: el aviso de «Pagos a SV» (cdir_tab.js, PROFASE_ABRE: 'ver:pagos-sv')
+      else muestra(mi ? 'com' : 'res');
     } catch (e) {
       $('cargando').hidden = true;
       $('error').textContent = 'No se pudo abrir la sección: ' + falla(e); $('error').hidden = false;
@@ -682,7 +712,7 @@ tr.click:hover td{background:var(--navy-soft)}
   function pintaFalta(nd, ru) {
     var L = [], mes = MESES_L[PER.mes - 1].toLowerCase(), dd = DEV.d;
     if (nd) L.push({ c: nd, t: (nd === 1 ? '1 factura de ' + mes + ' por decidir' : nd + ' facturas de ' + mes + ' por decidir'), s: '¿Llevan comisión? Inclúyelas o descártalas.', b: 'Decidir', ir: 'fac', sub: 'disponible' });
-    semanaToca(dd).forEach(function (x) { L.push({ c: dinero(x.costo), t: 'Pago SV del ' + fecha(x.paga_el) + ' por entregar', s: plural(x.n, 'devolución', 'devoluciones') + (x.semana ? ' de la semana del ' + fecha(x.semana) : ' de antes del WorkFlow') + '.', b: 'Ver', ir: 'dev', sub: 'semanas' }); });
+    semanaToca(dd).forEach(function (x) { L.push({ c: dinero(x.costo), t: x.pago ? 'Pago SV #' + x.pago + ' (programado para el ' + fecha(x.paga_el) + ') por pagar' : 'Pago SV del ' + fecha(x.paga_el) + ' por entregar', s: plural(x.n, 'devolución', 'devoluciones') + (x.pago ? '' : x.semana ? ' de la semana del ' + fecha(x.semana) : ' de antes del WorkFlow') + '.', b: 'Ver', ir: 'dev', sub: 'semanas' }); });
     if (dd) {
       var pf = dd.por_facturar || [], sinPct = pf.filter(function (x) { return (x.sugerido || {}).falta === 'cond'; }).length,
         sinMonto = pf.filter(function (x) { return (x.sugerido || {}).falta === 'monto'; }).length,
@@ -1364,7 +1394,7 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   var AYUDA_DEV = {
     lista: 'Cada devolución, las de antes del WorkFlow y las nuevas: lo que devolvió el SAT, lo de SV, lo de PROFASE, el total, la factura con IVA y su pago a SV. Las pilas de arriba la filtran.',
-    semanas: 'Lo que se le entrega a SV cada día. Lo de las devoluciones del WorkFlow que se terminaron de pagar de lunes a domingo se entrega el miércoles siguiente (o el siguiente día hábil); lo de antes, el día que se capturó. Al entregarlo se marca «Entregado».',
+    semanas: 'Escoge las devoluciones que se le pagan a SV y regístralas: «Ya se le pagó», con la fecha en que se le pagó, o «Programar pago», para el día que se le va a pagar. Abajo, cada pago con sus devoluciones: ábrelo para marcarlo pagado, cambiarlo o cancelarlo. Las del WorkFlow salen aquí cuando el cliente termina de pagar su factura.',
     devs: 'Cada devolución con su factura (la sube Elisa Mata y entra sola, incluida): el monto devuelto, si ya se pagó, el costo SV, la utilidad y la comisión.',
     porfac: 'Ya le depositaron al cliente y falta su factura; la sube Elisa Mata en el Panel de trabajo.',
     cobra: 'Por cliente: si lleva factura, su porcentaje del monto devuelto (antes de IVA) y si lleva costo SV. Arriba, el % SV que se usa para todos.'
@@ -1377,18 +1407,19 @@ tr.click:hover td{background:var(--navy-soft)}
     numeritos();
     // pestañas
     $('n-lista').textContent = (d.lista || []).length;
-    $('n-semanas').textContent = pend.length; $('n-devs').textContent = L.length; $('n-porfac').textContent = F.length; $('n-cobra').textContent = C.length;
+    $('n-semanas').textContent = (d.sv_resumen || {}).n_elegibles || 0; $('n-devs').textContent = L.length; $('n-porfac').textContent = F.length; $('n-cobra').textContent = C.length;
     document.querySelectorAll('[data-dt]').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-dt') === k)); });
     document.querySelectorAll('[data-dp]').forEach(function (x) { x.hidden = x.getAttribute('data-dp') !== k; });
     $('dev-ayuda').textContent = AYUDA_DEV[k];
     $('d-sv-fila').hidden = k !== 'cobra';
     $('d-con-agrega').hidden = !(cap && k === 'cobra');
     $('d-lis-agrega').hidden = !(cap && k === 'lista');
+    $('d-lis-pagar').hidden = !(cap && k === 'lista' && ((d.sv_resumen || {}).n_elegibles || 0) > 0);
     $('d-lis-fila').hidden = k !== 'lista';
-    $('x-dev').hidden = k !== 'devs' && k !== 'lista';
+    $('x-dev').hidden = k !== 'devs' && k !== 'lista' && k !== 'semanas';
     $('h-dev').textContent = { lista: 'Devoluciones de IVA y su pago a SV', semanas: 'Pagos a SV', devs: 'Devoluciones con su factura', porfac: 'Depositadas, por facturar', cobra: 'Lo que se cobra de cada cliente' }[k];
-    $('dev-sub').textContent = { lista: plural((d.lista || []).length, 'devolución', 'devoluciones') + ' · las de antes del WorkFlow y las nuevas', semanas: plural(pend.length, 'semana', 'semanas') + ' por entregar · ' + plural(S.length, 'semana', 'semanas') + ' en total', devs: plural(L.length, 'devolución', 'devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre', porfac: plural(F.length, 'devolución', 'devoluciones'), cobra: plural(C.length, 'cliente capturado', 'clientes capturados') }[k];
-    var cuantos = { lista: (d.lista || []).length, semanas: S.length, devs: L.length, porfac: F.length, cobra: C.length }[k];
+    $('dev-sub').textContent = { lista: plural((d.lista || []).length, 'devolución', 'devoluciones') + ' · las de antes del WorkFlow y las nuevas', semanas: plural(+((d.sv_resumen || {}).n_elegibles) || 0, 'devolución por pagar', 'devoluciones por pagar') + ' · ' + plural((d.pagos || []).length, 'pago', 'pagos'), devs: plural(L.length, 'devolución', 'devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre', porfac: plural(F.length, 'devolución', 'devoluciones'), cobra: plural(C.length, 'cliente capturado', 'clientes capturados') }[k];
+    var cuantos = { lista: (d.lista || []).length, semanas: 1, devs: L.length, porfac: F.length, cobra: C.length }[k];
     $('dev-vacia').hidden = cuantos > 0;
     $('dev-vacia').textContent = { lista: 'Todavía no hay devoluciones.', semanas: 'Todavía no hay pagos SV.', devs: 'Todavía no hay devoluciones con su factura.', porfac: 'Ninguna por facturar.', cobra: 'Todavía no hay clientes capturados.' }[k];
     // % SV
@@ -1397,17 +1428,8 @@ tr.click:hover td{background:var(--navy-soft)}
     $('d-sv-n').textContent = d.sv_pct == null ? 'Falta capturarlo: sin él no se calcula el costo SV.' : '';
     // 260: todas las devoluciones con su pago a SV (la lista y su filtro)
     pintaListaDev();
-    // pago SV de cada día
-    $('t-dsem').tHead.innerHTML = '<tr><th>Se entrega</th><th>Semana (se terminaron de pagar)</th><th class="monto">Devoluciones</th><th class="monto">Costo SV</th><th>Entregado</th><th></th></tr>';
-    $('t-dsem').tBodies[0].innerHTML = S.map(function (x) {
-      return '<tr><td data-l="Se entrega" style="white-space:nowrap"><strong>' + esc(fecha(x.paga_el)) + '</strong></td>'
-        + '<td data-l="Semana">' + (x.semana ? esc(fecha(x.semana)) + ' al ' + esc(fecha(sumaDias(x.semana, 6))) : '<span class="mut">De antes del WorkFlow</span>')
-        + (x.n_antes && x.semana ? '<div class="mut">y ' + esc(x.n_antes) + ' de antes</div>' : '') + '</td>'
-        + '<td class="monto" data-l="Devoluciones">' + esc(x.n) + '</td><td class="monto" data-l="Costo SV"><strong>' + esc(dinero(x.costo)) + '</strong></td>'
-        + '<td data-l="Entregado">' + (x.entregado_el ? '<span class="chip ok">Entregado el ' + esc(fecha(x.entregado_el)) + '</span>' + (x.entregado_por ? ' <span class="mut">' + esc(x.entregado_por) + '</span>' : '') : x.toca ? '<span class="chip ojo">Toca entregar</span>' : '<span class="mut">Todavía no</span>') + '</td>'
-        + '<td class="ac" data-l="">' + (cap && !x.entregado_el && x.toca ? '<button class="btn chico acento" type="button" data-dentrega="' + esc(x.paga_el) + '">Entregado</button>' : '')
-        + (d.regresa && x.entregado_el ? '<button class="btn chico" type="button" data-dregresa="' + esc(x.paga_el) + '">Regresar</button>' : '') + '</td></tr>';
-    }).join('');
+    // 269: los pagos a SV (escoger cuáles, pagadas con su fecha, programar) y cada pago
+    pintaPagosSv();
     // devoluciones con su factura
     $('t-ddev').tHead.innerHTML = '<tr><th>Cliente</th><th>Devolución</th><th class="monto">Monto devuelto</th><th class="monto">%</th><th>Factura</th><th class="monto">Subtotal</th><th>Pago</th><th class="monto">Costo SV</th><th class="monto">Utilidad</th><th class="monto">Comisión</th><th>Pago SV</th></tr>';
     $('t-ddev').tBodies[0].innerHTML = L.map(function (x) {
@@ -1468,8 +1490,10 @@ tr.click:hover td{background:var(--navy-soft)}
     if (x.estado === 'pagado') {
       return '<span class="chip az">Pagado el ' + esc(fecha(x.entregado_el)) + '</span>'
         + (x.sv_pagado != null && Math.abs(Number(x.sv_pagado) - Number(x.sv)) > 0.005 ? '<div class="mut">se le pagaron ' + esc(dinero(x.sv_pagado)) + '</div>' : '')
-        + (x.entregado_por ? '<div class="mut">' + esc(x.entregado_por) + '</div>' : '');
+        + (x.entregado_por ? '<div class="mut">' + esc(x.entregado_por) + '</div>' : '')
+        + (x.pago_id ? '<div class="mut">pago SV #' + esc(x.pago_id) + '</div>' : '');
     }
+    if (x.estado === 'por_entregar' && x.pago_estado === 'programado') return '<span class="chip ojo">Programada</span><div class="mut">pago SV #' + esc(x.pago_id) + ' · el ' + esc(fecha(x.paga_el)) + '</div>';
     if (x.estado === 'por_entregar') return '<span class="chip ojo">Por entregar</span><div class="mut">toca el ' + esc(fecha(x.paga_el)) + '</div>';
     return '<span class="mut">' + esc({ cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago') + '</span>';
   }
@@ -1535,6 +1559,7 @@ tr.click:hover td{background:var(--navy-soft)}
     for (var a = anioHoy; a >= 2015; a--) anios += '<option value="' + a + '"' + (m && +m[0] === a ? ' selected' : '') + '>' + a + '</option>';
     var meses = MESES_L.map(function (t, i) { return '<option value="' + (i + 1) + '"' + (m && +m[1] === i + 1 ? ' selected' : '') + '>' + t + '</option>'; }).join('');
     var pago = x ? (x.estado === 'pagado' ? 'pagado' : x.estado === 'por_entregar' ? 'por_entregar' : 'sin_fecha') : 'por_entregar';
+    var enPago = !!(x && x.pago_id);   // 269: si ya está en un pago SV, su pago se maneja desde ese pago
     var fec = x ? String((pago === 'pagado' ? x.entregado_el : x.paga_el) || '').slice(0, 10) : hoy;
     abre(cab('Devoluciones de IVA', x ? x.cliente : 'Agregar devolución', x ? (x.mes_txt || '') : 'Una devolución que no vino del WorkFlow nuevo')
       + '<div class="cuerpo"><section class="sec"><div class="in campos">'
@@ -1544,9 +1569,10 @@ tr.click:hover td{background:var(--navy-soft)}
       + campo('dh-dev', 'Lo que devolvió el SAT', inp('dh-dev', x ? x.devuelto : '', ' inputmode="decimal" autocomplete="off"'))
       + campo('dh-svp', '% SV (sobre lo devuelto)', inp('dh-svp', x ? x.sv_pct : (d.sv_pct != null ? d.sv_pct : ''), ' inputmode="decimal" autocomplete="off"'))
       + campo('dh-pfp', '% PROFASE (sobre lo devuelto)', inp('dh-pfp', x ? x.pf_pct : '', ' inputmode="decimal" autocomplete="off"'))
-      + campo('dh-pago', 'Pago a SV', '<select id="dh-pago"><option value="por_entregar"' + (pago === 'por_entregar' ? ' selected' : '') + '>Por entregar</option>'
-              + '<option value="pagado"' + (pago === 'pagado' ? ' selected' : '') + '>Ya se le pagó</option><option value="sin_fecha"' + (pago === 'sin_fecha' ? ' selected' : '') + '>Sin fecha</option></select>')
-      + '<div class="campo" id="dh-fec-c"><label for="dh-fec" id="dh-fec-l"></label><input type="date" id="dh-fec" value="' + esc(fec) + '"></div>'
+      + campo('dh-pago', 'Pago a SV', '<select id="dh-pago"' + (enPago ? ' disabled' : '') + '><option value="por_entregar"' + (pago === 'por_entregar' ? ' selected' : '') + '>Por entregar</option>'
+              + '<option value="pagado"' + (pago === 'pagado' ? ' selected' : '') + '>Ya se le pagó</option><option value="sin_fecha"' + (pago === 'sin_fecha' ? ' selected' : '') + '>Sin fecha</option></select>'
+              + (enPago ? '<span class="mut">Está en el pago SV #' + esc(x.pago_id) + ': su pago se cambia desde «Pagos a SV».</span>' : ''))
+      + '<div class="campo" id="dh-fec-c"><label for="dh-fec" id="dh-fec-l"></label><input type="date" id="dh-fec" value="' + esc(fec) + '"' + (enPago ? ' disabled' : '') + '></div>'
       + campo('dh-nota', 'Nota (opcional)', '<textarea id="dh-nota" maxlength="600">' + esc(x ? x.nota : '') + '</textarea>', true)
       + '</div><p class="mut" style="margin:8px 0 0">Lo de SV, lo de PROFASE, el total y la factura con IVA los calcula el sistema con lo devuelto y sus porcentajes.</p></section>'
       + '<div class="msg" id="v-msg" hidden></div>'
@@ -1623,25 +1649,232 @@ tr.click:hover td{background:var(--navy-soft)}
     catch (e) { error(falla(e)); }
     b.disabled = false;
   }
-  async function devEntrega(b) {
-    var f = b.getAttribute('data-dentrega');
-    if (!(await pregunta('¿Ya se entregó el pago SV del ' + fecha(f) + '? A Héctor Daniel Nava le llega el aviso.'))) return;
-    b.disabled = true;
-    try { DEV.d = await rpc('cdir_dev_entrega', { p_paga_el: f }); pintaDev(); avisa('Listo: quedó marcado «Entregado».'); if (VISTA === 'res') pintaRes(); }
-    catch (e) { error(falla(e)); b.disabled = false; }
+  /* ---------- 269: los pagos a SV (269_pagos_sv.sql; Héctor Daniel Nava, 4-nov-2026, 19:10: «cómo poder seleccionar cuáles son
+     los que se le van a pagar y poderle poner pagadas y en qué fecha y demás para llevar un control de los pagos hacia sv»).
+     Se escogen las devoluciones por pagar y se registran (pagadas con su fecha o programadas); cada pago se abre para marcarlo
+     pagado, cambiarlo, cancelarlo o (la dirección) regresarlo. La base decide qué se puede escoger, los montos y quién puede
+     qué; aquí solo se suma lo escogido para enseñarlo. ---------- */
+  var FORMAS = { '': 'Sin decir', efectivo: 'Efectivo', transferencia: 'Transferencia', otra: 'Otra' };
+  var SV_EST = { programado: 'Programado', pagado: 'Pagado', cancelado: 'Cancelado', regresado: 'Regresado' };
+  function hoyDev() { return String((DEV.d || {}).hoy || '').slice(0, 10); }
+  function porPagarSv() {
+    return ((DEV.d || {}).lista || []).filter(function (x) { return x.elegible; }).sort(function (a, b) {
+      var fa = String(a.paga_el || '9999').slice(0, 10), fb = String(b.paga_el || '9999').slice(0, 10);
+      return fa.localeCompare(fb) || String(a.cliente).localeCompare(String(b.cliente)) || String(a.mes || '').localeCompare(String(b.mes || ''));
+    });
   }
-  function devRegresaForma(f) {
-    EDITA = { tipo: 'dreg', f: f };
-    abre(cab('Devoluciones de IVA', 'Regresar «Entregado»', 'Pago SV del ' + fecha(f))
-      + '<div class="cuerpo"><section class="sec"><div class="in campos">' + campo('dr-mo', 'Por qué se regresa (queda anotado)', '<textarea id="dr-mo" maxlength="300"></textarea>', true)
-      + '</div></section><div class="msg" id="v-msg" hidden></div><div class="acciones"><button class="btn peligro" type="button" id="dr-ok">Regresar</button></div></div>');
-    try { $('dr-mo').focus(); } catch (e) {}
+  function svToca(x) { return !!x.paga_el && String(x.paga_el).slice(0, 10) <= hoyDev(); }
+  function svEscogidas() { return porPagarSv().filter(function (x) { return SVSEL[x.clave]; }); }
+  function svEstado(g) {
+    if (g.estado === 'programado') return '<span class="chip ojo">' + (String(g.programado_el).slice(0, 10) <= hoyDev() ? 'Ya toca' : 'Programado') + '</span><div class="mut">para el ' + esc(fecha(g.programado_el)) + '</div>';
+    if (g.estado === 'pagado') return '<span class="chip ok">Pagado el ' + esc(fecha(g.pagado_el)) + '</span>';
+    return '<span class="chip">' + esc(SV_EST[g.estado] || g.estado) + '</span>' + (g.cerrado_en ? '<div class="mut">el ' + esc(fechaHora(g.cerrado_en)) + '</div>' : '');
   }
-  async function devRegresa(b) {
-    if (!EDITA || EDITA.tipo !== 'dreg') return;
+  function pintaPagosSv() {
+    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, L = porPagarSv(), G = d.pagos || [];
+    Object.keys(SVSEL).forEach(function (k) { if (!L.some(function (x) { return x.clave === k; })) delete SVSEL[k]; });   // lo que ya no se puede escoger se suelta
+    pintaBarSv();
+    $('t-dsel').tHead.innerHTML = '<tr><th>Por pagar a SV</th><th>Mes</th><th class="monto">Lo de SV</th><th>Cuándo toca</th></tr>';
+    $('t-dsel').tBodies[0].innerHTML = L.map(function (x) {
+      var si = !!SVSEL[x.clave];
+      return '<tr' + (cap ? ' class="click' + (si ? ' sel' : '') + '" tabindex="0" data-svrow="' + esc(x.clave) + '"' : '') + '>'
+        + '<td class="w" data-l="Cliente"><div class="svcli">'
+        + (cap ? '<input type="checkbox" class="svck" data-svck="' + esc(x.clave) + '"' + (si ? ' checked' : '') + ' aria-label="Escoger ' + esc(x.cliente) + ' ' + esc(x.mes_txt) + '">' : '')
+        + '<span><span class="rs">' + esc(x.cliente) + '</span>' + (x.origen === 'workflow' ? '<div class="mut">del WorkFlow' + (x.folio ? ' · factura ' + esc(x.folio) : '') + '</div>' : '') + '</span></div></td>'
+        + '<td data-l="Mes" style="white-space:nowrap">' + esc(x.mes_txt) + '</td>'
+        + '<td class="monto" data-l="Lo de SV"><strong>' + esc(dinero(x.sv)) + '</strong></td>'
+        + '<td data-l="Cuándo toca">' + (!x.paga_el ? '<span class="mut">Sin fecha</span>' : svToca(x) ? '<span class="chip ojo">Ya toca</span><div class="mut">desde el ' + esc(fecha(x.paga_el)) + '</div>'
+              : '<span class="mut">Toca el ' + esc(fecha(x.paga_el)) + '</span>') + '</td></tr>';
+    }).join('');
+    $('t-dsel').tFoot.innerHTML = L.length > 1 ? '<tr><td class="w" data-l="">Por pagar a SV</td><td data-l=""></td><td class="monto" data-l="Lo de SV">' + esc(dinero(sumaDev(L, 'sv'))) + '</td><td data-l=""></td></tr>' : '';
+    $('sv-sel-vacia').hidden = L.length > 0;
+    var np = G.filter(function (g) { return g.estado === 'programado'; }).length, ng = G.filter(function (g) { return g.estado === 'pagado'; }).length;
+    $('sv-pag-sub').textContent = G.length ? plural(np, 'programado', 'programados') + ' · ' + plural(ng, 'pagado', 'pagados') + ' · ábrelo para ver sus devoluciones' : ' ';
+    $('t-dpag').tHead.innerHTML = '<tr><th>Pago</th><th>Estado</th><th class="monto">Devoluciones</th><th class="monto">Lo de SV</th><th>Cómo</th><th>Registró</th></tr>';
+    $('t-dpag').tBodies[0].innerHTML = G.map(function (g) {
+      return '<tr class="click" tabindex="0" data-svpago="' + esc(g.id) + '">'
+        + '<td data-l="Pago"><strong>#' + esc(g.id) + '</strong>' + (g.origen === 'excel' ? '<div class="mut">de tu Excel IVAS</div>' : '') + (g.nota ? '<div class="mut">' + esc(g.nota) + '</div>' : '') + '</td>'
+        + '<td data-l="Estado">' + svEstado(g) + '</td>'
+        + '<td class="monto" data-l="Devoluciones">' + esc(g.n) + '</td>'
+        + '<td class="monto" data-l="Lo de SV"><strong>' + esc(dinero(g.monto)) + '</strong></td>'
+        + '<td data-l="Cómo">' + esc(g.forma ? FORMAS[g.forma] : '') + '</td>'
+        + '<td data-l="Registró"><span class="mut">' + esc(g.creado_por || '') + '</span></td></tr>';
+    }).join('');
+    $('sv-pag-vacia').hidden = G.length > 0;
+  }
+  function pintaBarSv() {
+    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, L = porPagarSv(), E = svEscogidas(), tocan = L.filter(svToca);
+    $('sv-bar').hidden = !cap || !L.length;
+    if (!cap) return;
+    $('sv-bar').innerHTML = '<span class="cuenta">' + (E.length ? '<strong>' + esc(plural(E.length, 'escogida', 'escogidas')) + '</strong> · ' + esc(dinero(sumaDev(E, 'sv'))) + ' de SV' : 'Escoge las que se le pagan a SV') + '</span>'
+      + '<span class="acciones">'
+      + (tocan.length && tocan.some(function (x) { return !SVSEL[x.clave]; }) ? '<button class="btn chico" type="button" data-svtodas="toca">Escoger las que ya tocan (' + tocan.length + ')</button>' : '')
+      + (E.length ? '<button class="btn chico" type="button" data-svtodas="nada">Quitar lo escogido</button>' : '')
+      + '<button class="btn chico" type="button" data-svreg="programado"' + (E.length ? '' : ' disabled') + '>Programar pago</button>'
+      + '<button class="btn chico acento" type="button" data-svreg="pagado"' + (E.length ? '' : ' disabled') + '>Ya se le pagó</button></span>';
+  }
+  function svToggle(c, v) {
+    if (v == null ? !SVSEL[c] : v) SVSEL[c] = true; else delete SVSEL[c];
+    var tr = document.querySelector('tr[data-svrow="' + c + '"]');
+    if (tr) { tr.classList.toggle('sel', !!SVSEL[c]); var ck = tr.querySelector('input.svck'); if (ck) ck.checked = !!SVSEL[c]; }
+    pintaBarSv();
+  }
+  function svTodas(q) {
+    if (q === 'nada') SVSEL = {}; else porPagarSv().forEach(function (x) { if (svToca(x)) SVSEL[x.clave] = true; });
+    pintaPagosSv();
+  }
+  function selForma(v) { return '<select id="sv-forma">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '"' + (k === (v || '') ? ' selected' : '') + '>' + FORMAS[k] + '</option>'; }).join('') + '</select>'; }
+  function listaSv(L, quitar) {
+    return '<ul class="lista svlis">' + L.map(function (x) {
+      return '<li' + (x.ok === false ? ' class="no-ok"' : '') + '><span class="t">' + esc(x.cliente) + '<div class="mut">' + esc(x.mes_txt) + '</div>'
+        + (x.ok === false ? '<div class="mut">Ya no se puede pagar: quítala del pago.</div>' : '') + '</span>'
+        + '<span class="acciones"><span class="m">' + esc(dinero(x.sv)) + '</span>' + (quitar ? '<button class="btn chico" type="button" data-svquita="' + esc(x.clave) + '">Quitar</button>' : '') + '</span></li>';
+    }).join('') + (L.length > 1 ? '<li class="tot"><span class="t">Total</span><span class="m">' + esc(dinero(sumaDev(L, 'sv'))) + '</span></li>' : '') + '</ul>';
+  }
+  function fecCampo(l, v) { return '<div class="campo"><label for="sv-fec" id="sv-fec-l">' + esc(l) + '</label><input type="date" id="sv-fec" value="' + esc(String(v || '').slice(0, 10)) + '"></div>'; }
+  function svRegistraForma(como) {
+    var E = svEscogidas();
+    if (!E.length) { error('Escoge al menos una devolución.'); return; }
+    EDITA = { tipo: 'svreg', claves: E.map(function (x) { return x.clave; }) };
+    abre(cab('Devoluciones de IVA', 'Registrar pago a SV', plural(E.length, 'devolución', 'devoluciones') + ' · ' + dinero(sumaDev(E, 'sv')) + ' de SV')
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + campo('sv-como', '¿Cómo va?', '<select id="sv-como"><option value="pagado"' + (como === 'pagado' ? ' selected' : '') + '>Ya se le pagó</option>'
+              + '<option value="programado"' + (como === 'programado' ? ' selected' : '') + '>Se le va a pagar (programarlo)</option></select>')
+      + fecCampo('', hoyDev())
+      + campo('sv-forma', 'Cómo se paga', selForma(''))
+      + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600" placeholder="A quién se le entregó, la referencia…"></textarea>', true)
+      + '</div></section>'
+      + sec('Las devoluciones de este pago', listaSv(E))
+      + '<div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="sv-reg-ok">Registrar</button></div></div>');
+    svFecLabel();
+  }
+  function svFecLabel() { var c = $('sv-como'); if (c && $('sv-fec-l')) $('sv-fec-l').textContent = c.value === 'pagado' ? 'Se le pagó el (la fecha de Amazon)' : 'Se le va a pagar el'; }
+  async function svRegistra(b) {
+    if (!EDITA || EDITA.tipo !== 'svreg') return;
+    var p = { claves: EDITA.claves, como: $('sv-como').value, fecha: $('sv-fec').value, forma: $('sv-forma').value, nota: $('sv-nota').value.trim() };
+    if (!p.fecha) { msgEn('Escribe la fecha.'); return; }
     b.disabled = true;
-    try { DEV.d = await rpc('cdir_dev_regresa', { p_paga_el: EDITA.f, p_motivo: $('dr-mo').value }); cierra(); pintaDev(); avisa('Se regresó el «Entregado».'); }
+    try {
+      var r = await rpc('cdir_sv_registra', { p: p }); DEV.d = r; SVSEL = {}; cierra(); pintaDev();
+      avisa(p.como === 'pagado' ? 'Listo: quedó el pago SV #' + r.nuevo + ', pagado el ' + fecha(p.fecha) + '.' : 'Listo: quedó programado el pago SV #' + r.nuevo + ' para el ' + fecha(p.fecha) + '.');
+      if (VISTA === 'res') pintaRes();
+    } catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  function svFicha(id) {
+    var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, g = (d.pagos || []).filter(function (x) { return x.id === id; })[0];
+    if (!g) { cierra(); return; }
+    EDITA = { tipo: 'svpago', id: g.id, g: g };
+    var F = [['Estado', svEstado(g)]];
+    if (g.programado_el) F.push(['Programado para', esc(fecha(g.programado_el))]);
+    if (g.pagado_el) F.push(['Se le pagó el', '<strong>' + esc(fecha(g.pagado_el)) + '</strong>']);
+    F.push(['Cómo', esc(FORMAS[g.forma || ''])]);
+    if (g.nota) F.push(['Nota', esc(g.nota)]);
+    F.push(['Lo registró', esc(g.creado_por || '') + (g.origen !== 'excel' && g.creado ? ' · ' + esc(fechaHora(g.creado)) : '')]);
+    if (g.pagado_por && g.pagado_por !== g.creado_por) F.push(['Lo marcó pagado', esc(g.pagado_por) + (g.pagado_en ? ' · ' + esc(fechaHora(g.pagado_en)) : '')]);
+    if (g.cerrado_por) F.push([g.estado === 'cancelado' ? 'Lo canceló' : 'Lo regresó', esc(g.cerrado_por) + (g.cerrado_en ? ' · ' + esc(fechaHora(g.cerrado_en)) : '') + (g.motivo ? '<div class="mut">' + esc(g.motivo) + '</div>' : '')]);
+    var bot = '';
+    if (g.estado === 'programado' && cap) bot = '<button class="btn acento" type="button" id="sv-a-paga">Marcar pagado</button><button class="btn" type="button" id="sv-a-cambia">Cambiar</button><button class="btn peligro" type="button" id="sv-a-cancela">Cancelar el pago</button>';
+    else if (g.estado === 'pagado') bot = (cap ? '<button class="btn" type="button" id="sv-a-cambia">Cambiar</button>' : '') + (d.regresa ? '<button class="btn peligro" type="button" id="sv-a-regresa">Regresar</button>' : '');
+    var cerrado = g.estado === 'cancelado' || g.estado === 'regresado';
+    abre(cab('Devoluciones de IVA', 'Pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · ' + dinero(g.monto) + ' de SV')
+      + '<div class="cuerpo">'
+      + sec('Datos del pago', '<div class="in dl">' + F.map(function (f) { return '<span>' + esc(f[0]) + '</span><span class="v">' + f[1] + '</span>'; }).join('') + '</div>')
+      + sec(cerrado ? 'Las devoluciones que traía' : 'Sus devoluciones', listaSv(g.devs || [], g.estado === 'programado' && cap && (g.devs || []).length > 1))
+      + (cerrado ? '<p class="mut" style="margin:0">' + (g.estado === 'cancelado' ? 'Se canceló: sus devoluciones volvieron a quedar por pagar.' : 'Se regresó: sus devoluciones volvieron a quedar por pagar a SV.') + '</p>' : '')
+      + '<div class="msg" id="v-msg" hidden></div>'
+      + (bot ? '<div class="acciones">' + bot + '</div>' : '') + '</div>');
+  }
+  function volverSv(id) { return '<button class="btn" type="button" data-svver="' + esc(id) + '">‹ Volver al pago</button>'; }
+  function svPagaForma() {
+    var g = EDITA && EDITA.g; if (!g) return;
+    EDITA = { tipo: 'svpaga', id: g.id, g: g };
+    abre(cab('Devoluciones de IVA', 'Marcar pagado el pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · ' + dinero(g.monto) + ' de SV')
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + fecCampo('Se le pagó el (la fecha de Amazon)', hoyDev())
+      + campo('sv-forma', 'Cómo se pagó', selForma(g.forma))
+      + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600">' + esc(g.nota || '') + '</textarea>', true)
+      + '</div></section><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="sv-paga-ok">Marcar pagado</button>' + volverSv(g.id) + '</div></div>');
+  }
+  async function svPaga(b) {
+    if (!EDITA || EDITA.tipo !== 'svpaga') return;
+    var id = EDITA.id, f = $('sv-fec').value; if (!f) { msgEn('Escribe la fecha en que se le pagó.'); return; }
+    b.disabled = true;
+    try {
+      DEV.d = await rpc('cdir_sv_paga', { p_pago: id, p: { fecha: f, forma: $('sv-forma').value, nota: $('sv-nota').value.trim() } });
+      pintaDev(); svFicha(id); avisa('Listo: el pago SV #' + id + ' quedó pagado el ' + fecha(f) + '.'); if (VISTA === 'res') pintaRes();
+    } catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  function svCambiaForma() {
+    var g = EDITA && EDITA.g, d = DEV.d || {}; if (!g) return;
+    var prog = g.estado === 'programado', otras = prog ? porPagarSv() : [];
+    EDITA = { tipo: 'svcambia', id: g.id, g: g };
+    abre(cab('Devoluciones de IVA', 'Cambiar el pago SV #' + g.id, prog ? 'Programado para el ' + fecha(g.programado_el) : 'Pagado el ' + fecha(g.pagado_el))
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + (prog ? fecCampo('Se le va a pagar el', g.programado_el)
+         : d.regresa || g.origen === 'excel' ? fecCampo('Se le pagó el (la fecha de Amazon)', g.pagado_el)
+         : '<div class="campo"><label for="sv-fec-ro">Se le pagó el</label><input id="sv-fec-ro" readonly value="' + esc(fecha(g.pagado_el)) + '"><span class="mut">La fecha de un pago ya registrado la cambia Héctor Daniel Nava.</span></div>')
+      + campo('sv-forma', 'Cómo', selForma(g.forma))
+      + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600">' + esc(g.nota || '') + '</textarea>', true)
+      + '</div></section>'
+      + (otras.length ? sec('Agregarle devoluciones (opcional)', '<ul class="lista svlis">' + otras.map(function (x) {
+          return '<li class="ck"><input type="checkbox" class="svck" id="sv-ag-' + esc(x.clave) + '" data-svag="' + esc(x.clave) + '"><label class="t" for="sv-ag-' + esc(x.clave) + '">' + esc(x.cliente)
+            + '<div class="mut">' + esc(x.mes_txt) + (x.paga_el ? ' · toca el ' + esc(fecha(x.paga_el)) : '') + '</div></label><span class="m">' + esc(dinero(x.sv)) + '</span></li>';
+        }).join('') + '</ul>') : '')
+      + '<div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="sv-cambia-ok">Guardar</button>' + volverSv(g.id) + '</div></div>');
+  }
+  async function svCambia(b) {
+    if (!EDITA || EDITA.tipo !== 'svcambia') return;
+    var id = EDITA.id, p = { forma: $('sv-forma').value, nota: $('sv-nota').value.trim() }, ag = [];
+    if ($('sv-fec')) { if (!$('sv-fec').value) { msgEn('Escribe la fecha.'); return; } p.fecha = $('sv-fec').value; }
+    document.querySelectorAll('[data-svag]').forEach(function (c) { if (c.checked) ag.push(c.getAttribute('data-svag')); });
+    if (ag.length) p.agrega = ag;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_sv_cambia', { p_pago: id, p: p }); pintaDev(); svFicha(id); avisa('Guardado.'); }
     catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  async function svQuita(b) {
+    var g = EDITA && EDITA.g; if (!g) return;
+    var c = b.getAttribute('data-svquita'), x = (g.devs || []).filter(function (y) { return y.clave === c; })[0];
+    if (!(await pregunta('¿Quitar ' + (x ? x.cliente + ' (' + x.mes_txt + ')' : 'esta devolución') + ' del pago SV #' + g.id + '? Vuelve a quedar por pagar.'))) return;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_sv_cambia', { p_pago: g.id, p: { quita: [c] } }); pintaDev(); svFicha(g.id); avisa('Se quitó del pago.'); }
+    catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  function svMotivoForma(tipo) {
+    var g = EDITA && EDITA.g; if (!g) return;
+    var can = tipo === 'svcancela';
+    EDITA = { tipo: tipo, id: g.id, g: g };
+    abre(cab('Devoluciones de IVA', (can ? 'Cancelar' : 'Regresar') + ' el pago SV #' + g.id, can ? 'Sus devoluciones vuelven a quedar por pagar.' : 'Sus devoluciones vuelven a quedar por pagar a SV; el pago se queda guardado como regresado.')
+      + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + campo('sv-mo', can ? 'Por qué se cancela (queda anotado)' : 'Por qué se regresa (queda anotado)', '<textarea id="sv-mo" maxlength="300"></textarea>', true)
+      + '</div></section><div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn peligro" type="button" id="sv-mo-ok">' + (can ? 'Cancelar el pago' : 'Regresar') + '</button>' + volverSv(g.id) + '</div></div>');
+    try { $('sv-mo').focus(); } catch (e) {}
+  }
+  async function svMotivo(b) {
+    if (!EDITA || (EDITA.tipo !== 'svcancela' && EDITA.tipo !== 'svregresa')) return;
+    var id = EDITA.id, can = EDITA.tipo === 'svcancela', mo = $('sv-mo').value;
+    b.disabled = true;
+    try {
+      DEV.d = can ? await rpc('cdir_sv_cancela', { p_pago: id, p_motivo: mo }) : await rpc('cdir_sv_regresa', { p_pago: id, p_motivo: mo });
+      pintaDev(); svFicha(id); avisa(can ? 'Se canceló el pago SV #' + id + '.' : 'Se regresó el pago SV #' + id + '.'); if (VISTA === 'res') pintaRes();
+    } catch (e) { msgEn(falla(e)); b.disabled = false; }
+  }
+  function excelPagosSv(b) {
+    var G = (DEV.d || {}).pagos || [], L = porPagarSv(), filas = [];
+    G.forEach(function (g) {
+      (g.devs || []).forEach(function (x) {
+        filas.push(['#' + g.id, SV_EST[g.estado] || g.estado, fecha(g.programado_el), fecha(g.pagado_el), g.forma ? FORMAS[g.forma] : '', x.cliente || '', x.mes_txt || '', Number(x.sv),
+                    g.nota || '', g.creado_por || '', g.motivo || '']);
+      });
+    });
+    L.forEach(function (x) { filas.push(['', 'Por pagar', x.paga_el ? fecha(x.paga_el) : 'Sin fecha', '', '', x.cliente || '', x.mes_txt || '', Number(x.sv), '', '', '']); });
+    excel(b, 'Pagos a SV PROFASE', 'Pagos a SV', ['Comisiones de dirección', plural(G.length, 'pago', 'pagos') + ' · ' + plural(L.length, 'devolución por pagar', 'devoluciones por pagar')],
+      ['Pago', 'Estado', 'Programado / toca', 'Se le pagó el', 'Cómo', 'Cliente', 'Mes', 'Lo de SV', 'Nota', 'Registró', 'Motivo'],
+      filas, [8], [9, 12, 16, 14, 13, 32, 10, 15, 30, 20, 30]);
   }
   function excelDev(b) {
     var L = (DEV.d || {}).devoluciones || [];
@@ -1729,8 +1962,9 @@ tr.click:hover td{background:var(--navy-soft)}
   $('p-hoy').onclick = function () { cambiaPer(A0, M0); };
   $('p-mes').onchange = function () { cambiaPer(PER.anio, +this.value); };
   $('p-anio').onchange = function () { cambiaPer(+this.value, PER.mes); };
-  $('x-dev').onclick = function () { if (DEV.tab === 'lista') excelListaDev(this); else excelDev(this); };
+  $('x-dev').onclick = function () { if (DEV.tab === 'lista') excelListaDev(this); else if (DEV.tab === 'semanas') excelPagosSv(this); else excelDev(this); };
   $('d-lis-agrega').onclick = function () { devHisForma(null); };
+  $('d-lis-pagar').onclick = function () { DEV.tab = 'semanas'; pintaDev(); try { $('h-dev').scrollIntoView({ block: 'nearest' }); } catch (er) {} };
   $('d-lis-cli').onchange = function () { DLIS.cli = this.value; pintaListaDev(); };
   $('d-lis-est').onchange = function () { DLIS.est = this.value; pintaPilasDev(DEV.d || {}); pintaListaDev(); };
   $('d-sv-ok').onclick = function () { devSv(this); };
@@ -1756,7 +1990,7 @@ tr.click:hover td{background:var(--navy-soft)}
   document.addEventListener('click', function (ev) {
     var t = ev.target; if (!t.closest) return;
     var sc = t.closest('[data-sec]'); if (sc) { muestra(sc.getAttribute('data-sec')); return; }
-    var ir = t.closest('[data-ir]'); if (ir && !t.closest('[data-dentrega]')) {
+    var ir = t.closest('[data-ir]'); if (ir) {
       var im = ir.getAttribute('data-irmes'); if (im && /^\d{4}-\d{2}$/.test(im)) { PER.anio = +im.slice(0, 4); PER.mes = +im.slice(5, 7); periodos(); }
       muestra(ir.getAttribute('data-ir'), ir.getAttribute('data-irsub') || null); return;
     }
@@ -1771,6 +2005,22 @@ tr.click:hover td{background:var(--navy-soft)}
     if (dp) { var kp = dp.getAttribute('data-dpila'), filtra = kp === 'por_entregar' || kp === 'pagado' || kp === 'sin_fecha';
               DLIS.est = filtra ? (DEV.tab === 'lista' && DLIS.est === kp ? '' : kp) : ''; DEV.tab = 'lista'; pintaDev();
               try { $('h-dev').scrollIntoView({ block: 'nearest' }); } catch (er) {} return; }
+    // 269: los pagos a SV
+    var svc = t.closest('[data-svck]'); if (svc) { svToggle(svc.getAttribute('data-svck'), svc.checked); return; }
+    var svr = t.closest('tr[data-svrow]'); if (svr) { svToggle(svr.getAttribute('data-svrow')); return; }
+    var svt = t.closest('[data-svtodas]'); if (svt) { svTodas(svt.getAttribute('data-svtodas')); return; }
+    var svg = t.closest('[data-svreg]'); if (svg) { if (!svg.disabled) svRegistraForma(svg.getAttribute('data-svreg')); return; }
+    var svp = t.closest('tr[data-svpago]'); if (svp) { svFicha(+svp.getAttribute('data-svpago')); return; }
+    var svv = t.closest('[data-svver]'); if (svv) { svFicha(+svv.getAttribute('data-svver')); return; }
+    var svq = t.closest('[data-svquita]'); if (svq) { svQuita(svq); return; }
+    if (t.id === 'sv-reg-ok') { svRegistra(t); return; }
+    if (t.id === 'sv-a-paga') { svPagaForma(); return; }
+    if (t.id === 'sv-a-cambia') { svCambiaForma(); return; }
+    if (t.id === 'sv-a-cancela') { svMotivoForma('svcancela'); return; }
+    if (t.id === 'sv-a-regresa') { svMotivoForma('svregresa'); return; }
+    if (t.id === 'sv-paga-ok') { svPaga(t); return; }
+    if (t.id === 'sv-cambia-ok') { svCambia(t); return; }
+    if (t.id === 'sv-mo-ok') { svMotivo(t); return; }
     var dh = t.closest('tr[data-dhis]');
     if (dh) { var hid = +dh.getAttribute('data-dhis'); devHisForma(((DEV.d || {}).lista || []).filter(function (y) { return y.id === hid; })[0] || null); return; }
     if (t.id === 'dh-guarda') { devHisGuarda(t); return; }
@@ -1788,9 +2038,6 @@ tr.click:hover td{background:var(--navy-soft)}
     var ed = t.closest('tr[data-edita]'); if (ed) { var kk = ed.getAttribute('data-edita').split(':'); forma(kk[0], +kk[1]); return; }
     if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
     var dc = t.closest('tr[data-dcon]'); if (dc) { devConForma(+dc.getAttribute('data-dcon')); return; }
-    if (t.getAttribute('data-dentrega')) { devEntrega(t); return; }
-    if (t.getAttribute('data-dregresa')) { devRegresaForma(t.getAttribute('data-dregresa')); return; }
-    if (t.id === 'dr-ok') { devRegresa(t); return; }
     if (t.id === 'dc-guarda') { devConGuarda(t, false); return; }
     if (t.id === 'dc-quita') { devConGuarda(t, true); return; }
     if (t.id === 'aj-pct-ok') { guardaPct(t); return; }
@@ -1815,6 +2062,7 @@ tr.click:hover td{background:var(--navy-soft)}
   document.addEventListener('change', function (ev) {
     var t = ev.target;
     if (t.id === 'dh-pago' || t.id === 'dh-anio') { devHisFecha(); return; }
+    if (t.id === 'sv-como') { svFecLabel(); return; }
     if (t.getAttribute('data-kid')) {
       var id = +t.getAttribute('data-kid'), tipo = t.getAttribute('data-tipo');
       if (tipo === 'emp') { var e = EMP.filter(function (x) { return x.id === id; })[0]; catGuarda('emp', id, t.value, e ? e.activo : true); }
