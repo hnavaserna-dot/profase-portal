@@ -39,6 +39,9 @@
    El concentrado de los avisos que manda el SAT a sat@profase.com.mx («Nuevo mensaje en el Buzón Tributario de <RFC>»):
      - Liliana Lechuga recibe el aviso de lo nuevo y, con Francisco Rivera, asigna cada aviso a quien corresponde (uno o
        varios a la vez) o lo cierra como «Solo informativo». Quien lo tiene asignado le da seguimiento (notas, documentos).
+     - (296) «Asignar a» acepta a varias personas: una responsable y las demás de apoyo (equipoUI); escogen el equipo quien
+       asigna (la lista, con Jesús Fernando Gutiérrez) y la dirección (EST.equipo). En la tabla, todos, el responsable
+       primero; «Asignados a mí» y el filtro cuentan a cualquiera de ellos.
      - (293) Lo cierran los gerentes y la dirección con «Camino › Cerrado» (hace falta a quién se asignó, el concepto y al
        menos una nota en «Seguimiento»; el botón dice «Cerrar aviso») y lo reabren cambiando «Camino» (Héctor Daniel Nava,
        5-nov-2026, a la mejora de Francisco Rivera: «Solo gerentes y dirección»). En la tabla, debajo del concepto, la
@@ -184,6 +187,22 @@ tr.click:hover td{background:var(--navy-soft)}
 .falta .chip{white-space:normal}
 .op-off{opacity:.6;cursor:default!important}
 .msg-ventana{margin:0}
+/* (296) responsable y apoyos: en la tabla y en el aviso, uno debajo del otro (el responsable primero); en «Asignar a», la lista
+   con su papel, «Hacer responsable» y ✕ */
+.asg{display:grid;gap:2px;min-width:0}
+.asg .p{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:6px;min-width:0}
+.asg .nm{min-width:0;overflow-wrap:anywhere}
+.asg .rol{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.asg .p.resp .rol{color:var(--accent-ink)}
+.equipo{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.equipo li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border-top:1px solid var(--line);min-width:0}
+.equipo li:first-child{border-top:0}
+.equipo .n{flex:1 1 150px;min-width:0;font-weight:600;overflow-wrap:anywhere}
+.equipo .acc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.equipo .x{width:32px;height:32px;flex:none;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);font-size:18px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}
+.equipo .x:hover{color:var(--red);border-color:var(--red)}
+.equipo .x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.equipo li.vacio{color:var(--muted);font-size:13px}
 /* (202) el plazo y los dos caminos */
 .opciones{display:flex;flex-wrap:wrap;gap:6px 16px}
 .campo .opciones label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;color:var(--ink);cursor:pointer}
@@ -309,6 +328,23 @@ tr.click:hover td{background:var(--navy-soft)}
     var e = ESTADOS[f.estado] || [f.estado, '']; return chip(e[0], e[1]);
   }
   function cliente(f) { return f.razon || f.rfc; }
+  // (296) quién está en el aviso: el responsable («asignado») y sus apoyos (en el orden en que se agregaron)
+  function apoyosDe(f) { return Array.isArray(f.apoyos) ? f.apoyos : []; }
+  function enAviso(f, u) { return !!u && (f.asignado === u || apoyosDe(f).some(function (y) { return y.u === u; })); }
+  // en la tabla: todos, uno debajo del otro, el responsable primero (con su papel cuando hay apoyos)
+  function asignadosCelda(f) {
+    if (!f.asignado_n) return '<span class="mut">Sin asignar</span>';
+    var ap = apoyosDe(f);
+    if (!ap.length) return esc(f.asignado_n);
+    return '<div class="asg"><div class="p resp"><span class="nm">' + esc(f.asignado_n) + '</span><span class="rol">Responsable</span></div>'
+      + ap.map(function (y) { return '<div class="p"><span class="nm">' + esc(y.n || y.u) + '</span><span class="rol">Apoyo</span></div>'; }).join('') + '</div>';
+  }
+  function asignadosTexto(f) {
+    if (!f.asignado_n) return 'Sin asignar';
+    var ap = apoyosDe(f);
+    return ap.length ? f.asignado_n + ' (responsable); ' + ap.map(function (y) { return (y.n || y.u) + ' (apoyo)'; }).join('; ') : f.asignado_n;
+  }
+  var PEND = { abierto: 'abierto', proceso: 'en proceso', revision: 'en revisión', hecho: 'hecho', cancelado: 'cancelado' };
   // (293) el concepto arriba y, debajo, en letra chica, la última nota (recortada; completa en la ficha). Sin concepto, la nota
   // va donde decía «Sin concepto»
   function conceptoCelda(f) {
@@ -394,7 +430,7 @@ tr.click:hover td{background:var(--navy-soft)}
       + cs.map(function (c) { return '<option value="' + esc(c.k) + '">' + esc(c.t) + '</option>'; }).join('');
     $('f-concepto').value = vc || '';
     var personas = {};
-    FILAS.forEach(function (f) { if (f.asignado) personas[f.asignado] = f.asignado_n; });
+    FILAS.forEach(function (f) { if (f.asignado) personas[f.asignado] = f.asignado_n; apoyosDe(f).forEach(function (y) { personas[y.u] = y.n || y.u; }); });   // (296) y sus apoyos
     var va = $('f-asignado').value;
     $('f-asignado').innerHTML = '<option value="">Asignado a cualquiera</option><option value="-">Sin asignar</option>'
       + Object.keys(personas).sort(function (a, b) { return personas[a].localeCompare(personas[b]); })
@@ -428,7 +464,7 @@ tr.click:hover td{background:var(--navy-soft)}
         if (est === 'plazo' && !(f.limite && f.limite >= DATOS.hoy)) return false;
         if (est === 'vencido' && f.limite && f.limite >= DATOS.hoy) return false;
       } else {
-        if (est === 'mios') { if (f.asignado !== EST.yo || ['asignado', 'proceso'].indexOf(f.estado) < 0) return false; }
+        if (est === 'mios') { if (!enAviso(f, EST.yo) || ['asignado', 'proceso'].indexOf(f.estado) < 0) return false; }   // (296) también de apoyo
         else if (est === 'confirmar') { if (!abierto(f) || f.plazo) return false; }
         else if (est === 'abiertos') { if (!abierto(f)) return false; }
         else if (est === 'porvencer') { if (!porVencer(f)) return false; }
@@ -436,9 +472,9 @@ tr.click:hover td{background:var(--navy-soft)}
         if (con === '-' && f.concepto) return false;
         if (con && con !== '-' && f.concepto !== con) return false;
         if (asg === '-' && f.asignado) return false;
-        if (asg && asg !== '-' && f.asignado !== asg) return false;
+        if (asg && asg !== '-' && !enAviso(f, asg)) return false;   // (296) el responsable o cualquiera de sus apoyos
       }
-      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].join(' ')).indexOf(t) < 0) return false;
+      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; })).join(' ')).indexOf(t) < 0) return false;
       return true;
     });
   }
@@ -451,7 +487,7 @@ tr.click:hover td{background:var(--navy-soft)}
     $('lista-sub').textContent = (PES === 'cancel' ? 'Solo para consultar. Si el cliente no contesta en 3 días hábiles, se considera aceptada (art. 29-A del CFF). · ' : '')
       + L.length + (L.length === 1 ? ' aviso' : ' avisos') + ' del ' + fecha(DATOS.desde) + ' al ' + fecha(DATOS.hasta);
     $('thead').innerHTML = '<tr>' + (sel ? '<th class="chk"><input type="checkbox" id="sel-todos" aria-label="Seleccionar los de la página"></th>' : '')
-      + '<th>Fecha</th><th>Cliente</th><th>RFC</th>' + (PES === 'cancel' ? '<th>De quién</th><th>Plazo</th>' : '<th>Concepto</th><th>Asignado a</th><th>Estado</th>') + '</tr>';
+      + '<th>Fecha</th><th>Cliente</th><th>RFC</th>' + (PES === 'cancel' ? '<th>De quién</th><th>Plazo</th>' : '<th>Concepto</th><th id="th-asg">Asignado a</th><th>Estado</th>') + '</tr>';
     $('tbody').innerHTML = ver.map(function (f) {
       return '<tr class="click" data-id="' + f.id + '">' + (sel ? '<td class="chk"><input type="checkbox" data-sel="' + f.id + '"' + (SEL[f.id] ? ' checked' : '') + ' aria-label="Seleccionar"></td>' : '')
         + '<td class="nowrap" data-l="Fecha">' + esc(fecha(f.fecha)) + (f.hora ? ' <span class="mut">' + esc(f.hora) + '</span>' : '') + (f.origen === 'manual' ? '<div class="mut">Subido a mano</div>' : '') + '</td>'
@@ -460,7 +496,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + (PES === 'cancel'
           ? '<td data-l="De quién">' + esc(deQuien(f)) + '</td><td data-l="Plazo">' + estChip(f) + '</td>'
           : '<td data-l="Concepto">' + conceptoCelda(f) + '</td>'
-            + '<td data-l="Asignado a">' + (f.asignado_n ? esc(f.asignado_n) : '<span class="mut">Sin asignar</span>') + '</td>'
+            + '<td data-l="Asignado a">' + asignadosCelda(f) + '</td>'
             + '<td data-l="Estado">' + estChip(f) + (f.docs ? ' <span class="mut">· ' + f.docs + (f.docs === 1 ? ' documento' : ' documentos') + '</span>' : '')
             + (abierto(f) ? '<div style="margin-top:4px">' + plazoChip(f) + (f.camino === 'trabajo' ? ' ' + chip('Lleva trabajo', 'az') : '') + '</div>' : '') + '</td>')
         + '</tr>';
@@ -535,8 +571,62 @@ tr.click:hover td{background:var(--navy-soft)}
     return '<option value="">Escoge…</option>' + (EST.conceptos || []).filter(function (c) { return conCancel || c.k !== 'cancelacion'; })
       .map(function (c) { return '<option value="' + esc(c.k) + '"' + (c.k === sel ? ' selected' : '') + '>' + esc(c.t) + '</option>'; }).join('');
   }
-  function opcionesPersonas() {
-    return (EST.personas || []).map(function (p) { return { v: p.u, t: p.n }; });
+  function nombreDe(u) { var p = (EST.personas || []).filter(function (x) { return x.u === u; })[0]; return p ? p.n : u; }
+  /* (296) «Asignar a» con varias personas (mejora de Francisco Rivera): se escribe parte del nombre y se agrega una tras
+     otra; la primera es la responsable (siempre una sola; «Hacer responsable» la cambia) y las demás, apoyo. Al responsable
+     no se le quita mientras haya apoyos (antes se escoge otro). Una sola pieza: la usan el aviso y «varios a la vez».
+     o: {donde, id (el del campo, para su <label for>), equipo: [{u, n, rol}], nota, cambio} */
+  function equipoUI(o) {
+    var EQ = (o.equipo || []).map(function (p) { return { u: p.u, n: p.n || nombreDe(p.u), resp: p.rol === 'responsable' }; });
+    o.donde.innerHTML = '<div id="' + o.id + 'Box"></div><ul class="equipo" id="' + o.id + 'Lista" aria-live="polite"></ul>'
+      + '<div class="mut">' + esc(o.nota || 'La primera persona que agregas es la responsable; las demás, apoyo. Con «Hacer responsable» la cambias.') + '</div>';
+    var bq = null;
+    function opciones() { return (EST.personas || []).filter(function (p) { return !EQ.some(function (x) { return x.u === p.u; }); }).map(function (p) { return { v: p.u, t: p.n }; }); }
+    function pinta() {
+      EQ.sort(function (a, b) { return (b.resp ? 1 : 0) - (a.resp ? 1 : 0); });   // el responsable primero
+      $(o.id + 'Lista').innerHTML = EQ.length ? EQ.map(function (p) {
+        return '<li><span class="n">' + esc(p.n) + '</span><span class="acc">'
+          + (p.resp ? chip('Responsable', 'na') : chip('Apoyo', 'az') + '<button class="btn chico" type="button" data-eq-resp="' + esc(p.u) + '">Hacer responsable</button>')
+          + '<button class="x" type="button" data-eq-quita="' + esc(p.u) + '" aria-label="Quitar a ' + esc(p.n) + '" title="Quitar">×</button></span></li>';
+      }).join('') : '<li class="vacio">Todavía no hay nadie: escribe parte del nombre y escógelo de la lista.</li>';
+      if (typeof o.cambio === 'function') { try { o.cambio(); } catch (e) {} }
+    }
+    function agrega(u) {
+      if (!u) return;
+      if (EQ.some(function (x) { return x.u === u; })) error(nombreDe(u) + ' ya está en el aviso: cada persona va una sola vez.');
+      else EQ.push({ u: u, n: nombreDe(u), resp: !EQ.some(function (x) { return x.resp; }) });
+      bq.opciones(opciones()); bq.pon([]); pinta();
+    }
+    bq = window.PROFASE_BUSCA.crea({ donde: $(o.id + 'Box'), id: o.id, opciones: opciones(), valor: [],
+      marcador: 'Escribe parte del nombre para agregar', vacio: 'Nadie coincide (o ya está en el aviso)', sinOpciones: 'Sin personas',
+      cambio: function (v) { if (v && v[0]) agrega(v[0]); } });
+    $(o.id + 'Lista').addEventListener('click', function (e) {
+      var r = e.target.closest('[data-eq-resp]'), q = e.target.closest('[data-eq-quita]');
+      if (r) { EQ.forEach(function (p) { p.resp = p.u === r.dataset.eqResp; }); pinta(); return; }
+      if (!q) return;
+      var p = EQ.filter(function (x) { return x.u === q.dataset.eqQuita; })[0]; if (!p) return;
+      if (p.resp && EQ.length > 1) { error('Antes de quitar a ' + p.n + ', escoge a otro responsable con «Hacer responsable»: el aviso nunca se queda sin responsable.', q); return; }
+      EQ = EQ.filter(function (x) { return x !== p; }); bq.opciones(opciones()); pinta();
+    });
+    pinta();
+    return {
+      // lo escrito que es de la lista también cuenta (js/buscador.js lo fija y entra por «cambio»)
+      lee: function () { bq.valor(); var r = EQ.filter(function (x) { return x.resp; })[0]; return { resp: r ? r.u : '', apoyos: EQ.filter(function (x) { return !x.resp; }).map(function (x) { return x.u; }) }; },
+      escrito: function () { return String(bq.escrito() || '').trim(); },
+      foco: function () { bq.foco(); }
+    };
+  }
+  // (296) en la ficha: quién está, con su papel, quién lo puso y, si lleva trabajo, cómo va su pendiente
+  function equipoFicha(a) {
+    var eq = a.equipo || [];
+    if (!eq.length) return '<span class="mut">Sin asignar</span>';
+    return '<div class="asg">' + eq.map(function (p) {
+      var resp = p.rol === 'responsable';
+      return '<div class="p' + (resp ? ' resp' : '') + '"><span class="nm">' + esc(p.n) + '</span><span class="rol">' + (resp ? 'Responsable' : 'Apoyo') + '</span>'
+        + (a.camino === 'trabajo' && p.pend ? ' <span class="mut">· su pendiente: ' + esc(PEND[p.pend] || p.pend) + '</span>' : '')
+        + (resp ? (a.asignado_por ? ' <span class="mut">(lo asignó ' + esc(a.asignado_por) + ', ' + esc(fh(a.asignado_en)) + ')</span>' : '')
+                : (p.por ? ' <span class="mut">(lo agregó ' + esc(p.por) + (p.en ? ', ' + esc(fh(p.en)) : '') + ')</span>' : '')) + '</div>';
+    }).join('') + '</div>';
   }
   function pintaFicha(a) {
     var pu = a.puedo || {}, h = [];
@@ -557,8 +647,8 @@ tr.click:hover td{background:var(--navy-soft)}
       + (a.concepto !== 'cancelacion' && (a.plazo || abierto(a)) ? '<dt>Plazo</dt><dd>' + (a.plazo === 'con' ? esc('Vence el ' + fecha(a.vence)) + (a.plazo_dias ? ' <span class="mut">(' + a.plazo_dias + ' días hábiles)</span>' : '') + (abierto(a) ? ' ' + plazoChip(a) : '')
           : a.plazo === 'sin' ? 'Sin plazo' : chip('Por confirmar', 'na')) + '</dd>' : '')
       + (a.camino ? '<dt>Camino</dt><dd>' + esc(CAMINOS[a.camino] || a.camino)
-          + (a.pendiente && a.pendiente.ve ? ' · <button class="lnk" type="button" id="a-pend">Ver su pendiente</button> <span class="mut">(' + esc({ abierto: 'abierto', proceso: 'en proceso', revision: 'en revisión', hecho: 'hecho', cancelado: 'cancelado' }[a.pendiente.estatus] || a.pendiente.estatus) + ')</span>' : '') + '</dd>' : '')
-      + '<dt>Asignado a</dt><dd>' + (a.asignado_n ? esc(a.asignado_n) + (a.asignado_por ? ' <span class="mut">(lo asignó ' + esc(a.asignado_por) + ', ' + esc(fh(a.asignado_en)) + ')</span>' : '') : '<span class="mut">Sin asignar</span>') + '</dd>'
+          + (a.pendiente && a.pendiente.ve ? ' · <button class="lnk" type="button" id="a-pend">' + (a.soy ? 'Ver mi pendiente' : 'Ver su pendiente') + '</button> <span class="mut">(' + esc(PEND[a.pendiente.estatus] || a.pendiente.estatus) + ')</span>' : '') + '</dd>' : '')
+      + '<dt>Asignado a</dt><dd>' + equipoFicha(a) + '</dd>'
       + (a.cerrado_por ? '<dt>' + (a.estado === 'informativo' ? 'Marcado informativo' : 'Lo cerró') + '</dt><dd>' + esc(a.cerrado_por) + ' · ' + esc(fh(a.cerrado_en)) + (a.nota_cierre ? '<div>' + esc(a.nota_cierre) + '</div>' : '') + '</dd>' : '')
       + (a.observaciones ? '<dt>Observaciones</dt><dd>' + esc(a.observaciones) + '</dd>' : '')
       + '</dl></div></div>');
@@ -574,14 +664,14 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<div class="falta" id="c-falta' + suf + '" aria-live="polite"></div>'
         + '<div class="mut">El plazo no es obligatorio: puede quedar «Sin plazo». Ya cerrado, deja de contar como «Plazo por confirmar».</div></div>';
     }
-    if (pu.asignar) acc.push('<div class="bloque"><div class="campo"><label for="a-quien">' + (a.asignado ? 'Reasignar a' : 'Asignar a') + '</label><div id="a-quienBox"></div></div>'
+    if (pu.asignar) acc.push('<div class="bloque"><div class="campo"><label for="a-quien">Asignar a</label><div id="a-equipo"></div></div>'
       + '<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
       + (!a.asignado && a.concepto !== 'cancelacion' ? '<div class="campo"><label>Camino</label>' + opcionesCamino('a-cam0', a.camino, { opcional: true, cerrado: cl }) + '</div>' + cajaCierre('0', false) : '')
-      + '<div class="acciones"><button class="btn acento" type="button" id="a-asigna">' + (a.asignado ? 'Reasignar' : 'Asignar') + '</button>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="a-asigna">' + (a.asignado ? 'Guardar' : 'Asignar') + '</button>'
       + (pu.informativo ? '<button class="btn" type="button" id="a-info">Solo informativo (sin asignar)</button>' : '') + '</div></div>');
     else if (pu.clasificar) acc.push('<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
       + '<div class="acciones"><button class="btn" type="button" id="a-guarda-con">Guardar concepto</button></div>');
-    if (pu.cerrar && !pu.asignar && !a.asignado) acc.push('<div class="mut">Para cerrarlo, primero lo asigna Liliana Lechuga o Francisco Rivera.</div>');
+    if (pu.cerrar && !pu.asignar && !a.asignado) acc.push('<div class="mut">Para cerrarlo, primero lo asigna ' + esc(EST.asignan || 'quien asigna los avisos') + ' o la dirección.</div>');
     // (202) el plazo: el CRM propone la fecha de notificación; Liliana o Frank la confirman y dicen si lleva plazo
     if (pu.plazo) acc.push('<div class="bloque" id="a-plazo-box"><div class="t">El plazo</div>'
       + '<div class="campo"><label for="a-not">Queda notificado el</label><input type="date" id="a-not" value="' + esc(String(a.notificado || a.propuesta || '').slice(0, 10)) + '">'
@@ -630,15 +720,20 @@ tr.click:hover td{background:var(--navy-soft)}
       return '<li><div><b>' + esc(b.que.charAt(0).toUpperCase() + b.que.slice(1)) + '</b>' + (b.texto ? ' · ' + esc(b.texto) : '') + '</div><div class="mut">' + esc(b.quien) + ' · ' + esc(fh(b.en)) + '</div></li>';
     }).join('') + '</ul></div></div>');
     abre(cliente(a), a.rfc + ' · ' + fecha(a.fecha) + (a.concepto_n ? ' · ' + a.concepto_n : ''), h.join(''));
-    var bq = null;
-    if ($('a-quienBox')) bq = window.PROFASE_BUSCA.crea({ donde: $('a-quienBox'), id: 'a-quien', opciones: opcionesPersonas(), valor: a.asignado ? [a.asignado] : [],
-      marcador: 'Escribe parte del nombre', vacio: 'Nadie coincide', sinOpciones: 'Sin personas',
+    var eqUI = null;   // (296) responsable y apoyos
+    if ($('a-equipo')) eqUI = equipoUI({ donde: $('a-equipo'), id: 'a-quien', equipo: a.equipo || [],
       cambio: function () { ['0', '1'].forEach(function (k) { if ($('c-box' + k) && !$('c-box' + k).hidden) pintaFalta(k); }); } });
     function boton(id, fn) { var b = $(id); if (!b) return; b.onclick = async function () { b.disabled = true; try { await fn(b); } catch (e) { error(falla(e), b); } b.disabled = false; }; }
     // (293) a quién: lo escogido o lo escrito que es de la lista (js/buscador.js); si no, qué faltó, en palabras
-    function quien() { return bq ? bq.valor()[0] : ''; }
+    function quien() { return eqUI ? eqUI.lee().resp : ''; }
+    // (296) ¿cambió quién está? (el responsable o sus apoyos)
+    function equipoCambio() {
+      if (!eqUI) return null;
+      var t = eqUI.lee(), antes = apoyosDe(a).map(function (y) { return y.u; });
+      return (t.resp && t.resp !== a.asignado) || t.apoyos.join('|') !== antes.join('|') ? t : null;
+    }
     function sinQuien() {
-      var t = bq ? String(bq.escrito() || '').trim() : '';
+      var t = eqUI ? eqUI.escrito() : '';
       return t ? '«' + t + '» no es una persona de la lista: escribe más de su nombre y escógela de la lista' : 'Escoge a quién se lo asignas (escribe parte de su nombre y escógela de la lista)';
     }
     // (293) «Cerrado» en Camino: el botón cambia a «Cerrar aviso», sale «Para cerrarlo» y dice qué falta
@@ -671,9 +766,10 @@ tr.click:hover td{background:var(--navy-soft)}
     }
     async function cerrarAviso(suf) {
       var f = faltan(suf);
-      if (f.length) { if (f[0] === 'la persona en «Asignar a»' && bq && String(bq.escrito() || '').trim()) throw new Error(sinQuien()); throw new Error('Para cerrarlo falta ' + (f.length === 1 ? f[0] : f.slice(0, -1).join(', ') + ' y ' + f[f.length - 1])); }
-      var p = { nota: String(($('c-nota' + suf) || {}).value || '').trim() }, u = quien(), con = $('a-con') ? $('a-con').value : ($('c-con' + suf) ? $('c-con' + suf).value : '');
-      if (u && u !== a.asignado) p.usuario = u;
+      if (f.length) { if (f[0] === 'la persona en «Asignar a»' && eqUI && eqUI.escrito()) throw new Error(sinQuien()); throw new Error('Para cerrarlo falta ' + (f.length === 1 ? f[0] : f.slice(0, -1).join(', ') + ' y ' + f[f.length - 1])); }
+      var p = { nota: String(($('c-nota' + suf) || {}).value || '').trim() }, con = $('a-con') ? $('a-con').value : ($('c-con' + suf) ? $('c-con' + suf).value : '');
+      var eqc = equipoCambio();   // (296) si cambió quién está, se guarda junto con el cierre (responsable y apoyos)
+      if (eqc) { if (eqc.resp) p.usuario = eqc.resp; p.apoyos = eqc.apoyos; }
       if (con && con !== a.concepto) p.concepto = con;
       // el plazo (Héctor Daniel: «se quita solo al cerrar»): si en «El plazo» quedó escogido y no se había confirmado así, se guarda junto
       if ($('a-plazo-box') && radio('a-pla') && radio('a-pla') !== a.plazo) await guardaPlazo();
@@ -682,12 +778,16 @@ tr.click:hover td{background:var(--navy-soft)}
     }
     boton('a-asigna', async function () {
       if (document.querySelector('input[name="a-cam0"]') && radio('a-cam0') === 'cerrado') return cerrarAviso('0');
-      var u = quien(); if (!u) throw new Error(sinQuien());
-      var cam = $('a-quienBox') && document.querySelector('input[name="a-cam0"]') ? radio('a-cam0') : '';
-      var r = await rpc('bzt_asigna', { p_ids: [a.id], p_usuario: u, p_concepto: $('a-con').value || null, p_camino: cam || null });
-      if (!r || !r.asignados) throw new Error('No cambió nada: ya estaba asignado así.');
+      var t = eqUI.lee(); if (!t.resp) throw new Error(sinQuien());
+      var cam = document.querySelector('input[name="a-cam0"]') ? radio('a-cam0') : '';
+      // (296) el responsable y, exactamente, los apoyos que quedaron en la lista
+      var r = await rpc('bzt_asigna', { p_ids: [a.id], p_usuario: t.resp, p_concepto: $('a-con').value || null, p_camino: cam || null,
+                                        p_apoyos: t.apoyos, p_exacto: true });
+      if (!r || !r.asignados) throw new Error('No cambió nada: ya estaba así.');
       await ficha(a.id);
-      avisa('Listo: quedó asignado a ' + ((EST.personas || []).filter(function (x) { return x.u === u; }).map(function (x) { return x.n; })[0] || 'esa persona') + ' y se le avisó.' + (r.pendientes ? ' Lleva trabajo: también quedó en sus Pendientes.' : ''));
+      avisa('Listo: ' + (t.apoyos.length ? 'quedó con ' + nombreDe(t.resp) + ' de responsable y ' + t.apoyos.length + (t.apoyos.length === 1 ? ' persona' : ' personas') + ' de apoyo'
+                                       : 'quedó asignado a ' + nombreDe(t.resp)) + '; a quien entró o cambió de papel se le avisó.'
+        + (r.pendientes ? ' Lleva trabajo: cada quien tiene su pendiente.' : ''));
       await carga();
     });
     // el plazo: con los días, la fecha límite la calcula la base (una sola regla); si alguien la escribe a mano, manda la suya
@@ -715,9 +815,9 @@ tr.click:hover td{background:var(--navy-soft)}
       var cam = radio('a-cam'); if (!cam) throw new Error('Escoge el camino');
       if (cam === 'cerrado') return cerrarAviso('1');
       await rpc('bzt_camino', { p_ids: [a.id], p_camino: cam });
-      await ficha(a.id); avisa(cam === 'trabajo' ? 'Listo: lleva trabajo y quedó en los Pendientes de quien lo tiene.' : 'Listo: se resuelve contestando.'); await carga();
+      await ficha(a.id); avisa(cam === 'trabajo' ? 'Listo: lleva trabajo y quedó en los Pendientes de quien lo tiene' + (apoyosDe(a).length ? ' y de sus apoyos.' : '.') : 'Listo: se resuelve contestando.'); await carga();
     });
-    cierreUi('a-cam0', '0', 'a-asigna', a.asignado ? 'Reasignar' : 'Asignar', true);
+    cierreUi('a-cam0', '0', 'a-asigna', a.asignado ? 'Guardar' : 'Asignar', true);
     cierreUi('a-cam', '1', 'a-camino', 'Guardar el camino', !!pu.camino_edita);
     // (293) reabrir: al escoger otro camino sale por qué y «Reabrir aviso»
     if ($('a-reabre2')) {
@@ -772,19 +872,22 @@ tr.click:hover td{background:var(--navy-soft)}
   $('sel-asigna').onclick = function () {
     var n = ids().length;
     pregunta('<h2 id="pq-t">Asignar ' + (n === 1 ? '1 aviso' : n + ' avisos') + '</h2>'
-      + '<div class="campo"><label for="m-quien">A quién</label><div id="m-quienBox"></div></div>'
+      + '<div class="campo"><label for="m-quien">Asignar a</label><div id="m-equipo"></div></div>'
       + '<div class="campo"><label for="m-con">Concepto (opcional)</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
       + '<div class="campo"><label>Camino</label>' + opcionesCamino('m-cam', '', { opcional: true }) + '</div>'
-      + '<div class="mut">A esa persona le llega un solo aviso con todos.</div>'
+      + '<div class="mut">A cada persona le llega un solo aviso con todos.</div>'
       + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Asignar</button></div>');
-    var bq = window.PROFASE_BUSCA.crea({ donde: $('m-quienBox'), id: 'm-quien', opciones: opcionesPersonas(), valor: [], marcador: 'Escribe parte del nombre', vacio: 'Nadie coincide', sinOpciones: 'Sin personas' });
-    try { bq.foco(); } catch (e) {}
+    // (296) el mismo «Asignar a» del aviso: el responsable de todos y, si se agregan, apoyos (se suman a los que ya tenga cada uno)
+    var eq = equipoUI({ donde: $('m-equipo'), id: 'm-quien', equipo: [],
+      nota: 'La primera persona es la responsable de todos; las demás, apoyo (se agregan a los apoyos que ya tenga cada aviso; quitar a alguien se hace en cada aviso).' });
+    try { eq.foco(); } catch (e) {}
     $('m-no').onclick = noPregunta;
     $('m-ok').onclick = async function () {
-      var u = bq.valor()[0], t = String(bq.escrito() || '').trim();
-      if (!u) return error(t ? '«' + t + '» no es una persona de la lista: escribe más de su nombre y escógela de la lista' : 'Escoge a quién se los asignas');
+      var t = eq.lee(), w = eq.escrito();
+      if (!t.resp) return error(w ? '«' + w + '» no es una persona de la lista: escribe más de su nombre y escógela de la lista' : 'Escoge a quién se los asignas');
       this.disabled = true;
-      try { var r = await rpc('bzt_asigna', { p_ids: ids(), p_usuario: u, p_concepto: $('m-con').value || null, p_camino: radio('m-cam') || null }); noPregunta(); SEL = {};
+      try { var r = await rpc('bzt_asigna', { p_ids: ids(), p_usuario: t.resp, p_concepto: $('m-con').value || null, p_camino: radio('m-cam') || null,
+                                              p_apoyos: t.apoyos, p_exacto: false }); noPregunta(); SEL = {};
             avisa((r.asignados || 0) + ' asignados.' + (r.pendientes ? ' ' + r.pendientes + ' llevan trabajo: quedaron en sus Pendientes.' : '')); await carga(); }
       catch (e) { error(falla(e)); this.disabled = false; }
     };
@@ -1035,13 +1138,13 @@ tr.click:hover td{background:var(--navy-soft)}
       var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado', 'Queda notificado', 'Plazo', 'Camino'];
       var filas = L.map(function (f) {
         return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, deQuien(f), f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
-          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', f.asignado_n || 'Sin asignar', (ESTADOS[f.estado] || [f.estado])[0],
+          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', asignadosTexto(f), (ESTADOS[f.estado] || [f.estado])[0],
              f.notificado ? fecha(f.notificado) + (f.notif_prop ? ' (propuesta)' : '') : '',
              f.plazo === 'con' ? 'Vence el ' + fecha(f.vence) : f.plazo === 'sin' ? 'Sin plazo' : abierto(f) ? 'Por confirmar' : '',
              CAMINOS[f.camino] || ''];
       });
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
-      ws.columns = (cancel ? [13, 40, 26, 16, 36, 22] : [13, 40, 26, 16, 18, 30, 18, 26, 14, 20, 20, 24]).map(function (w) { return { width: w }; });
+      ws.columns = (cancel ? [13, 40, 26, 16, 36, 22] : [13, 40, 26, 16, 18, 30, 18, 34, 14, 20, 20, 24]).map(function (w) { return { width: w }; });
       var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Del ' + fecha(DATOS.desde) + ' al ' + fecha(DATOS.hasta) + ' · ' + L.length + ' avisos', 'Exportado el ' + fh(new Date())] });
       ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
       filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
@@ -1080,6 +1183,7 @@ tr.click:hover td{background:var(--navy-soft)}
       if (id > 0) ficha(id);
       if (q.get('ver') === 'subir-aviso') window.__bztAbre('ver:subir-aviso');
       if (q.get('ver') === 'cerrar-aviso') window.__bztAbre('ver:cerrar-aviso');
+      if (q.get('ver') === 'apoyos') window.__bztAbre('ver:apoyos');
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
@@ -1110,6 +1214,20 @@ tr.click:hover td{background:var(--navy-soft)}
                          : 'Nuevo: en la tabla ya se ve a quién se asignó cada aviso y su última nota debajo del concepto. Los cierran los gerentes y la dirección.');
       };
       ilu1(); return;
+    }
+    // (296) lo nuevo: responsable y apoyos («Nuevos cambios», clave ver|apoyos|…): la columna «Asignado a» y «Asignados a mí»
+    if (String(x || '') === 'ver:apoyos') {
+      var t2 = 0, ilu2 = function () {
+        if (!EST || !$('cargando').hidden || !$('principal') || $('principal').hidden) { if (t2++ < 60) setTimeout(ilu2, 150); return; }
+        if (PES !== 'avisos') document.querySelector('[data-pes="avisos"]').click();
+        var k = document.querySelector('[data-kpi="mios"]'), th = $('th-asg');
+        [k, th].forEach(function (el) { if (!el) return; el.style.outline = '3px solid var(--accent)'; el.style.outlineOffset = '2px'; });
+        try { (th || k).scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) {}
+        setTimeout(function () { [k, th].forEach(function (el) { if (el) { el.style.outline = ''; el.style.outlineOffset = ''; } }); }, 6000);
+        avisa(EST.equipo ? 'Nuevo: en cada aviso, «Asignar a» acepta a varias personas: una responsable y las demás de apoyo. En la tabla salen todas, el responsable primero, y «Asignados a mí» cuenta también donde estás de apoyo.'
+                         : 'Nuevo: un aviso puede tener a varias personas: una responsable y las demás de apoyo. En la tabla salen todas, el responsable primero, y «Asignados a mí» cuenta también donde estás de apoyo.');
+      };
+      ilu2(); return;
     }
     var v = VER[String(x || '').replace(/^ver:/, '')];
     if (/^ver:/.test(String(x || '')) && v) {
