@@ -776,8 +776,13 @@ const TER=6, MODS_BASE=[0,1,2,3,4,5];
 const MOD_SHORT=['CXC','CXP','ANT CLIEN','ANT PROV','NTC CLIEN','NTC PROV','TERCEROS'];
 const MOD_VAR=['--cli','--prov','--cli-2','--prov-2','--cli-3','--prov-3','--ink-3'];
 const ES_CLI=[true,false,true,false,true,false,false];
-const FAM={todos:MODS_BASE,fac:[0,1],ant:[2,3],ntc:[4,5],ter:[TER],apl:[],can:MODS_BASE};
-const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones'],['can','Canceladas en el SAT con saldo']];   // 251: el nombre dice qué cuenta (petición 20261104-1356)
+const FAM={todos:MODS_BASE,fac:[0,1],ant:[2,3],ntc:[4,5],ter:[TER],apl:[],can:MODS_BASE,cq:MODS_BASE.concat(TER)};
+const FAM_LAB=[['todos','Todos'],['fac','Facturas'],['ant','Anticipos'],['ntc','Notas de crédito'],['ter','Terceros'],['apl','Aplicaciones'],['can','Canceladas en el SAT con saldo'],['cq','Canceladas en QUO con saldo']];   // 251: el nombre dice qué cuenta (petición 20261104-1356)
+/* «Canceladas en QUO con saldo» (4-nov-2026, pedido de Fernando Cadengo: «no quiero que las canceladas se vean en la pestaña de
+   facturas, porque hace ruido y piensan que se está sumando a los totales»): lo que QUO ya tiene cancelado y todavía le trae
+   saldo sale solo en su pestaña de la ventana de cada empresa y no suma en sus cifras, pestañas ni totales (como en la
+   pantalla principal, donde «Cancelados» viene apagado). En las demás pestañas, solo si se escoge «Cancelada» en sus FILTROS. */
+const esCanQuo=r=>r.est==='Cancelada';
 /* tarjetas por rubro del resumen; cada una abre su lista */
 const RUBROS=[
   {k:'cxc',lab:'Cuentas por cobrar',mods:[0],tab:'fac',lado:'cli',iva:'emi',dot:'--cli'},
@@ -1550,6 +1555,8 @@ function botonesVentana(){
    plantilla, antigüedad, búsqueda y estatus del reporte); lo cancelado lo decide el filtro de la ventana */
 const docsVentana=ci=>ROWS.filter(r=>r.cli===ci&&pasa(r,{ven:true}));
 const docsCliente=()=>docsVentana(S.cliente);
+// las de la pestaña «Canceladas en QUO con saldo»: con los filtros de la ventana (menos el de estatus, como la del SAT)
+const canQuoVentana=rows=>rows.filter(r=>esCanQuo(r)&&pasaMF(r,true));
 /* los filtros propios de la ventana (botón FILTROS): cliente o proveedor, saldo (sin signo) y días de atraso, fecha del
    CFDI, plantilla y estatus, y en Todos y Terceros, el rol, la naturaleza y la cuenta contable de los terceros. Se quedan
    puestos al cambiar de pestaña o de empresa (menos el cliente o proveedor, que es de cada empresa) */
@@ -1573,8 +1580,9 @@ function mfGuardado(){
   return f;
 }
 function pasaMF(r,conSat){
-  const f=S.mf; if(!f) return conSat===true||!r.satCan;
+  const f=S.mf; if(!f) return conSat===true||(!r.satCan&&!esCanQuo(r));
   if(r.satCan&&conSat!==true&&!f.est.has('SAT')) return false;   // no suma: solo en «Canceladas» o con su estatus
+  if(esCanQuo(r)&&conSat!==true&&!f.est.has('Cancelada')) return false;   // igual las canceladas en QUO: solo en su pestaña o con su estatus
   if(f.cps.size&&!f.cps.has(r.cp)) return false;
   const a=Math.abs(r.saldo), s1=numMF(f.smin), s2=numMF(f.smax);
   if(s1!=null&&!(a>s1)) return false;
@@ -1683,7 +1691,7 @@ function pintaModal(){
   if(ESTC.ok){ const be=el('button','minibtn xlbtn','Estatus: '+estEmpresaTxt(S.cliente)+' ▾'); be.type='button'; be.dataset.estEmpresa='1';
     be.title='Estatus de la empresa'; be.onclick=()=>menuEmpresa(S.cliente); wb.prepend(be); }
   const bx=el('button','minibtn xlbtn','Excel'); bx.type='button'; bx.setAttribute('data-excel','Excel');   // marca.js le pone su «PDF» al lado
-  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes y Proveedores (demostrativo)':S.tab==='can'?'Las canceladas en el SAT que QUO trae vigentes':'Lo que está seleccionado en la ventana, con el formato del reporte CXC CXP';
+  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes y Proveedores (demostrativo)':S.tab==='can'?'Las canceladas en el SAT que QUO trae vigentes':S.tab==='cq'?'Las canceladas en QUO que todavía traen saldo, con el formato del reporte CXC CXP':'Lo que está seleccionado en la ventana, con el formato del reporte CXC CXP';
   bx.onclick=async()=>{ bx.disabled=true; bx.textContent='Generando…';
     try{ bx.textContent=S.tab==='apl'?await exportaAplicaciones(S.cliente):S.tab==='can'?await exportaCanceladas(S.cliente):await exportaReporteCxcCxp(S.cliente); }
     catch(e){ bx.textContent='No se pudo exportar'; bx.title=String(e&&e.message||e); }
@@ -1717,6 +1725,7 @@ function pintaModal(){
     b.appendChild(document.createTextNode(lab));
     if(k==='apl') b.appendChild(el('span','cnt',F.int.format(todos.filter(r=>{ const F2=aplF(r); return F2&&F2.rels.length; }).length)));
     else if(k==='can') b.appendChild(el('span','cnt',F.int.format(base.filter(r=>r.satCan&&pasaMF(r,true)).length)));
+    else if(k==='cq') b.appendChild(el('span','cnt',F.int.format(canQuoVentana(base).length)));
     else b.appendChild(el('span','cnt',F.int.format(todos.filter(r=>FAM[k].includes(r.mod)).length)));
     b.onclick=()=>{S.tab=k; S.doc=null; S.dsort=null; pintaModal();};
     tb.appendChild(b);
@@ -1746,7 +1755,10 @@ function pintaModal(){
     S.sel=new Set(); pestanaCan(base.filter(r=>r.satCan&&pasaMF(r,true)),lista,m);
   } else {
     const cols=TABCOLS[S.tab]||TABCOLS.todos, srt=ordenDocs();
-    const docs=docsDeTab(todos), conSel=S.tab==='fac'&&yoMarco(), vistos=docs.slice(0,500);
+    const docs=docsDeTab(S.tab==='cq'?canQuoVentana(base):todos), conSel=S.tab==='fac'&&yoMarco(), vistos=docs.slice(0,500);
+    if(S.tab==='cq'){ const bar=el('div','aplbar');
+      bar.appendChild(el('span','aplnota','QUO ya las tiene canceladas, pero todavía les trae saldo. No suman en las cifras de arriba, en las demás pestañas ni en la pantalla principal: hay que dejarlas en cero en QUO.'));
+      lista.appendChild(bar); }
     N_VEN=docs.length;
     if(!conSel) S.sel=new Set();
     else S.sel=new Set([...S.sel].filter(r=>vistos.includes(r)));
@@ -1766,7 +1778,7 @@ function pintaModal(){
     });
     hd.appendChild(el('span','ch',''));
     lista.appendChild(hd);
-    if(!docs.length) lista.appendChild(el('div','empty','Sin documentos con estos filtros.'));
+    if(!docs.length) lista.appendChild(el('div','empty',S.tab==='cq'?'Esta empresa no tiene facturas canceladas en QUO con saldo.':'Sin documentos con estos filtros.'));
     vistos.forEach(d=>{
       const b=el('button','drow'+(d.st==='fuera'?' fuera':'')); b.type='button';
       b.setAttribute('aria-current',!!(S.doc&&S.doc.quo===d.quo&&S.doc.uuid===d.uuid));
@@ -1832,10 +1844,10 @@ function acomodaLista(lista){
 /* el renglón TOTAL de la lista de la ventana: suma todo lo que pasa los filtros (también lo que no cabe en los 500 que se
    ven), con las mismas columnas que la lista; clientes y proveedores en renglones aparte para no mezclar lo que nos deben
    con lo que se debe. Cuadra con las cifras de arriba de la ventana. Con la barra de lo escogido abajo, no se pega. */
-const TOT_LADO={todos:['Clientes','Proveedores'],fac:['Por cobrar','Por pagar'],ant:['De clientes','A proveedores'],
+const TOT_LADO={todos:['Clientes','Proveedores'],cq:['Clientes','Proveedores'],fac:['Por cobrar','Por pagar'],ant:['De clientes','A proveedores'],
   ntc:['A clientes','De proveedores']};
 const TOT_DOC={todos:['documento','documentos'],fac:['factura','facturas'],ant:['anticipo','anticipos'],
-  ntc:['nota de crédito','notas de crédito'],ter:['documento','documentos']};
+  ntc:['nota de crédito','notas de crédito'],ter:['documento','documentos'],cq:['cancelada','canceladas']};
 function totalDocs(docs,cols,conSel,suelto){
   const w=el('div','dtots'+(suelto?' suelto':'')); w.id='dtots';
   const lado=r=>r.mod===TER?2:[0,2,4].includes(r.mod)?0:1;
@@ -1885,7 +1897,7 @@ const DCOL={
 };
 const TABCOLS={todos:['cp','tip','fec','dia','sal','tot','est'],ntc:['cp','tip','fec','dia','sal','rel','iva','tot','est'],
   fac:['cp','fol','fec','pl','tot','sal','rel','iva','ivr','isr','est'],ant:['cp','fol','fec','pl','mto','xap','apc','rel'],
-  ter:['cp','pl','rol','cta','nat','fec','mto','sal']};
+  ter:['cp','pl','rol','cta','nat','fec','mto','sal'],cq:['cp','tip','fol','fec','sal','tot']};
 const claseCol=k=>{ const c=DCOL[k]; return 'dc'+(c.g?' g':'')+(c.r?' r':'')+(c.p>1?' p'+c.p:'')+(c.rt?' rt':''); };
 const ordenDocs=()=>S.dsort&&(TABCOLS[S.tab]||TABCOLS.todos).includes(S.dsort.k)?S.dsort:{k:'sal',dir:-1};
 function cmpDocs(a,b){
@@ -3664,7 +3676,7 @@ function hojaRCX(wb,h,c,docs,corte,gen){
    Terceros), lado (Clientes / Proveedores) y los filtros de la ventana (contraparte, saldo, estatus, días) */
 function seleccionRCX(ci){
   const mods=FAM[S.tab].filter(m=>LADO[S.lado].includes(m));
-  const docs=docsVentana(ci).filter(r=>mods.includes(r.mod)&&pasaMF(r)).sort(cmpDocs);
+  const docs=(S.tab==='cq'?canQuoVentana(docsVentana(ci)):docsVentana(ci).filter(r=>pasaMF(r))).filter(r=>mods.includes(r.mod)).sort(cmpDocs);
   return {mods,docs,hojas:RCX_HOJAS.filter(h=>h.mods.some(m=>mods.includes(m)))};
 }
 async function exportaReporteCxcCxp(ci){
@@ -3681,7 +3693,7 @@ async function exportaReporteCxcCxp(ci){
   const mm=String(TODAY.getMonth()+1).padStart(2,'0');
   const et=sel.hojas.map(h=>h.etq);
   const que=et.length>1?et.slice(0,-1).join(' ')+' y '+et[et.length-1]:et[0];
-  const nombre=(mm+' Reporte '+que+' '+c[1]).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx';
+  const nombre=(mm+' Reporte '+que+(S.tab==='cq'?' canceladas en QUO ':' ')+c[1]).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx';
   return descargaXlsx(wb,nombre);
 }
 // con PROFASE_MARCA.guardar(): el mismo libro sale en Excel o, con su botón «PDF» al lado, en PDF (siempre juntos)
