@@ -314,8 +314,11 @@
       var vw = document.documentElement.clientWidth, vh = window.innerHeight, t0 = tope();
       var b = btn.getBoundingClientRect(), r0 = raiz.getBoundingClientRect(), s = pan.style;
       s.position = 'fixed'; s.right = 'auto'; s.top = '0px'; s.bottom = 'auto'; s.left = '0px';
-      // a lo ancho: empieza donde la barra y llega, como mucho, a 16 px del borde derecho
-      var izq = Math.max(8, Math.min(r0.left, vw - 16 - 240));
+      // a lo ancho: empieza donde la barra y llega, como mucho, a 16 px del borde derecho; si la barra va a la derecha
+      // (en Reportes, desde el 5-nov-2026, FILTROS va después del buscador), se recorre a la izquierda lo necesario para
+      // tener su ancho de siempre (hasta 880 px), en lugar de quedar angosta y que sus columnas se salgan
+      var natural = Math.min(880, vw - 32);
+      var izq = Math.max(8, Math.min(r0.left, vw - 16 - natural));
       s.maxWidth = Math.max(240, Math.floor(vw - izq - 16)) + 'px';
       // a lo alto: su alto natural (hasta 620 px) contra el lugar de abajo (sin pasar de los avisos) y el de arriba
       var av = avisosArriba(izq, izq + pan.getBoundingClientRect().width), piso = vh - 8;
