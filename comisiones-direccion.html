@@ -137,6 +137,8 @@ button.pila:hover{border-color:var(--navy);border-top-color:var(--navy)}
 /* Devoluciones de IVA (260): las pilas del pago a SV filtran la lista; la que está puesta va sombreada */
 button.pila[aria-pressed="true"]{border-color:var(--navy);background:var(--navy-soft)}
 .pila .d.ojo{color:var(--amber);font-weight:600}
+/* 282: las cantidades de las pilas de Devoluciones de IVA, siempre en un renglón (en el iPad se partían a medio número) */
+#d-pilas{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}#d-pilas .pila{container-type:inline-size}#d-pilas .pila .v{font-size:clamp(17px,12.5cqi,27px);white-space:nowrap;overflow-wrap:normal}
 @media (max-width:600px){#d-pilas{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}#d-pilas .pila{padding:10px 12px 11px}#d-pilas .pila .v{font-size:19px}#d-pilas .pila .ir{display:none}}
 .op{font-family:var(--f-body);font-weight:700;color:var(--muted);margin-right:4px}
 /* «Lo que falta» */
@@ -216,7 +218,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
 .svcli{display:flex;gap:10px;align-items:flex-start;min-width:0}
 .svcli>span{min-width:0}
 #t-dsel tr.click,#t-dpag tr.click{cursor:pointer}
-#t-dsel tr.sel td{background:var(--navy-soft)}
+#t-dsel tr.sel td,#t-dlis tr.sel td{background:var(--navy-soft)}
 .lista.svlis li.ck{grid-template-columns:auto minmax(0,1fr) auto}
 .lista.svlis li .m{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .lista.svlis li.no-ok{background:var(--amber-soft)}
@@ -472,11 +474,12 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
         <span class="grupo"><label for="d-lis-est">Pago a SV</label><select id="d-lis-est"><option value="">Todas</option><option value="por_entregar">Por entregar</option><option value="pagado">Pagadas a SV</option><option value="sin_fecha">Sin fecha de pago</option><option value="no_lleva">No llevan SV</option></select></span>
         <span class="mut" id="d-lis-n"></span></div>
       <div class="in" style="padding-bottom:0"><h2 id="h-dev" style="font-size:16px">Devoluciones de IVA y su pago a SV</h2><div class="sub" id="dev-sub">&nbsp;</div></div>
+      <!-- 269 y 282 (5-nov-2026): escoger cuáles se le pagan a SV, aquí y en «Pagos a SV» (lo mismo escogido en las dos) -->
+      <div class="in svbar" id="sv-bar" hidden></div>
       <!-- 260 (4-nov-2026): todas las devoluciones, las de antes del WorkFlow nuevo y las del WorkFlow, con su pago a SV -->
       <div class="tabla" data-dp="lista"><table class="resp" id="t-dlis"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
       <!-- 269 (4-nov-2026): escoger cuáles se le pagan a SV, registrarlas pagadas con su fecha o programarlas, y cada pago -->
       <div data-dp="semanas" hidden>
-        <div class="in svbar" id="sv-bar" hidden></div>
         <div class="tabla"><table class="resp" id="t-dsel"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
         <div class="vacio" id="sv-sel-vacia" hidden>No hay devoluciones por pagar a SV.</div>
         <div class="in" style="padding-bottom:0;border-top:1px solid var(--line)"><h3 class="svh" id="h-svpag">Pagos registrados</h3><div class="sub" id="sv-pag-sub">&nbsp;</div></div>
@@ -1393,7 +1396,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     catch (e) { if (n === DEV.pide) { estado('dev-estado', ''); error(falla(e)); } }
   }
   var AYUDA_DEV = {
-    lista: 'Cada devolución, las de antes del WorkFlow y las nuevas: lo que devolvió el SAT, lo de SV, lo de PROFASE, el total, la factura con IVA y su pago a SV. Las pilas de arriba la filtran.',
+    lista: 'Cada devolución, las de antes del WorkFlow y las nuevas: lo que devolvió el SAT, lo de SV, lo de PROFASE, el total, la factura con IVA, su factura (con su fecha), cuándo la pagó el cliente y su pago a SV. Las pilas de arriba la filtran. Para pagarle a SV, palomea las que se le pagan y pica «Ya se le pagó» (con la fecha) o «Programar pago».',
     semanas: 'Escoge las devoluciones que se le pagan a SV y regístralas: «Ya se le pagó», con la fecha en que se le pagó, o «Programar pago», para el día que se le va a pagar. Abajo, cada pago con sus devoluciones: ábrelo para marcarlo pagado, cambiarlo o cancelarlo. Las del WorkFlow salen aquí cuando el cliente termina de pagar su factura.',
     devs: 'Cada devolución con su factura (la sube Elisa Mata y entra sola, incluida): el monto devuelto, si ya se pagó, el costo SV, la utilidad y la comisión.',
     porfac: 'Ya le depositaron al cliente y falta su factura; la sube Elisa Mata en el Panel de trabajo.',
@@ -1497,6 +1500,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (x.estado === 'por_entregar') return '<span class="chip ojo">Por entregar</span><div class="mut">toca el ' + esc(fecha(x.paga_el)) + '</div>';
     return '<span class="mut">' + esc({ cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago') + '</span>';
   }
+  // 282: cuándo pagó el cliente la factura de la devolución (la regla es de la base: cdir_fac_cobro)
+  var COBRO = { pagada: 'Pagada', revisar: 'Saldada con nota de crédito', abonada: 'Abonada', por_cobrar: 'Por cobrar' };
+  function cobroDev(x) {
+    if (!x.cobro) return '<span class="mut">' + (x.folio ? '' : 'Sin factura') + '</span>';
+    if (x.cobro === 'pagada' || x.cobro === 'revisar') return '<span style="white-space:nowrap">' + esc(fecha(x.cobro_el)) + '</span>' + (x.cobro === 'revisar' ? '<div class="mut">' + esc(COBRO.revisar) + '</div>' : '');
+    return '<span class="chip' + (x.cobro === 'abonada' ? ' ojo' : '') + '">' + esc(COBRO[x.cobro] || x.cobro) + '</span>'
+      + (x.cobro === 'abonada' && x.saldo_cliente != null ? '<div class="mut">le falta ' + esc(dinero(x.saldo_cliente)) + '</div>' : '');
+  }
+  function cobroTxt(x) { return !x.cobro ? '' : (x.cobro === 'pagada' || x.cobro === 'revisar') ? fecha(x.cobro_el) + (x.cobro === 'revisar' ? ' (' + COBRO.revisar.toLowerCase() + ')' : '') : COBRO[x.cobro] || x.cobro; }
   function listaDev() {
     var L = (DEV.d || {}).lista || [];
     return L.filter(function (x) {
@@ -1515,26 +1527,33 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('d-lis-est').value = DLIS.est === 'pf' || DLIS.est === 'fac' ? '' : DLIS.est;
     var L = listaDev();
     $('d-lis-n').textContent = L.length === 1 ? '1 devolución' : L.length + ' devoluciones';
+    var tFac = 'Factura ' + (T.b_facturas || '');
     $('t-dlis').tHead.innerHTML = '<tr><th>Cliente</th><th>Mes</th><th class="monto">Devolvió el SAT</th><th class="monto">SV</th><th class="monto">PROFASE</th>'
-      + '<th class="monto">Total sin IVA</th><th class="monto">Factura con IVA</th><th>Pago a SV</th></tr>';
+      + '<th class="monto">Total sin IVA</th><th class="monto">Factura con IVA</th><th>' + esc(tFac) + '</th><th>Pagó el cliente</th><th>Pago a SV</th></tr>';
     $('t-dlis').tBodies[0].innerHTML = L.map(function (x) {
-      var ed = cap && x.origen !== 'workflow';
-      return '<tr' + (ed ? ' class="click" tabindex="0" data-dhis="' + esc(x.id) + '"' : '') + '>'
-        + '<td class="w" data-l="Cliente"><div class="rs">' + esc(x.cliente) + '</div>'
-        + (x.origen === 'workflow' ? '<div class="mut">del WorkFlow' + (x.folio ? ' · factura ' + esc(x.folio) : '') + '</div>' : x.folio ? '<div class="mut">factura ' + esc(x.folio) + '</div>' : '')
-        + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</td>'
+      var ed = cap && x.origen !== 'workflow', ck = cap && x.elegible, si = ck && !!SVSEL[x.clave];
+      var cls = (ed ? 'click' : '') + (si ? ' sel' : '');
+      return '<tr' + (cls ? ' class="' + cls.trim() + '"' : '') + (ed ? ' tabindex="0" data-dhis="' + esc(x.id) + '"' : '') + (ck ? ' data-svlis="' + esc(x.clave) + '"' : '') + '>'
+        + '<td class="w" data-l="Cliente"><div class="svcli">'
+        + (ck ? '<input type="checkbox" class="svck" data-svck="' + esc(x.clave) + '"' + (si ? ' checked' : '') + ' aria-label="Escoger para pagar a SV: ' + esc(x.cliente) + ' ' + esc(x.mes_txt) + '">' : '')
+        + '<span><span class="rs">' + esc(x.cliente) + '</span>'
+        + (x.origen === 'workflow' ? '<div class="mut">del WorkFlow</div>' : '')
+        + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</span></div></td>'
         + '<td data-l="Mes" style="white-space:nowrap">' + esc(x.mes_txt) + '</td>'
         + '<td class="monto" data-l="Devolvió el SAT">' + (x.devuelto != null ? esc(dinero(x.devuelto)) : '<span class="mut">Falta</span>') + '</td>'
         + '<td class="monto" data-l="SV">' + esc(dinero(x.sv)) + '<div class="mut">' + esc(pctTxt(x.sv_pct)) + '</div></td>'
         + '<td class="monto" data-l="PROFASE">' + esc(dinero(x.pf)) + '<div class="mut">' + esc(pctTxt(x.pf_pct)) + '</div></td>'
         + '<td class="monto" data-l="Total sin IVA"><strong>' + esc(dinero(x.total)) + '</strong><div class="mut">' + esc(pctTxt(x.tot_pct)) + '</div></td>'
         + '<td class="monto" data-l="Factura con IVA">' + esc(dinero(x.factura_iva)) + '</td>'
+        + '<td data-l="' + esc(tFac) + '" style="white-space:nowrap">' + (x.folio ? esc(x.folio) + '<div class="mut">' + esc(fecha(x.fac_fecha)) + '</div>' : '<span class="mut">Sin factura</span>') + '</td>'
+        + '<td data-l="Pagó el cliente">' + cobroDev(x) + '</td>'
         + '<td data-l="Pago a SV">' + pagoSv(x) + '</td></tr>';
     }).join('');
     $('t-dlis').tFoot.innerHTML = L.length > 1 ? '<tr><td data-l="">Total</td><td data-l=""></td>'
       + '<td class="monto" data-l="Devolvió el SAT">' + esc(dinero(sumaDev(L, 'devuelto'))) + '</td><td class="monto" data-l="SV">' + esc(dinero(sumaDev(L, 'sv'))) + '</td>'
       + '<td class="monto" data-l="PROFASE">' + esc(dinero(sumaDev(L, 'pf'))) + '</td><td class="monto" data-l="Total sin IVA">' + esc(dinero(sumaDev(L, 'total'))) + '</td>'
-      + '<td class="monto" data-l="Factura con IVA">' + esc(dinero(sumaDev(L, 'factura_iva'))) + '</td><td data-l=""></td></tr>' : '';
+      + '<td class="monto" data-l="Factura con IVA">' + esc(dinero(sumaDev(L, 'factura_iva'))) + '</td><td data-l=""></td><td data-l=""></td><td data-l=""></td></tr>' : '';
+    pintaBarSv();
     if (DEV.tab === 'lista') {
       $('dev-vacia').hidden = L.length > 0;
       $('dev-vacia').textContent = T.length ? 'No hay devoluciones con ese filtro.' : 'Todavía no hay devoluciones.';
@@ -1544,12 +1563,13 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var L = listaDev(), est = $('d-lis-est'), filtro = (DLIS.cli || 'Todos los clientes') + ' · ' + est.options[est.selectedIndex].text;
     var E = function (x) { return { pagado: 'Pagado a SV', por_entregar: 'Por entregar', cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago'; };
     excel(b, 'Devoluciones de IVA y pago a SV PROFASE', 'Devoluciones de IVA', ['Comisiones de dirección', filtro, L.length + ' devoluciones'],
-      ['Cliente', 'Mes', 'Devolvió el SAT', '% SV', 'SV', '% PROFASE', 'PROFASE', 'Total sin IVA', 'Factura con IVA', 'Pago a SV', 'Fecha', 'Se le pagó', 'Nota'],
+      ['Cliente', 'Mes', 'Devolvió el SAT', '% SV', 'SV', '% PROFASE', 'PROFASE', 'Total sin IVA', 'Factura con IVA', 'Factura ' + (T.b_facturas || ''), 'Fecha de la factura', 'Pagó el cliente', 'Pago a SV', 'Fecha', 'Se le pagó', 'Nota'],
       L.map(function (x) {
-        return [x.cliente || '', x.mes_txt || '', x.devuelto, pctTxt(x.sv_pct), Number(x.sv), pctTxt(x.pf_pct), Number(x.pf), Number(x.total), Number(x.factura_iva), E(x),
+        return [x.cliente || '', x.mes_txt || '', x.devuelto, pctTxt(x.sv_pct), Number(x.sv), pctTxt(x.pf_pct), Number(x.pf), Number(x.total), Number(x.factura_iva),
+                x.folio || '', x.fac_fecha ? fecha(x.fac_fecha) : '', cobroTxt(x), E(x),
                 fecha(x.estado === 'pagado' ? x.entregado_el : x.paga_el), x.estado === 'pagado' ? Number(x.sv_pagado) : '', x.nota || ''];
       }),
-      [3, 5, 7, 8, 9, 12], [30, 12, 16, 9, 14, 11, 14, 15, 15, 18, 13, 14, 30],
+      [3, 5, 7, 8, 9, 15], [30, 12, 16, 9, 14, 11, 14, 15, 15, 14, 14, 16, 18, 13, 14, 30],
       L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), '', sumaDev(L, 'sv'), '', sumaDev(L, 'pf'), sumaDev(L, 'total'), sumaDev(L, 'factura_iva')]] : null);
   }
   function devHisForma(x) {
@@ -1709,24 +1729,30 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function pintaBarSv() {
     var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, L = porPagarSv(), E = svEscogidas(), tocan = L.filter(svToca);
-    $('sv-bar').hidden = !cap || !L.length;
+    var enLista = DEV.tab === 'lista', vis = enLista ? listaDev().filter(function (x) { return x.elegible; }) : [];
+    $('sv-bar').hidden = !cap || !L.length || (DEV.tab !== 'lista' && DEV.tab !== 'semanas') || (enLista && !vis.length && !E.length);
     if (!cap) return;
-    $('sv-bar').innerHTML = '<span class="cuenta">' + (E.length ? '<strong>' + esc(plural(E.length, 'escogida', 'escogidas')) + '</strong> · ' + esc(dinero(sumaDev(E, 'sv'))) + ' de SV · se le paga ' + esc(dinero(aCientos(sumaDev(E, 'sv')))) : 'Escoge las que se le pagan a SV') + '</span>'
+    $('sv-bar').innerHTML = '<span class="cuenta">' + (E.length ? '<strong>' + esc(plural(E.length, 'escogida', 'escogidas')) + '</strong> · ' + esc(dinero(sumaDev(E, 'sv'))) + ' de SV · se le paga ' + esc(dinero(aCientos(sumaDev(E, 'sv'))))
+        : 'Palomea las que se le pagan a SV y luego pica «Ya se le pagó» o «Programar pago»') + '</span>'
       + '<span class="acciones">'
-      + (tocan.length && tocan.some(function (x) { return !SVSEL[x.clave]; }) ? '<button class="btn chico" type="button" data-svtodas="toca">Escoger las que ya tocan (' + tocan.length + ')</button>' : '')
+      + (enLista && vis.length > 1 && vis.some(function (x) { return !SVSEL[x.clave]; }) ? '<button class="btn chico" type="button" data-svtodas="vista">Escoger las ' + vis.length + ' que se ven</button>' : '')
+      + (!enLista && tocan.length && tocan.some(function (x) { return !SVSEL[x.clave]; }) ? '<button class="btn chico" type="button" data-svtodas="toca">Escoger las que ya tocan (' + tocan.length + ')</button>' : '')
       + (E.length ? '<button class="btn chico" type="button" data-svtodas="nada">Quitar lo escogido</button>' : '')
       + '<button class="btn chico" type="button" data-svreg="programado"' + (E.length ? '' : ' disabled') + '>Programar pago</button>'
       + '<button class="btn chico acento" type="button" data-svreg="pagado"' + (E.length ? '' : ' disabled') + '>Ya se le pagó</button></span>';
   }
   function svToggle(c, v) {
     if (v == null ? !SVSEL[c] : v) SVSEL[c] = true; else delete SVSEL[c];
-    var tr = document.querySelector('tr[data-svrow="' + c + '"]');
-    if (tr) { tr.classList.toggle('sel', !!SVSEL[c]); var ck = tr.querySelector('input.svck'); if (ck) ck.checked = !!SVSEL[c]; }
+    // lo mismo escogido en «Todas y su pago a SV» y en «Pagos a SV»
+    document.querySelectorAll('tr[data-svrow="' + c + '"], tr[data-svlis="' + c + '"]').forEach(function (tr) { tr.classList.toggle('sel', !!SVSEL[c]); });
+    document.querySelectorAll('input.svck[data-svck="' + c + '"]').forEach(function (ck) { ck.checked = !!SVSEL[c]; });
     pintaBarSv();
   }
   function svTodas(q) {
-    if (q === 'nada') SVSEL = {}; else porPagarSv().forEach(function (x) { if (svToca(x)) SVSEL[x.clave] = true; });
-    pintaPagosSv();
+    if (q === 'nada') SVSEL = {};
+    else if (q === 'vista') listaDev().forEach(function (x) { if (x.elegible) SVSEL[x.clave] = true; });
+    else porPagarSv().forEach(function (x) { if (svToca(x)) SVSEL[x.clave] = true; });
+    pintaPagosSv(); pintaListaDev();
   }
   function selForma(v) { return '<select id="sv-forma">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '"' + (k === (v || '') ? ' selected' : '') + '>' + FORMAS[k] + '</option>'; }).join('') + '</select>'; }
   function listaSv(L, quitar, paga) {
