@@ -718,6 +718,7 @@ td.ab{width:40px;padding-left:4px}
 .ago-tot .k{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
 .ago-tot .v{font-family:var(--f-num);font-weight:700;font-size:14px;margin-top:2px;overflow-wrap:anywhere}
 .ago-nf{font-size:12.5px;color:var(--ink-2)}
+.ago-err{overflow-wrap:anywhere;font-weight:600}
 .ago-lista{display:grid;gap:8px}
 .ago-g{border:1px solid var(--line-2);border-radius:10px;padding:8px 11px;background:var(--surface-3,var(--surface));min-width:0}
 .ago-g .h{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
@@ -1310,6 +1311,11 @@ async function arranca(recarga){
 function avisaArriba(txt){
   const a=document.getElementById('m-act'); a.textContent=txt; a.hidden=false;
   clearTimeout(a._t); a._t=setTimeout(()=>{a.hidden=true;},6000);
+  // con la ventana de una empresa (o una ventanita) abierta, esta línea queda atrás, tapada: el mismo mensaje sale además en
+  // el aviso chico de abajo, encima de todo y con su ✕ (PORTAL.toast de js/portal.js). 5-nov-2026: así se perdían el «Listo»
+  // y los errores de «Agotar» y de ✓ Aplicar, y parecía que «no pasó nada» (Fernando Cadengo).
+  const ov=document.getElementById('ov'), ov2=document.getElementById('ov2');
+  if(((ov&&!ov.hidden)||(ov2&&!ov2.hidden))&&window.PORTAL&&window.PORTAL.toast){ try{ window.PORTAL.toast(txt,9000); }catch(e){} }
 }
 (async()=>{
   const v=document.getElementById('vista');
@@ -3947,7 +3953,7 @@ function agotarPlan(ci,lado){
     rl.parte.forEach((m,d)=>{ const v=cen(m);
       if(rF.has(rl.fac)){ rF.set(rl.fac,Math.max(0,rF.get(rl.fac)-v)); yaF.set(rl.fac,(yaF.get(rl.fac)||0)+v); }
       if(rD.has(d)){ rD.set(d,Math.max(0,rD.get(d)-v)); yaD.set(d,(yaD.get(d)||0)+v); } }); }));
-  const lleva=(d,f)=>f&&rF.get(f)>0&&!!f.uuid&&ladoFac(f)===ladoDoc(d)&&!aplDec(f,d);
+  const lleva=(d,f)=>f&&rF.get(f)>0&&!!f.uuid&&f.uuid.toUpperCase()!==d.uuid.toUpperCase()&&ladoFac(f)===ladoDoc(d)&&!aplDec(f,d);
   const da=(f,d,v)=>{ rF.set(f,rF.get(f)-v); rD.set(d,rD.get(d)-v); nuF.set(f,(nuF.get(f)||0)+v); nuD.set(d,(nuD.get(d)||0)+v); pares.push({f,d,m:v/100}); };
   const toma=(d,f)=>{ if(rD.get(d)>0&&lleva(d,f)) da(f,d,Math.min(rD.get(d),rF.get(f))); };
   const fOrd=(a,b)=>{ const x=fch(a)||'9999', y=fch(b)||'9999'; return x<y?-1:x>y?1:0; };
@@ -4107,11 +4113,11 @@ function pintaAgotar(ci,body,pie){
    'Nunca contra facturas canceladas (en QUO o en el SAT), de otro cliente o proveedor, ni más del saldo.'].forEach(t=>ul.appendChild(el('li',null,t)));
   rg.appendChild(ul); body.appendChild(rg);
   pie.appendChild(boton('Cancelar','g',cierraOv2));
-  const b=boton(P.pares.length?'Aplicar todo · '+plural(P.pares.length,'relación','relaciones'):'Nada que aplicar','',()=>guardaAgotar(ci,P,b));
+  const b=boton(P.pares.length?'Aplicar todo · '+plural(P.pares.length,'relación','relaciones'):'Nada que aplicar','',()=>guardaAgotar(ci,P,b,body,pie));
   b.id='ago-aplica'; b.disabled=!P.pares.length; pie.appendChild(b);
   if(sb) sb.scrollTop=scr;
 }
-async function guardaAgotar(ci,P,b){
+async function guardaAgotar(ci,P,b,body,pie){
   if(!yoApl()||!P.pares.length) return;
   const rfc=D.cli[ci][2];
   const items=P.pares.map(x=>{ const cp=D.cp[x.f.cp]||['',''];
@@ -4124,10 +4130,23 @@ async function guardaAgotar(ci,P,b){
     if(q.error){ err=q.error; break; }
     hechos+=Math.min(300,items.length-i);
   }
-  cierraOv2();
+  if(!err){
+    cierraOv2();
+    await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+    avisaArriba('Listo: '+plural(items.length,'relación aceptada','relaciones aceptadas')+' (demostrativo). Se deshace con «Deshacer lo de Agotar».');
+    return;
+  }
+  // si algo no se pudo, la ventana se queda abierta y lo dice arriba (cerrada, el mensaje quedaba atrás de la ventana de la
+  // empresa y parecía que «no pasó nada»); el reparto se vuelve a calcular con lo que sí se guardó, para volver a intentar
   await cargaApl(); render(); if(S.cliente!=null) pintaModal();
-  avisaArriba(err?'Se guardaron '+F.int.format(hechos)+' de '+F.int.format(items.length)+' relaciones; lo demás no se pudo ('+msgErr(err)+'). Vuelve a picar «Agotar» para seguir.'
-    :'Listo: '+plural(items.length,'relación aceptada','relaciones aceptadas')+' (demostrativo). Se deshace con «Deshacer lo de Agotar».');
+  const txt=(hechos?'Se guardaron '+F.int.format(hechos)+' de '+F.int.format(items.length)+' relaciones; lo demás no se pudo'
+    :'No se guardó ninguna relación')+': '+msgErr(err)+'.';
+  if(body&&pie&&document.getElementById('ov2box').contains(body)){
+    pintaAgotar(ci,body,pie);
+    const m=el('div','actmsg err ago-err',txt); m.setAttribute('role','alert');
+    body.insertBefore(m,body.firstChild);
+    const sb=body.closest('.sheet-b'); if(sb) sb.scrollTop=0;
+  } else avisaArriba(txt);
 }
 function ventanaDeshaz(ci,n){
   if(!yoApl()) return;
