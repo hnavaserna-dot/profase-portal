@@ -693,7 +693,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     // 4. las devoluciones de IVA (de todas las fechas)
     var dd = DEV.d, toca = semanaToca(dd), prox = semanaProx(dd), pf = dd ? (dd.por_facturar || []).length : 0;
     h += pila({ l: 'Devoluciones de IVA', ir: 'dev', sub: toca.length ? 'semanas' : (pf ? 'porfac' : 'devs'), ir_t: 'Ver',
-      v: !dd ? '…' : toca.length ? esc(dinero(toca[0].costo)) : prox ? esc(dinero(prox.costo)) : 'Al día', chica: dd && !toca.length && !prox,
+      v: !dd ? '…' : toca.length ? esc(dinero(aPagarDe(toca[0]))) : prox ? esc(dinero(aPagarDe(prox))) : 'Al día', chica: dd && !toca.length && !prox,
       d: !dd ? '' : (toca.length ? 'Pago SV por entregar (' + esc(fecha(toca[0].paga_el)) + ')' : prox ? 'Próximo pago SV: ' + esc(fecha(prox.paga_el)) : 'Sin pagos SV pendientes')
         + ' · ' + esc(plural(pf, 'por facturar', 'por facturar')) });
     $('r-pilas').innerHTML = h;
@@ -712,7 +712,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function pintaFalta(nd, ru) {
     var L = [], mes = MESES_L[PER.mes - 1].toLowerCase(), dd = DEV.d;
     if (nd) L.push({ c: nd, t: (nd === 1 ? '1 factura de ' + mes + ' por decidir' : nd + ' facturas de ' + mes + ' por decidir'), s: '¿Llevan comisión? Inclúyelas o descártalas.', b: 'Decidir', ir: 'fac', sub: 'disponible' });
-    semanaToca(dd).forEach(function (x) { L.push({ c: dinero(x.costo), t: x.pago ? 'Pago SV #' + x.pago + ' (programado para el ' + fecha(x.paga_el) + ') por pagar' : 'Pago SV del ' + fecha(x.paga_el) + ' por entregar', s: plural(x.n, 'devolución', 'devoluciones') + (x.pago ? '' : x.semana ? ' de la semana del ' + fecha(x.semana) : ' de antes del WorkFlow') + '.', b: 'Ver', ir: 'dev', sub: 'semanas' }); });
+    semanaToca(dd).forEach(function (x) { L.push({ c: dinero(aPagarDe(x)), t: x.pago ? 'Pago SV #' + x.pago + ' (programado para el ' + fecha(x.paga_el) + ') por pagar' : 'Pago SV del ' + fecha(x.paga_el) + ' por entregar', s: plural(x.n, 'devolución', 'devoluciones') + (x.pago ? '' : x.semana ? ' de la semana del ' + fecha(x.semana) : ' de antes del WorkFlow') + '.', b: 'Ver', ir: 'dev', sub: 'semanas' }); });
     if (dd) {
       var pf = dd.por_facturar || [], sinPct = pf.filter(function (x) { return (x.sugerido || {}).falta === 'cond'; }).length,
         sinMonto = pf.filter(function (x) { return (x.sugerido || {}).falta === 'monto'; }).length,
@@ -1471,9 +1471,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var r = d.sv_resumen || {}, hoy = String(d.hoy || '').slice(0, 10), prox = String(r.proximo || '').slice(0, 10);
     var dev = function (n) { n = +n || 0; return n === 1 ? '1 devolución' : n + ' devoluciones'; };
     var P = [
-      { k: 'por_entregar', l: 'Por entregar a SV', v: dinero(r.por_entregar),
-        s: dev(r.n_por_entregar) + (prox ? (prox <= hoy ? ' · ya toca' : ' · toca el ' + fecha(prox)) : ''), ojo: !!prox && prox <= hoy },
-      { k: 'pagado', l: 'Pagado a SV', v: dinero(r.pagado), s: dev(r.n_pagado) + (r.ultimo_pago ? ' · el último, el ' + fecha(r.ultimo_pago) : '') },
+      { k: 'por_entregar', l: 'Por entregar a SV', v: dinero(r.por_entregar_pago != null ? r.por_entregar_pago : r.por_entregar),
+        s: dev(r.n_por_entregar) + (+r.n_por_entregar ? ' · a cientos' : '') + (prox ? (prox <= hoy ? ' · ya toca' : ' · toca el ' + fecha(prox)) : ''), ojo: !!prox && prox <= hoy },
+      { k: 'pagado', l: 'Pagado a SV', v: dinero(r.pagado_entregado != null ? r.pagado_entregado : r.pagado), s: dev(r.n_pagado) + (r.ultimo_pago ? ' · el último, el ' + fecha(r.ultimo_pago) : '') },
       { k: 'sin_fecha', l: 'Sin fecha de pago', v: String(+r.n_sin_fecha || 0), s: dinero(r.sv_sin_fecha) + ' de SV' },
       { k: '', l: 'Lo que devolvió el SAT', v: dinero(r.devuelto), s: dev(r.n) },
       { k: 'pf', l: 'Lo de PROFASE', v: dinero(r.pf), s: 'sin IVA · de todas' },
@@ -1657,6 +1657,10 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   var FORMAS = { '': 'Sin decir', efectivo: 'Efectivo', transferencia: 'Transferencia', otra: 'Otra' };
   var SV_EST = { programado: 'Programado', pagado: 'Pagado', cancelado: 'Cancelado', regresado: 'Regresado' };
   function hoyDev() { return String((DEV.d || {}).hoy || '').slice(0, 10); }
+  // 272: lo que se le paga a SV en cada pago se cierra a cientos (Héctor Daniel Nava, 4-nov-2026). Lo de cada pago lo pone la
+  // base (cdir_sv_a_pagar); aquí solo se enseña, antes de guardar, cuánto quedaría lo escogido (la misma regla, en centavos).
+  function aCientos(n) { var c = Math.round((Number(n) || 0) * 100); return Math.round(c / 10000) * 100; }
+  function aPagarDe(x) { return x && x.a_pagar != null ? x.a_pagar : x ? (x.costo != null ? x.costo : x.monto) : 0; }
   function porPagarSv() {
     return ((DEV.d || {}).lista || []).filter(function (x) { return x.elegible; }).sort(function (a, b) {
       var fa = String(a.paga_el || '9999').slice(0, 10), fb = String(b.paga_el || '9999').slice(0, 10);
@@ -1690,13 +1694,14 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('sv-sel-vacia').hidden = L.length > 0;
     var np = G.filter(function (g) { return g.estado === 'programado'; }).length, ng = G.filter(function (g) { return g.estado === 'pagado'; }).length;
     $('sv-pag-sub').textContent = G.length ? plural(np, 'programado', 'programados') + ' · ' + plural(ng, 'pagado', 'pagados') + ' · ábrelo para ver sus devoluciones' : ' ';
-    $('t-dpag').tHead.innerHTML = '<tr><th>Pago</th><th>Estado</th><th class="monto">Devoluciones</th><th class="monto">Lo de SV</th><th>Cómo</th><th>Registró</th></tr>';
+    $('t-dpag').tHead.innerHTML = '<tr><th>Pago</th><th>Estado</th><th class="monto">Devoluciones</th><th class="monto">Se le paga</th><th>Cómo</th><th>Registró</th></tr>';
     $('t-dpag').tBodies[0].innerHTML = G.map(function (g) {
       return '<tr class="click" tabindex="0" data-svpago="' + esc(g.id) + '">'
         + '<td data-l="Pago"><strong>#' + esc(g.id) + '</strong>' + (g.origen === 'excel' ? '<div class="mut">de tu Excel IVAS</div>' : '') + (g.nota ? '<div class="mut">' + esc(g.nota) + '</div>' : '') + '</td>'
         + '<td data-l="Estado">' + svEstado(g) + '</td>'
         + '<td class="monto" data-l="Devoluciones">' + esc(g.n) + '</td>'
-        + '<td class="monto" data-l="Lo de SV"><strong>' + esc(dinero(g.monto)) + '</strong></td>'
+        + '<td class="monto" data-l="Se le paga"><strong>' + esc(dinero(aPagarDe(g))) + '</strong>'
+        + (Math.abs(Number(aPagarDe(g)) - Number(g.monto)) > 0.005 ? '<div class="mut">lo de SV, ' + esc(dinero(g.monto)) + '</div>' : '') + '</td>'
         + '<td data-l="Cómo">' + esc(g.forma ? FORMAS[g.forma] : '') + '</td>'
         + '<td data-l="Registró"><span class="mut">' + esc(g.creado_por || '') + '</span></td></tr>';
     }).join('');
@@ -1706,7 +1711,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, L = porPagarSv(), E = svEscogidas(), tocan = L.filter(svToca);
     $('sv-bar').hidden = !cap || !L.length;
     if (!cap) return;
-    $('sv-bar').innerHTML = '<span class="cuenta">' + (E.length ? '<strong>' + esc(plural(E.length, 'escogida', 'escogidas')) + '</strong> · ' + esc(dinero(sumaDev(E, 'sv'))) + ' de SV' : 'Escoge las que se le pagan a SV') + '</span>'
+    $('sv-bar').innerHTML = '<span class="cuenta">' + (E.length ? '<strong>' + esc(plural(E.length, 'escogida', 'escogidas')) + '</strong> · ' + esc(dinero(sumaDev(E, 'sv'))) + ' de SV · se le paga ' + esc(dinero(aCientos(sumaDev(E, 'sv')))) : 'Escoge las que se le pagan a SV') + '</span>'
       + '<span class="acciones">'
       + (tocan.length && tocan.some(function (x) { return !SVSEL[x.clave]; }) ? '<button class="btn chico" type="button" data-svtodas="toca">Escoger las que ya tocan (' + tocan.length + ')</button>' : '')
       + (E.length ? '<button class="btn chico" type="button" data-svtodas="nada">Quitar lo escogido</button>' : '')
@@ -1724,19 +1729,20 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     pintaPagosSv();
   }
   function selForma(v) { return '<select id="sv-forma">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '"' + (k === (v || '') ? ' selected' : '') + '>' + FORMAS[k] + '</option>'; }).join('') + '</select>'; }
-  function listaSv(L, quitar) {
+  function listaSv(L, quitar, paga) {
     return '<ul class="lista svlis">' + L.map(function (x) {
       return '<li' + (x.ok === false ? ' class="no-ok"' : '') + '><span class="t">' + esc(x.cliente) + '<div class="mut">' + esc(x.mes_txt) + '</div>'
         + (x.ok === false ? '<div class="mut">Ya no se puede pagar: quítala del pago.</div>' : '') + '</span>'
         + '<span class="acciones"><span class="m">' + esc(dinero(x.sv)) + '</span>' + (quitar ? '<button class="btn chico" type="button" data-svquita="' + esc(x.clave) + '">Quitar</button>' : '') + '</span></li>';
-    }).join('') + (L.length > 1 ? '<li class="tot"><span class="t">Total</span><span class="m">' + esc(dinero(sumaDev(L, 'sv'))) + '</span></li>' : '') + '</ul>';
+    }).join('') + (L.length > 1 ? '<li class="tot"><span class="t">Total de SV</span><span class="m">' + esc(dinero(sumaDev(L, 'sv'))) + '</span></li>' : '')
+      + (paga != null ? '<li class="tot"><span class="t">Se le paga' + (paga.cientos ? ' (cerrado a cientos)' : '') + '</span><span class="m">' + esc(dinero(paga.monto)) + '</span></li>' : '') + '</ul>';
   }
   function fecCampo(l, v) { return '<div class="campo"><label for="sv-fec" id="sv-fec-l">' + esc(l) + '</label><input type="date" id="sv-fec" value="' + esc(String(v || '').slice(0, 10)) + '"></div>'; }
   function svRegistraForma(como) {
     var E = svEscogidas();
     if (!E.length) { error('Escoge al menos una devolución.'); return; }
     EDITA = { tipo: 'svreg', claves: E.map(function (x) { return x.clave; }) };
-    abre(cab('Devoluciones de IVA', 'Registrar pago a SV', plural(E.length, 'devolución', 'devoluciones') + ' · ' + dinero(sumaDev(E, 'sv')) + ' de SV')
+    abre(cab('Devoluciones de IVA', 'Registrar pago a SV', plural(E.length, 'devolución', 'devoluciones') + ' · se le paga ' + dinero(aCientos(sumaDev(E, 'sv'))))
       + '<div class="cuerpo"><section class="sec"><div class="in campos">'
       + campo('sv-como', '¿Cómo va?', '<select id="sv-como"><option value="pagado"' + (como === 'pagado' ? ' selected' : '') + '>Ya se le pagó</option>'
               + '<option value="programado"' + (como === 'programado' ? ' selected' : '') + '>Se le va a pagar (programarlo)</option></select>')
@@ -1744,7 +1750,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       + campo('sv-forma', 'Cómo se paga', selForma(''))
       + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600" placeholder="A quién se le entregó, la referencia…"></textarea>', true)
       + '</div></section>'
-      + sec('Las devoluciones de este pago', listaSv(E))
+      + sec('Las devoluciones de este pago', listaSv(E, false, { monto: aCientos(sumaDev(E, 'sv')), cientos: true })
+            + '<p class="mut" style="margin:8px 0 0">Lo que se le paga se cierra a cientos, como tu Comisión HDN; lo que se redondea no pasa al siguiente pago.</p>')
       + '<div class="msg" id="v-msg" hidden></div>'
       + '<div class="acciones"><button class="btn acento" type="button" id="sv-reg-ok">Registrar</button></div></div>');
     svFecLabel();
@@ -1777,10 +1784,12 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (g.estado === 'programado' && cap) bot = '<button class="btn acento" type="button" id="sv-a-paga">Marcar pagado</button><button class="btn" type="button" id="sv-a-cambia">Cambiar</button><button class="btn peligro" type="button" id="sv-a-cancela">Cancelar el pago</button>';
     else if (g.estado === 'pagado') bot = (cap ? '<button class="btn" type="button" id="sv-a-cambia">Cambiar</button>' : '') + (d.regresa ? '<button class="btn peligro" type="button" id="sv-a-regresa">Regresar</button>' : '');
     var cerrado = g.estado === 'cancelado' || g.estado === 'regresado';
-    abre(cab('Devoluciones de IVA', 'Pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · ' + dinero(g.monto) + ' de SV')
+    F.push(['Lo de SV', esc(dinero(g.monto))]);
+    F.push(['Se le paga', '<strong>' + esc(dinero(aPagarDe(g))) + '</strong><div class="mut">' + (g.a_cientos ? 'cerrado a cientos' : 'lo que se pagó (de antes de cerrar a cientos)') + '</div>']);
+    abre(cab('Devoluciones de IVA', 'Pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · se le paga ' + dinero(aPagarDe(g)))
       + '<div class="cuerpo">'
       + sec('Datos del pago', '<div class="in dl">' + F.map(function (f) { return '<span>' + esc(f[0]) + '</span><span class="v">' + f[1] + '</span>'; }).join('') + '</div>')
-      + sec(cerrado ? 'Las devoluciones que traía' : 'Sus devoluciones', listaSv(g.devs || [], g.estado === 'programado' && cap && (g.devs || []).length > 1))
+      + sec(cerrado ? 'Las devoluciones que traía' : 'Sus devoluciones', listaSv(g.devs || [], g.estado === 'programado' && cap && (g.devs || []).length > 1, { monto: aPagarDe(g), cientos: !!g.a_cientos }))
       + (cerrado ? '<p class="mut" style="margin:0">' + (g.estado === 'cancelado' ? 'Se canceló: sus devoluciones volvieron a quedar por pagar.' : 'Se regresó: sus devoluciones volvieron a quedar por pagar a SV.') + '</p>' : '')
       + '<div class="msg" id="v-msg" hidden></div>'
       + (bot ? '<div class="acciones">' + bot + '</div>' : '') + '</div>');
@@ -1789,8 +1798,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function svPagaForma() {
     var g = EDITA && EDITA.g; if (!g) return;
     EDITA = { tipo: 'svpaga', id: g.id, g: g };
-    abre(cab('Devoluciones de IVA', 'Marcar pagado el pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · ' + dinero(g.monto) + ' de SV')
+    abre(cab('Devoluciones de IVA', 'Marcar pagado el pago SV #' + g.id, plural(+g.n || 0, 'devolución', 'devoluciones') + ' · se le paga ' + dinero(aPagarDe(g)))
       + '<div class="cuerpo"><section class="sec"><div class="in campos">'
+      + '<div class="campo"><label for="sv-paga-ro">Se le paga' + (g.a_cientos ? ' (cerrado a cientos)' : '') + '</label><input id="sv-paga-ro" readonly value="' + esc(dinero(aPagarDe(g))) + '"></div>'
       + fecCampo('Se le pagó el (la fecha de Amazon)', hoyDev())
       + campo('sv-forma', 'Cómo se pagó', selForma(g.forma))
       + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600">' + esc(g.nota || '') + '</textarea>', true)
@@ -1866,15 +1876,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function excelPagosSv(b) {
     var G = (DEV.d || {}).pagos || [], L = porPagarSv(), filas = [];
     G.forEach(function (g) {
-      (g.devs || []).forEach(function (x) {
+      (g.devs || []).forEach(function (x, i) {   // «Se le paga» (lo del pago, cerrado a cientos) va en su primer renglón
         filas.push(['#' + g.id, SV_EST[g.estado] || g.estado, fecha(g.programado_el), fecha(g.pagado_el), g.forma ? FORMAS[g.forma] : '', x.cliente || '', x.mes_txt || '', Number(x.sv),
-                    g.nota || '', g.creado_por || '', g.motivo || '']);
+                    i === 0 ? Number(aPagarDe(g)) : '', g.nota || '', g.creado_por || '', g.motivo || '']);
       });
     });
-    L.forEach(function (x) { filas.push(['', 'Por pagar', x.paga_el ? fecha(x.paga_el) : 'Sin fecha', '', '', x.cliente || '', x.mes_txt || '', Number(x.sv), '', '', '']); });
+    L.forEach(function (x) { filas.push(['', 'Por pagar', x.paga_el ? fecha(x.paga_el) : 'Sin fecha', '', '', x.cliente || '', x.mes_txt || '', Number(x.sv), '', '', '', '']); });
     excel(b, 'Pagos a SV PROFASE', 'Pagos a SV', ['Comisiones de dirección', plural(G.length, 'pago', 'pagos') + ' · ' + plural(L.length, 'devolución por pagar', 'devoluciones por pagar')],
-      ['Pago', 'Estado', 'Programado / toca', 'Se le pagó el', 'Cómo', 'Cliente', 'Mes', 'Lo de SV', 'Nota', 'Registró', 'Motivo'],
-      filas, [8], [9, 12, 16, 14, 13, 32, 10, 15, 30, 20, 30]);
+      ['Pago', 'Estado', 'Programado / toca', 'Se le pagó el', 'Cómo', 'Cliente', 'Mes', 'Lo de SV', 'Se le paga (el pago)', 'Nota', 'Registró', 'Motivo'],
+      filas, [8, 9], [9, 12, 16, 14, 13, 32, 10, 15, 17, 30, 20, 30]);
   }
   function excelDev(b) {
     var L = (DEV.d || {}).devoluciones || [];
