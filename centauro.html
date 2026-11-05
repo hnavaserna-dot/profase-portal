@@ -133,6 +133,8 @@ button,select,input,textarea{font:inherit;color:inherit}
 .mat tr.sec td span,.mat tr.sub td span{position:sticky;left:8px;display:inline-block;max-width:min(560px,calc(100vw - 72px));white-space:normal}
 .mat td.dif{color:var(--accent-ink);font-weight:700}
 .mat td.cero{color:var(--muted)}
+.mat th.tx,.mat td.tx{text-align:left;white-space:normal;min-width:110px}
+.mat td.tx.largo{min-width:260px}
 .dconst{padding:10px 14px}
 .dconst summary{font-weight:600;cursor:pointer}
 .dconst table{margin-top:8px}
@@ -428,7 +430,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         <label>Tipo <select id="d-tipo" aria-label="Tipo"><option value="">Todas</option><option value="normal">Normales</option><option value="comp">Complementarias</option></select></label>
       </div>
       <div class="lados dvis" id="d-vista" role="group" aria-label="Qué ver">
-        <button type="button" data-dvista="decl" aria-pressed="true">Declaraciones</button><button type="button" data-dvista="con" aria-pressed="false">Conceptos por mes</button><button type="button" data-dvista="nom" aria-pressed="false">Nómina: SAT contra XML</button>
+        <button type="button" data-dvista="decl" aria-pressed="true">Declaraciones</button><button type="button" data-dvista="con" aria-pressed="false">Conceptos por mes</button><button type="button" data-dvista="nom" aria-pressed="false">Nómina: SAT contra XML</button><button type="button" data-dvista="rev" aria-pressed="false">Revisión fiscal</button>
       </div>
       <div id="d-vdecl">
         <div class="opi" id="d-opi" hidden></div>
@@ -446,6 +448,20 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         <div class="tot" id="d-ntot"></div>
         <div class="tabla"><table class="mat" id="d-nom"></table></div>
         <details class="dconst" id="d-nconst" hidden><summary>La constancia del acumulado anual del visor del SAT</summary><div id="d-nconstb"></div></details>
+      </div>
+      <!-- 271: la revisión fiscal al instante (solo hechos de lo que Centauro trae del SAT y de la bóveda; nada para el cliente) -->
+      <div id="d-vrev" hidden>
+        <div class="tot" id="d-rtot"></div>
+        <div class="lados dvis" id="d-rfil" role="group" aria-label="Riesgo"></div>
+        <div class="tabla"><table class="resp"><thead><tr><th>Riesgo</th><th>Mes</th><th>Hallazgo</th><th>Qué puede pasar</th><th>Qué lo resuelve</th></tr></thead>
+          <tbody id="d-rlista"></tbody></table></div>
+        <details class="dconst"><summary>Cronología de declaraciones</summary><div id="d-rcron"></div></details>
+        <details class="dconst"><summary>Conciliación de nómina</summary><div id="d-rnom"></div></details>
+        <details class="dconst"><summary>ISR de personas morales</summary><div id="d-risr"></div></details>
+        <details class="dconst"><summary>IVA</summary><div id="d-riva"></div></details>
+        <details class="dconst"><summary>Retenciones y accesorios</summary><div id="d-rret"></div></details>
+        <details class="dconst"><summary>Indicadores</summary><div id="d-rind"></div></details>
+        <details class="dconst"><summary>Pendientes y lo que falta</summary><div id="d-rpen"></div></details>
       </div>
     </div>
     <p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente (cada uso queda en Accesos) solo para consultar y bajar: nunca presenta, firma ni envía nada y nunca abre el Buzón Tributario. Primero baja todo 2026, luego 2025, 2024, 2023 y 2022; después, cada día en temporada de declaraciones y una vez a la semana lo nuevo (también las complementarias). «Ver» enseña la declaración con la marca PROFASE y «Bajar» deja escoger con la marca o el original del SAT. «Pago» es la prueba del pago que da el SAT («Información registrada de pagos de contribuciones federales», con el pago recibido en el banco) y arriba sale la última opinión de cumplimiento; las dos también se suben solas a su actividad del WorkFlow (sin terminarla) si el contador no subió ya un documento.</p>
@@ -571,6 +587,15 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         var f0 = MK.encabezado(wb, ws, head.length, { titulo: h.titulo || titulo, lineas: (lineas || []).concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
         ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
         filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+        // 271: un renglón de totales de control con su fórmula a la vista (el PDF enseña el resultado)
+        if (h.totales && filas.length) {
+          var tr = [h.totalTxt || 'Total'];
+          h.totales.forEach(function (c) {
+            var col = ws.getColumn(c + 1).letter, sum = filas.reduce(function (s, r) { return s + (typeof r[c] === 'number' ? r[c] : 0); }, 0);
+            tr[c] = { formula: 'SUM(' + col + (f0 + 1) + ':' + col + (f0 + filas.length) + ')', result: Math.round(sum * 100) / 100 };
+          });
+          ws.getRow(f0 + filas.length + 1).values = tr; ws.getRow(f0 + filas.length + 1).font = { bold: true };
+        }
         Object.keys(h.formatos || {}).forEach(function (c) { ws.getColumn(+c + 1).numFmt = h.formatos[c]; });
         if (filas.length && filas.length <= 5000) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
         ws.views = [{ state: 'frozen', ySplit: f0 }];
@@ -625,6 +650,11 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       return '<span class="chip ' + k[0] + '" title="' + esc(t) + '">' + esc(a.anio + k[2]) + (a.k === 'hecho' && a.n != null ? ' ' + a.n : '') + '</span>';
     }).join(' ');
   }
+  // 271: cuántos de riesgo alto trae cada cliente en su revisión fiscal (lo que revisó el reloj)
+  function revChips(rfc) {
+    var l = (D.revRes || []).filter(function (x) { return x.rfc === rfc && x.altos > 0; });
+    return l.length ? '<div>' + l.slice(0, 3).map(function (x) { return chip('Riesgo alto ' + x.ejercicio + ': ' + x.altos, 'mal'); }).join(' ') + '</div>' : '';
+  }
   function pintaClientesD() {
     var tb = $('d-clis'), l = D.clis.filter(function (c) { return !D.cli || c.rfc === D.cli; });
     $('d-sub').textContent = D.clis.length ? cuenta(D.clis.length, 'cliente', 'clientes') + ' · pícale a uno para ver sus declaraciones' : '';
@@ -632,7 +662,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     tb.innerHTML = l.map(function (c) {
       var mal = (c.anios || []).filter(function (a) { return a.k === 'sin' || a.k === 'error'; })[0];
       return '<tr data-rfc="' + esc(c.rfc) + '" class="pica' + (c.rfc === D.cli ? ' sel' : '') + '"><td data-l="Cliente"><span class="rs">' + esc(c.cliente || c.rfc) + '</span><div class="mut">' + esc(c.rfc) + '</div>'
-        + (mal && mal.mensaje ? '<div class="mut">' + esc(mal.mensaje) + '</div>' : '') + '</td>'
+        + (mal && mal.mensaje ? '<div class="mut">' + esc(mal.mensaje) + '</div>' : '') + revChips(c.rfc) + '</td>'
         + '<td data-l="Cómo va cada año">' + anioChips(c) + '</td>'
         + '<td data-l="Declaraciones" class="num">' + (+c.n || 0).toLocaleString('es-MX') + '</td>'
         + '<td data-l="Revisado">' + (c.revisado ? esc(fechaHora(c.revisado)) : '<span class="mut">Todavía no</span>') + '</td></tr>';
@@ -642,7 +672,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     });
   }
   async function cargaDecl() {
-    D.clis = await rpc('cen_decl_clientes') || [];
+    var dosC = await Promise.all([rpc('cen_decl_clientes'), rpc('cen_decl_rev_resumen', { p: {} })]);
+    D.clis = dosC[0] || []; D.revRes = dosC[1] || [];
     var n = D.clis.length, hechos = 0, faltan = 0;
     D.clis.forEach(function (c) { (c.anios || []).forEach(function (a) { if (a.k === 'hecho') hechos++; else if (a.k === 'falta' || a.k === 'tomado') faltan++; }); });
     $('d-nota').textContent = n ? 'Prueba con ' + cuenta(n, 'cliente', 'clientes') + ': ' + cuenta(hechos, 'año ya está', 'años ya están') + (faltan ? ' y ' + cuenta(faltan, 'falta', 'faltan') + ' por bajar' : '') + '. Primero 2026 de todos, luego 2025, 2024, 2023 y 2022.'
@@ -658,6 +689,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     }
     var pide = ''; try { pide = sessionStorage.getItem('cen-decl-abre') || ''; sessionStorage.removeItem('cen-decl-abre'); } catch (e) { pide = ''; }
     if (pide && D.clis.some(function (c) { return c.rfc === pide; })) { D.cli = pide; if (bD && bD.pon) bD.pon([pide]); }   // 253: desde el aviso de su opinión
+    var rev = ''; try { rev = sessionStorage.getItem('cen-decl-rev') || ''; sessionStorage.removeItem('cen-decl-rev'); } catch (e) { rev = ''; }
+    if (pide && /^\d{4}$/.test(rev)) { D.vista = 'rev'; if (![].some.call(sa.options, function (o) { return o.value === rev; })) sa.insertAdjacentHTML('beforeend', '<option>' + rev + '</option>'); sa.value = rev; }   // 271: desde el aviso de la revisión fiscal
     pintaClientesD();
     if (D.cli) await listaD();
   }
@@ -756,10 +789,11 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   function pintaVista() {
     var v = D.vista || 'decl';
     document.querySelectorAll('[data-dvista]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-dvista') === v ? 'true' : 'false'); });
-    $('d-vdecl').hidden = v !== 'decl'; $('d-vcon').hidden = v !== 'con'; $('d-vnom').hidden = v !== 'nom';
+    $('d-vdecl').hidden = v !== 'decl'; $('d-vcon').hidden = v !== 'con'; $('d-vnom').hidden = v !== 'nom'; $('d-vrev').hidden = v !== 'rev';
     $('d-tipo').parentNode.hidden = v !== 'decl';
     if (v === 'con') return listaCon();
     if (v === 'nom') return listaNom();
+    if (v === 'rev') return listaRev();
     pintaD();
   }
   function numTxt(n) { var r = Math.round(n * 100) / 100; return r.toLocaleString('es-MX', Number.isInteger(r) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -883,9 +917,126 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     }
     await libroExcel(btn, 'Nómina SAT contra XML', hojas, [D.cliente + ' (' + D.cli + ') · ' + D.nomAnio, 'XML por su fecha de pago, sin los cancelados en el SAT; lo declarado, de la última declaración del mes con «ISR retenciones por salarios»']);
   }
+  /* 271: la revisión fiscal al instante (lo que Centauro trae del SAT y de la bóveda; solo hechos, nada para el cliente) */
+  var RIESGO = { alto: ['mal', 'Alto'], medio: ['ojo', 'Medio'], bajo: ['', 'Bajo'] };
+  function mesTxt(m) { return m >= 1 && m <= 12 ? MESES_L[m - 1] : ''; }
+  function pct(a, b) { return b ? (Math.round(a / b * 10000) / 100).toLocaleString('es-MX', { maximumFractionDigits: 2 }) + ' %' : '—'; }
+  function tablaMat(head, filas) {
+    if (!filas.length) return '<p class="mut">Sin datos de este año.</p>';
+    // las columnas de texto (todas sus celdas son texto) van a la izquierda; las de importes, a la derecha
+    var tx = head.map(function (_, i) { return i > 0 && filas.every(function (f) { return f[i] == null || typeof f[i] === 'string'; }); });
+    return '<div class="tabla"><table class="mat"><thead><tr>' + head.map(function (x, i) { return '<th' + (tx[i] ? ' class="tx"' : '') + '>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>'
+      + filas.map(function (f) { return '<tr>' + f.map(function (x, i) {
+          if (i === 0 || tx[i] || typeof x === 'string') return '<td' + (tx[i] ? ' class="tx' + (String(x || '').length > 60 ? ' largo' : '') + '"' : '') + '>' + esc(x == null ? '' : x) + '</td>';
+          return celNum(x); }).join('') + '</tr>'; }).join('')
+      + '</tbody></table></div>';
+  }
+  // los renglones de cada parte (los mismos para la pantalla y el Excel)
+  function revPartes(r) {
+    var n = function (x) { return x == null || x === '' || isNaN(+x) ? null : +x; };
+    var cron = (r.cronologia || []).map(function (d) {
+      return [fechaHora(d.presentada), mesTxt(d.mes) || d.periodo || '', d.tipo || '', d.tipo_comp || '', d.numero, fecha(d.vence), d.tarde ? 'Sí' : '',
+              (d.obligaciones || []).join(' · '), d.sustituida ? 'Sustituida' : 'Vigente',
+              (d.cambios || []).map(function (c) { return c.concepto + ': ' + (c.antes == null ? 'nuevo' : numTxt(+c.antes)) + ' → ' + numTxt(+c.despues); }).join('; ')];
+    });
+    var nom = (r.nomina || []).map(function (m) {
+      var dif = m.isr_declarado != null && m.isr_timbrado != null ? +m.isr_declarado - +m.isr_timbrado : null;
+      return [mesTxt(m.mes), n(m.recibos), n(m.trab), n(m.trabajadores), n(m.sueldos), n(m.exentos), n(m.isr_cfdi_decl), n(m.isr_reg), n(m.visor_isr), n(m.xml_isr), dif];
+    });
+    var pagado = {};
+    (r.isr_pm || []).concat(r.iva || []).concat(r.retenciones || []).forEach(function (x) { if (x.a_pagar != null) pagado[x.mes] = (pagado[x.mes] || 0) + (+x.a_pagar || 0); });
+    var isr = (r.isr_pm || []).map(function (m) {
+      return [mesTxt(m.mes), n(m.ingresos), n(m.coeficiente), n(m.utilidad), n(m.base), n(m.causado), n(m.pagos_anteriores), n(m.retenido), n(m.a_cargo), n(m.a_pagar),
+              m.ingresos ? pct(pagado[m.mes] || 0, +m.ingresos) : '—'];
+    });
+    var iva = (r.iva || []).map(function (m) { return [mesTxt(m.mes), n(m.gravados16), n(m.causado), n(m.acreditable), n(m.retenido), n(m.a_cargo), n(m.a_favor), n(m.a_pagar), n(m.neto)]; });
+    var ret = (r.retenciones || []).map(function (m) { return [m.obligacion, mesTxt(m.mes), n(m.a_cargo), n(m.a_pagar), n(m.actualizacion), n(m.recargos)]; });
+    var I = r.indicadores || {};
+    var ind = [
+      ['Carga fiscal del año', I.ingresos ? pct(+I.total_pagado || 0, +I.ingresos) : '—', 'Todo lo pagado en las declaraciones vigentes entre los ingresos nominales de ISR'],
+      ['Total pagado en el año', I.total_pagado != null ? '$' + numTxt(+I.total_pagado) : '—', '«Cantidad a pagar» de todas las declaraciones vigentes'],
+      ['ISR retenido entre pagos de sueldos', I.sueldos ? pct(+I.isr_sueldos || 0, +I.sueldos) : '—', 'Lo declarado en retenciones por salarios'],
+      ['Parte exenta de la nómina', I.sueldos ? pct(+I.exentos || 0, +I.sueldos) : '—', 'Pagos exentos entre pagos de sueldos (declarado)'],
+      ['Rotación de personal', I.trabajadores_prom ? (Math.round(+I.unicos / +I.trabajadores_prom * 100) / 100).toLocaleString('es-MX') + ' veces' : '—',
+       'Trabajadores distintos del año entre el promedio de cada mes (CFDI de la bóveda)'],
+      ['CFDI cancelados entre emitidos', I.emitidos ? pct(+I.cancelados || 0, +I.emitidos) : '—', (+I.cancelados || 0).toLocaleString('es-MX') + ' de ' + (+I.emitidos || 0).toLocaleString('es-MX')],
+      ['Recibos de nómina cancelados', I.nomina_cfdi ? pct(+I.nomina_cancelados || 0, +I.nomina_cfdi) : '—', (+I.nomina_cancelados || 0).toLocaleString('es-MX') + ' de ' + (+I.nomina_cfdi || 0).toLocaleString('es-MX')],
+      ['Coeficientes de utilidad usados', (I.coeficientes || []).map(function (x) { return String(x); }).join(', ') || '—', 'Para validarlos hace falta la anual del ejercicio de antes'],
+      ['Obligaciones del año', (I.obligaciones || []).join(' · ') || '—', 'Las que trae al menos una declaración del año']];
+    var pen = (r.pendientes || []).map(function (x) { return [x.que, x.resuelve || '']; });
+    return { cron: cron, nom: nom, isr: isr, iva: iva, ret: ret, ind: ind, pen: pen };
+  }
+  var REV_H = {
+    cron: ['Presentada', 'Mes', 'Tipo', 'Tipo de complementaria', 'Número de operación', 'Vencía', 'Fuera de plazo', 'Obligaciones', 'Estado', 'Qué cambió contra la anterior'],
+    nom: ['Mes', 'Recibos (CFDI)', 'Trabajadores declarados', 'Trabajadores con CFDI', 'Pagos de sueldos', 'Pagos exentos', 'ISR timbrado según la declaración',
+          'ISR de acuerdo a sus registros', 'ISR según el visor del SAT', 'ISR según los CFDI de la bóveda', 'Declarado menos timbrado'],
+    isr: ['Mes', 'Ingresos nominales', 'Coeficiente de utilidad', 'Utilidad fiscal', 'Base gravable', 'Impuesto causado', 'Pagos provisionales anteriores', 'ISR retenido',
+          'A cargo', 'A pagar', 'Carga fiscal del mes'],
+    iva: ['Mes', 'Actos gravados al 16 %', 'IVA causado', 'IVA acreditable', 'IVA retenido', 'A cargo', 'A favor', 'A pagar', 'Neto (a cargo menos a favor)'],
+    ret: ['Obligación', 'Mes', 'A cargo', 'A pagar', 'Actualización', 'Recargos'],
+    ind: ['Indicador', 'Valor', 'Cómo se calcula'], pen: ['Qué falta', 'Qué lo resuelve'] };
+  async function listaRev() {
+    var mi = ++D.seq2, a = anioVista();
+    $('d-h').textContent = 'Revisión fiscal de ' + D.cliente; $('d-sub2').textContent = D.cli + ' · ' + a;
+    $('d-rtot').innerHTML = '<span class="mut">Revisando…</span>'; $('d-rlista').innerHTML = ''; $('d-rfil').innerHTML = '';
+    var r = await rpc('cen_decl_revision', { p: { rfc: D.cli, ejercicio: a } }) || {};
+    if (mi !== D.seq2) return;
+    D.rev = r; D.revAnio = a;
+    pintaRev();
+  }
+  function pintaRev() {
+    var r = D.rev || {}, hs = r.hallazgos || [], res = r.resumen || {}, f = D.revFil || '', dt = r.datos || {};
+    $('d-rtot').innerHTML = '<span><b>Revisión de ' + esc(String(D.revAnio)) + '</b> al instante (' + esc(fechaHora(r.al || new Date().toISOString())) + ')</span>'
+      + '<span>' + chip(cuenta(+dt.declaraciones || 0, 'declaración del SAT', 'declaraciones del SAT'), '') + '</span>'
+      + '<span>' + chip(dt.visor === 'hecho' ? 'Visor de nómina leído' : dt.visor === 'sin_nomina' ? 'El visor no trae nómina' : 'Sin el visor de nómina', dt.visor === 'hecho' ? 'ok' : '') + '</span>'
+      + '<span>' + chip(dt.xml_completo ? 'Bóveda completa del año' : 'La bóveda todavía baja el año', dt.xml_completo ? 'ok' : 'ojo') + '</span>'
+      + '<span class="mut">solo hechos de lo que trae Centauro; nada se le manda al cliente</span>';
+    var fil = [['', 'Todos', hs.length], ['alto', 'Riesgo alto', +res.altos || 0], ['medio', 'Riesgo medio', +res.medios || 0], ['bajo', 'Riesgo bajo', +res.bajos || 0]];
+    $('d-rfil').innerHTML = fil.map(function (x) { return '<button type="button" data-rfil="' + x[0] + '" aria-pressed="' + (f === x[0] ? 'true' : 'false') + '">' + esc(x[1] + ' · ' + x[2]) + '</button>'; }).join('');
+    $('d-rfil').querySelectorAll('[data-rfil]').forEach(function (b) { b.onclick = function () { D.revFil = b.getAttribute('data-rfil'); pintaRev(); }; });
+    var l = hs.filter(function (h) { return !f || h.riesgo === f; }), tb = $('d-rlista');
+    if (!hs.length) tb.innerHTML = '<tr><td colspan="5" class="vacio">' + chip('Sin hallazgos con lo que trae Centauro de ' + D.revAnio, 'ok') + '</td></tr>';
+    else if (!l.length) vacio(tb, 5, 'Nada con ese riesgo.');
+    else tb.innerHTML = l.map(function (h) {
+      var k = RIESGO[h.riesgo] || ['', h.riesgo];
+      return '<tr><td data-l="Riesgo">' + chip(k[1], k[0]) + '</td><td data-l="Mes">' + esc(mesTxt(h.mes)) + '</td>'
+        + '<td data-l="Hallazgo"><b>' + esc(h.titulo) + '</b><div class="mut">' + esc(h.detalle || '') + '</div><div class="mut">' + esc((h.obligacion ? h.obligacion + ' · ' : '') + 'en «' + (h.referencia || '') + '»') + '</div></td>'
+        + '<td data-l="Qué puede pasar">' + esc(h.reaccion || '') + '</td><td data-l="Qué lo resuelve">' + esc(h.resuelve || '') + '</td></tr>';
+    }).join('');
+    var P2 = revPartes(r);
+    $('d-rcron').innerHTML = tablaMat(REV_H.cron, P2.cron); $('d-rnom').innerHTML = tablaMat(REV_H.nom, P2.nom);
+    $('d-risr').innerHTML = tablaMat(REV_H.isr, P2.isr); $('d-riva').innerHTML = tablaMat(REV_H.iva, P2.iva);
+    $('d-rret').innerHTML = tablaMat(REV_H.ret, P2.ret); $('d-rind').innerHTML = tablaMat(REV_H.ind, P2.ind);
+    $('d-rpen').innerHTML = P2.pen.length ? tablaMat(REV_H.pen, P2.pen) : '<p class="mut">Nada: con lo que trae Centauro se revisó todo el año.</p>';
+    $('x-decl').disabled = false;
+  }
+  // el Excel de la revisión, con las 8 hojas que pidió Frank (totales de control con su fórmula y la referencia de cada hallazgo)
+  async function excelRev(btn) {
+    var r = D.rev || {}, P2 = revPartes(r), hs = r.hallazgos || [], res = r.resumen || {};
+    var num = function (desde, hasta) { var o = {}; for (var i = desde; i <= hasta; i++) o[i] = '#,##0.00'; return o; };
+    var hojas = [
+      { nombre: 'Resumen ejecutivo', titulo: 'Revisión fiscal · ' + D.revAnio + ' · ' + (+res.altos || 0) + ' de riesgo alto, ' + (+res.medios || 0) + ' medio y ' + (+res.bajos || 0) + ' bajo',
+        head: ['Riesgo', 'Tema', 'Mes', 'Obligación', 'Hallazgo', 'Detalle', 'Qué puede pasar', 'Qué lo resuelve', 'Referencia'],
+        filas: hs.map(function (h) { return [(RIESGO[h.riesgo] || ['', h.riesgo])[1], h.tema, mesTxt(h.mes), h.obligacion || '', h.titulo, h.detalle || '', h.reaccion || '', h.resuelve || '',
+                                             (h.referencia || '') + (h.mes ? ', ' + mesTxt(h.mes) : '')]; }),
+        anchos: [9, 14, 11, 30, 50, 60, 36, 44, 30] },
+      { nombre: 'Cronología', titulo: 'Cronología de declaraciones (normales y complementarias)', head: REV_H.cron, filas: P2.cron, anchos: [17, 11, 16, 22, 16, 11, 9, 46, 11, 70] },
+      { nombre: 'Conciliación de nómina', titulo: 'Conciliación de nómina: lo declarado contra lo timbrado', head: REV_H.nom, filas: P2.nom, formatos: num(1, 10), totales: [1, 4, 5, 6, 7, 8, 9, 10],
+        anchos: [11, 12, 13, 13, 15, 14, 17, 17, 17, 17, 16] },
+      { nombre: 'Análisis ISR PM', titulo: 'ISR de personas morales por mes', head: REV_H.isr, filas: P2.isr, formatos: Object.assign(num(1, 9), { 2: '0.0000' }), totales: [1, 5, 7, 8, 9],
+        anchos: [11, 16, 12, 15, 15, 15, 17, 14, 14, 14, 14] },
+      { nombre: 'Análisis IVA', titulo: 'IVA por mes', head: REV_H.iva, filas: P2.iva, formatos: num(1, 8), totales: [1, 2, 3, 4, 5, 6, 7, 8], anchos: [11, 16, 14, 14, 14, 14, 14, 14, 18] },
+      { nombre: 'Retenciones y accesorios', titulo: 'Retenciones y accesorios por mes', head: REV_H.ret, filas: P2.ret, formatos: num(2, 5), totales: [2, 3, 4, 5], anchos: [34, 11, 14, 14, 14, 14] },
+      { nombre: 'Indicadores', titulo: 'Indicadores del año', head: REV_H.ind, filas: P2.ind, anchos: [34, 30, 70] },
+      { nombre: 'Pendientes', titulo: 'Pendientes y documentación faltante', head: REV_H.pen,
+        filas: P2.pen.concat(hs.filter(function (h) { return h.riesgo !== 'bajo'; }).map(function (h) { return [h.titulo, h.resuelve || '']; })), anchos: [70, 60] }];
+    await libroExcel(btn, 'Revisión fiscal', hojas, [D.cliente + ' (' + D.cli + ') · ' + D.revAnio,
+      'Solo hechos de lo que trae Centauro del SAT (declaraciones, visor de nómina) y de la bóveda de XML; las declaraciones vienen en pesos y la nómina con centavos (tolerancia de $1)']);
+  }
   $('x-decl').onclick = function () {
     if (D.vista === 'con') return excelCon(this);
     if (D.vista === 'nom') return excelNom(this);
+    if (D.vista === 'rev') return excelRev(this);
     var l = visiblesD();
     excel(this, 'Declaraciones', ['Cliente', 'RFC', 'Ejercicio', 'Periodo', 'Periodicidad', 'Tipo', 'Tipo de complementaria', 'Presentada', 'Vencía', 'Obligaciones', 'Número de operación', 'Pagada el', 'Estado'],
       l.map(function (f) { return [D.cliente, D.cli, f.ejercicio, f.periodo || '', f.periodicidad || '', f.tipo || '', f.tipo_comp || '', fechaHora(f.presentada), fecha(f.vence), (f.obligaciones || []).join(' · '), f.numero, f.pago ? (f.pago_fecha ? fecha(f.pago_fecha) : 'Sí') : '', vigTxt(f)]; }),
