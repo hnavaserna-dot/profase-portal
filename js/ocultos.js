@@ -11,7 +11,7 @@
 
    PROFASE_OCULTOS.carga()              // una vez por página (las demás veces regresa lo mismo)
    PROFASE_OCULTOS.es(rfc)              // ¿lo ocultó, o se oculta solo por no tener contabilidad activa (217)? (falso mientras «Verlos por ahora»)
-   PROFASE_OCULTOS.nota(donde, {sinVer}) // «Ocultaste N clientes de tu lista» con «Verlos por ahora» y «Cambiar mi lista»
+   PROFASE_OCULTOS.nota(donde, {sinVer}) // la pastilla «N clientes ocultos · Verlos por ahora · Cambiar mi lista · ¿Por qué?»
    PROFASE_OCULTOS.alCambiar(fn)        // para volver a pintar cuando cambia la lista (aquí o en otra pantalla abierta)
    PROFASE_OCULTOS.ventana()            // la ventana «Mis clientes ocultos» (escoger varios y regresarlos)
    PROFASE_OCULTOS.ocultaUno(rfc, nombre)  // «Ocultar» de un cliente, con «Deshacer» en el aviso chico
@@ -48,13 +48,20 @@
     + '.poc-msg{font-size:12.5px;border-radius:8px;padding:8px 10px;background:var(--red-soft,#FDECEC);color:var(--red,#B42318);overflow-wrap:anywhere}'
     + '.poc-msg[hidden]{display:none}'
     + '.poc-pie{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--po-ln);background:var(--po-sf)}'
-    + '.poc-nota{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px;line-height:1.45;color:var(--ink-2,#4E5D6E);'
-    + 'background:var(--surface-2,#EEF1F5);border-left:3px solid var(--accent,#F07A1E);border-radius:8px;padding:7px 10px;margin:8px 0;min-width:0}'
+    + '.poc-nota{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;font-size:12.5px;line-height:1.4;color:var(--ink-2,var(--fg-2,#4E5D6E));'
+    + 'background:var(--surface-2,#EEF1F5);border:1px solid var(--line,#DDE3EA);border-radius:999px;padding:2px 6px 2px 10px;margin:6px 0;min-width:0;width:fit-content;max-width:100%}'
     + '.poc-nota[hidden]{display:none!important}'
-    + '.poc-nota .t{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}'
-    + '.poc-nota button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;color:var(--navy,#1F3864);cursor:pointer;padding:4px 6px;min-height:30px;border-radius:6px}'
+    + '.poc-nota .t{min-width:0;overflow-wrap:anywhere;display:inline-flex;align-items:center;gap:6px}'
+    + '.poc-nota .t svg{width:15px;height:15px;flex:none;opacity:.75}'
+    + '.poc-nota .t b{font-weight:700;color:var(--ink,var(--fg,#132036))}'
+    + '.poc-nota button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;color:var(--navy,#1F3864);cursor:pointer;padding:4px 7px;min-height:30px;border-radius:999px}'
     + ':root[data-theme="dark"] .poc-nota button{color:var(--accent,#F07A1E)}'
     + '.poc-nota button:hover{background:rgba(0,0,0,.06)}'
+    + ':root[data-theme="dark"] .poc-nota button:hover{background:rgba(255,255,255,.08)}'
+    + '.poc-nota .sep{opacity:.45}'
+    + '.poc-nota .poc-por{flex-basis:100%;margin:2px 4px 6px;font-size:12px;line-height:1.45;color:var(--ink-3,var(--muted,#7B8A9B))}'
+    + '.poc-nota.abierta{border-radius:12px}'
+    + '@media (max-width:600px){.poc-nota{border-radius:12px;gap:0 2px}.poc-nota .sep{display:none}.poc-nota .t{flex-basis:100%;padding:3px 0 0}}'
     + '@media (max-width:600px){.poc-velo{padding:0;align-items:stretch}.poc-vent{width:100%;max-height:none;height:100%;border-radius:0}'
     + '.poc-fila{flex-wrap:wrap}.poc-fila .poc-btn{margin-left:auto}}';
 
@@ -144,6 +151,9 @@
   }
 
   // ---------- La nota de las pantallas ----------
+  // La nota es una pastilla chica (5-nov-2026, la vista nueva de Reportes: «5 clientes ocultos · Verlos por ahora · Cambiar
+  // mi lista · ¿Por qué?»): la explicación larga sale solo con «¿Por qué?». Antes era un párrafo que ocupaba media pantalla.
+  var OJO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.9 17.9A10 10 0 0 1 12 20c-7 0-10-8-10-8a18 18 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c7 0 10 8 10 8a18 18 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>';
   function pintaNota(n) {
     var el = n.el; if (!el) return;
     var c = LISTA.size, a = 0;
@@ -155,14 +165,21 @@
     if (c) partes.push('ocultaste ' + plural(c, 'cliente', 'clientes') + ' de tu lista');
     if (a) partes.push(plural(a, 'cliente sin contabilidad activa (en pausa en el WorkFlow, inactivo o incubado) se oculta solo',
                                  'clientes sin contabilidad activa (en pausa en el WorkFlow, inactivos o incubados) se ocultan solos'));
-    var t = VER ? 'Por ahora ves también ' + (c + a === 1 ? 'el cliente oculto' : 'los ' + (c + a) + ' clientes ocultos') + '.'
-                : partes.join(' y ') + ': ' + donde;
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    el.innerHTML = '<span class="t">' + esc(t) + '</span>'
-      + (n.sinVer ? '' : '<button type="button" data-poc="ver">' + (VER ? 'Ocultarlos otra vez' : 'Verlos por ahora') + '</button>')
-      + '<button type="button" data-poc="cambia">Cambiar mi lista</button>';
+    var largo = partes.join(' y ') + ': ' + donde + ' Lo de los demás no cambia.';
+    largo = largo.charAt(0).toUpperCase() + largo.slice(1);
+    var tot = c + a;
+    var t = VER ? 'Ves también ' + (tot === 1 ? 'el cliente oculto' : 'los <b>' + tot + '</b> clientes ocultos')
+                : '<b>' + tot + '</b> ' + (tot === 1 ? 'cliente oculto' : 'clientes ocultos');
+    el.classList.toggle('abierta', !!n.por);
+    el.setAttribute('title', largo);
+    el.innerHTML = '<span class="t">' + OJO + '<span>' + t + '</span></span>'
+      + (n.sinVer ? '' : '<span class="sep" aria-hidden="true">·</span><button type="button" data-poc="ver">' + (VER ? 'Ocultarlos otra vez' : 'Verlos por ahora') + '</button>')
+      + '<span class="sep" aria-hidden="true">·</span><button type="button" data-poc="cambia">Cambiar mi lista</button>'
+      + '<span class="sep" aria-hidden="true">·</span><button type="button" data-poc="por" aria-expanded="' + (!!n.por) + '">¿Por qué?</button>'
+      + (n.por ? '<span class="poc-por">' + esc(largo) + '</span>' : '');
     var bv = el.querySelector('[data-poc="ver"]'); if (bv) bv.onclick = function () { VER = !VER; avisa(); };
     el.querySelector('[data-poc="cambia"]').onclick = function () { ventana(); };
+    el.querySelector('[data-poc="por"]').onclick = function () { n.por = !n.por; pintaNota(n); var x = el.querySelector('[data-poc="por"]'); if (x) x.focus(); };
   }
   function nota(el, o) {
     if (!el) return;

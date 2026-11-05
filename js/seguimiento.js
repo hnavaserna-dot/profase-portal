@@ -17,6 +17,7 @@
      nota: 'texto',                  // opcional: aviso naranja arriba
      antes: '<html>',                // opcional: antes del resumen
      resumen: '<html>',              // lo de adentro del recuadro de arriba (PROFASE_SEG.chip() para el estatus)
+     queHacer: '<html>',             // opcional (5-nov-2026): qué revisar y qué estatus poner, en palabras, bajo el resumen
      estatus: {actual: 'consulta', puede: true, gc: false, titulo: 'Estatus de revisión', ayudaPie: 'texto',
                nota: function (actual, puede) { return 'texto bajo las pastillas'; }} ,   // o null: sin estatus
      despues: nodo o '<html>',       // opcional: lo propio del reporte, bajo las pastillas
@@ -177,6 +178,12 @@
     + '.segv .seg-nuevo{margin:0 0 14px;border-radius:10px;border:1px solid var(--sg-nab);background:var(--sg-nas);padding:9px 12px;font-size:12.5px;color:var(--sg-ink)}'
     + '.segv .seg-res{border-radius:12px;border:1px solid var(--sg-ln);background:var(--sg-sf2);padding:12px 14px}'
     + '.segv .seg-res .r1{display:flex;align-items:baseline;justify-content:space-between;gap:12px}'
+    // «Qué hacer» (5-nov-2026, Héctor Daniel: «que lo que abran sea fácil de entender y poder trabajar»): en palabras, a la vista
+    + '.segv .seg-que{margin-top:10px;border-radius:12px;border:1px solid var(--sg-nab);border-left:4px solid #F07A1E;background:var(--sg-nas);'
+    + 'padding:10px 14px;font-size:12.5px;line-height:1.5;color:var(--sg-ink)}'
+    + '.segv .seg-que > b{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-na2);margin-bottom:3px}'
+    + '.segv .seg-que p{margin:0}.segv .seg-que p + p{margin-top:4px}'
+    + '.segv .seg-que ul{margin:4px 0 0;padding-left:18px}.segv .seg-que li{margin:1px 0}'
     + '.segv .seg-res h3{margin:0;font-size:15px;font-weight:600;min-width:0;overflow-wrap:anywhere;color:var(--sg-ink)}'
     + '.segv .seg-res .big{font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;white-space:nowrap}'
     + '.segv .seg-res p{margin:2px 0 0;font-size:12px;color:var(--sg-ink3);overflow-wrap:anywhere}'
@@ -296,6 +303,7 @@
       + (o.nota ? '<p class="seg-nuevo">' + esc(o.nota) + '</p>' : '')
       + (o.antes || '')
       + '<div class="seg-res">' + (o.resumen || '') + '</div>'
+      + (o.queHacer ? '<div class="seg-que"><b>Qué hacer</b><div>' + o.queHacer + '</div></div>' : '')
       + estHTML
       + '<div data-despues></div>'
       + '<div class="seg-sec"><b>Comentarios · <span data-ncom>' + NUM.format(hilo.length) + '</span></b><span class="sg-hint">del más viejo al más nuevo</span></div>'

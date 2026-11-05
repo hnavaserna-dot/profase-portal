@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/ocultos.js?v=7f465dfe13"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=3399471b0c"></script><script src="js/ocultos.js?v=6fbbeb4ec0"></script><script src="js/pilas.js?v=4cb1e99107"></script>
 <style>
 /* Portal PROFASE · Reportes › Carga de Quo (2-nov-2026, pedido de Fernando Cadengo: «quiero hacer un panel para tener
    el control de esto… tipo el historial que tenía la página anterior»). El control de lo que se carga de Quo
@@ -179,6 +179,7 @@ tr.click:hover td{background:var(--navy-soft)}
   .ficha .fcab h2{font-size:18px}
 }
 
+.semaforo[hidden]{display:none!important}
 .semaforo{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:16px 0 0}
 .semaforo .kpi{border-left:4px solid var(--line-strong)}
 .semaforo .kpi.ok{border-left-color:var(--ok)}
@@ -274,7 +275,11 @@ tr.click:hover td{background:var(--navy-soft)}
   <div id="oc-nota" hidden></div>
 
   <section id="todo" hidden>
-    <section class="semaforo" id="semaforo" aria-label="Cómo va la carga">
+    <!-- «Tus clientes en Quo» (5-nov-2026, Héctor Daniel: «quiero optimizar esos reportes para encontrar cosas fáciles y también
+         poder trabajar desde ahí (los contadores)»; a la propuesta: «Si asi es»): las pilas de lo que hay que atender y
+         «Traer de Quo los que fallaron»; lo técnico (las seis cifras de la carga) va en «Ver lo técnico ▾». -->
+    <section id="pilas" hidden style="margin-top:16px"></section>
+    <section class="semaforo" id="semaforo" aria-label="Cómo va la carga" hidden>
       <div class="kpi" id="k-ult"><div class="l">Al día con Quo</div><div class="v" id="k-ult-v">—</div><div class="s" id="k-ult-s">&nbsp;</div></div>
       <div class="kpi" id="k-vpn"><div class="l">Ahora</div><div class="v" id="k-vpn-v">—</div><div class="s" id="k-vpn-s">&nbsp;</div></div>
       <div class="kpi" id="k-bien"><div class="l">Clientes y meses al día</div><div class="v" id="k-bien-v">0</div><div class="s" id="k-bien-s">&nbsp;</div></div>
@@ -456,7 +461,7 @@ tr.click:hover td{background:var(--navy-soft)}
       b.onclick = async function () { b.disabled = true; try { await rpc('qc_cancela', { p_id: +b.dataset.can }); avisa('Listo: se canceló.'); await cargaRes(); } catch (e) { error(falla(e)); b.disabled = false; } };
     });
   }
-  async function cargaRes() { RES = await rpc('qc_resumen'); pintaRes(); }
+  async function cargaRes() { RES = await rpc('qc_resumen'); pintaRes(); pintaPilas(); }
 
   /* ---------- historial ---------- */
   /* las de cada hora en las que nada cambió no llenan el historial (se ven con la casilla) */
@@ -506,6 +511,63 @@ tr.click:hover td{background:var(--navy-soft)}
     } catch (e) { error(falla(e)); }
   }
 
+  /* ---------- «Tus clientes en Quo»: las pilas de arriba (5-nov-2026) ----------
+     Cuántos clientes y meses (del rango de «Por cliente y mes») están al día, fallaron, trajeron menos o no se han traído,
+     con el mismo estadoMes() de los cuadros de abajo: al picar una pila, «Por cliente y mes» queda con esos (el mismo
+     filtro de estado); otra vez, regresa todo. «Lo que pediste» lleva a «Lo que se pidió». «Traer de Quo los que fallaron»
+     abre la misma ventana de «Traer de Quo ahora» con esos ya escogidos. Lo técnico (las seis cifras de cada carga) va en
+     «Ver lo técnico ▾» (abierto para quien pide de todos los clientes y la dirección; se recuerda en este equipo). */
+  var TEC_K = 'profase-qc-tecnico';
+  function tecnico() { return PIDE === 'todo' || !!(P && P.perfil && P.perfil.rol === 'director'); }
+  function tecAbierto() { try { var v = localStorage.getItem(TEC_K); return v == null ? tecnico() : v === '1'; } catch (e) { return tecnico(); } }
+  var BTN_TEC = null;
+  function botonTec() {
+    if (!BTN_TEC) {
+      BTN_TEC = document.createElement('button'); BTN_TEC.type = 'button'; BTN_TEC.className = 'btn'; BTN_TEC.id = 'b-tec';
+      BTN_TEC.setAttribute('aria-controls', 'semaforo');
+      BTN_TEC.onclick = function () { var v = $('semaforo').hidden; try { localStorage.setItem(TEC_K, v ? '1' : '0'); } catch (e) { /* sin guardar */ } ponTec(v); };
+    }
+    return BTN_TEC;
+  }
+  function ponTec(v) { $('semaforo').hidden = !v; var b = botonTec(); b.textContent = v ? 'Ocultar lo técnico ▴' : 'Ver lo técnico ▾'; b.setAttribute('aria-expanded', String(!!v)); }
+  function fallaronPares() {
+    if (!TAB) return [];
+    var out = [];
+    filtradosSinEst().forEach(function (c) { if (!c.pide || !c.cuenta) return;
+      rangoMeses().forEach(function (m) { if (estadoMes(c.rfc, m) === 'fallo' && !enCamino(c.rfc, m)) out.push([c.rfc, m]); }); });
+    return out;
+  }
+  function pintaPilas() {
+    var host = $('pilas'); if (!host || !window.PROFASE_PILAS || !RES) return;
+    var n = { bien: 0, fallo: 0, diferencia: 0, sin: 0 }, nCli = 0, ms = TAB ? rangoMeses() : [];
+    if (TAB) filtradosSinEst().forEach(function (c) { nCli++; ms.forEach(function (m) { var e = estadoMes(c.rfc, m); if (n[e] != null) n[e]++; }); });
+    var tot = n.bien + n.fallo + n.diferencia + n.sin, fe = $('f-est').value, enTab = T === 'tab';
+    var mios = (RES.pedidos || []).filter(function (p) { return p.mio && (p.estado === 'pendiente' || p.estado === 'corriendo'); }).length;
+    var listo = !!TAB;
+    var pilas = [
+      { k: 'bien', t: 'Al día con Quo', txt: listo ? num(n.bien) + ' de ' + num(tot) : '…', n: n.bien, d: 'clientes y meses cargados bien', tono: 'verde', on: enTab && fe === 'bien' },
+      { k: 'fallo', t: 'Falló la carga', n: n.fallo, txt: listo ? null : '…', d: 'no se pudo traer: pídelo otra vez', tono: 'rojo', on: enTab && fe === 'fallo', tag: n.fallo && PIDE ? 'Te toca' : '' },
+      { k: 'diferencia', t: 'Quo trajo menos', n: n.diferencia, txt: listo ? null : '…', d: 'bajó mucho contra lo que había (o no cuadra): revísalo', tono: 'ambar', on: enTab && fe === 'diferencia' },
+      { k: 'sin', t: 'Sin cargar', n: n.sin, txt: listo ? null : '…', d: 'meses que todavía no se traen', tono: 'gris', on: enTab && fe === 'sin' },
+      { k: 'ped', t: 'Lo que pediste', n: mios, d: mios ? 'en camino: te llega el aviso' : 'nada en camino', tono: 'azul', on: false }
+    ];
+    var par = fallaronPares();
+    window.PROFASE_PILAS.pinta(host, {
+      titulo: (YO && YO.todo) || PIDE === 'todo' || nCli > 60 ? 'Clientes en Quo' : 'Tus clientes en Quo',   // quien ve todos los clientes (la dirección, los gerentes, Gabo): «Clientes en Quo»
+      meta: ms.length ? num(nCli) + (nCli === 1 ? ' cliente' : ' clientes') + ' · ' + mesTxt(ms[ms.length - 1]) + ' a ' + mesTxt(ms[0]) : '',
+      pilas: pilas,
+      alPicar: function (k) {
+        if (k === 'ped') { if (!$('c-ped').hidden) $('c-ped').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+        var on = T === 'tab' && $('f-est').value === k;
+        $('f-est').value = on ? '' : k; ponTab('tab'); if (TAB) pintaTab(); pintaPilas();
+        try { $('p-tab').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* se queda */ }
+      },
+      boton: PIDE && !CONSULTA && par.length ? { t: 'Traer de Quo los que fallaron', n: par.length, alPicar: function () { ventanaPide({ pares: par }); } } : null,
+      nota: PIDE && !CONSULTA ? (par.length ? 'Se abre la ventana de «Traer de Quo ahora» con esos ya escogidos (hasta 10 a la vez).' : 'Todo lo de tus clientes en esos meses se trajo sin fallas.') : '',
+      extra: [botonTec()]
+    });
+  }
+
   /* ---------- por cliente y mes ---------- */
   var IDX = {};
   function rangoMeses() { var out = [], m = $('f-hasta').value; while (m >= $('f-desde').value) { out.push(m); m = mesMas(m, -1); } return out; }
@@ -519,7 +581,7 @@ tr.click:hover td{background:var(--navy-soft)}
     var sel = $('f-per').value;
     $('f-per').innerHTML = '<option value="">De todos</option>' + ks.map(function (k) { return '<option value="' + esc(k) + '">' + esc(per[k]) + '</option>'; }).join('');
     $('f-per').value = ks.indexOf(sel) >= 0 ? sel : '';
-    pintaTab();
+    pintaTab(); pintaPilas();
   }
   function estadoMes(rfc, m) {
     var c = IDX[rfc + '|' + m]; if (!c) return 'sin';
@@ -529,6 +591,15 @@ tr.click:hover td{background:var(--navy-soft)}
     if (es.indexOf('diferencia') >= 0 || es.indexOf('bajo') >= 0) return 'diferencia';
     if (es.indexOf('sin') >= 0) return 'sin';
     return 'bien';
+  }
+  // los clientes de «Por cliente y mes» con la búsqueda y «De quién», sin el filtro de estado (lo que cuentan las pilas)
+  function filtradosSinEst() {
+    var q = norm($('q').value), per = $('f-per').value;
+    return (TAB.clientes || []).filter(function (c) {
+      if (q && norm(c.nombre + ' ' + c.rfc).indexOf(q) < 0) return false;
+      if (per && (c.quien || []).indexOf(per) < 0) return false;
+      return true;
+    });
   }
   function filtrados() {
     var q = norm($('q').value), per = $('f-per').value, fe = $('f-est').value, ms = rangoMeses();
@@ -573,8 +644,8 @@ tr.click:hover td{background:var(--navy-soft)}
     if (window.PROFASE_OCULTOS) window.PROFASE_OCULTOS.nota($('oc-nota'), { sinVer: true });
     return Promise.all([cargaRes(), cargaHis(), cargaAle(), TAB ? cargaTab() : null]).catch(function (e) { error(falla(e)); });
   }
-  ['q'].forEach(function (k) { $(k).addEventListener('input', function () { if (TAB) pintaTab(); }); });
-  ['f-per', 'f-est'].forEach(function (k) { $(k).addEventListener('change', function () { if (TAB) pintaTab(); }); });
+  ['q'].forEach(function (k) { $(k).addEventListener('input', function () { if (TAB) { pintaTab(); pintaPilas(); } }); });
+  ['f-per', 'f-est'].forEach(function (k) { $(k).addEventListener('change', function () { if (TAB) { pintaTab(); pintaPilas(); } }); });
   ['f-desde', 'f-hasta'].forEach(function (k) { $(k).addEventListener('change', function () { cargaTab().catch(function (e) { error(falla(e)); }); }); });
   $('his-hora').addEventListener('change', pintaHis);
 
@@ -603,7 +674,15 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<div class="mut">' + (y[6] === 'fallo' ? esc(y[9] || 'No se pudo cargar') : 'Quo trajo ' + num(y[3]) + ' · quedaron guardados ' + num(y[4]) + (y[6] === 'bajo' && y[5] != null ? ' · antes había ' + num(y[5]) : ''))
         + ' · ' + esc(TIPO[y[8]] || '') + ', ' + esc(fh(y[7])) + '</div></div>';
     }).join('');
-    abre(c.nombre, c.rfc + ' · ' + mesTxt(m), '<div class="sec"><h3>Sus 6 reportes</h3><div class="in rep5">' + filas + '</div></div>'
+    // «Qué hacer», en palabras y arriba (5-nov-2026, Héctor Daniel: «que lo que abran sea fácil de entender y poder trabajar»)
+    var est = estadoMes(c.rfc, m), es = REP.map(function (r) { return x[r[0]] ? x[r[0]][6] : 'sin'; });
+    var hacer = est === 'fallo' ? 'Uno o más reportes no se pudieron traer de Quo. ' + (c.pide && !CONSULTA ? 'Pídelo otra vez con «Traer de Quo ahora», abajo.' : 'Se vuelve a intentar solo en la siguiente carga.')
+      : es.indexOf('bajo') >= 0 ? 'Quo trajo mucho menos de lo que había: revisa en Quo si se borró o se ajustó algo. Si está bien así, no hay que hacer nada.'
+      : est === 'diferencia' ? 'Lo que se trajo no es igual a lo que guardó la carga de los viernes (es la comparación de prueba): solo informa.'
+      : est === 'sin' ? 'Ese mes todavía no se trae completo: se trae solo (cada hora o en la noche)' + (c.pide && !CONSULTA && c.cuenta ? ' o con «Traer de Quo ahora», abajo.' : '.')
+      : 'Todo cuadra: lo que trajo Quo es lo que quedó guardado. No hay que hacer nada.';
+    abre(c.nombre, c.rfc + ' · ' + mesTxt(m), '<div class="sec"><h3>Qué hacer</h3><div class="in"><p style="margin:0">' + esc(hacer) + '</p></div></div>'
+      + '<div class="sec"><h3>Sus 6 reportes</h3><div class="in rep5">' + filas + '</div></div>'
       + (c.pide && !CONSULTA ? '<div class="sec"><h3>Traerlo otra vez</h3><div class="in"><p class="mut" style="margin:0 0 10px">«Traer de Quo ahora» trae otra vez sus 6 reportes de ese mes y lo que tiene pendiente directo de Quo, y pone al día Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo. «Comparar con los viernes» lo lee de Quo y lo compara con lo que guardó la carga de los viernes, sin cambiar nada. En unos minutos queda y te llega el aviso.</p>' + botonesPide(c, m) + '</div></div>' : '')
       + (CONSULTA ? '' : '<div class="sec"><h3>¿Ya no lo quieres ver?</h3><div class="in"><p class="mut" style="margin:0 0 10px">Ocúltalo de tu lista: deja de salirte solo a ti aquí y en Depuración de CxC / CxP, Variaciones / Movimientos y Reclasificación de activo fijo. A los demás no les cambia nada y lo regresas en «Mis clientes ocultos».</p><button class="btn" type="button" id="c-oc">Ocultar de mi lista</button></div></div>'));
     engancha($('ficha'));
@@ -629,14 +708,21 @@ tr.click:hover td{background:var(--navy-soft)}
   function cuantos(nc, nm) {
     return nc + (nc === 1 ? ' cliente' : ' clientes') + ' × ' + nm + (nm === 1 ? ' mes' : ' meses') + ' = ' + (nc * nm) + (nc * nm === 1 ? ' pedido' : ' pedidos');
   }
-  async function ventanaPide() {
+  async function ventanaPide(pre) {
     try {
+      pre = pre && pre.pares ? pre : null;
       if (!TAB) await cargaTab();
       var ops = (TAB.clientes || []).filter(function (c) { return c.pide && c.cuenta; });
       var quedan = Math.max(0, (YO.limite || 0) - (YO.hoy || 0));
       var tope = Math.min(10, quedan);
       var ms = meses().slice().reverse();
-      abre('Traer de Quo ahora', quedan + ' de ' + (YO.limite || 0) + ' pedidos te quedan hoy (cada cliente con cada mes cuenta uno)',
+      // «Traer de Quo los que fallaron» (5-nov-2026): los meses que fallaron (los más nuevos) y sus clientes, hasta el tope
+      var preCli = [], preMes = [];
+      if (pre) {
+        preMes = pre.pares.map(function (x) { return x[1]; }).filter(function (m, i, a) { return a.indexOf(m) === i; }).sort().reverse().slice(0, Math.max(1, Math.min(3, tope)));
+        pre.pares.forEach(function (x) { if (preMes.indexOf(x[1]) >= 0 && preCli.indexOf(x[0]) < 0 && (preCli.length + 1) * preMes.length <= Math.max(1, tope)) preCli.push(x[0]); });
+      }
+      abre(pre ? 'Traer de Quo los que fallaron' : 'Traer de Quo ahora', quedan + ' de ' + (YO.limite || 0) + ' pedidos te quedan hoy (cada cliente con cada mes cuenta uno)',
         '<div class="sec"><h3>¿Qué clientes y qué meses?</h3><div class="in"><div class="campos">'
           + '<div class="campo ancho pide-cli"><label for="p-cli">Clientes</label><div id="p-cliBox"></div></div>'
           + '<div class="campo ancho pide-cli"><label for="p-mes">Meses</label><div id="p-mesBox"></div></div>'
@@ -658,11 +744,11 @@ tr.click:hover td{background:var(--navy-soft)}
         $('p-ok').disabled = mas || CONSULTA;
       }
       var bus = window.PROFASE_BUSCA.crea({ donde: $('p-cliBox'), id: 'p-cli', varios: true,
-        opciones: ops.map(function (c) { var ya = enCamino(c.rfc); return { v: c.rfc, t: c.nombre, nota: c.rfc + (ya ? ' · trayéndose ' + mesTxt(ya.mes) : '') }; }), valor: [],
+        opciones: ops.map(function (c) { var ya = enCamino(c.rfc); return { v: c.rfc, t: c.nombre, nota: c.rfc + (ya ? ' · trayéndose ' + mesTxt(ya.mes) : '') }; }), valor: preCli,
         marcador: 'Escribe parte del nombre o el RFC', vacio: 'Ningún cliente coincide', sinOpciones: 'No tienes clientes con cuenta de Quo',
         cambio: cuenta });
       var bm = window.PROFASE_BUSCA.crea({ donde: $('p-mesBox'), id: 'p-mes', varios: true,
-        opciones: ms.map(function (m) { return { v: m, t: mesTxt(m) }; }), valor: [ms[0]],
+        opciones: ms.map(function (m) { return { v: m, t: mesTxt(m) }; }), valor: preMes.length ? preMes : [ms[0]],
         marcador: 'Escribe el mes o el año (sep, 2026…)', vacio: 'Ningún mes coincide', sinOpciones: 'Sin meses',
         cambio: cuenta });
       cuenta();
@@ -824,6 +910,7 @@ tr.click:hover td{background:var(--navy-soft)}
     document.querySelectorAll('#tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === t ? 'true' : 'false'); });
     $('p-his').hidden = t !== 'his'; $('p-tab').hidden = t !== 'tab'; $('p-ale').hidden = t !== 'ale';
     if (t === 'tab' && !TAB) cargaTab().catch(function (e) { error(falla(e)); });
+    pintaPilas();
   }
   document.querySelectorAll('#tabs [data-t]').forEach(function (b) { b.onclick = function () { ponTab(b.dataset.t); }; });
 
@@ -898,7 +985,10 @@ tr.click:hover td{background:var(--navy-soft)}
         window.PROFASE_OCULTOS.nota($('oc-nota'), { sinVer: true });
         window.PROFASE_OCULTOS.alCambiar(recargaTodo);
       }
-      await Promise.all([cargaRes(), cargaHis(), cargaAle()]);
+      ponTec(tecAbierto());
+      // «Por cliente y mes» se trae desde el principio: de ahí salen las pilas (y es la pestaña de quien no ve lo técnico)
+      await Promise.all([cargaRes(), cargaHis(), cargaAle(), cargaTab()]);
+      if (!tecnico()) ponTab('tab');
       $('todo').hidden = false; $('cargando').hidden = true;
       // su ventana de avance sigue donde iba (si recargó o entró de nuevo), salvo que ya la haya cerrado
       if (RES && RES.mi_lote && !LOTE && cerradoEn() !== RES.mi_lote) abreLote(RES.mi_lote);
