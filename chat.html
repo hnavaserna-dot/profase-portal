@@ -239,6 +239,8 @@ img.av{background:var(--surface-3);overflow:hidden}
 
 .msgs{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 16px 10px;background:var(--fondo-msgs);overscroll-behavior:contain;position:relative}
 .cargando{text-align:center;color:var(--muted);font-size:13px;padding:10px}
+/* cada día va en su propio grupo (.dg, pintaMsgs): su fecha se queda arriba solo mientras se ven mensajes de ese día y la del
+   día siguiente la empuja; antes todas las fechas eran hermanas y se encimaban arriba («30 de octubre 2026» debajo de «Hoy»; 5-nov-2026) */
 .dia{display:flex;justify-content:center;margin:12px 0 8px;position:sticky;top:0;z-index:2;pointer-events:none}
 .dia span{background:var(--surface);border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .sis{display:flex;justify-content:center;margin:8px 0}
@@ -1341,12 +1343,14 @@ audio.ad-med{width:280px;max-width:100%}
     if (!ACT) return;
     op = op || {};
     var caja = $('#msgs'), estaba = cerca(), desdeAbajo = caja.scrollHeight - caja.scrollTop;
-    var h = '', prev = null, diaAnt = '';
+    var h = '', prev = null, diaAnt = '', grupo = false;
+    // un grupo por día (.dg): la fecha pegada arriba no se encima con la de otro día
+    function abreDia(creado) { h += (grupo ? '</div>' : '') + '<div class="dg"><div class="dia"><span>' + esc(etiquetaDia(creado)) + '</span></div>'; grupo = true; }
     if (ACT.mas) h += '<div class="cargando" id="mas-arriba">Desliza hacia arriba para ver mensajes anteriores</div>';
     else if (ACT.orden.length && ACT.info && ACT.info.desde_id > 0) h += '<div class="sis"><span>Ves los mensajes desde que entraste al grupo</span></div>';
     ACT.orden.forEach(function (k) {
       var m = ACT.msgs.get(k), d = dia(m.creado);
-      if (d !== diaAnt) { h += '<div class="dia"><span>' + esc(etiquetaDia(m.creado)) + '</span></div>'; diaAnt = d; prev = null; }
+      if (d !== diaAnt) { abreDia(m.creado); diaAnt = d; prev = null; }
       if (ACT.divisor && k === ACT.divisor) {
         var n = ACT.orden.filter(function (x) { var mm = ACT.msgs.get(x); return x >= ACT.divisor && mm.autor !== YO.usuario && mm.tipo === 'msg'; }).length;
         h += '<div class="divisor" id="divisor">' + n + (n === 1 ? ' mensaje sin leer' : ' mensajes sin leer') + '</div>';
@@ -1356,9 +1360,10 @@ audio.ad-med{width:280px;max-width:100%}
     });
     TEMP.forEach(function (t) {
       var d = dia(t.m.creado);
-      if (d !== diaAnt) { h += '<div class="dia"><span>' + esc(etiquetaDia(t.m.creado)) + '</span></div>'; diaAnt = d; prev = null; }
+      if (d !== diaAnt) { abreDia(t.m.creado); diaAnt = d; prev = null; }
       h += msgHTML(t.m, prev, t); prev = t.m;
     });
+    if (grupo) h += '</div>';
     if (!ACT.orden.length && !TEMP.length) h += '<div class="vacio" style="min-height:60%"><div>' + (ACT.info && ACT.info.tipo === 'directo' ? 'Saluda a ' + esc(corto(ACT.otro)) + ' 👋' : 'Todavía no hay mensajes.') + '</div></div>';
     caja.innerHTML = h;
     cargaMedios(caja);
@@ -2385,7 +2390,9 @@ audio.ad-med{width:280px;max-width:100%}
     // como en WhatsApp: si el mensaje de abajo también es una nota de voz, sigue con esa
     var el = Array.prototype.find.call(document.querySelectorAll('#msgs .vz[data-vz]'), function (e) { return e.getAttribute('data-vz') === clave; });
     var x = el && el.closest('.m'); if (!x) return;
-    do { x = x.nextElementSibling; } while (x && !(x.matches('.m[data-id]')));
+    // el mensaje que sigue, aunque sea de otro día (cada día va en su grupo .dg)
+    var todos = Array.prototype.slice.call(document.querySelectorAll('#msgs .m[data-id]')), i = todos.indexOf(x);
+    x = i >= 0 ? todos[i + 1] : null;
     var sig = x && x.querySelector('.vz[data-nota]');
     if (sig) { try { a.currentTime = 0; } catch (e) { /* nada */ } vozToca(sig.getAttribute('data-vz')); }
   }
