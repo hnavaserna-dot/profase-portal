@@ -7,10 +7,6 @@
    Uso: PROFASE_RECORRIDO.corre({ pasos: [{ el: () => elemento o null, titulo, texto, etiqueta: 'Nuevo', icono: 'candado',
                                             antes: async () => {} }] }) → promesa: 'fin' o 'saltado'.
    Un paso sin «el» sale al centro, sin flechita. Si su parte no está a la vista, el paso se brinca.
-   El globo cabe siempre (Héctor Daniel, 4-nov-2026, 19:09: «Corrige esto; o puedo ponerle siguiente»; 19:21: «si es
-   demasiado texto lo apartas en dos, tres, cuatro… tanto para el nuevo como para lo viejo»): un texto de más de 400
-   letras se parte solo en 2, 3 o 4 pasos con «Siguiente» (partePasos(), abajo); el globo nunca es más alto que la
-   pantalla, el texto se desliza por dentro y Atrás/Siguiente siempre se ven. exige_pasos_caben() de construir.py.
    «A la vista» es de verdad (30-oct-2026, Daniel con una captura del celular: el paso «En el menú RH» iluminaba un
    pedazo vacío del Inicio): dentro de la pantalla, no escondida (visibility, display u opacidad) y no fuera de la
    pantalla (el menú del celular cerrado vive a la izquierda, fuera de ella). PROFASE_RECORRIDO.aLaVista(el) es la
@@ -35,21 +31,14 @@
     + '.rc-luz{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(8,14,28,.66);transition:left .25s ease,top .25s ease,width .25s ease,height .25s ease;pointer-events:none}'
     + '.rc-luz::after{content:"";position:absolute;inset:-4px;border-radius:15px;border:3px solid #F07A1E;animation:rc-late 1.6s ease-in-out infinite}'
     + '@keyframes rc-late{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(1.035)}}'
-    + '.rc-globo{position:fixed;width:min(370px,calc(100vw - 24px));background:var(--surface,#fff);color:var(--ink,#132036);border-radius:14px;border-top:5px solid #F07A1E;box-shadow:0 18px 50px rgba(0,0,0,.35);padding:14px 16px 12px;transition:left .25s ease,top .25s ease;'
-    // nunca más alto que la pantalla (Héctor Daniel, 4-nov-2026, 19:09, con la captura del celular donde «Siguiente» se
-    // quedaba fuera): el globo mide a lo más lo que se ve (acomoda() lo ajusta en px, con las orillas del iPhone), el
-    // texto se desliza por dentro y la cabeza, el título y Atrás/Siguiente siempre se ven
-    + 'display:flex;flex-direction:column;box-sizing:border-box;max-height:calc(100vh - 16px)}'
-    + '.rc-cab,.rc-globo h3,.rc-pie{flex:none}'
-    + '.rc-sa{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}'
+    + '.rc-globo{position:fixed;width:min(370px,calc(100vw - 24px));background:var(--surface,#fff);color:var(--ink,#132036);border-radius:14px;border-top:5px solid #F07A1E;box-shadow:0 18px 50px rgba(0,0,0,.35);padding:14px 16px 12px;transition:left .25s ease,top .25s ease}'
     + '.rc-globo.centro{width:min(420px,calc(100vw - 24px))}'
     + '.rc-cab{display:flex;align-items:center;gap:8px;margin-bottom:6px}'
     + '.rc-et{background:#F07A1E;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:3px 10px}'
     + '.rc-ic{width:30px;height:30px;border-radius:50%;background:#1F3864;color:#fff;display:grid;place-items:center;flex:none}'
     + '.rc-ic svg{width:17px;height:17px}'
     + '.rc-globo h3{margin:0 0 4px;font-family:var(--f-display,"Archivo","Arial Narrow",Arial,sans-serif);font-stretch:85%;font-size:20px;font-weight:800;line-height:1.15;color:inherit}'
-    + '.rc-globo p{margin:0;font-size:14.5px;line-height:1.45;color:inherit;opacity:.92;flex:1 1 auto;min-height:3em;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}'
-    + '.rc-globo p.mas{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}'
+    + '.rc-globo p{margin:0;font-size:14.5px;line-height:1.45;color:inherit;opacity:.92}'
     + '.rc-pie{display:flex;align-items:center;gap:8px;margin-top:12px}'
     + '.rc-n{flex:1;font-size:12.5px;color:var(--muted,#5A6577)}'
     + '.rc-pie button{font:inherit;font-size:14px;font-weight:700;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
@@ -170,95 +159,6 @@
     for (var i = 0; i < primeros.length; i++) { try { if (primeros[i]()) return true; } catch (e) { /* sigue */ } }
     return false;
   }
-  /* Mucho texto se parte solo en 2, 3 o 4 pasos con «Siguiente» (Héctor Daniel, 4-nov-2026, 19:21: «crear una regla que si
-     es demasiado texto lo apartas en dos, tres, cuatro… tanto para el nuevo como para lo viejo»). Un paso de más de LIM
-     letras se reparte por oraciones (y, si una oración sola no cabe, en sus «;», «:» o comas) en partes parejas de hasta
-     LIM letras; cada parte ilumina lo mismo y su título dice «(1 de 3)», «(2 de 3)»… Vale para todos los recorridos, los de
-     antes y los nuevos, también los que arman su texto con partes que cambian. Al escribir uno nuevo, mejor partirlo a mano
-     con su propio título (como «Empresas» de la Cartera); esto es la red para lo que se pase. */
-  var LIM = 400;
-  function mayus(t) { return t.charAt(0).toUpperCase() + t.slice(1); }
-  // ¿la posición k está dentro de un paréntesis o de unas comillas «»? (ahí no se corta)
-  function adentro(t, k) {
-    var p = 0, c = 0;
-    for (var j = 0; j < k; j++) { var x = t.charAt(j); if (x === '(') p++; else if (x === ')') p--; else if (x === '«') c++; else if (x === '»') c--; }
-    return p > 0 || c > 0;
-  }
-  // corta t después de cada coincidencia de re que no quede dentro de un paréntesis o unas comillas (con libre, aunque
-  // quede); fin(trozo) arregla cómo termina cada trozo
-  function corta(t, re, fin, libre) {
-    var out = [], ini = 0, m;
-    re.lastIndex = 0;
-    while ((m = re.exec(t))) {
-      if (!libre && adentro(t, m.index)) continue;
-      out.push(fin(t.slice(ini, m.index + m[0].length).trim())); ini = m.index + m[0].length;
-    }
-    out.push(t.slice(ini).trim());
-    return out.filter(function (x) { return x; });
-  }
-  var MISMO = function (x) { return x; };
-  // los trozos que no se parten: oraciones; si una sola no cabe, sus «;» (el trozo termina en punto y el siguiente
-  // empieza con mayúscula), luego sus «:», luego sus comas y, si aún no cabe, en el espacio que quepa
-  function trozos(t) {
-    var out = [];
-    function mete(x, nivel) {
-      if (x.length <= LIM || nivel > 4) {
-        if (x.length <= LIM) { out.push(x); return; }
-        while (x.length > LIM) { var k = x.lastIndexOf(' ', LIM); if (k < 1) k = LIM; out.push(x.slice(0, k)); x = x.slice(k).trim(); }
-        if (x) out.push(x);
-        return;
-      }
-      var ps = nivel === 0 ? corta(x, /[.!?…][»)"]*\s+(?=[«¿¡"A-ZÁÉÍÓÚÑÜ])/g, MISMO)
-        : nivel === 1 ? corta(x, /;\s+/g, function (z) { return z.replace(/;$/, '.'); }).map(function (z, k) { return k ? mayus(z) : z; })
-        : nivel === 2 ? corta(x, /:\s+(?=\S)/g, MISMO)
-        : corta(x, /,\s+/g, MISMO, nivel === 4);
-      if (ps.length < 2) { mete(x, nivel + 1); return; }
-      ps.forEach(function (z) { mete(z, nivel + 1); });
-    }
-    mete(t, 0);
-    return out;
-  }
-  // reparte los trozos en el menor número de partes de hasta LIM letras, lo más parejas que se pueda
-  function partes(t) {
-    t = String(t || '').trim();
-    if (t.length <= LIM) return [t];
-    var ts = trozos(t), m = ts.length, pre = [0], a, b, j;
-    for (a = 0; a < m; a++) pre.push(pre[a] + ts[a].length + 1);
-    function largo(x, y) { return pre[y] - pre[x] - 1; }
-    for (var k = Math.max(2, Math.ceil(t.length / LIM)); k <= m; k++) {
-      var f = [[0]], de = [[]];
-      for (b = 1; b <= m; b++) f[0][b] = Infinity;
-      for (j = 1; j <= k; j++) {
-        f[j] = []; de[j] = [];
-        for (b = 0; b <= m; b++) {
-          f[j][b] = Infinity;
-          for (a = j - 1; a < b; a++) { var v = Math.max(f[j - 1][a], largo(a, b)); if (v < f[j][b]) { f[j][b] = v; de[j][b] = a; } }
-        }
-      }
-      if (f[k][m] <= LIM) {
-        var out = [], y = m;
-        for (j = k; j > 0; j--) { a = de[j][y]; out.unshift(ts.slice(a, y).join(' ')); y = a; }
-        return out;
-      }
-    }
-    return ts;
-  }
-  function partePasos(lista) {
-    var out = [];
-    lista.forEach(function (p) {
-      var ps = p && typeof p.texto === 'string' ? partes(p.texto) : [p && p.texto];
-      if (ps.length < 2) { out.push(p); return; }
-      ps.forEach(function (tx, k) {
-        var q = {};
-        for (var c in p) if (Object.prototype.hasOwnProperty.call(p, c)) q[c] = p[c];
-        q.texto = tx;
-        q.titulo = (p.titulo || '') + ' (' + (k + 1) + ' de ' + ps.length + ')';
-        if (k) { delete q.antes; q.__sigue = true; }   // lo que se abre antes, solo en la primera parte
-        out.push(q);
-      });
-    });
-    return out;
-  }
   function corre(def) {
     if (activo || !def || !def.pasos || !def.pasos.length) return Promise.resolve('ocupado');
     activo = true;
@@ -270,26 +170,13 @@
     if (!def.sinCierre && typeof cierre === 'function') {
       try { var ult = cierre(); if (ult && ult.titulo) pasos.push(ult); } catch (e) { /* sin cierre */ }
     }
-    pasos = partePasos(pasos);
-    var visto = -1;   // el último paso que de verdad se enseñó (para que «(2 de 3)» siga en lo mismo sin volver a abrir nada)
     var capa = document.createElement('div'); capa.className = 'rc-capa';
-    capa.innerHTML = '<i class="rc-sa" aria-hidden="true"></i><div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
+    capa.innerHTML = '<div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
       + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p>'
       + '<div class="rc-pie"><button type="button" class="rc-salta">Saltar</button><span class="rc-n" aria-live="polite"></span><button type="button" class="rc-atras">Atrás</button><button type="button" class="rc-sig">Siguiente</button></div></div>';
     document.body.appendChild(capa);
     var luz = capa.querySelector('.rc-luz'), flecha = capa.querySelector('.rc-flecha'), globo = capa.querySelector('.rc-globo');
-    var espera = capa.querySelector('.rc-espera'), texto = capa.querySelector('#rc-p'), sa = capa.querySelector('.rc-sa');
-    // las orillas del iPhone (la hora arriba y la rayita de abajo) no cuentan como espacio para el globo
-    function orillas() {
-      try { var cs = getComputedStyle(sa); return { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 }; }
-      catch (e) { return { t: 0, b: 0 }; }
-    }
-    // si el texto no cabe, se desvanece abajo hasta que se desliza al final (así se nota que hay más)
-    function masTexto() {
-      try { texto.classList.toggle('mas', texto.scrollHeight > texto.clientHeight + 2 && texto.scrollTop + texto.clientHeight < texto.scrollHeight - 2); }
-      catch (e) { /* sin aviso */ }
-    }
-    texto.addEventListener('scroll', masTexto, { passive: true });
+    var espera = capa.querySelector('.rc-espera');
     var bAtras = capa.querySelector('.rc-atras'), bSig = capa.querySelector('.rc-sig'), bSalta = capa.querySelector('.rc-salta');
     return new Promise(function (listo) {
       function termina(como) {
@@ -304,15 +191,12 @@
       function acomoda() {
         var p = pasos[i]; if (!p) return;
         var vw = innerWidth, vh = innerHeight, g = el ? caja(el) : null;
-        var o = orillas(), m0 = 8 + o.t, m1 = 8 + o.b;
         globo.classList.toggle('centro', !g);
         capa.classList.toggle('sin-luz', !g);
-        globo.style.maxHeight = Math.max(160, vh - m0 - m1) + 'px';
         var bw = globo.offsetWidth, bh = globo.offsetHeight;
-        masTexto();
         if (!g) {
           luz.hidden = true; flecha.hidden = true;
-          globo.style.left = Math.round((vw - bw) / 2) + 'px'; globo.style.top = Math.round(Math.max(m0, (vh - bh) / 2)) + 'px';
+          globo.style.left = Math.round((vw - bw) / 2) + 'px'; globo.style.top = Math.round(Math.max(12, (vh - bh) / 2)) + 'px';
           return;
         }
         var pad = 6, t = { x: g.x - pad, y: g.y - pad, w: g.w + pad * 2, h: g.h + pad * 2 };
@@ -322,16 +206,16 @@
         luz.hidden = false;
         luz.style.left = t.x + 'px'; luz.style.top = t.y + 'px'; luz.style.width = t.w + 'px'; luz.style.height = t.h + 'px';
         var hueco = 52, cx = t.x + t.w / 2, cy = t.y + t.h / 2, lado, x, y;
-        if (t.y + t.h + hueco + bh <= vh - m1) lado = 'abajo';
-        else if (t.y - hueco - bh >= m0) lado = 'arriba';
+        if (t.y + t.h + hueco + bh <= vh - 8) lado = 'abajo';
+        else if (t.y - hueco - bh >= 8) lado = 'arriba';
         else if (t.x + t.w + hueco + bw <= vw - 8) lado = 'der';
         else if (t.x - hueco - bw >= 8) lado = 'izq';
         else lado = 'encima';
         if (lado === 'abajo' || lado === 'arriba') {
           x = clamp(cx - bw / 2, 8, vw - bw - 8); y = lado === 'abajo' ? t.y + t.h + hueco : t.y - hueco - bh;
         } else if (lado === 'der' || lado === 'izq') {
-          y = clamp(cy - bh / 2, m0, vh - bh - m1); x = lado === 'der' ? t.x + t.w + hueco : t.x - hueco - bw;
-        } else { x = clamp(cx - bw / 2, 8, vw - bw - 8); y = clamp(vh - bh - 8 - m1, m0, vh - bh - m1); }
+          y = clamp(cy - bh / 2, 8, vh - bh - 8); x = lado === 'der' ? t.x + t.w + hueco : t.x - hueco - bw;
+        } else { x = clamp(cx - bw / 2, 8, vw - bw - 8); y = clamp(vh - bh - 16, 8, vh - bh - 8); }
         globo.style.left = Math.round(x) + 'px'; globo.style.top = Math.round(y) + 'px';
         // la flechita, entre el globo y la parte, apuntándole
         flecha.hidden = lado === 'encima';
@@ -347,8 +231,6 @@
         if (n >= pasos.length) { termina('fin'); return; }
         i = n;
         var p = pasos[i];
-        // la parte siguiente del mismo paso: se queda con lo que ya está iluminado (sin cerrar ni volver a abrir el menú)
-        if (p.__sigue && visto === n - 1 && el && caja(el)) { pinta(p, n); return; }
         globo.style.visibility = 'hidden'; luz.hidden = true; flecha.hidden = true;
         if (sueltaMenu()) await dormir(220);
         if (!activo || i !== n) return;
@@ -372,25 +254,17 @@
           dentro(el);
           if (!aLaVista(el)) { muestra(n + dir, dir); return; }      // fuera de la pantalla o escondida: se brinca
         }
-        pinta(p, n);
-      }
-      function pinta(p, n) {
-        visto = n;
         capa.querySelector('.rc-cab').innerHTML = (p.icono && ICONOS[p.icono] ? '<span class="rc-ic">' + ICONOS[p.icono] + '</span>' : '')
           + (p.etiqueta ? '<span class="rc-et">' + esc(p.etiqueta) + '</span>' : '');
         capa.querySelector('.rc-cab').hidden = !(p.icono || p.etiqueta);
         capa.querySelector('#rc-t').textContent = p.titulo || '';
-        texto.textContent = p.texto || ''; texto.scrollTop = 0;
+        capa.querySelector('#rc-p').textContent = p.texto || '';
         capa.querySelector('.rc-n').textContent = (i + 1) + ' de ' + pasos.length;
         bAtras.hidden = i === 0;
         var ultimo = i === pasos.length - 1;
         bSig.textContent = ultimo ? (def.fin || 'Terminar') : 'Siguiente';
         bSalta.hidden = ultimo || !!def.obligatorio;
-        // si estaba escondido (se abrió algo antes), aparece ya en su lugar, sin resbalar desde donde estaba
-        var oculto = globo.style.visibility === 'hidden';
-        if (oculto) globo.style.transition = 'none';
         acomoda();
-        if (oculto) { void globo.offsetHeight; globo.style.transition = ''; }
         globo.style.visibility = '';
         try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
       }
@@ -468,6 +342,6 @@
   }
   window.PROFASE_RECORRIDO = { corre: corre, activo: function (real) { return activo || (!real && primeroFalta()); },
                                 primero: function (fn) { if (typeof fn === 'function') primeros.push(fn); }, primeroFalta: primeroFalta,
-                                aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez, partes: partePasos,
+                                aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez,
                                 alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; } };
 })();
