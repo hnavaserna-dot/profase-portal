@@ -20,7 +20,9 @@
      sinOpciones: 'Primero escoge el grupo',  // lo que dice si todavía no hay opciones
      cambio: function (valores) { … }        // después de cualquier cambio
    });
-   b.valor()            // ['12', …]  (con varios y «todos» escogido: [])
+   b.valor()            // ['12', …]  (con varios y «todos» escogido: []); con una sola opción, si se escribió un nombre de la
+                        // lista sin escogerlo (o lo escrito solo coincide con una), esa
+   b.escrito()          // lo que está escrito en el campo
    b.pon(['12'])        // escoge desde fuera (sin avisar)
    b.opciones([…])      // cambia las opciones (lo escogido que ya no esté, se quita)
    b.habilita(true|false)
@@ -227,18 +229,25 @@
         var u = vistos.length === 1 ? vistos[0] : null; if (u) escoge(u);
       }
     });
-    // al salir del campo: con una sola opción, si lo escrito es un nombre de la lista se queda; si no, regresa a lo escogido
+    // con una sola opción, lo escrito se queda si es de la lista: el nombre completo o, si solo una opción coincide con lo
+    // escrito, esa; si no, regresa a lo escogido (con «regresa»; si no, se deja lo escrito para corregirlo). Una sola regla
+    // para la salida del campo y para valor() (5-nov-2026, Buzón tributario › «Asignar a»: se escribía el nombre, se picaba
+    // «Asignar» sin escogerlo de la lista y el botón no sabía a quién, porque la salida del campo llega 120 ms después del clic)
+    function fija(regresa) {
+      if (varios) return;
+      var t = norm(inp.value);
+      if (!t) { if (sel.length) { sel = []; pinta(); avisa(); } return; }
+      if (sel.length && t === norm(texto(sel[0]))) return;
+      var m = ops.filter(function (o) { return norm(o.t) === t; });
+      if (m.length !== 1) m = ops.filter(function (o) { return coincide(o, t); });
+      if (m.length === 1) escoge(m[0]); else if (regresa) inp.value = sel.length ? texto(sel[0]) : '';
+    }
+    // al salir del campo
     w.addEventListener('focusout', function () {
       setTimeout(function () {
         if (w.contains(document.activeElement)) return;
-        if (!varios) {
-          var t = norm(inp.value);
-          if (!t) { if (sel.length) { sel = []; pinta(); avisa(); } }
-          else if (!sel.length || t !== norm(texto(sel[0]))) {
-            var m = ops.filter(function (o) { return norm(o.t) === t; });
-            if (m.length === 1) escoge(m[0]); else inp.value = sel.length ? texto(sel[0]) : '';
-          }
-        } else if (!abierta) inp.value = '';
+        if (!varios) fija(true);
+        else if (!abierta) inp.value = '';
         abre(false); pinta();
       }, 120);
     });
@@ -246,7 +255,12 @@
 
     var api = {
       el: w,
-      valor: function () { return sel.slice(); },
+      // lo escrito que todavía no se escoge (el campo ya no tiene el foco: picaron un botón) se fija antes de contestar
+      valor: function () {
+        if (!varios && document.activeElement !== inp && inp.value !== (sel.length ? texto(sel[0]) : '')) fija(false);
+        return sel.slice();
+      },
+      escrito: function () { return inp.value; },   // lo que está escrito en el campo (para decir qué faltó)
       pon: function (vals) { sel = (vals || []).map(String).filter(function (v, i, a) { return a.indexOf(v) === i; }); if (!varios) sel = sel.slice(0, 1); pinta(); },
       opciones: function (lista) {
         ops = (lista || []).map(function (o) { return { v: String(o.v), t: String(o.t == null ? o.v : o.t), nota: o.nota || '', buscar: o.buscar || '', otro: !!o.otro }; });
