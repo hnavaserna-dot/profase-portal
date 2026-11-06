@@ -1633,6 +1633,47 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function campo(id, l, html, ancho) { return '<div class="campo' + (ancho ? ' ancho' : '') + '"><label for="' + id + '">' + esc(l) + '</label>' + html + '</div>'; }
   function inp(id, v, extra) { return '<input id="' + id + '" value="' + esc(v == null ? '' : v) + '"' + (extra || '') + '>'; }
 
+  /* El gasto que no está en la lista se escribe en la misma ventana (Eva Rangel y Héctor Daniel Nava, 6-nov-2026: «al querer
+     agregar un nuevo concepto no lo permite… que permita realmente agregar nuevos conceptos de gastos extraordinarios»).
+     Antes solo se podía escoger uno del catálogo y el nuevo se daba de alta aparte, en Ajustes y catálogos. Ahora el
+     desplegable trae «+ Gasto nuevo (escríbelo)» (y abajo «¿No está? Escríbelo aquí»); al guardar, el nombre entra al catálogo
+     con la misma función de siempre (cdir_catalogo_guarda: quien captura) y el gasto queda con él. Si ya estaba (sin importar
+     mayúsculas ni espacios), se usa ese y no se repite. Vale para los extraordinarios (catálogo 0) y los del personal (1). */
+  function conCampo(tipo, x) {
+    var L = catDe(tipo), nuevo = CAPTURA;
+    return campo('e-con', 'Gasto', '<select id="e-con" data-ctipo="' + tipo + '">' + opts([], null, 'Escoge…')
+        + (nuevo ? '<option value="nuevo">+ Gasto nuevo (escríbelo)</option>' : '') + opts(L, x && x.concepto_id) + '</select>'
+        + (nuevo ? '<button class="lnk" type="button" id="e-con-nuevo" style="font-size:12.5px;margin-top:2px;align-self:flex-start">¿No está? Escríbelo aquí</button>' : ''), true)
+      + (nuevo ? '<div class="campo ancho" id="e-con-n" hidden><label for="e-con-txt">Nombre del gasto nuevo</label>'
+        + inp('e-con-txt', '', ' maxlength="200" autocomplete="off" placeholder="Ej.: Mantenimiento del clima"')
+        + '<div class="mut">Al guardar entra a la lista y ya sale en los demás meses.</div></div>' : '');
+  }
+  function conModo() {
+    var s = $('e-con'), n = $('e-con-n'), l = $('e-con-nuevo'); if (!s || !n) return;
+    var es = s.value === 'nuevo';
+    n.hidden = !es; if (l) l.hidden = es;
+    if (es) { msgEn(''); try { $('e-con-txt').focus(); } catch (e) {} }
+  }
+  function conLimpia(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+  // Regresa el id del concepto escogido o, si es «nuevo», lo da de alta (o usa el que ya está con ese nombre)
+  async function conId() {
+    var s = $('e-con'); if (!s) return null;
+    if (s.value !== 'nuevo') return s.value ? +s.value : null;
+    var tipo = +s.getAttribute('data-ctipo'), txt = conLimpia($('e-con-txt').value);
+    if (!txt) throw new Error('Escribe el nombre del gasto nuevo.');
+    function busca() { var k = txt.toLowerCase(); return catDe(tipo).filter(function (x) { return conLimpia(x.concepto).toLowerCase() === k; })[0]; }
+    var ya = busca(), id = ya ? ya.id : null;
+    if (!id) {
+      try { id = ((await rpc('cdir_catalogo_guarda', { p: { id: null, tipo: tipo, concepto: txt } })) || {}).id || null; }
+      catch (e) { await catalogos(); ya = busca(); if (!ya) throw e; id = ya.id; }   // alguien lo dio de alta al mismo tiempo
+      await catalogos();
+    }
+    // ya quedó en el catálogo: si el gasto no se guarda (un día mal, por ejemplo), se vuelve a intentar sin repetirlo
+    s.innerHTML = opts([], null, 'Escoge…') + '<option value="nuevo">+ Gasto nuevo (escríbelo)</option>' + opts(catDe(tipo), id);
+    s.value = String(id); conModo();
+    return id;
+  }
+
   function forma(tabla, id) {
     var periodo = tabla === 'reembolso' || tabla === 'deduccion' ? COM : UTI, d = periodo.d || {};
     var lista = tabla === 'reserva' ? ((d.reserva || {}).filas || []) : tabla === 'reembolso' || tabla === 'deduccion' ? (d.reembolsos || []) : (d[tabla] || []);
@@ -1645,8 +1686,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (tabla === 'nomina') c += campo('e-emp', 'Persona', '<select id="e-emp">' + opts(emps, x && x.empleado_id, 'Escoge…') + '</select>', true)
       + campo('e-n1', 'Nómina', inp('e-n1', x ? Number(x.nomina).toFixed(2) : '', ' inputmode="decimal"')) + campo('e-n2', 'Carga laboral', inp('e-n2', x ? Number(x.carga).toFixed(2) : '', ' inputmode="decimal"'));
     if (tabla === 'personal') c += campo('e-emp', 'Persona', '<select id="e-emp">' + opts(emps, x && x.empleado_id, 'Escoge…') + '</select>', true)
-      + campo('e-con', 'Gasto', '<select id="e-con">' + opts(catDe(1), x && x.concepto_id, 'Escoge…') + '</select>', true) + campo('e-n1', 'Monto', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"'));
-    if (tabla === 'ext') c += campo('e-con', 'Gasto', '<select id="e-con">' + opts(catDe(0), x && x.concepto_id, 'Escoge…') + '</select>', true) + campo('e-n1', 'Monto', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"'));
+      + conCampo(1, x) + campo('e-n1', 'Monto', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"'));
+    if (tabla === 'ext') c += conCampo(0, x) + campo('e-n1', 'Monto', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"'));
     if (tabla === 'reserva') c += campo('e-txt', 'Descripción', inp('e-txt', x ? x.descripcion : '', ' maxlength="500"'), true) + campo('e-n1', 'Monto (negativo si sale de la reserva)', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"'));
     if (tabla === 'reembolso' || tabla === 'deduccion') c += campo('e-met', 'Método', '<select id="e-met">' + [1, 2].map(function (m) { return '<option value="' + m + '"' + (x && x.metodo === m ? ' selected' : '') + '>' + METODO[m] + '</option>'; }).join('') + '</select>')
       + campo('e-txt', 'Motivo', inp('e-txt', x ? x.motivo : '', ' maxlength="500"' + (tabla === 'deduccion' ? ' placeholder="Anticipo de comisión, descuento de un pago…"' : '')), true) + campo('e-txt2', 'Comentarios', '<textarea id="e-txt2" maxlength="1500">' + esc(x ? x.comentarios : '') + '</textarea>', true)
@@ -1665,15 +1706,22 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (E.id) p.id = E.id;
     var n1 = $('e-n1') ? num($('e-n1').value) : null, n2 = $('e-n2') ? num($('e-n2').value) : null;
     if ($('e-emp')) p.empleado_id = $('e-emp').value ? +$('e-emp').value : null;
-    if ($('e-con')) p.concepto_id = $('e-con').value ? +$('e-con').value : null;
     if ($('e-met')) p.metodo = +$('e-met').value;
     if (E.tabla === 'nomina') { p.nomina = n1 == null ? 0 : n1; p.carga = n2 == null ? 0 : n2; }
     else if (E.tabla === 'reembolso' || E.tabla === 'deduccion') { p.motivo = $('e-txt').value; p.comentarios = $('e-txt2').value; p.monto = n1 == null ? 0 : n1; p.porcentaje = n2 == null ? null : n2 / 100; }
     else { p.monto = n1 == null ? 0 : n1; if ($('e-txt')) p.descripcion = $('e-txt').value; }
+    if ($('e-con') && $('e-con').value === 'nuevo') {   // antes de dar de alta el gasto nuevo, lo que se ve aquí mismo
+      var ult = ultimo(E.anio, E.mes);
+      if (!(p.dia >= 1 && p.dia <= ult)) { msgEn('El día tiene que ser del 1 al ' + ult + '.'); return; }
+      if ($('e-emp') && !p.empleado_id) { msgEn('Escoge a la persona.'); return; }
+      if (!conLimpia($('e-con-txt').value)) { msgEn('Escribe el nombre del gasto nuevo.'); try { $('e-con-txt').focus(); } catch (e) {} return; }
+    }
+    var conNuevo = $('e-con') && $('e-con').value === 'nuevo' ? conLimpia($('e-con-txt').value) : '';
     b.disabled = true; msgEn('');
     try {
+      if ($('e-con')) p.concepto_id = await conId();
       await rpc('cdir_guarda', { p_tabla: E.tabla, p: p });
-      cierra(); avisa('Guardado.'); RES.clave = '';
+      cierra(); avisa(conNuevo ? 'Guardado. «' + conNuevo + '» ya está en la lista de gastos.' : 'Guardado.'); RES.clave = '';
       if (E.tabla === 'reembolso' || E.tabla === 'deduccion') await cargaCom(); else await cargaUti();
     } catch (e) { msgEn(falla(e)); b.disabled = false; }
   }
@@ -2448,6 +2496,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (t.id === 'aj-pct-ok') { guardaPct(t); return; }
     if (t.id === 'rp-guarda') { repartoGuarda(t); return; }
     if (t.id === 'e-guarda') { guardaForma(t); return; }
+    if (t.id === 'e-con-nuevo' && $('e-con')) { $('e-con').value = 'nuevo'; conModo(); return; }
     if (t.id === 'e-borra') { borraForma(t); return; }
     if (t.id === 'e-fac-ok') { guardaFac(t, false); return; }
     if (t.id === 'e-fac-sig') { guardaFac(t, true); return; }
@@ -2468,6 +2517,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var t = ev.target;
     if (t.id === 'dh-pago' || t.id === 'dh-anio') { devHisFecha(); return; }
     if (t.id === 'sv-como') { svFecLabel(); return; }
+    if (t.id === 'e-con') { conModo(); return; }
     if (t.id === 'rd-pq') { RD.quien = t.value; RD.sel = {}; (rdD().pendientes || []).forEach(function (x) { if (x.quien === RD.quien) RD.sel[x.id] = true; }); rdirPagaLista(); return; }
     if (t.id === 'rd-pf') { rdirPagaMes(); return; }
     if (t.getAttribute('data-kid')) {
