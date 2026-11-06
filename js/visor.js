@@ -35,25 +35,39 @@
   var PDFJS = 'js/lib/pdfjs/pdf.min.js', PDFJS_TRABAJADOR = 'js/lib/pdfjs/pdf.worker.min.js';
   var GUARDA_MAX = 10, GUARDA_BYTES = 80 * 1024 * 1024, PRETRAE_MAX = 4 * 1024 * 1024;
 
-  function cargaJS(src, listo) {
+  function cargaJS(src, listo, D) {
+    D = D || document;
     return new Promise(function (ok, ko) {
       if (listo()) return ok();
-      var s = document.createElement('script'); s.src = src; s.async = true;
+      var s = D.createElement('script'); s.src = src; s.async = true;
       s.onload = function () { listo() ? ok() : ko(new Error(src)); }; s.onerror = function () { ko(new Error(src)); };
-      document.head.appendChild(s);
+      (D.head || D.documentElement).appendChild(s);
     });
   }
-  var PJS = null;
-  function pdfjs() {
-    if (window.pdfjsLib && window.pdfjsLib.getDocument) return Promise.resolve(window.pdfjsLib);
-    if (!PJS) {
-      PJS = cargaJS(PDFJS, function () { return !!(window.pdfjsLib && window.pdfjsLib.getDocument); }).then(function () {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(PDFJS_TRABAJADOR, location.href).href;
-        return window.pdfjsLib;
+  /* PDF.js se carga en la ventana donde se dibujan las hojas (W; si no se dice, esta). Las letras que trae cada PDF las
+     carga PDF.js en SU página, y el dibujo solo las encuentra si la hoja es de esa misma página. El 6-nov-2026 la vista
+     previa del chat pasó a la página de arriba y PDF.js seguía en la del chat: las hojas salían con cuadritos en lugar de
+     letras (Héctor Daniel, 6-nov-2026, 07:35, con la cita del SAT de un cliente: «mira cómo se ve… corrígelo»).
+     Un cargador por ventana; una sola versión. */
+  var PJS = typeof WeakMap === 'function' ? new WeakMap() : null, PJS_AQUI = null;
+  function pdfjs(W) {
+    W = W || window;
+    try { if (!W.document || !W.document.head) W = window; } catch (e) { W = window; }
+    var listo = function () { try { return !!(W.pdfjsLib && W.pdfjsLib.getDocument); } catch (e) { return false; } };
+    if (listo()) return Promise.resolve(W.pdfjsLib);
+    if (W !== window && !PJS) W = window;
+    var p = W === window ? PJS_AQUI : PJS.get(W);
+    if (!p) {
+      var src = new URL(PDFJS, location.href).href, trab = new URL(PDFJS_TRABAJADOR, location.href).href, Wc = W;
+      p = cargaJS(src, listo, W.document).then(function () {
+        Wc.pdfjsLib.GlobalWorkerOptions.workerSrc = trab;
+        return Wc.pdfjsLib;
       });
-      PJS.catch(function () { PJS = null; });
+      var olvida = function () { if (Wc === window) { if (PJS_AQUI === p) PJS_AQUI = null; } else if (PJS.get(Wc) === p) PJS.delete(Wc); };
+      p.catch(olvida);
+      if (W === window) PJS_AQUI = p; else PJS.set(W, p);
     }
-    return PJS;
+    return p;
   }
   // ¿El navegador muestra PDF por su cuenta dentro de la página? (computadora sí; celular y tableta, no siempre)
   function nativo() {
@@ -401,10 +415,11 @@
       c.cuerpo.innerHTML = ''; c.cuerpo.appendChild(fr);
     }
     async function conHojas(c, b) {
-      var L = await pdfjs();
+      // PDF.js de la página donde va la capa (la de arriba, en el chat), para que las letras del PDF se dibujen ahí
+      var L = await pdfjs(c.W);
       if (c.cerrada) return;
-      // copia: PDF.js se queda con el arreglo que le dan, y el original sigue sirviendo para «Bajar»
-      var pdf = await L.getDocument({ data: b.slice(), isEvalSupported: false }).promise;
+      // copia, hecha en esa misma ventana: PDF.js se queda con el arreglo que le dan, y el original sigue para «Bajar»
+      var pdf = await L.getDocument({ data: new c.W.Uint8Array(b), isEvalSupported: false }).promise;
       if (c.cerrada) { pdf.destroy(); return; }
       c.pdf = pdf;
       var caja = c.D.createElement('div'); caja.className = 'pv-hojas'; caja.tabIndex = 0;
@@ -448,7 +463,7 @@
       var c = abreCapa(d);
       if (btn) c.antes = btn;
       var usaLector = nativo();
-      if (!usaLector) pdfjs().catch(function () { /* se intenta con el lector del navegador */ });
+      if (!usaLector) pdfjs(c.W).catch(function () { /* se intenta con el lector del navegador */ });
       bytes(d).then(function (b) {
         if (c.cerrada) return;
         c.bytes = b; c.bBaja.disabled = false;
@@ -477,7 +492,7 @@
       idle(function () {
         if (!sigue()) return;
         try { if (window.PROFASE_MARCA && window.PROFASE_MARCA.precargaSello) window.PROFASE_MARCA.precargaSello(); } catch (e) { /* luego */ }
-        if (!nativo()) pdfjs().catch(function () { /* luego */ });
+        if (!nativo()) pdfjs(docCapa().defaultView).catch(function () { /* luego */ });
       });
       setTimeout(function () {
         if (!sigue()) return;
@@ -497,7 +512,8 @@
     return { ver: ver, baja: baja, bajaVarios: bajaVarios, precarga: precarga, bytes: bytes, cierra: cierraCapa, abierta: function () { return !!CAPA; } };
   }
 
-  // pdfjs(): el mismo PDF.js del portal, cargado una sola vez, para quien solo necesita leer un PDF (SuperConta cuenta las
+  // pdfjs(W): el mismo PDF.js del portal, cargado una sola vez por ventana (sin W, esta), para quien solo necesita leer un
+  // PDF (SuperConta cuenta las
   // hojas de lo que le adjuntan, 4-nov-2026): una sola versión del cargador
   window.PROFASE_VISOR = { nuevo: nuevo, nativo: nativo, pdfjs: pdfjs };
 })();
