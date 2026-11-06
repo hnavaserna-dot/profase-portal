@@ -123,8 +123,7 @@
     + '.cx{display:flex;flex-direction:column;min-width:0;padding-top:10px}'
     + '.cx *,.cx-dlg *{box-sizing:border-box}'
     + '.cx [hidden],.cx-dlg [hidden]{display:none!important}.cx-nw{white-space:nowrap}'
-    // arriba: la compañía y con o sin IVA
-    + '.cx-top{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin-bottom:10px}'
+    // la compañía, con o sin IVA y cómo se ve: botones de dos o tres, dentro de la barra común (UX PROFASE)
     + '.cx-seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:3px;border:1px solid var(--cx-ln2);border-radius:999px;background:var(--cx-sf);max-width:100%}'
     + '.cx-seg button{font:inherit;font-size:13px;font-weight:600;border:0;background:transparent;color:var(--cx-mu);border-radius:999px;padding:6px 13px;cursor:pointer;white-space:nowrap}'
     + '.cx-seg button:hover{color:var(--cx-ink)}'
@@ -132,27 +131,9 @@
     + ':root[data-theme="dark"] .cx-seg button[aria-pressed="true"]{background:#8FB0E8;color:#0D1320}'
     + '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cx-seg button[aria-pressed="true"]{background:#8FB0E8;color:#0D1320}}'
     + '.cx-lb{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--cx-mu);font-weight:700;padding:0 6px 0 9px;align-self:center}'
-    // las pilas
-    + '.cx-pilas{display:grid;gap:10px;grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}'
-    + '.cx-pilas.tres{grid-template-columns:repeat(3,minmax(0,1fr))}'
-    + '.cx-pila{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;text-align:left;font:inherit;color:var(--cx-ink);'
-    + 'background:var(--cx-sf);border:1px solid var(--cx-ln);border-left:4px solid var(--c);border-radius:14px;padding:10px 14px 11px;cursor:pointer;box-shadow:0 1px 2px rgba(19,32,54,.05)}'
-    + '.cx-pila:hover{border-color:var(--c)}'
-    + '.cx-pila[aria-pressed="true"]{background:color-mix(in srgb,var(--c) 10%,var(--cx-sf));border-color:var(--c);box-shadow:0 0 0 1px var(--c) inset}'
-    + '.cx-pila:focus-visible{outline:2px solid var(--cx-ac);outline-offset:2px}'
-    + '.cx-ptp{display:flex;align-items:center;gap:8px;width:100%}'
-    + '.cx-pic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}'
-    + '.cx-pic svg{width:15px;height:15px}'
-    + '.cx-pk{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--cx-mu);font-weight:700;line-height:1.2}'
-    + '.cx-pv{font-family:var(--f-display,Arial,sans-serif);font-weight:750;font-stretch:90%;font-size:clamp(20px,2.1vw,27px);line-height:1.15;margin-top:5px;color:var(--ci,var(--cx-ink));font-variant-numeric:tabular-nums}'
-    + '.cx-ps{font-size:12px;color:var(--cx-mu);line-height:1.35;overflow-wrap:break-word}'
-    + '.cx-ps b{color:var(--cx-ink);font-weight:600}'
+    // la barrita de antigüedad de cada grupo (en el celular); las pilas de arriba son las comunes (js/pilas.js, UX PROFASE)
     + '.cx-mini{display:flex;width:100%;height:6px;border-radius:999px;overflow:hidden;background:var(--cx-alt);margin:6px 0 3px}'
     + '.cx-mini i{display:block;height:100%}'
-    + '.cx-p-tot{--c:var(--cx-nv);--ci:var(--cx-ink)}'
-    + ':root[data-theme="dark"] .cx-p-tot{--c:#8FB0E8}@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cx-p-tot{--c:#8FB0E8}}'
-    + '.cx-p-ven{--c:var(--cx-rj);--ci:var(--cx-rj)}.cx-p-ven.solo2{--c:var(--cx-am);--ci:var(--cx-am)}'
-    + '.cx-p-curso{--c:var(--cx-az);--ci:var(--cx-ink)}.cx-p-cob{--c:var(--cx-ok);--ci:var(--cx-ok)}'
     + '.cx-l{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.cx-l i{width:8px;height:8px;border-radius:50%;display:inline-block}'
     // la barra: filtros, buscar y cómo se ve
     + '.cx-bar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-bottom:10px}'
@@ -160,10 +141,12 @@
     + '.cx-q{flex:1 1 220px;max-width:420px;display:flex;align-items:center;gap:7px;height:38px;padding:0 11px;border:1px solid var(--cx-ln2);border-radius:10px;background:var(--cx-sf);color:var(--cx-mu)}'
     + '.cx-q svg{width:16px;height:16px;flex:none}'
     + '.cx-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--cx-ink);font:inherit;font-size:14px;outline:none}'
-    + '.cx-der{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}'
     + '.cx-btn{font:inherit;font-size:13px;font-weight:600;height:38px;border:1px solid var(--cx-ln2);background:var(--cx-sf);color:var(--cx-ink);border-radius:10px;padding:0 13px;cursor:pointer;white-space:nowrap}'
     + '.cx-btn:hover{border-color:var(--cx-nv)}'
     + '.cx-bar .cx-seg{border-radius:10px}.cx-bar .cx-seg button{border-radius:8px;padding:6px 11px}'
+    + '.cx .ppl-masm .cx-btn{width:100%;text-align:left;margin:0}.cx-pp{margin:0}'
+    // en la barra, la compañía va sin su letrero (cabe en un renglón en la computadora; el grupo dice «Compañía» al lector)
+    + '.cx .ppl-bar .cx-lb{display:none}'
     // la tabla
     + '.cx-caja{background:var(--cx-sf);border:1px solid var(--cx-ln);border-radius:12px;overflow:auto;-webkit-overflow-scrolling:touch;max-height:max(380px,calc(100dvh - 260px));margin-bottom:8px}'
     + '.cx-tb{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;font-variant-numeric:tabular-nums}'
@@ -216,20 +199,17 @@
     + '.cx-tfa span:last-child{white-space:nowrap;color:var(--cx-ink);font-variant-numeric:tabular-nums}'
     + '.cx-t.cx-ttot{background:var(--cx-nvs);padding:11px 12px;display:flex;justify-content:space-between;gap:10px;font-weight:800}'
     + '@media (max-width:640px){'
-    + '.cx-pilas,.cx-pilas.tres{grid-template-columns:1fr 1fr;gap:8px}'
-    + '.cx-pilas.tres .cx-pila:last-child{grid-column:1/-1}'
-    + '.cx-pila{padding:9px 10px 10px}'
-    + '.cx-pv{font-size:19px}'
-    + '.cx-top .cx-seg{width:100%;flex-wrap:nowrap}.cx-top .cx-seg button{flex:1 1 0;min-width:0;padding:6px 6px;white-space:normal;line-height:1.2}.cx-top .cx-lb{display:none}'
+    + '.cx .ppl-per{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px}'
+    + '.cx .ppl-per .cx-seg{width:100%;flex-wrap:nowrap}.cx .ppl-per .cx-seg button{flex:1 1 0;min-width:0;padding:6px 6px;white-space:normal;line-height:1.2}.cx .ppl-per .cx-lb{display:none}'
     + '.cx-q{max-width:none;flex:1 1 100%}.cx-q input{font-size:16px}'
-    + '.cx-der{margin-left:0;width:100%}.cx-der .cx-vista{display:none}'
+    + '.cx .cx-vista{display:none!important}'
     + '.cx-caja.cx-tabla{display:none}.cx-tarjetas{display:block}'
     + '}'
     // en la computadora la pantalla no se desliza: solo la tabla (como antes)
     + '@media (min-width:700px) and (min-height:500px){'
     + '.cx{flex:1 1 auto;min-height:0}'
     + '.cx-caja{flex:1 1 auto;min-height:180px;max-height:none}'
-    + '.cx-top,.cx-pilas,.cx-bar,.cx-nota{flex:none}'
+    + '.cx-pp,.cx-bar,.cx-nota{flex:none}'
     + '.cx-nota{margin-bottom:6px}'
     + '}'
     // la ventana del resumen (Inicio)
@@ -267,10 +247,6 @@
   }
 
   var IC = {
-    tot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>',
-    ven: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>',
-    curso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
-    cob: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
     q: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
   };
   // la barrita de antigüedad de un grupo (o de una pila)
@@ -290,19 +266,23 @@
     var S = { cia: '', pila: 'tot', iva: store.get(CL + 'iva') === 'sin' ? 'sin' : 'con', vista: store.get(CL + 'vista') === 'mes' ? 'mes' : 'edad',
               q: '', anio: [], mes: [], grp: [], sort: { k: 'tot', dir: -1 }, abiertos: {}, rsAbiertos: {}, todos: false };
     raiz.classList.add('cx');
-    raiz.innerHTML = '<div class="cx-top"><div class="cx-seg cx-cias" role="group" aria-label="Compañía"></div>'
-      + '<div class="cx-seg cx-iva" role="group" aria-label="Montos"><button type="button" data-iva="con">Con IVA</button><button type="button" data-iva="sin">Sin IVA</button></div></div>'
-      + '<div class="cx-pilas" role="group" aria-label="Resumen de la cobranza"></div>'
-      + '<div class="cx-bar"><div class="cx-fil"></div><label class="cx-q">' + IC.q + '<input type="search" placeholder="Buscar grupo, razón social, RFC o folio" aria-label="Buscar" autocomplete="off" spellcheck="false"></label>'
-      + '<div class="cx-der"><div class="cx-seg cx-vista" role="group" aria-label="Columnas"><button type="button" data-vista="edad">Por antigüedad</button><button type="button" data-vista="mes">Por mes</button></div>'
-      + '<button type="button" class="cx-btn cx-todos">Abrir todos</button><button type="button" class="cx-btn cx-xl" data-excel>Excel</button></div></div>'
+    /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026, 23:08: «que todos los menús y sub menús tengan el UX profase»): la barra
+       común de js/pilas.js (buscar, la compañía, con o sin IVA, FILTROS, cómo se ve, Excel y «Más ▾» con «Abrir todos») y,
+       abajo, las pilas comunes de «Tu trabajo» (las mismas cuentas de siempre). Los botones de siempre se mueven a la barra
+       y siguen haciendo lo mismo (los clics van por la raíz). Sin js/pilas.js, la barra se queda como estaba. */
+    raiz.innerHTML = '<div class="cx-bar"><label class="cx-q">' + IC.q + '<input type="search" placeholder="Buscar grupo, razón social, RFC o folio" aria-label="Buscar" autocomplete="off" spellcheck="false"></label>'
+      + '<div class="cx-seg cx-cias" role="group" aria-label="Compañía"></div>'
+      + '<div class="cx-seg cx-iva" role="group" aria-label="Montos"><button type="button" data-iva="con">Con IVA</button><button type="button" data-iva="sin">Sin IVA</button></div>'
+      + '<div class="cx-fil"></div>'
+      + '<div class="cx-seg cx-vista" role="group" aria-label="Columnas"><button type="button" data-vista="edad">Por antigüedad</button><button type="button" data-vista="mes">Por mes</button></div>'
+      + '<button type="button" class="cx-btn cx-xl" data-excel>Excel</button><button type="button" class="cx-btn cx-todos">Abrir todos</button></div>'
+      + '<div class="cx-pp"></div>'
       + '<div class="cx-caja cx-tabla"><table class="cx-tb"></table></div><div class="cx-tarjetas"></div><p class="cx-nota"></p>';
     var $ = function (s) { return raiz.querySelector(s); };
-    var FB = null;
+    var FB = null, BAR = null;
     function filtros() {
       if (FB || !window.PROFASE_FILTROS) return;
-      FB = window.PROFASE_FILTROS.crea({
-        donde: $('.cx-fil'),
+      var cfg = {
         grupos: [
           { t: 'Factura', campos: [
             { k: 'anio', t: 'Año de factura', tipo: 'varios', lista: true,
@@ -316,11 +296,20 @@
               opciones: function () { return gruposLista(); }, valor: function () { return S.grp; }, pon: function (v) { S.grp = v; } }] }],
         cambio: function () { pinta(); },
         limpiar: function () { S.anio = []; S.mes = []; S.grp = []; },
-        resultados: function () { var n = arbol(filas(), 'saldo', function () { return 0; }).length; return 'Ver ' + n + (n === 1 ? ' grupo' : ' grupos'); }
-      });
+        resultados: function () { if (!P) return 'Ver'; var n = arbol(filas(), 'saldo', function () { return 0; }).length; return 'Ver ' + n + (n === 1 ? ' grupo' : ' grupos'); }
+      };
+      if (window.PROFASE_PILAS && PROFASE_PILAS.barra) {
+        var q = $('.cx-q input'), lq = $('.cx-q'), fil = $('.cx-fil');
+        BAR = PROFASE_PILAS.barra($('.cx-bar'), { caja: true, buscar: q, periodo: [$('.cx-cias'), $('.cx-iva')], filtros: cfg,
+          botones: [$('.cx-vista'), $('.cx-xl')], mas: [[$('.cx-todos')]] });
+        if (lq && lq.parentNode) lq.remove();
+        if (fil && fil.parentNode) fil.remove();
+        FB = BAR.f;
+      } else { cfg.donde = $('.cx-fil'); FB = window.PROFASE_FILTROS.crea(cfg); }
     }
-    function anios() { var y = {}; P.INV.forEach(function (o) { if (o.saldo > 0) y[o.y] = 1; }); return Object.keys(y).map(Number).sort(); }
+    function anios() { if (!P) return []; var y = {}; P.INV.forEach(function (o) { if (o.saldo > 0) y[o.y] = 1; }); return Object.keys(y).map(Number).sort(); }
     function gruposLista() {
+      if (!P) return [];
       var g = {}; P.INV.forEach(function (o) { if (o.saldo > 0 && (!S.cia || o.cia === S.cia)) g[o.grp] = (g[o.grp] || 0) + 1; });
       return Object.keys(g).sort(function (a, b) { return a.localeCompare(b, 'es'); }).map(function (k) { return { v: k, t: k, n: g[k] }; });
     }
@@ -359,20 +348,21 @@
       }
       var mesTxt = MESL[+P.mes.slice(5, 7) - 1];
       var sub = conIva ? 'con IVA' : 'sin IVA';
-      function pila(k, cls, v, s, extra) {
-        return '<button type="button" class="cx-pila ' + cls + '" data-pila="' + k + '" aria-pressed="' + (S.pila === k) + '">'
-          + '<span class="cx-ptp"><span class="cx-pic" aria-hidden="true">' + IC[k] + '</span><span class="cx-pk">' + (k === 'cob' ? 'Cobrado en ' + mesTxt : PILAS[k]) + '</span></span>'
-          + '<span class="cx-pv">' + fm0(v) + '</span>' + (extra || '') + '<span class="cx-ps">' + s + '</span></button>';
-      }
-      var mix = c.ven > 0 ? '<span class="cx-mini" aria-hidden="true"><i style="width:' + (c.ven2 / c.ven * 100).toFixed(2) + '%;background:var(--cx-am)"></i><i style="width:' + (c.ven3 / c.ven * 100).toFixed(2) + '%;background:var(--cx-rj)"></i></span>' : '';
-      var h = pila('tot', 'cx-p-tot', c.tot, ni(c.nTot) + (c.nTot === 1 ? ' factura' : ' facturas') + ' · ' + ni(c.nGrp) + (c.nGrp === 1 ? ' grupo' : ' grupos') + ' · ' + sub)
-        + pila('ven', 'cx-p-ven' + (c.ven3 > 0 ? '' : ' solo2'), c.ven, c.ven > 0
-          ? '<span class="cx-l"><i style="background:var(--cx-am)"></i>2 meses <b>' + fm0(c.ven2) + '</b></span> · <span class="cx-l"><i style="background:var(--cx-rj)"></i>3 o más <b>' + fm0(c.ven3) + '</b></span>'
-          : 'nada de meses anteriores', mix)
-        + pila('curso', 'cx-p-curso', c.curso, 'por vencer · ' + ni(c.nCurso) + (c.nCurso === 1 ? ' factura' : ' facturas'));
-      if (P.conPagos) h += pila('cob', 'cx-p-cob', c.cob, ni(c.nCob) + (c.nCob === 1 ? ' pago' : ' pagos') + ' con fecha de ' + mesTxt);
-      else if (S.pila === 'cob') S.pila = 'tot';
-      var el = $('.cx-pilas'); el.innerHTML = h; el.classList.toggle('tres', !P.conPagos);
+      if (!P.conPagos && S.pila === 'cob') S.pila = 'tot';
+      var pl = [
+        { k: 'tot', t: PILAS.tot, n: c.nTot, txt: fm0(c.tot), d: ni(c.nTot) + (c.nTot === 1 ? ' factura' : ' facturas') + ' · ' + ni(c.nGrp) + (c.nGrp === 1 ? ' grupo' : ' grupos') + ' · ' + sub, tono: 'azul', on: S.pila === 'tot' },
+        { k: 'ven', t: PILAS.ven, n: c.nVen, txt: fm0(c.ven), tono: c.ven3 > 0 ? 'rojo' : 'ambar', on: S.pila === 'ven',
+          mini: [{ v: c.ven2, tono: 'ambar' }, { v: c.ven3, tono: 'rojo' }],
+          d: c.ven > 0 ? '2 meses ' + fm0(c.ven2) + ' · 3 o más ' + fm0(c.ven3) : 'nada de meses anteriores' },
+        { k: 'curso', t: PILAS.curso, n: c.nCurso, txt: fm0(c.curso), d: 'por vencer · ' + ni(c.nCurso) + (c.nCurso === 1 ? ' factura' : ' facturas'), tono: 'gris', on: S.pila === 'curso' }
+      ];
+      if (P.conPagos) pl.push({ k: 'cob', t: 'Cobrado en ' + mesTxt, n: c.nCob, txt: fm0(c.cob), d: ni(c.nCob) + (c.nCob === 1 ? ' pago' : ' pagos') + ' con fecha de ' + mesTxt, tono: 'verde', on: S.pila === 'cob' });
+      if (!window.PROFASE_PILAS) return;
+      PROFASE_PILAS.pinta($('.cx-pp'), {
+        titulo: 'Tu trabajo · la cobranza', meta: (S.cia || (P.cias.length > 1 ? 'Todas las compañías' : '')) + (S.cia || P.cias.length > 1 ? ' · ' : '') + sub,
+        pilas: pl,
+        alPicar: function (k) { S.pila = S.pila === k && k !== 'tot' ? 'tot' : k; if (typeof S.sort.k === 'number') S.sort = { k: 'tot', dir: -1 }; pinta(); }
+      });
     }
     function columnas(rows) {
       if (S.vista === 'edad') {
@@ -497,7 +487,7 @@
       if (!P) return;
       pintaTop(); pintaPilas();
       if (FB) FB.pinta();
-      raiz.querySelector('.cx-der .cx-vista').hidden = S.pila === 'cob';
+      $('.cx-vista').hidden = S.pila === 'cob';
       if (S.pila === 'cob') pintaCobrado(); else pintaTabla();
       pintaNota();
     }
@@ -598,7 +588,6 @@
       if ((b = e.target.closest('[data-cia]'))) { S.cia = b.getAttribute('data-cia'); S.grp = []; pinta(); return; }
       if ((b = e.target.closest('[data-iva]'))) { S.iva = b.getAttribute('data-iva'); store.set(CL + 'iva', S.iva); pinta(); return; }
       if ((b = e.target.closest('[data-vista]'))) { S.vista = b.getAttribute('data-vista'); store.set(CL + 'vista', S.vista); if (typeof S.sort.k === 'number') S.sort = { k: 'tot', dir: -1 }; pinta(); return; }
-      if ((b = e.target.closest('[data-pila]'))) { var k = b.getAttribute('data-pila'); S.pila = S.pila === k && k !== 'tot' ? 'tot' : k; if (typeof S.sort.k === 'number') S.sort = { k: 'tot', dir: -1 }; pinta(); return; }
       if ((b = e.target.closest('.cx-todos'))) { S.todos = !S.todos; if (!S.todos) S.abiertos = {}; pinta(); return; }
       if ((b = e.target.closest('th[data-s]'))) {
         var s = b.getAttribute('data-s'), k2 = s === 'n' || s === 'tot' ? s : +s;

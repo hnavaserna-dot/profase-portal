@@ -9,7 +9,9 @@
 
    PROFASE_PILAS.pinta(donde, {
      titulo: 'Tu trabajo · tus clientes', meta: '2 clientes · 2026 · datos al …',
-     pilas: [{k, t, n, d, tono: 'rojo'|'ambar'|'azul'|'naranja'|'violeta'|'verde'|'gris', on, tag: 'Te toca', title}],
+     pilas: [{k, t, n, d, tono: 'rojo'|'ambar'|'azul'|'naranja'|'violeta'|'verde'|'gris', on, tag: 'Te toca', title,
+              txt: '$1,200'     // lo que se ve en lugar del número (un monto)
+              mini: [{v, tono}]}],   // una barrita de cómo se reparte (p. ej. vencido de 2 meses y de 3 o más; Cobranza)
      alPicar: k => …,                       // la página filtra y vuelve a pintar (pica otra vez la misma: quita el filtro)
      boton: {t: 'Empezar a revisar', n, alPicar: () => …} | null,   // abre la primera en el seguimiento
      nota: 'texto chico junto al botón', extra: [nodos] })           // p. ej. «Ver gráfica mes a mes ▾»
@@ -43,9 +45,12 @@
     violeta: ['#6B46C1', '#B69CF2'], verde: ['#2F855A', '#5FCF8E'], gris: ['#5B6B7D', '#9AA8B8']
   };
   var CSS = Object.keys(TONOS).map(function (t) {
-      return '.ppl-p[data-tono="' + t + '"]{--c:' + TONOS[t][0] + '}:root[data-theme="dark"] .ppl-p[data-tono="' + t + '"]{--c:' + TONOS[t][1] + '}';
+      return '.ppl-p[data-tono="' + t + '"]{--c:' + TONOS[t][0] + '}:root[data-theme="dark"] .ppl-p[data-tono="' + t + '"]{--c:' + TONOS[t][1] + '}'
+        + '.ppl-mini i[data-tono="' + t + '"]{background:' + TONOS[t][0] + '}:root[data-theme="dark"] .ppl-mini i[data-tono="' + t + '"]{background:' + TONOS[t][1] + '}';
     }).join('')
-    + '.ppl{--pp-sf:var(--surface,#FFFFFF);--pp-sf2:var(--surface-2,#F3F5F8);--pp-ln:var(--line,#DDE3EA);--pp-ink:var(--ink,var(--fg,#132036));'
+    + '.ppl-mini{display:flex;width:100%;height:6px;border-radius:999px;overflow:hidden;background:var(--pp-sf2);margin:5px 0 2px}'
+    + '.ppl-mini i{display:block;height:100%}'
+    + '.ppl{--pp-sf:var(--surface,#FFFFFF);--pp-sf2:var(--surface-2,var(--bg,#F3F5F8));--pp-ln:var(--line,#DDE3EA);--pp-ink:var(--ink,var(--fg,#132036));'
     + '--pp-ink2:var(--ink-2,var(--fg-2,#4E5D6E));--pp-mu:var(--ink-3,var(--muted,#7B8A9B));--pp-nv:#1F3864;--pp-ac:#F07A1E;'
     + 'margin:0 0 14px;min-width:0;color:var(--pp-ink);box-sizing:border-box}'
     + ':root[data-theme="dark"] .ppl{--pp-nv:#8FB3F0}'
@@ -105,7 +110,7 @@
     + '.ppl-qn{flex:1 1 260px;min-width:0;display:block;margin:0}.ppl-qn > *{margin:0;max-width:100%}'
     + '.ppl-q svg{position:absolute;left:10px;width:15px;height:15px;color:var(--muted,var(--ink-3,#7B8A9B));pointer-events:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}'
     + '.ppl-q input{width:100%;max-width:none;font:inherit;font-size:13.5px;padding:9px 12px 9px 33px;min-height:38px;border:1px solid var(--line,#DDE3EA);'
-    + 'border-radius:10px;background:var(--surface-2,#F3F5F8);color:var(--ink,var(--fg,#132036));box-sizing:border-box;margin:0}'
+    + 'border-radius:10px;background:var(--surface-2,var(--bg,#F3F5F8));color:var(--ink,var(--fg,#132036));box-sizing:border-box;margin:0}'
     + '.ppl-q input:focus{outline:none;border-color:#F07A1E;box-shadow:0 0 0 2px rgba(240,122,30,.2)}'
     + '.ppl-bf{display:contents}.ppl-bar .pf{margin:0}'
     + '.ppl-per{display:inline-flex;flex-wrap:wrap;gap:8px;min-width:0}'
@@ -115,7 +120,7 @@
     + '.ppl-bb > [hidden]{display:none!important}'
     + '.ppl-bar .ppl-masb{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line,#DDE3EA);border-radius:10px;'
     + 'background:var(--surface,#FFFFFF);color:var(--ink,var(--fg,#132036));padding:8px 13px;min-height:38px;cursor:pointer;box-sizing:border-box}'
-    + '.ppl-bar .ppl-masb:hover{background:var(--surface-2,#F3F5F8)}'
+    + '.ppl-bar .ppl-masb:hover{background:var(--surface-2,var(--bg,#F3F5F8))}'
     + '.ppl-masm .btn{width:100%;justify-content:flex-start;text-align:left;margin:0}'
     + '.ppl-nav{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;flex:none}'
     + '.ppl-navn{font-size:12.5px;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap}'
@@ -150,6 +155,7 @@
       h += '<button type="button" class="ppl-p' + (n ? '' : ' cero') + (p.tag ? ' con-tag' : (p.on ? ' con-x' : '')) + '" data-ppl="' + esc(p.k) + '" aria-pressed="' + (!!p.on) + '"'
         + ' data-tono="' + (TONOS[p.tono] ? p.tono : 'azul') + '"' + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>'
         + '<span class="ppl-t">' + esc(p.t) + '</span><span class="ppl-n">' + esc(p.txt != null ? p.txt : fmt.format(n)) + '</span>'
+        + mini(p.mini)
         + (p.d ? '<span class="ppl-d">' + esc(p.d) + '</span>' : '')
         + (p.tag ? '<span class="ppl-tag">' + esc(p.tag) + '</span>' : '')
         + (p.on ? '<span class="ppl-x" aria-hidden="true">✕</span>' : '') + '</button>';
@@ -173,6 +179,16 @@
     if (ex && o.extra) o.extra.forEach(function (n) { if (n) ex.appendChild(n); });
     if (foco) { var f = foco === 'go' ? go : donde.querySelector('[data-ppl="' + foco.replace(/"/g, '') + '"]'); if (f) try { f.focus({ preventScroll: true }); } catch (e) { /* nada */ } }
     return donde;
+  }
+
+  // la barrita de cómo se reparte una pila: [{v, tono}] (solo lo que pasa de 0; nada si no suma)
+  function mini(l) {
+    if (!l || !l.length) return '';
+    var tot = l.reduce(function (a, x) { return a + (Number(x.v) > 0 ? Number(x.v) : 0); }, 0);
+    if (!(tot > 0)) return '';
+    return '<span class="ppl-mini" aria-hidden="true">' + l.filter(function (x) { return Number(x.v) > 0; }).map(function (x) {
+      return '<i data-tono="' + (TONOS[x.tono] ? x.tono : 'azul') + '" style="width:' + (Number(x.v) / tot * 100).toFixed(2) + '%"></i>';
+    }).join('') + '</span>';
   }
 
   function mas(o) {
