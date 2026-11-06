@@ -24,6 +24,7 @@
    todas las pantallas (antes cada una la armaba a mano):
    PROFASE_PILAS.barra(donde, {
      buscar: elInput | {id, placeholder, alEscribir: q => …},   // el buscador (si la pantalla ya tenía uno, se mueve aquí)
+                                                                // (o el de clientes de js/buscador.js: su caja se mueve tal cual)
      periodo: [nodos],                                          // lo que recarga los datos (año, mes, periodo), a la vista
      filtros: {grupos, cambio, …},                              // lo de PROFASE_FILTROS.crea, sin «donde» → r.f
      botones: [nodos],                                          // lo que siempre se ve (Excel con su PDF, la acción del día)
@@ -101,6 +102,7 @@
     + '.ppl-bar[hidden]{display:none!important}'
     + '.ppl-bar.caja{background:var(--surface,#FFFFFF);border:1px solid var(--line,#DDE3EA);border-radius:12px;padding:11px 14px}'
     + '.ppl-q{flex:1 1 260px;min-width:0;position:relative;display:flex;align-items:center;margin:0}'
+    + '.ppl-qn{flex:1 1 260px;min-width:0;display:block;margin:0}.ppl-qn > *{margin:0;max-width:100%}'
     + '.ppl-q svg{position:absolute;left:10px;width:15px;height:15px;color:var(--muted,var(--ink-3,#7B8A9B));pointer-events:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}'
     + '.ppl-q input{width:100%;max-width:none;font:inherit;font-size:13.5px;padding:9px 12px 9px 33px;min-height:38px;border:1px solid var(--line,#DDE3EA);'
     + 'border-radius:10px;background:var(--surface-2,#F3F5F8);color:var(--ink,var(--fg,#132036));box-sizing:border-box;margin:0}'
@@ -118,7 +120,7 @@
     + '.ppl-nav{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;flex:none}'
     + '.ppl-navn{font-size:12.5px;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap}'
     + '.ppl-nav [disabled]{opacity:.45;cursor:default}'
-    + '@media (max-width:600px){.ppl-q{flex-basis:100%}.ppl-q input{font-size:16px}.ppl-per select,.ppl-per input{font-size:16px}}';
+    + '@media (max-width:600px){.ppl-q,.ppl-qn{flex-basis:100%}.ppl-q input{font-size:16px}.ppl-per select,.ppl-per input{font-size:16px}}';
 
   function estilos() {
     if (document.getElementById('ppl-css')) return;
@@ -229,7 +231,11 @@
     estilos(); o = o || {};
     donde.classList.add('ppl-bar'); if (o.caja) donde.classList.add('caja'); donde.hidden = false;
     var r = { w: donde, q: null, f: null, mas: null };
-    if (o.buscar) {
+    if (o.buscar && o.buscar.nodeType === 1 && !/^(INPUT|TEXTAREA)$/.test(o.buscar.tagName)) {
+      // un buscador que ya es una pieza (el de clientes de js/buscador.js): se mueve tal cual, en el lugar del buscador
+      var qn = document.createElement('span'); qn.className = 'ppl-qn'; qn.appendChild(o.buscar);
+      donde.appendChild(qn); r.q = o.buscar.querySelector('input');
+    } else if (o.buscar) {
       var lb = document.createElement('label'); lb.className = 'ppl-q'; lb.innerHTML = LUPA;
       var inp = o.buscar.nodeType === 1 ? o.buscar : document.createElement('input');
       if (inp !== o.buscar) {

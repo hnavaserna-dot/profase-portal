@@ -483,5 +483,66 @@
     return c;
   }
 
-  window.PROFASE_FILTROS = { crea: crea, norm: norm, pasa: pasa, deSelect: deSelect };
+  /* Lo mismo que deSelect para los otros controles que una pantalla ya tenía (5-nov-2026, Centauro con UX PROFASE): se quedan
+     (escondidos) y la pantalla los sigue leyendo; FILTROS solo los mueve.
+       PROFASE_FILTROS.deBotones(grupo, { t, attr })   // un grupo de botones con aria-pressed (uno a la vez): 'uno'
+       PROFASE_FILTROS.deCasilla(casilla, { t })        // una casilla: 'varios' con una sola opción (su texto)
+       PROFASE_FILTROS.deFechas(desde, hasta, { t })    // dos <input type="date">: 'rango' de fechas
+     Los botones: su valor es el atributo data-… del primero (o «attr»); escoger uno lo pica (hace lo que ya hacía) y su
+     defecto es el primero. Si el grupo, la casilla o las fechas están escondidos o apagados, el campo no sale. */
+  function deBotones(grupo, o) {
+    o = o || {};
+    if (!grupo) return null;
+    var bs = function () { return Array.prototype.filter.call(grupo.querySelectorAll('button'), function (b) { return !b.hidden; }); };
+    var b0 = bs()[0];
+    var an = o.attr || (b0 ? (Array.prototype.filter.call(b0.attributes, function (x) { return /^data-/.test(x.name); })[0] || {}).name : '');
+    if (!an) return null;
+    var c = {
+      k: o.k || grupo.id || an, tipo: 'uno', lista: o.lista !== false, ver: function () { return !grupo.hidden; },
+      t: o.t || String(grupo.getAttribute('aria-label') || 'Ver').toUpperCase(),
+      opciones: function () { return bs().map(function (b) { return { v: b.getAttribute(an), t: b.textContent.trim() }; }); },
+      valor: function () { var l = bs(), b = l.filter(function (x) { return x.getAttribute('aria-pressed') === 'true'; })[0] || l[0]; return b ? [b.getAttribute(an)] : []; },
+      pon: function (v) {
+        var l = bs(); if (!l.length) return;
+        var x = v && v.length ? String(v[v.length - 1]) : l[0].getAttribute(an);
+        var b = l.filter(function (z) { return z.getAttribute(an) === x; })[0];
+        if (b && b.getAttribute('aria-pressed') !== 'true') b.click();
+      }
+    };
+    Object.defineProperty(c, 'defecto', { enumerable: true, get: function () { var l = bs(); return l.length ? [l[0].getAttribute(an)] : []; } });
+    return c;
+  }
+  function deCasilla(chk, o) {
+    o = o || {};
+    if (!chk) return null;
+    var lb = chk.closest ? chk.closest('label') : null;
+    return {
+      k: o.k || chk.id, tipo: 'varios', lista: true, t: o.t || 'TAMBIÉN',
+      ver: function () { return !chk.disabled && !(lb && lb.hidden); },
+      opciones: function () { return [{ v: 'si', t: String(lb ? lb.textContent : (chk.getAttribute('aria-label') || chk.id)).trim() }]; },
+      valor: function () { return chk.checked ? ['si'] : []; },
+      pon: function (v) {
+        var x = !!(v && v.indexOf('si') >= 0); if (chk.checked === x) return;
+        chk.checked = x;
+        try { chk.dispatchEvent(new Event('input', { bubbles: true })); chk.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* nada */ }
+      }
+    };
+  }
+  function deFechas(d0, d1, o) {
+    o = o || {};
+    if (!d0 || !d1) return null;
+    return {
+      k: o.k || 'periodo', tipo: 'rango', entrada: 'fecha', etiquetas: o.etiquetas || ['Del', 'Al'], t: o.t || 'PERIODO',
+      ver: function () { return !d0.disabled && !d1.disabled; },
+      valor: function () { return [d0.value, d1.value]; },
+      pon: function (v) {
+        v = v || ['', '']; var cambio = false;
+        if (d0.value !== (v[0] || '')) { d0.value = v[0] || ''; cambio = true; }
+        if (d1.value !== (v[1] || '')) { d1.value = v[1] || ''; cambio = true; }
+        if (cambio) try { d1.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* nada */ }
+      }
+    };
+  }
+
+  window.PROFASE_FILTROS = { crea: crea, norm: norm, pasa: pasa, deSelect: deSelect, deBotones: deBotones, deCasilla: deCasilla, deFechas: deFechas };
 })();
