@@ -780,8 +780,9 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     D.clis = dosC[0] || []; D.revRes = dosC[1] || [];
     var n = D.clis.length, hechos = 0, faltan = 0;
     D.clis.forEach(function (c) { (c.anios || []).forEach(function (a) { if (a.k === 'hecho') hechos++; else if (a.k === 'falta' || a.k === 'tomado') faltan++; }); });
-    $('d-nota').textContent = n ? 'Prueba con ' + cuenta(n, 'cliente', 'clientes') + ': ' + cuenta(hechos, 'año ya está', 'años ya están') + (faltan ? ' y ' + cuenta(faltan, 'falta', 'faltan') + ' por bajar' : '') + '. Primero 2026 de todos, luego 2025, 2024, 2023 y 2022.'
-      : 'El robot empieza con los 5 clientes de la prueba de los XML: primero 2026, luego 2025, 2024, 2023 y 2022.';
+    $('d-nota').textContent = (n ? (EST && EST.decl_modo === 'todos' ? cuenta(n, 'cliente', 'clientes') : 'Prueba con ' + cuenta(n, 'cliente', 'clientes')) + ': ' + cuenta(hechos, 'año ya está', 'años ya están') + (faltan ? ' y ' + cuenta(faltan, 'falta', 'faltan') + ' por bajar' : '') + '. Primero 2026 de todos, luego 2025, 2024, 2023 y 2022.'
+      : 'El robot empieza con los 5 clientes de la prueba de los XML: primero 2026, luego 2025, 2024, 2023 y 2022.')
+      + (EST && EST.decl_detenida ? ' Este mes ya se usó el tiempo que se le dio a la revisión de las declaraciones: se detuvo sola, no se perdió nada y sigue el primer día del mes que entra.' : '');
     if (!bD) {
       bD = buscaCliente($('d-cliBox'), 'd-cli', D.clis, function (v) { D.cli = v; pintaClientesD(); listaD(); });
     }
@@ -3184,8 +3185,10 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       var det = k === 'riesgos' ? 'En la revisión fiscal de ' + M.anio : la.map(function (l) { return (l === 'emitida' ? 'emitidas: ' : 'recibidas: ') + (+kl[k + '|' + l]).toLocaleString('es-MX'); }).join(' · ');
       if (k === 'ppd_sin_pago') det += (det ? ' · ' : '') + 'de hace más de dos meses';
       h += '<div class="it"><span class="sc ' + d[1] + '">' + M_SIM[d[1]] + ' ' + y[1].toLocaleString('es-MX') + '</span><b>' + esc(d[0]) + '</b>'
-        + '<button class="btn chico" type="button" data-mir="' + k + '|' + (la[0] || '') + '">Ver</button><div class="mut">' + esc(det) + '</div></div>';
+        + (EST && EST.solo_semaforo ? '' : '<button class="btn chico" type="button" data-mir="' + k + '|' + (la[0] || '') + '">Ver</button>')
+        + '<div class="mut">' + esc(det) + '</div></div>';
     });
+    if (cs.length && EST && EST.solo_semaforo) h += '<p class="mut">Para corregirlo, platícalo con el contador del cliente.</p>';   // 299: sin los reportes
     $('msem-cu').innerHTML = h;
     $('msem-cu').querySelectorAll('[data-mir]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-mir').split('|'); $('msem').hidden = true; irM(rfc, mes, v[0], v[1]); }; });
     $('msem').hidden = false; $('msem-cierra').focus();
@@ -3194,8 +3197,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   $('msem').addEventListener('click', function (e) { if (e.target === this) this.hidden = true; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('msem').hidden) $('msem').hidden = true; });
   function notaM() {
-    $('m-nota').textContent = 'Cada cliente que ves, mes por mes, con lo que ya trae Centauro (los XML de la bóveda, sus canceladas, la lista 69-B y la revisión fiscal). '
-      + 'Pica un mes para ver qué trae y a qué reporte ir.' + (M.al ? ' Al día al ' + fechaHora(M.al) + '.' : '');
+    $('m-nota').textContent = (EST && EST.solo_semaforo ? 'Los clientes de tu equipo' : 'Cada cliente que ves') + ', mes por mes, con lo que ya trae Centauro (los XML de la bóveda, sus canceladas, la lista 69-B y la revisión fiscal). '
+      + (EST && EST.solo_semaforo ? 'Pica un mes para ver qué trae. Si un cliente pasa a rojo, te llega un aviso.' : 'Pica un mes para ver qué trae y a qué reporte ir.') + (M.al ? ' Al día al ' + fechaHora(M.al) + '.' : '');
   }
   async function listaM() {
     var mi = (M.seq = (M.seq || 0) + 1);
@@ -3214,8 +3217,15 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     pintaKpisM(); pintaM();
   }
   async function cargaSemaforo() {
+    // 299: desde el aviso de que un cliente pasó a rojo (ese cliente en ese año) o el de varios (la pila «En rojo»)
+    var ab = null; try { ab = JSON.parse(sessionStorage.getItem('cen-sem-abre') || 'null'); sessionStorage.removeItem('cen-sem-abre'); } catch (e) { ab = null; }
+    if (ab && ab.anio) M.anio = +ab.anio;
     if (M.anio === null) M.anio = mHoy().a || new Date().getFullYear();
+    if (ab) { mLimpia(); M.k = ab.k === 'rojo' ? 'rojo' : ''; }
     await listaM();
+    if (ab && ab.rfc && M.filas.some(function (c) { return c.rfc === ab.rfc; })) {
+      M.f.cli = [ab.rfc]; if (PM) PM.inicio(); if (FM) FM.pinta(); pintaKpisM(); pintaM();
+    }
   }
   $('m-anio').onchange = function () { M.anio = +this.value; M.k = ''; listaM().catch(function (e) { error(falla(e)); }); };
   $('x-semaforo').onclick = function () {
@@ -3255,6 +3265,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       EST = await rpc('cen_estado');
       if (!EST || !EST.ve) throw new Error('Centauro lo ven, por ahora, Héctor Daniel Nava, Héctor Nava Ramos, Fernando Gutiérrez, Fernando Cadengo y Francisco Rivera.');
       CONSULTA = !!P.consulta || !!EST.consulta;
+      if (EST.solo_semaforo && S !== 'semaforo') S = 'semaforo';   // 299: quien solo tiene el Semáforo (Fernando Barbosa)
       $('consulta').hidden = !CONSULTA;
       $('titulo').textContent = TIT[S][0]; $('desc').textContent = TIT[S][1];
       try { document.title = 'Portal PROFASE · Centauro · ' + TIT[S][0]; } catch (e) {}

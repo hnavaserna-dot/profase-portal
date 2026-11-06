@@ -165,8 +165,9 @@
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
     // (usr_estado(), portal/sql/82_usuarios.sql; bloque usr_tab.js)
-    { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas, accesos y las personas del WorkFlow.', subs: [
-      { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña y regresos.' },
+    // (295, 5-nov-2026) Usuarios del portal también a los gerentes, solo para el permiso de cerrar avisos del Buzón tributario
+    { k: 'usr', t: 'Usuarios', d: 'Quién entra al portal: altas, bajas, contraseñas, permisos, accesos y las personas del WorkFlow.', subs: [
+      { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña, regresos y el permiso de cerrar avisos del Buzón.' },
       { k: 'usuarios-wf', v: 'uwf', t: 'Personas del WorkFlow', d: 'Las personas del WorkFlow: cómo salen, si salen como contador, sus teléfonos y su carga.' },   // la pantalla «Usuarios» del Access (31-oct-2026): Daniel, Cadengo y Gabo
       { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
     { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
