@@ -610,7 +610,10 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   ];
   var PAGO_CORTE = {efectivo:'Efectivo', transferencia:'Transferencia'};
   var REL = {cliente:'Cliente', grupo:'Grupo'};
-  // Daniel decidió (28-oct-2026) que el kilometraje se captura a mano: no hay tarifa fija por km
+  // La gasolina de las vueltas va por km (308_caja_gasolina_km.sql; petición de Fernando Cadengo autorizada por Héctor
+  // Daniel Nava el 6-nov-2026): quien la registra pone origen, destino y los km del viaje completo y el importe lo pone la
+  // base, km × la tarifa (caja_registro().tarifa_km, hoy $12). Lo de antes (Gasolina con ticket, Kilometraje) se queda.
+  var TARIFA = null, GAS_VIEJA = false;   // GAS_VIEJA: se corrige una Gasolina de antes, con ticket y sin km
 
   var mx = new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'});
   var mxp = new Intl.NumberFormat('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -689,7 +692,10 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   }
 
   // ---------- selects ----------
-  function llenaCats(sel, lista){ lista.forEach(function(x){ sel.appendChild(new Option(x.label,x.id)); }); }
+  // en el formulario (form) no se ofrece lo que ya no se registra (viejo), salvo al corregir uno de antes (deja)
+  function llenaCats(sel, lista, form, deja){ lista.forEach(function(x){
+    if(form && x.viejo && x.id!==deja) return;
+    sel.appendChild(new Option(form && x.id==='gasolina' && GAS_VIEJA ? 'Gasolina (con ticket, de antes)' : x.label, x.id)); }); }
   (function initSelects(){
     var gv=document.createElement('optgroup'); gv.label='Vueltas a cliente'; llenaCats(gv, CATS_V);
     var gi=document.createElement('optgroup'); gi.label='Gastos internos'; llenaCats(gi, CATS_I);
@@ -806,7 +812,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     $('tVuelta').setAttribute('aria-pressed', formTipo==='vuelta'?'true':'false');
     $('tInterno').setAttribute('aria-pressed', formTipo==='interno'?'true':'false');
     var lista = formTipo==='interno' ? CATS_I : CATS_V, sel=$('categoria');
-    sel.textContent=''; llenaCats(sel, lista);
+    sel.textContent=''; llenaCats(sel, lista, true, catActual);
     var ok = lista.some(function(c){ return c.id===catActual; });
     sel.value = ok ? catActual : lista[0].id;
     $('rowMotivo').hidden = formTipo==='interno';   // el gasto interno ya trae «Evento o motivo»
@@ -821,14 +827,25 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   $('tVuelta').addEventListener('click', function(){ setTipo('vuelta', $('categoria').value); });
   $('tInterno').addEventListener('click', function(){ setTipo('interno', $('categoria').value); });
 
+  // ¿el gasto que se captura va por km? (Gasolina nueva o una que ya iba por km)
+  function porKmForm(){ return formTipo==='vuelta' && $('categoria').value==='gasolina' && !GAS_VIEJA; }
+  function calcImporte(){
+    var k=Math.round((Number($('km').value)||0)*10)/10;
+    $('importe').value = k>0 && TARIFA ? (Math.round(k*TARIFA*100)/100).toFixed(2) : '';
+  }
   function syncFormUI(){
-    var cat=catOf($('categoria').value);
+    var cat=catOf($('categoria').value), pk=porKmForm();
     $('subRuta').hidden = !(formTipo==='vuelta' && cat.ruta);
     $('subFiscal').hidden = !!cat.km;
-    $('importeHint').textContent = cat.km ? 'Captura el importe del kilometraje.' : '';
+    ['origen','destino','km'].forEach(function(id){ $(id).required = pk; });
+    var lk=document.querySelector('label[for="km"]'); if(lk) lk.textContent = pk ? 'Km del viaje (ida y vuelta)' : 'Km';
+    $('importe').readOnly = pk;
+    if(pk){ calcImporte(); $('importeHint').textContent = TARIFA ? 'Lo pone el portal: km × '+money(TARIFA)+'. Escribe los km del viaje completo, ida y vuelta.' : 'No se pudo leer la tarifa por km: recarga la página.'; }
+    else $('importeHint').textContent = cat.km ? 'Captura el importe del kilometraje.' : '';
     $('pagoHint').textContent = propio({pago:$('pago').value}) ? 'Al autorizarlo, se le paga del fondo de caja chica.' : 'Lo pagó la empresa: no sale del fondo.';
   }
   ['categoria','pago'].forEach(function(id){ $(id).addEventListener('input', syncFormUI); $(id).addEventListener('change', syncFormUI); });
+  $('km').addEventListener('input', function(){ if(porKmForm()) calcImporte(); });
 
   $('rfc').addEventListener('input', function(){
     this.value=this.value.toUpperCase().replace(/[^A-ZÑ&0-9]/g,'');
@@ -876,6 +893,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     $('deducible').checked = mov ? mov.deducible!==false : true;
     $('rfcHint').textContent=''; $('folioHint').textContent='';
     ponRel(mov);
+    GAS_VIEJA = !!(mov && mov.categoria==='gasolina' && !mov.porKm);
     setTipo(t, mov ? (mov.categoria||'') : '');
     $('sheet').hidden=false;
     try{ $('sheet').scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
@@ -893,6 +911,13 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     if(!db || !captura()){ $('formMsg').textContent='Sin conexión con la base: recarga la página.'; return; }
     var fecha=$('fecha').value;
     if(!fecha){ $('formMsg').textContent='Falta la fecha.'; return; }
+    var pk=porKmForm();
+    if(pk){
+      if(!TARIFA){ $('formMsg').textContent='No se pudo leer la tarifa por km: recarga la página.'; return; }
+      if(!$('origen').value.trim() || !$('destino').value.trim()){ $('formMsg').textContent='Faltan el origen y el destino del viaje.'; return; }
+      if(!((Number($('km').value)||0)>0)){ $('formMsg').textContent='Faltan los km del viaje completo (ida y vuelta).'; return; }
+      calcImporte();   // la base lo vuelve a calcular al guardar
+    }
     var importe=Math.round((Number($('importe').value)||0)*100)/100;
     if(importe<=0){ $('formMsg').textContent='El importe debe ser mayor a cero.'; return; }
     var persona=$('persona').value.trim();
@@ -917,7 +942,8 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
       origen: ruta ? $('origen').value.trim() : '', destino: ruta ? $('destino').value.trim() : '',
       km: ruta ? (Number($('km').value)||0) : 0, vehiculo: ruta ? $('vehiculo').value.trim() : '',
       rfc: cat.km ? '' : $('rfc').value.trim(), folio: cat.km ? '' : $('folio').value.trim(),
-      deducible: cat.km ? false : !!$('deducible').checked
+      deducible: cat.km ? false : !!$('deducible').checked,
+      porKm: pk
     };
     var ahora=new Date().toISOString();
     var existing = editingId ? byId(editingId) : null, obj={}, k;
@@ -1025,7 +1051,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   function sinAcento(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
   function buscaEn(m, q){
     var txt=sinAcento([m.descripcion, m.motivo, m.evento, quienDe(m), m.porNombre, m.cliente, m.clienteRfc, m.clienteGrupo,
-      catOf(m.categoria).label, pagoOf(m.pago).label, estOf(m.estatus).label, m.origen, m.destino, m.repo, m.corte].join(' '));
+      catOf(m.categoria).label, CF.catDe(m), pagoOf(m.pago).label, estOf(m.estatus).label, m.origen, m.destino, m.repo, m.corte].join(' '));
     return sinAcento(q).split(/\s+/).filter(Boolean).every(function(w){ return txt.indexOf(w)>=0; });
   }
   // las pilas de «Tu trabajo»: cada una deja la lista con lo suyo (se cuentan con lo mismo que trae la lista)
@@ -1181,7 +1207,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   function celGasto(m){
     var cat=catOf(m.categoria), interno=tipoOf(m)==='interno';
     var c2=td('Gasto','full');
-    var chip=document.createElement('span'); chip.className='chip'+(interno?' interno':''); chip.textContent=(interno?'Interno · ':'')+cat.label; c2.appendChild(chip);
+    var chip=document.createElement('span'); chip.className='chip'+(interno?' interno':''); chip.textContent=(interno?'Interno · ':'')+CF.catDe(m); c2.appendChild(chip);
     var t=document.createElement('div'); t.className='mov-t'; t.textContent=m.descripcion||'(sin concepto)'; c2.appendChild(t);
     var s=document.createElement('div'); s.className='mov-s';
     function bit(txt,mono){ if(!txt) return; var x=document.createElement('span'); if(mono) x.className='uuid'; x.textContent=txt; s.appendChild(x); }
@@ -1189,7 +1215,8 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     if(interno) bit(m.evento||'');
     else if(m.motivo) bit(m.motivo);
     if(m.origen||m.destino) bit((m.origen||'—')+' → '+(m.destino||'—'));
-    if(Number(m.km)>0) bit(kms(m.km)+' km'+(m.vehiculo?' · '+m.vehiculo:''));
+    if(m.porKm) bit(CF.kmTxt(m)+(m.vehiculo?' · '+m.vehiculo:''));
+    else if(Number(m.km)>0) bit(kms(m.km)+' km'+(m.vehiculo?' · '+m.vehiculo:''));
     if(m.folio) bit('Con folio fiscal');
     if(m.deducible===false && m.categoria!=='kilometraje') bit('No deducible');
     if(s.childNodes.length) c2.appendChild(s);
@@ -1431,10 +1458,11 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
       + (m.repo ? ' · Reposición '+m.repo : m.corte ? ' · '+m.corte : ''));
     if(m.autoAutorizado) f('Para revisar', 'Se lo autorizó la misma persona que lo hizo', 'Eva lo revisa antes de depositar la reposición');
     if(m.origen||m.destino) f('Traslado', (m.origen||'—')+' → '+(m.destino||'—'), Number(m.km)>0 ? kms(m.km)+' km'+(m.vehiculo?' · '+m.vehiculo:'') : '');
+    if(m.porKm) f('Por km', CF.kmTxt(m), 'La tarifa la pone el portal');
     if(cat.km) f('Kilómetros', kms(m.km), m.vehiculo||'');
     else f('Comprobante', m.folio ? 'Con folio fiscal' : 'Sin folio fiscal', [m.rfc ? 'RFC '+m.rfc : '', m.folio||'', m.deducible===false ? 'No deducible' : 'Deducible'].filter(Boolean).join(' · '));
     var cap=document.createElement('div'); cap.className='dlg';
-    cap.innerHTML='<div class="caja" role="dialog" aria-modal="true" aria-labelledby="dlgT"><div class="top"><div><span class="chip'+(interno?' interno':'')+'">'+esc(cat.label)+'</span>'
+    cap.innerHTML='<div class="caja" role="dialog" aria-modal="true" aria-labelledby="dlgT"><div class="top"><div><span class="chip'+(interno?' interno':'')+'">'+esc(CF.catDe(m))+'</span>'
       +'<h3 id="dlgT">'+esc(m.descripcion||'(sin concepto)')+'</h3></div><div class="imp">'+esc(money(m.importe))+'</div></div><dl>'+filas.join('')+'</dl>'
       +'<div class="dnav"></div>'
       +'<div class="actions">'+(autoriza?'<button class="btn accent" type="button" data-d="autorizar">Autorizar'+(sig?' y siguiente ›':'')+'</button><button class="btn ghost" type="button" data-d="rechazar" style="color:var(--danger)">Rechazar</button>':'')
@@ -1678,7 +1706,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
       y+=14;
       var body=(c.gastos||[]).map(function(g){
         var interno=g.tipo==='interno';
-        return [fechaCorta(g.fecha), interno?'Interno':'Vuelta', catOf(g.categoria).label+(g.descripcion?' · '+g.descripcion:''),
+        return [fechaCorta(g.fecha), interno?'Interno':'Vuelta', CF.catDe(g)+(g.descripcion?' · '+g.descripcion:''),
                 interno ? (g.evento||'') : (g.cliente||''), money(g.importe)];
       });
       doc.autoTable(Object.assign(MK.tablaPDF(), {
@@ -1792,7 +1820,7 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
         {h:'RFC cliente', w:15, v:function(m){ return m.clienteRfc||''; }},
         {h:'Grupo', w:18, v:function(m){ return m.clienteGrupo||''; }},
         {h:'Motivo o evento', w:30, v:function(m){ return m.motivo||m.evento||''; }},
-        {h:'Categoría', w:27, v:function(m){ return catOf(m.categoria).label; }},
+        {h:'Categoría', w:27, v:function(m){ return CF.catDe(m); }},
         {h:'Concepto', w:36, v:function(m){ return m.descripcion||''; }},
         {h:'Importe', w:13, f:PESOS, suma:true, v:function(m){ return Number(m.importe)||0; }},
         {h:'Deducible', w:10, v:function(m){ return m.categoria==='kilometraje' ? '' : (m.deducible===false?'No':'Sí'); }},
@@ -1862,9 +1890,11 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
       if(!modo){ sinAcceso('Sin acceso a la caja chica','La caja chica la ven los gerentes y la dirección.'); return; }
       if(captura()){
         // qué tipos registra lo dice la base (caja_registro(): vueltas, los gerentes; gastos internos, caja_rh); si no contesta, nada
-        try{ var rg = await P.sb.rpc('caja_registro'); var rd = (!rg.error && rg.data) || {}; esRH = rd.interno===true; puedeVuelta = rd.vuelta===true; }
+        try{ var rg = await P.sb.rpc('caja_registro'); var rd = (!rg.error && rg.data) || {}; esRH = rd.interno===true; puedeVuelta = rd.vuelta===true; if(rd.tarifa_km) TARIFA=Number(rd.tarifa_km); }
         catch(e){ esRH=false; puedeVuelta=false; }
       }
+      // la tarifa por km también la necesita quien autoriza y corrige (308)
+      if(!TARIFA){ try{ var rt = await P.sb.rpc('caja_registro'); if(!rt.error && rt.data && rt.data.tarifa_km) TARIFA=Number(rt.data.tarifa_km); }catch(e){} }
     }catch(e){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
 
     // quién ve el fondo lo dice la base: 'maneja' (Fernando), 'fondo' (Eva), 'direccion' o nada (Gabo y los demás)

@@ -332,6 +332,13 @@ tr.click:hover td{background:var(--navy-soft)}
   function dinero(n) { n = Number(n || 0); return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function dias(n) { if (n == null) return ''; n = Number(n); return n.toLocaleString('es-MX', { maximumFractionDigits: 1 }) + (Math.abs(n) === 1 ? ' día' : ' días'); }
   function num(v) { var s = String(v == null ? '' : v).replace(/[$,\s]/g, ''); if (s === '') return null; var n = Number(s); return isFinite(n) ? n : NaN; }
+  // 309: la siguiente nómina desde una fecha: en los quincenales, el 15 o el último día del mes (lo mismo que revisa la base)
+  function sigNomina(per, desde) {
+    var h = desde || hoyISO(); if (per !== 'quincenal') return h;
+    var p = h.split('-'), y = +p[0], m = +p[1], d = +p[2], ult = new Date(y, m, 0).getDate(), dd = function (n) { return String(n).padStart(2, '0'); };
+    return d <= 15 ? y + '-' + dd(m) + '-15' : y + '-' + dd(m) + '-' + dd(ult);
+  }
+  function esQuincena(f) { if (!f) return false; var p = f.split('-'), d = +p[2]; return d === 15 || d === new Date(+p[0], +p[1], 0).getDate(); }
   function hoyISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
@@ -648,7 +655,7 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<div class="sec" id="q-resto"><h3>Cómo se descuenta lo que falta</h3><div class="in"><div class="campos">'
       + '<div class="campo"><label for="q-pag">Pagos que faltan</label><input id="q-pag" inputmode="numeric" autocomplete="off"></div>'
       + '<div class="campo"><label for="q-per">Cada cuándo</label><select id="q-per">' + ['quincenal', 'semanal', 'mensual'].map(function (k) { return '<option value="' + k + '">' + PER_PL[k][0].toUpperCase() + PER_PL[k].slice(1) + '</option>'; }).join('') + '</select></div>'
-      + '<div class="campo"><label for="q-prox">Nómina del próximo descuento</label><input type="date" id="q-prox"></div>'
+      + '<div class="campo"><label for="q-prox">Nómina del próximo descuento</label><input type="date" id="q-prox" min="' + hoyISO() + '" value="' + sigNomina('quincenal') + '"></div>'
       + '<div class="campo ancho"><label for="q-mot">Nota</label><textarea id="q-mot" maxlength="1000"></textarea></div>'
       + '</div></div></div><div class="msg ojo" id="q-info" hidden></div><div class="msg" id="v-msg" hidden></div>'
       + '<div class="acciones"><button class="btn acento" type="button" id="q-ok">Guardar préstamo</button></div>');
@@ -699,11 +706,21 @@ tr.click:hover td{background:var(--navy-soft)}
       };
     };
     ['q-mon', 'q-sal'].forEach(function (id) { $(id).addEventListener('input', cuadra); });
+    // 309: si cambia cada cuándo y no la habían tocado, la nómina del próximo descuento se pone sola
+    var proxTocada = false;
+    $('q-prox').addEventListener('input', function () { proxTocada = true; });
+    $('q-per').addEventListener('change', function () { if (!proxTocada) $('q-prox').value = sigNomina(this.value); });
     fila('', '');
     $('q-ok').onclick = async function () {
       var b = this, L = descs(); msgEn('');
       if (L === null) { msgEn('Revisa la fecha y el monto de cada descuento.'); return; }
       var mon = num($('q-mon').value), sal = num($('q-sal').value);
+      if (sal !== 0) {   // 309: la nómina del próximo descuento, nunca una que ya pasó (la base también lo revisa)
+        var px = $('q-prox').value;
+        if (!px) { msgEn('Escribe la nómina del próximo descuento.'); return; }
+        if (px < hoyISO()) { msgEn('La nómina del próximo descuento no puede ser una que ya pasó.'); return; }
+        if ($('q-per').value === 'quincenal' && !esQuincena(px)) { msgEn('En los quincenales, la nómina del próximo descuento es el 15 o el último día del mes.'); return; }
+      }
       b.disabled = true;
       try {
         var r = await rpc('rh_prestamo_carga', { p: { colab_id: $('q-col').value, prestado: $('q-fec').value, monto: mon > 0 ? String(mon) : '', descuentos: L,
@@ -797,6 +814,51 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td data-l="Estado">' + chip(EST_TXT[p.estado] || p.estado, EST_CHIP[p.estado]) + '</td><td data-l="Pedido" class="mut">' + esc(fecha(String(p.solicitado).slice(0, 10))) + '</td></tr>';
     }).join('') : '<tr><td class="vacio" colspan="8">' + (PFX || $('p-q').value ? 'Nada con lo que escogiste.' : PT === 'curso' ? 'No hay préstamos en curso.' : 'Sin préstamos.') + '</td></tr>';
   }
+  /* 309: «Corregir fechas» (rh_prestamo_fechas): desde qué nómina siguen los descuentos que faltan, con motivo. Los montos,
+     cuántos descuentos y lo ya aplicado no cambian; la tabla de antes y después sale de rh_prestamo_simula (la misma regla). */
+  function corrigeFechas(p) {
+    var pend = (p.plan || []).filter(function (x) { return !x.aplicado; }).sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.n - b.n; });
+    var ult = (p.plan || []).filter(function (x) { return x.aplicado; }).reduce(function (m, x) { return x.fecha > m ? x.fecha : m; }, '');
+    var falta = Math.round(pend.reduce(function (a, x) { return a + Number(x.monto); }, 0) * 100) / 100, t0 = 0;
+    var base = hoyISO();   // la primera nómina posible: hoy o el día después del último descuento ya aplicado
+    if (ult && ult >= base) { var u = new Date(ult + 'T12:00:00'); u.setDate(u.getDate() + 1); base = u.getFullYear() + '-' + String(u.getMonth() + 1).padStart(2, '0') + '-' + String(u.getDate()).padStart(2, '0'); }
+    var ini = sigNomina(p.periodicidad, base);
+    abre('Corregir fechas', 'Préstamo de ' + p.nombre,
+      '<div class="sec"><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="cf-d">¿A partir de qué nómina siguen los descuentos?</label><input type="date" id="cf-d" min="' + hoyISO() + '" value="' + esc(ini) + '"></div>'
+      + '<div class="campo ancho"><label for="cf-m">¿Por qué? (obligatorio)</label><textarea id="cf-m" maxlength="500"></textarea></div></div>'
+      + '<p class="mut" style="margin:10px 0 0">Solo se mueven las fechas de lo que falta (' + esc(dinero(falta)) + ' en ' + pend.length + (pend.length === 1 ? ' descuento' : ' descuentos') + '): los montos, cuántos y lo ya descontado no cambian.'
+      + (p.periodicidad === 'quincenal' ? ' En los quincenales, la nómina es el 15 o el último día del mes.' : '') + ' A ' + esc(p.nombre) + ' le llega un aviso, sin montos ni el motivo.</p></div></div>'
+      + '<div class="sec"><h3>Los descuentos que faltan</h3><div class="tabla"><table class="resp"><thead><tr><th>#</th><th class="monto">Monto</th><th>Hoy</th><th>Quedaría</th></tr></thead><tbody id="cf-t"></tbody></table></div></div>'
+      + '<div class="msg" id="v-msg" hidden></div>'
+      + '<div class="acciones"><button class="btn acento" type="button" id="cf-ok">Guardar</button><button class="btn" type="button" id="cf-x">Regresar</button></div>');
+    async function pinta() {
+      var d = $('cf-d').value, t = ++t0, nuevas = [];
+      if (d) { try { var r = await rpc('rh_prestamo_simula', { p_monto: falta, p_pagos: pend.length, p_periodicidad: p.periodicidad, p_primer: d }); nuevas = ((r && r.pagos) || []).map(function (x) { return x.fecha; }); } catch (e) {} }
+      if (t !== t0 || !$('cf-t')) return;
+      $('cf-t').innerHTML = pend.map(function (x, k) {
+        var nv = nuevas[k] || '', cam = nv && nv !== x.fecha;
+        return '<tr><td data-l="#">' + (k + 1) + '</td><td data-l="Monto" class="monto">' + esc(dinero(x.monto)) + '</td><td data-l="Hoy">' + esc(fecha(x.fecha)) + '</td>'
+          + '<td data-l="Quedaría">' + (nv ? (cam ? '<b>' + esc(fecha(nv)) + '</b>' : esc(fecha(nv))) : '<span class="mut">—</span>') + '</td></tr>';
+      }).join('');
+    }
+    $('cf-d').addEventListener('change', pinta); $('cf-d').addEventListener('input', pinta);
+    pinta();
+    $('cf-x').onclick = function () { fichaPre(p.id); };
+    $('cf-ok').onclick = async function () {
+      var b = this, d = $('cf-d').value, m = $('cf-m').value.trim(); msgEn('');
+      if (!d) { msgEn('Escoge desde qué nómina siguen los descuentos.'); return; }
+      if (d < hoyISO()) { msgEn('La nómina no puede ser una que ya pasó.'); return; }
+      if (p.periodicidad === 'quincenal' && !esQuincena(d)) { msgEn('En los quincenales, la nómina es el 15 o el último día del mes.'); return; }
+      if (m.length < 3) { msgEn('Escribe por qué se corrigen las fechas.'); return; }
+      b.disabled = true;
+      try {
+        var r = await rpc('rh_prestamo_fechas', { p_id: p.id, p_desde: d, p_motivo: m });
+        if (r && r.cambio === false) { msgEn('Las fechas ya eran esas: no cambió nada.'); b.disabled = false; return; }
+        avisa('Listo: se corrigieron las fechas y a ' + p.nombre + ' le llega el aviso.'); await cargaPre(); fichaPre(p.id);
+      } catch (e) { msgEn(falla(e)); b.disabled = false; }
+    };
+  }
   async function cargaPre() {
     var r = await Promise.all([rpc('rh_prestamos_lista'), rpc('rh_colaboradores')]);
     PRE = r[0] || []; COL = r[1] || []; pintaPre();
@@ -821,13 +883,13 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<div class="sec"><h3>Descuentos</h3><div class="tabla"><table class="resp"><thead><tr><th>#</th><th>Nómina</th><th class="monto">Monto</th><th>Aplicado</th><th>Nota</th></tr></thead><tbody>'
       + (p.plan || []).map(function (x) {
         return '<tr><td data-l="#">' + x.n + '</td><td data-l="Nómina">' + esc(fecha(x.fecha)) + '</td><td data-l="Monto" class="monto">' + esc(dinero(x.monto)) + '</td>'
-          + '<td data-l="Aplicado">' + (aplica ? '<input type="checkbox" data-aplica="' + x.n + '"' + (x.aplicado ? ' checked' : '') + ' aria-label="Descuento ' + x.n + ' aplicado">' : (x.aplicado ? chip('Aplicado', 'ok') : '<span class="mut">Pendiente</span>')) + '</td>'
+          + '<td data-l="Aplicado">' + (x.adelanto ? chip('Adelanto', 'ok') : aplica ? '<input type="checkbox" data-aplica="' + x.n + '"' + (x.aplicado ? ' checked' : '') + ' aria-label="Descuento ' + x.n + ' aplicado">' : (x.aplicado ? chip('Aplicado', 'ok') : '<span class="mut">Pendiente</span>')) + '</td>'
           + '<td data-l="Nota" class="mut">' + esc(x.nota || '') + '</td></tr>';
       }).join('') + '</tbody></table></div></div>'
       + '<div class="msg" id="v-msg" hidden></div><div class="acciones">'
       + (AUTORIZA && p.estado === 'solicitado' ? '<button class="btn bien" type="button" id="p-aut">Autorizar</button><button class="btn peligro" type="button" id="p-rec">Rechazar</button>' : '')
       + (CAPTURA && p.estado === 'solicitado' ? '<button class="btn" type="button" id="p-ed">Cambiar</button><button class="btn peligro" type="button" id="p-can">Cancelar solicitud</button>' : '')
-      + (CAPTURA && p.estado === 'autorizado' ? '<button class="btn" type="button" id="p-liq">Pagó todo de una vez</button>' : '')
+      + (CAPTURA && p.estado === 'autorizado' ? '<button class="btn" type="button" id="p-liq">Pagó todo de una vez</button><button class="btn" type="button" id="p-fec">Corregir fechas</button>' : '')
       + '<button class="btn" type="button" id="x-plan" data-excel>Excel</button></div>');
     var NV = window.PROFASE_PILAS ? PROFASE_PILAS.nav({ ids: COLAP, id: p.id, antes: $('v-cierra'), clase: 'btn chico', abre: function (x) { fichaPre(x); } }) : null;
     async function resuelve(aut) {
@@ -849,6 +911,7 @@ tr.click:hover td{background:var(--navy-soft)}
       var r = await pregunta('¿' + p.nombre + ' pagó los ' + dinero(debe(p)) + ' que faltaban de una vez?', 'Nota (opcional)', 'Sí, pagó todo'); if (!r || !r.ok) return;
       try { await rpc('rh_prestamo_liquida', { p_id: p.id, p_nota: r.texto || '' }); cierra(); avisa('Préstamo pagado.'); await cargaPre(); } catch (e) { msgEn(falla(e)); }
     };
+    if ($('p-fec')) $('p-fec').onclick = function () { corrigeFechas(p); };
     $('ficha').querySelectorAll('[data-aplica]').forEach(function (c) {
       c.onchange = async function () {
         c.disabled = true;

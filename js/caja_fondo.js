@@ -13,10 +13,12 @@
   var CATS_V = [
     { id: 'tramites', label: 'Trámites y derechos' },
     { id: 'traslados', label: 'Traslados', ruta: true },
-    { id: 'gasolina', label: 'Gasolina', ruta: true },
+    // la gasolina va por km: km × la tarifa de la base (308_caja_gasolina_km.sql; Héctor Daniel Nava, 6-nov-2026)
+    { id: 'gasolina', label: 'Gasolina (por km)', ruta: true, porKm: true },
     { id: 'casetas', label: 'Casetas', ruta: true },
     { id: 'estacionamiento', label: 'Estacionamiento', ruta: true },
-    { id: 'kilometraje', label: 'Kilometraje (vehículo propio)', ruta: true, km: true },
+    // solo para leer lo de antes: ya no se ofrece al registrar (308)
+    { id: 'kilometraje', label: 'Kilometraje (vehículo propio)', ruta: true, km: true, viejo: true },
     { id: 'papeleria', label: 'Papelería' },
     { id: 'mensajeria', label: 'Mensajería y copias' },
     { id: 'alimentos', label: 'Alimentos' },
@@ -37,6 +39,17 @@
     var l = CATS_V.concat(CATS_I);
     for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].label;
     return id || '—';
+  }
+  // el nombre de la categoría de un gasto: la gasolina de antes (con ticket, sin km) se sigue llamando «Gasolina»
+  function catDe(g) {
+    if (g && g.categoria === 'gasolina' && !(g.porKm || g.por_km)) return 'Gasolina';
+    return cat(g && g.categoria);
+  }
+  // «170 km × $12.00 = $2,040.00» de un gasto por km (la base pone el importe)
+  function kmTxt(g) {
+    if (!g || !(g.porKm || g.por_km)) return '';
+    var km = Number(g.km) || 0, t = Number(g.tarifaKm != null ? g.tarifaKm : g.tarifa_km) || 0;
+    return km.toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' km × ' + money(t) + ' = ' + money(g.importe);
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function money(n) { return mxn.format(Number(n) || 0); }
@@ -138,7 +151,8 @@
       else if (x.k === 'sub') html += '<tr class="smes"><td></td><td colspan="3">' + esc(x.t) + '</td><td class="r">' + money(x.v) + '</td><td></td></tr>';
       else {
         var g = x.g;
-        html += '<tr' + (g.auto ? ' class="auto"' : '') + '><td>' + esc(fecha(g.fecha)) + '</td><td>' + esc(g.concepto || '—') + ' <span class="ds">· ' + esc(cat(g.categoria)) + '</span>'
+        html += '<tr' + (g.auto ? ' class="auto"' : '') + '><td>' + esc(fecha(g.fecha)) + '</td><td>' + esc(g.concepto || '—') + ' <span class="ds">· ' + esc(catDe(g)) + '</span>'
+          + (kmTxt(g) ? '<div class="mo">' + esc((g.origen || g.destino ? (g.origen || '—') + ' → ' + (g.destino || '—') + ' · ' : '') + kmTxt(g)) + '</div>' : '')
           + (g.motivo ? '<div class="mo">' + esc(g.motivo) + '</div>' : '')
           + (g.auto ? '<div class="tag">REVISAR · SE LO AUTORIZÓ ' + esc((g.autorizo || 'ÉL MISMO').toUpperCase()) + '</div>' : '')
           + '</td><td>' + (esc(relTxt(g)) || '<span class="ds">—</span>') + '</td><td>' + esc(g.quien || '—')
@@ -217,7 +231,7 @@
         var g = x.g;
         var est = g.auto ? { fillColor: SM ? [242, 242, 242] : [255, 246, 238] } : {};
         body.push([{ content: fecha(g.fecha), styles: est },
-          { content: (g.concepto || '—') + ' · ' + cat(g.categoria) + (g.motivo ? '\n' + g.motivo : '') + (g.auto ? '\nREVISAR · SE LO AUTORIZÓ ' + (g.autorizo || 'ÉL MISMO').toUpperCase() : ''), styles: est },
+          { content: (g.concepto || '—') + ' · ' + catDe(g) + (kmTxt(g) ? '\n' + (g.origen || g.destino ? (g.origen || '—') + ' → ' + (g.destino || '—') + ' · ' : '') + kmTxt(g) : '') + (g.motivo ? '\n' + g.motivo : '') + (g.auto ? '\nREVISAR · SE LO AUTORIZÓ ' + (g.autorizo || 'ÉL MISMO').toUpperCase() : ''), styles: est },
           { content: relTxt(g) || '—', styles: est }, { content: g.quien || '—', styles: est },
           { content: money(g.importe), styles: Object.assign({ halign: 'right' }, est) }, { content: money(x.saldo), styles: Object.assign({ halign: 'right' }, est) }]);
       }
@@ -251,6 +265,6 @@
     await dl.save({ filename: 'Reposición caja chica ' + (r.folio || 'vista previa') + '.pdf', data: doc.output('blob') });
   }
 
-  window.CAJA_FONDO = { CATS_V: CATS_V, CATS_I: CATS_I, cat: cat, destino: destino, relTxt: relTxt, money: money, fecha: fecha,
+  window.CAJA_FONDO = { CATS_V: CATS_V, CATS_I: CATS_I, cat: cat, catDe: catDe, kmTxt: kmTxt, destino: destino, relTxt: relTxt, money: money, fecha: fecha,
                         revisar: revisar, hoja: hoja, ver: ver, pdf: pdf };
 })();

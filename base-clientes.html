@@ -451,6 +451,10 @@ details.hist>summary{width:auto}
   /* Páginas de las tablas (Fernando, 3-nov-2026): la pieza común js/paginas.js (una sola versión con Facturación y Pagos). */
   var PAG = {};
   var EST = null, CIAS = {}, CONSULTA = false, DIR = false;
+  /* Servicios, precios y catálogo (306_clientes_ve_todo.sql; Héctor Daniel Nava, 6-nov-2026: «1 autorizado»): a quien
+     ve la ficha solo para consultar (cli_estado().servicios en falso) no le salen la pestaña del catálogo, la sección
+     «Servicios y precios» ni su cuadro de resumen; la base tampoco se los manda. */
+  var SRV = true;
   var TABLAS = ['grupos', 'empresas', 'registros', 'contadores', 'contactos', 'contacto_reg', 'catalogo', 'servicios', 'precios',
                 'regimen_cat', 'regimenes', 'actividades', 'obligaciones'];
   var T = {}, I = {};               // tablas y sus índices
@@ -513,7 +517,9 @@ details.hist>summary{width:auto}
       var p = await P.listo; if (!p) return;
       CONSULTA = !!P.consulta; DIR = p.rol === 'director';
       EST = await rpc('cli_estado');
-      if (!EST || !EST.ve) { $('cargando').hidden = true; error('La base de clientes la ven la dirección, los gerentes y quien edita la ficha.'); return; }
+      if (!EST || !EST.ve) { $('cargando').hidden = true; error('La base de clientes la ven la dirección, los gerentes, quien edita la ficha y a quien Héctor Daniel Nava se la abrió.'); return; }
+      SRV = EST.servicios !== false;
+      $('t-cat').hidden = !SRV; if (!SRV && VISTA === 'cat') VISTA = 'emp';
       CIAS = {}; (EST.companias || []).forEach(function (c) { CIAS[c.id] = c; });
       $('practica').hidden = EST.modo !== 'practica';
       $('nuevo-w').hidden = !edita();
@@ -539,6 +545,7 @@ details.hist>summary{width:auto}
   // para el recorrido de la pantalla (guia_tab.js): abre la ficha de la primera empresa de la lista y la cierra
   window.__bcliAbreUna = function () { if (!T.empresas) return false; var L = filtradas(), e = L[0] || T.empresas[0]; if (!e) return false; abreEmpresa(e.id); return true; };
   window.__bcliCierra = function () { if (!$('velo').hidden) cierra(); };
+  window.__bcliSrv = function () { return SRV; };   // el recorrido de la pantalla (guia_tab.js) dice si ve servicios (306)
   async function recarga(tablas) {
     var R = await Promise.all(tablas.map(todo));
     tablas.forEach(function (t, i) { T[t] = R[i]; });
@@ -906,8 +913,8 @@ details.hist>summary{width:auto}
       + '<span class="s">' + esc(conts.length ? (conts.length === 1 ? 'asignado' : 'asignados') : 'asígnalo en «Quién la atiende»') + '</span></button>'
       + '<button type="button" class="rbox" data-ir="sec-quien"><span class="l">Quién la atiende</span><span class="v">' + esc(R.length ? R.map(function (r) { return cia(r.compania); }).join(' · ') : 'Ninguna compañía') + '</span>'
       + '<span class="s">' + (ctos.length === 1 ? '1 contacto' : ctos.length + ' contactos') + '</span></button>'
-      + '<button type="button" class="rbox" data-ir="sec-srv"><span class="l">Servicios</span><span class="v">' + esc(conPrecio ? dinero(suma) : activos.length ? 'Sin precio' : 'Sin servicios') + '</span>'
-      + '<span class="s">' + esc(activos.length ? (activos.length === 1 ? '1 servicio vigente' : activos.length + ' servicios vigentes') + (conPrecio ? ' · suma de precios, sin IVA' : '') : 'de las compañías que ves') + '</span></button>'
+      + (SRV ? '<button type="button" class="rbox" data-ir="sec-srv"><span class="l">Servicios</span><span class="v">' + esc(conPrecio ? dinero(suma) : activos.length ? 'Sin precio' : 'Sin servicios') + '</span>'
+      + '<span class="s">' + esc(activos.length ? (activos.length === 1 ? '1 servicio vigente' : activos.length + ' servicios vigentes') + (conPrecio ? ' · suma de precios, sin IVA' : '') : 'de las compañías que ves') + '</span></button>' : '')
       + '<button type="button" class="rbox' + (nv == null ? '' : nv < 0 ? ' mal' : nv < 92 ? ' ojo' : '') + '" data-ir="sec-gen"><span class="l">Vencimientos</span>'
       + '<span class="v">' + esc(venc ? venc[0] + ' ' + fecha(venc[1]) : 'Sin e.firma ni sellos') + '</span><span class="s">' + esc(venc ? enDias(nv) : 'anotados en la ficha') + '</span></button></div>';
     if (ATN.length) h += '<div class="atn" role="status"><b>Atención:</b>' + ATN.map(function (a) { return '<button type="button" class="' + (a.c === 'mal' ? 'mal' : '') + '" data-ir="' + a.ir + '">' + esc(a.t) + '</button>'; }).join('') + '</div>';
@@ -918,7 +925,7 @@ details.hist>summary{width:auto}
     var ptGen = M.some(function (m) { return m.ir === 'sec-gen' && m.c === 'mal'; }) ? 'mal' : M.some(function (m) { return m.ir === 'sec-gen'; }) ? 'ojo' : '';
     var it = function (ir, t, n, p) { return '<button type="button" data-ir="' + ir + '" aria-current="false"><span>' + esc(t) + '</span><span class="n">' + (n != null ? n : '') + pt(p) + '</span></button>'; };
     h += '<div class="cols"><nav class="indice" aria-label="Secciones de la ficha">'
-      + it('sec-gen', 'General', null, ptGen) + it('sec-quien', 'Quién la atiende', ctos.length, ptQuien) + it('sec-srv', 'Servicios y precios', S.length)
+      + it('sec-gen', 'General', null, ptGen) + it('sec-quien', 'Quién la atiende', ctos.length, ptQuien) + (SRV ? it('sec-srv', 'Servicios y precios', S.length) : '')
       + '<span id="ind-dev" hidden></span>' + it('sec-fis', 'Fiscal', RG.length + A.length + O.length) + it('sec-quo', 'Usuarios QUO') + it('sec-his', 'Historia')
       + (otras.length ? '<div class="sepi"></div><div class="gr">Otras del grupo (' + otras.length + ')</div>' + otras.map(function (x) {
         return '<button type="button" class="otra" data-acc="emp" data-id="' + x.id + '">' + esc(x.razon) + '</button>';
@@ -951,7 +958,7 @@ details.hist>summary{width:auto}
     }).join('') : '<div class="vacio">Ninguna compañía la atiende todavía.</div>', 'contador y contactos', ed ? bt('nuevoReg', 'Agregar compañía', { emp: id }) : '', 'sec-quien');
     // servicios
     var algunaCia = Object.keys(CIAS).some(function (c) { return editaCia(+c); });
-    h += sec('Servicios y precios', S.length ? '<ul class="lista">' + S.map(function (s) {
+    if (SRV) h += sec('Servicios y precios', S.length ? '<ul class="lista">' + S.map(function (s) {
       var c = I.cat[s.servicio_id] || {}, pv = precioVigente(s), hist = I.preDeSrv[s.id] || [], ec = editaCia(s.compania);
       var paga = s.empresa_paga_id && s.empresa_paga_id !== s.empresa_id ? (I.empresa[s.empresa_paga_id] || {}).razon || ('Razón ' + s.empresa_paga_id) : '';
       var vig = !vigente(s) ? '<span class="tag">Terminó ' + esc(fecha(s.final)) + '</span>' : '';
@@ -1373,13 +1380,17 @@ details.hist>summary{width:auto}
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), L = filtradas(), wb = MK.libro(EX, 'Base de clientes');
       var ws = wb.addWorksheet('Empresas');
       var head = ['Grupo', 'Razón social', 'RFC', 'Estatus', 'Compañías que la atienden', 'Contador', 'Cliente de PROFASE desde', 'Inicio de operaciones (SAT)', 'Vence e.firma', 'Vencen sellos', 'Municipio', 'Estado', 'Servicios', 'Marcas'];
-      ws.columns = [26, 44, 15, 11, 28, 28, 14, 14, 13, 13, 18, 16, 10, 30].map(function (w) { return { width: w }; });
+      var anchos = [26, 44, 15, 11, 28, 28, 14, 14, 13, 13, 18, 16, 10, 30];
+      if (!SRV) { head.splice(12, 1); anchos.splice(12, 1); }   // sin la columna de servicios a quien no los ve (306)
+      ws.columns = anchos.map(function (w) { return { width: w }; });
       var f0 = MK.encabezado(wb, ws, head.length, { titulo: 'Base de clientes', lineas: ['Al ' + fecha(hoy()), L.length + ' ' + tituloEmp().toLowerCase() + ' con los filtros de la pantalla'] });
       ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
       L.forEach(function (e, i) {
-        ws.getRow(f0 + 1 + i).values = [grupoNombre(I.grupo[e.grupo_id]), e.razon, e.rfc, ESTATUS[e.estatus] || '', (I.regDeEmp[e.id] || []).map(function (r) { return cia(r.compania); }).join(', '),
+        var fila = [grupoNombre(I.grupo[e.grupo_id]), e.razon, e.rfc, ESTATUS[e.estatus] || '', (I.regDeEmp[e.id] || []).map(function (r) { return cia(r.compania); }).join(', '),
           contadoresDe(e).join(', '), fecha(e.inicio_op), fecha(e.inicio_sat), e.cuenta_fiel ? fecha(e.vence_fiel) : '', e.cuenta_sellos ? fecha(e.vence_sellos) : '', e.municipio, e.estado, (I.srvDeEmp[e.id] || []).length,
           marcasDe(e).map(function (m) { return m.t; }).join(', ')];
+        if (!SRV) fila.splice(12, 1);
+        ws.getRow(f0 + 1 + i).values = fila;
       });
       if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
       ws.views = [{ state: 'frozen', ySplit: f0 }];
@@ -1397,7 +1408,7 @@ details.hist>summary{width:auto}
   PAG.emp = PROFASE_PAGINAS.crea({ donde: $('pag-emp'), clave: 'base-clientes.empresas', nombre: 'Empresas', arriba: $('c-emp'), cambio: pintaEmpresas });
   PAG.gru = PROFASE_PAGINAS.crea({ donde: $('pag-gru'), clave: 'base-clientes.grupos', nombre: 'Grupos', arriba: $('c-gru'), cambio: pintaGrupos });
   $('x-emp').onclick = function () { excel(this); };
-  ['emp', 'gru', 'cat'].forEach(function (v) { $('t-' + v).onclick = function () { VISTA = v; pinta(); }; });
+  ['emp', 'gru', 'cat'].forEach(function (v) { $('t-' + v).onclick = function () { if (v === 'cat' && !SRV) return; VISTA = v; pinta(); }; });
   $('b-nuevo').onclick = function () { abreMenuDe('bcli-nuevo', 'b-nuevo', 'nuevo-m'); };
   $('b-empresa').onclick = function () { cierraMenus(); abre(cab('Base de clientes › Alta', 'Nueva empresa', '') + '<div class="cuerpo"><div id="zona"></div></div>'); ACC.nuevaEmp({}); };
   $('b-grupo').onclick = function () {
