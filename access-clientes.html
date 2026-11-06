@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/filtros.js?v=46f3a7a51e"></script><script src="js/claves-quo.js?v=31392e4e2e"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/filtros.js?v=46f3a7a51e"></script><script src="js/claves-quo.js?v=31392e4e2e"></script><script src="js/pilas.js?v=ed7f02db96"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Access › Clientes (etapa 1 de la migración del Access, 29-oct-2026): la Base de Clientes del Access,
    solo para consultar. Los datos los deja la actualización de cada 3 horas (nube/access_nube.py); quién ve qué lo
@@ -124,6 +124,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 .ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
 .ficha .cab .rfc{color:var(--band-dim)}
 .ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cab .ppl-nav{margin-left:auto}
+@media (max-width:640px){.ficha .cab{flex-wrap:wrap}.ficha .cab .ppl-nav{margin-left:0}}
+#cli-bar{margin:0 0 12px}
 .ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px}
 .sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
@@ -252,24 +255,21 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div class="nota" id="error" hidden></div>
   <div class="cargando" id="cargando">Cargando los clientes…</div>
 
-  <section class="kpis" id="kpis" aria-label="Resumen" hidden>
-    <div class="kpi"><div class="l">Grupos</div><div class="v num" id="k-gru">–</div><div class="s" id="k-gru-s">&nbsp;</div></div>
-    <div class="kpi"><div class="l">Empresas activas</div><div class="v num" id="k-emp">–</div><div class="s" id="k-emp-s">&nbsp;</div></div>
-    <div class="kpi" id="k-fie-c"><div class="l">e.firma</div><div class="v num" id="k-fie">–</div><div class="s" id="k-fie-s">&nbsp;</div></div>
-    <div class="kpi" id="k-sel-c"><div class="l">Sellos</div><div class="v num" id="k-sel">–</div><div class="s" id="k-sel-s">&nbsp;</div></div>
-  </section>
-
   <div id="p-cli" role="tabpanel" aria-labelledby="t-cli" hidden>
+    <!-- UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (buscar, FILTROS y Excel con su PDF), «Tu trabajo» (lo que vence
+         y lo que falta, con su botón para ir uno por uno) y la lista por páginas -->
+    <div id="cli-bar" hidden>
+      <input id="q-cli" type="search" placeholder="Buscar (razón social, RFC, grupo, contacto)" aria-label="Buscar clientes">
+      <button class="btn" type="button" id="x-cli" data-excel>Excel</button>
+    </div>
+    <section id="kpis" aria-label="Tu trabajo" hidden></section>
     <section class="card" aria-labelledby="h-lista">
       <header>
         <div><h2 id="h-lista">Base de clientes</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <button class="btn" type="button" id="x-cli" data-excel>Excel</button>
-        </div>
       </header>
-      <div id="f-barra" style="padding:12px 14px 0"></div>
       <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Grupo</th><th>Estatus</th><th>Contador asignado</th><th>e.firma</th><th>Sellos</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="lista-vacia" hidden>Ningún cliente con estos filtros.</div>
+      <nav class="pgn" id="cli-pag" aria-label="Páginas de clientes"></nav>
       <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
     </section>
   </div>
@@ -379,7 +379,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         ? ' con sus datos de la ficha (Clientes › Base de clientes), sus claves del SAT y sus renovaciones. Las claves y los archivos del SAT se capturan aquí; lo demás, en la Base de clientes.'
         : ' como está en el Access, para consultar. Se actualiza sola cada 3 horas; hasta el lunes 2 de noviembre los cambios se siguen haciendo en el Access.');
       opciones();
-      $('cargando').hidden = true; $('kpis').hidden = false;
+      $('cargando').hidden = true;
       kpis(); pintaLista(); pintaFirmas();
       muestra(location.hash === '#firmas' ? 'fir' : location.hash === '#renovaciones' || REN_ABRE ? 'ren' : 'cli');
       if (REN) pintaRen();
@@ -394,60 +394,71 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   /* Filtros (29-oct-2026, propuesta de Gabriel): un botón «FILTROS» (js/filtros.js) con cliente (varios), estatus,
      contador, compañía y la búsqueda de siempre. Antes eran tres menús y el buscador. */
-  var F = { cli: [], est: ['vivos'], con: [], cia: [], q: '' }, FB = null, OP = { con: [], cia: [] };
+  var F = { cli: [], est: ['vivos'], con: [], cia: [], q: '' }, FB = null, OP = { con: [], cia: [] }, BAR = null, PGC = null, PILA = '', LISTA = [], COLA = [], FIRMA = '';
   function opciones() {
     var cs = {}, cias = {};
     EMP.forEach(function (e) { contadores(e).forEach(function (n) { cs[n] = 1; }); e.cias.forEach(function (c) { if (c.cia) cias[c.cia] = 1; }); });
     OP.con = [{ v: '__sin', t: 'Sin contador asignado' }].concat(Object.keys(cs).sort().map(function (n) { return { v: n, t: n }; }));
     OP.cia = Object.keys(cias).sort().map(function (n) { return { v: n, t: n }; });
-    if (!FB) FB = PROFASE_FILTROS.crea({
-      donde: $('f-barra'),
+    if (!FB) { var CFG = {
       grupos: [
         { t: 'Cliente', campos: [
           { k: 'cli', t: 'Cliente', tipo: 'varios', buscar: true,
             opciones: function () { return EMP.filter(function (e) { return F.est[0] !== 'vivos' || vivo(e); }).map(function (e) { return { v: String(e.id), t: e.rs + (e.rfc ? ' · ' + e.rfc : '') }; }).sort(function (a, b) { return a.t < b.t ? -1 : 1; }); },
-            valor: function () { return F.cli; }, pon: function (v) { F.cli = v; } },
-          { k: 'q', t: 'Buscar (razón social, RFC, grupo, contacto)', tipo: 'texto', valor: function () { return F.q; }, pon: function (v) { F.q = v; } }] },
+            valor: function () { return F.cli; }, pon: function (v) { F.cli = v; } }] },
         { t: 'Estatus y compañía', campos: [
           { k: 'est', t: 'Estatus', tipo: 'uno',
-            opciones: function () { return [{ v: 'vivos', t: 'Activos e incubados' }, { v: 'Activo', t: 'Activos' }, { v: 'Incubado', t: 'Incubados' }, { v: 'Inactivo', t: 'Inactivos' }]; },
-            valor: function () { return F.est; }, pon: function (v) { F.est = v; } },
+            opciones: function () { return [{ v: 'vivos', t: 'Activos e incubados' }, { v: 'Activo', t: 'Activos' }, { v: 'Incubado', t: 'Incubados' }, { v: 'Inactivo', t: 'Inactivos' }, { v: 'todos', t: 'Todos' }]; },
+            defecto: ['vivos'],   // abre con activos e incubados: no cuenta como filtro y «Limpiar» regresa ahí
+            valor: function () { return F.est; }, pon: function (v) { F.est = v && v.length ? v : ['vivos']; } },
           { k: 'cia', t: 'Compañía que lo atiende', tipo: 'varios', opciones: function () { return OP.cia; }, valor: function () { return F.cia; }, pon: function (v) { F.cia = v; } }] },
         { t: 'Contador', campos: [
           { k: 'con', t: 'Contador asignado', tipo: 'varios', buscar: true, opciones: function () { return OP.con; }, valor: function () { return F.con; }, pon: function (v) { F.con = v; } }] }],
       cambio: function () { mostrar = PAGINA; pintaLista(); },
-      limpiar: function () { F = { cli: [], est: ['vivos'], con: [], cia: [], q: '' }; },
+      limpiar: function () { var q = F.q; F = { cli: [], est: ['vivos'], con: [], cia: [], q: q }; PILA = ''; },
       resultados: function () { var n = filtrados().length; return 'Ver ' + n + (n === 1 ? ' cliente' : ' clientes'); }
-    });
+    };
+      BAR = PROFASE_PILAS.barra($('cli-bar'), { caja: true, buscar: { id: 'q-cli', placeholder: 'Buscar (razón social, RFC, grupo, contacto)', alEscribir: function (q) { F.q = q; mostrar = PAGINA; pintaLista(); } },
+        filtros: CFG, botones: [$('x-cli')] });
+      FB = BAR.f;
+      var viejo = $('q-cli'); if (viejo && viejo !== BAR.q) viejo.remove();
+      if (window.PROFASE_PAGINAS) PGC = PROFASE_PAGINAS.crea({ donde: $('cli-pag'), clave: 'claves-sat', nombre: 'Clientes', arriba: $('lista').closest('.card'), cambio: function () { pintaLista(); } });
+    }
     FB.pinta();
   }
 
-  function kpis() {
-    var vivas = EMP.filter(vivo), gs = {};
-    vivas.forEach(function (e) { gs[e.g] = 1; });
-    $('k-gru').textContent = Object.keys(gs).length;
-    $('k-gru-s').textContent = 'con empresas activas o incubadas';
-    $('k-emp').textContent = vivas.filter(function (e) { return e.est === 'Activo'; }).length;
-    var inc = vivas.filter(function (e) { return e.est === 'Incubado'; }).length;
-    $('k-emp-s').textContent = (inc ? inc + ' incubadas · ' : '') + EMP.length + ' en total';
-    var f = cuenta('fiel', 'vFiel'), s = cuenta('sellos', 'vSellos');
-    $('k-fie').textContent = f.mal; $('k-fie-s').textContent = 'vencidas · ' + f.ojo + ' por vencer en 3 meses';
-    $('k-sel').textContent = s.mal; $('k-sel-s').textContent = 'vencidos · ' + s.ojo + ' por vencer en 3 meses';
-    $('k-fie-c').className = 'kpi' + (f.mal ? ' mal' : f.ojo ? ' ojo' : '');
-    $('k-sel-c').className = 'kpi' + (s.mal ? ' mal' : s.ojo ? ' ojo' : '');
-  }
-  function cuenta(tiene, campo) {
-    var o = { mal: 0, ojo: 0 };
-    EMP.forEach(function (e) { if (!vivo(e) || !e[tiene] || !e[campo]) return; var x = estado(e[campo]); if (x === 'mal') o.mal++; else if (x === 'ojo') o.ojo++; });
-    return o;
+  /* «Tu trabajo» (UX PROFASE): lo que vence y lo que falta, contado con los filtros (menos la pila); picar una filtra la
+     lista (otra vez, lo quita) y «Revisar uno por uno» abre el primero con «‹ N de M Siguiente ›» en su ficha. Solo cuentan
+     las empresas activas e incubadas (como siempre). */
+  var PILAS_C = [
+    { k: 'fmal', t: 'e.firma vencida', d: 'Vence hoy o ya venció', tono: 'rojo', f: function (e) { return vivo(e) && e.fiel && e.vFiel && estado(e.vFiel) === 'mal'; } },
+    { k: 'fojo', t: 'e.firma por vencer', d: 'En los próximos 3 meses', tono: 'ambar', f: function (e) { return vivo(e) && e.fiel && e.vFiel && estado(e.vFiel) === 'ojo'; } },
+    { k: 'smal', t: 'Sellos vencidos', d: 'Vencen hoy o ya vencieron', tono: 'rojo', f: function (e) { return vivo(e) && e.sellos && e.vSellos && estado(e.vSellos) === 'mal'; } },
+    { k: 'sojo', t: 'Sellos por vencer', d: 'En los próximos 3 meses', tono: 'ambar', f: function (e) { return vivo(e) && e.sellos && e.vSellos && estado(e.vSellos) === 'ojo'; } },
+    { k: 'scon', t: 'Sin contador', d: 'Activas o incubadas sin contador asignado', tono: 'gris', f: function (e) { return vivo(e) && !contadores(e).length; } }];
+  function kpis() { pintaLista(); }
+  function pintaPilas(base) {
+    if (!window.PROFASE_PILAS) return;
+    var vivas = base.filter(vivo), gs = {}; vivas.forEach(function (e) { gs[e.g] = 1; });
+    var cola = PILA ? LISTA : base.filter(function (e) { return PILAS_C.slice(0, 4).some(function (p) { return p.f(e); }); });
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · claves y renovaciones',
+      meta: Object.keys(gs).length + ' grupos · ' + vivas.length + ' empresas activas o incubadas',
+      pilas: PILAS_C.map(function (p) { var n = base.filter(p.f).length; return { k: p.k, t: p.t, n: n, d: p.d, tono: p.tono, on: PILA === p.k, tag: p.k === 'fmal' && n && ROL === 'contador' ? 'Te toca' : '' }; }),
+      alPicar: function (k) { PILA = PILA === k ? '' : k; mostrar = PAGINA; pintaLista(); },
+      boton: { t: PILA ? 'Revisar estos' : 'Revisar uno por uno', n: cola.length, alPicar: function () { if (!cola.length) return; COLA = cola.map(function (e) { return e.id; }); abre(COLA[0]); } },
+      nota: PILA ? 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.' : 'Abre el primero con e.firma o sellos vencidos o por vencer; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
   }
 
-  function filtrados() {
+  function filtrados(sinPila) {
     var q = PROFASE_FILTROS.norm(F.q), est = F.est[0] || '';   // sin acentos ni signos, como en los filtros
+    var pl = sinPila ? null : PILAS_C.filter(function (p) { return p.k === PILA; })[0];
     return EMP.filter(function (e) {
+      if (pl && !pl.f(e)) return false;
       if (F.cli.length && F.cli.indexOf(String(e.id)) < 0) return false;
       if (est === 'vivos' && !vivo(e)) return false;
-      if (est && est !== 'vivos' && e.est !== est) return false;
+      if (est && est !== 'vivos' && est !== 'todos' && e.est !== est) return false;
       var cs = contadores(e);
       if (F.con.length && !F.con.some(function (c) { return c === '__sin' ? !cs.length : cs.indexOf(c) >= 0; })) return false;
       if (F.cia.length && !e.cias.some(function (c) { return F.cia.indexOf(c.cia) >= 0; })) return false;
@@ -461,16 +472,20 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   function pintaLista() {
-    var L = filtrados();
+    var L = filtrados(); LISTA = L;
+    var firma = JSON.stringify(F) + '|' + PILA + '|' + EMP.length;
+    if (PGC && firma !== FIRMA) PGC.inicio();
+    FIRMA = firma;
+    pintaPilas(filtrados(true));
     $('lista-sub').textContent = L.length === 1 ? '1 cliente' : L.length + ' clientes';
-    var h = L.slice(0, mostrar).map(function (e) {
+    var h = (PGC ? PGC.corta(L) : L.slice(0, mostrar)).map(function (e) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(e.id) + '"><td><div class="rs">' + esc(e.rs) + '</div><div class="rfc">' + esc(e.rfc) + '</div></td>'
         + '<td>' + esc(grupoTxt(GRU[e.g])) + '</td><td>' + chipEst(e) + '</td><td>' + (esc(contadores(e).join(', ')) || '<span class="no">Sin contador asignado</span>') + '</td>'
         + '<td>' + vence(e.vFiel, e.fiel) + '</td><td>' + vence(e.vSellos, e.sellos) + '</td></tr>';
     }).join('');
     $('lista').tBodies[0].innerHTML = h;
     $('lista-vacia').hidden = L.length > 0;
-    $('mas').hidden = L.length <= mostrar;
+    $('mas').hidden = !!PGC || L.length <= mostrar;
   }
 
   function listaFirmas(tit, sub, filas, campo) {
@@ -559,6 +574,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (otras.length) h += sec('Otras empresas del grupo', '<ul class="lista">' + otras.map(function (x) { return '<li><button type="button" class="link" data-id="' + esc(x.id) + '">' + esc(x.rs) + '</button><div class="d">' + esc(x.rfc) + ' · ' + esc(x.est) + '</div></li>'; }).join('') + '</ul>');
     h += '</div>';
     $('ficha').innerHTML = h;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: e.id, abre: abre, antes: $('cerrar'), clase: 'btn' });   // ‹ N de M Siguiente ›
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
@@ -1017,7 +1033,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   function muestra(t) {
     ['cli', 'fir', 'ren'].forEach(function (k) { $('t-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false'); $('p-' + k).hidden = k !== t; });
-    $('kpis').hidden = t === 'ren' || !D;
+    $('kpis').hidden = t !== 'cli' || !D;
   }
   $('t-cli').onclick = function () { muestra('cli'); };
   $('t-fir').onclick = function () { muestra('fir'); };
@@ -1047,7 +1063,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       return;
     }
     var t = ev.target.closest('[data-id]');
-    if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
+    if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { if (t.classList.contains('fila')) COLA = LISTA.map(function (x) { return x.id; }); abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
   });
   document.addEventListener('keydown', function (ev) {
