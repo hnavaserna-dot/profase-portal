@@ -436,7 +436,9 @@
     }
     // a medio escribir (PORTAL.escribiendo: la minuta de una reunión) tampoco se empieza un recorrido
     function escribiendo() { try { var p = window.PORTAL; return !!(p && p.estaEscribiendo && p.estaEscribiendo()); } catch (e) { return false; } }
-    function ocupado() { return hayVentana() || document.hidden || activo || escribiendo() || primeroFalta(); }
+    // mientras la vista dice «Abriendo…» (construir.py, con_abriendo(); 6-nov-2026) lo de abajo está tapado: se espera
+    function abriendo() { return document.documentElement.classList.contains('pm-cargando'); }
+    function ocupado() { return hayVentana() || document.hidden || activo || escribiendo() || primeroFalta() || abriendo(); }
     var esperando = false;
     async function quiza(desdeAviso) {
       if (esperando) return;

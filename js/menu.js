@@ -382,6 +382,11 @@
   }
   function nombre(s) { return ROL === 'contador' && s.tc ? s.tc : s.t; }
 
+  // «Abriendo…» (Fernando Cadengo, 6-nov-2026: «porque cuando se actualiza la pagina se va a otra pagina y regresa?»;
+  // «sí, así es»): mientras se abre la sección pedida, la vista tapa lo que trae de fábrica (el Panel del WorkFlow o la
+  // Cobranza) y dice a dónde va. La tapa la pone el <head> de las tres vistas (construir.py, con_abriendo()); aquí se
+  // quita en cuanto la sección se abre, si no hay sección que abrir o, a los 12 s, al abrir el Inicio.
+  function quitaCarga() { document.documentElement.classList.remove('pm-cargando'); }
   function ir(k) {
     var s = ENT[k] || ENT['v-' + k];
     if (!s || !tiene(s)) return false;
@@ -392,18 +397,24 @@
       x.click();      // primero la sub pestaña (para que no cargue la otra), luego QUO
     }
     b.click();
-    listo = true;
+    listo = true; quitaCarga();
     if (movil()) abre(false);
     cierraFly(); cerrarAlPintar = true;   // escogida la opción, su tarjeta se cierra
     pinta();
     return true;
   }
 
+  var espera = null;   // la sección que se está abriendo: el encabezado y el menú ya la dicen
+  function abriendo(e) {
+    espera = e;
+    var ct = document.querySelector('#pm-carga .pc-t');
+    if (ct) ct.textContent = 'Abriendo ' + (e === INI ? 'tu Inicio' : nombre(e)) + '…';
+  }
   function pinta() {
     pendiente = 0;
     var abiertos = {};
     try { abiertos = JSON.parse(store.get('portal.menu.abiertos') || '{}') || {}; } catch (e) { abiertos = {}; }
-    var act = activo(), h = '', guarda = false;
+    var act = (!listo && espera) ? espera : activo(), h = '', guarda = false;
     modulos().forEach(function (x) {
       var m = x.m, on = !!act && x.subs.indexOf(act) >= 0, open = on || abiertos[m.k] === true;
       var av = x.subs.some(function (s) { var b = boton(s.v); return b && +b.dataset.aviso > 0; });
@@ -730,14 +741,17 @@
     var entrada = false;
     try { entrada = sessionStorage.getItem('portal.entrada') === '1'; sessionStorage.removeItem('portal.entrada'); } catch (e) { entrada = false; }
     if ((entrada || !ENT[pedida]) && !/[?&]chat=/.test(location.search) && aLaVista(boton(INI.v))) pedida = INI.k;
+    if (ENT[pedida]) abriendo(ENT[pedida]);
+    document.documentElement.classList.add('pm-carga-dest');
     pinta();
-    if (!pedida || !(ENT[pedida])) { listo = true; pinta(); return; }
+    if (!pedida || !(ENT[pedida])) { listo = true; quitaCarga(); pinta(); return; }
     (function intenta() {
       if (listo) return;
       // una sección que no le toca (134_menu_lo_tuyo.sql: una liga vieja, por ejemplo) abre su Inicio
-      if (SIN && ENT[pedida] && ENT[pedida] !== INI && SIN[ENT[pedida].v] && aLaVista(boton(INI.v))) pedida = INI.k;
+      if (SIN && ENT[pedida] && ENT[pedida] !== INI && SIN[ENT[pedida].v] && aLaVista(boton(INI.v))) { pedida = INI.k; abriendo(INI); pinta(); }
       if (ir(pedida)) return;
-      if (Date.now() - t0 > 12000) { listo = true; pinta(); return; }
+      // no se pudo abrir: a su Inicio (antes se quedaba en lo que la vista trae de fábrica)
+      if (Date.now() - t0 > 12000) { if (!(pedida !== INI.k && aLaVista(boton(INI.v)) && ir(INI.k))) { listo = true; pinta(); } quitaCarga(); return; }
       setTimeout(intenta, 250);
     })();
   }
