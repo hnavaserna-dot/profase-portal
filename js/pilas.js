@@ -61,7 +61,8 @@
     + '.ppl-p[aria-pressed="true"]{background:color-mix(in srgb,var(--c) 9%,var(--pp-sf));border-color:var(--c);box-shadow:0 0 0 1.5px var(--c) inset}'
     + '.ppl-p:focus-visible{outline:2px solid var(--pp-ac);outline-offset:2px}'
     + '.ppl-p.cero .ppl-n{color:var(--pp-mu)}'
-    + '.ppl-t{font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;line-height:1.3;color:var(--c);overflow-wrap:anywhere;padding-right:52px}'
+    + '.ppl-t{font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;line-height:1.3;color:var(--c);overflow-wrap:anywhere}'
+    + '.ppl-p.con-tag .ppl-t{padding-right:52px}.ppl-p.con-x .ppl-t{padding-right:18px}'
     + '.ppl-n{font-size:24px;font-weight:750;line-height:1.15;color:var(--pp-ink);font-variant-numeric:tabular-nums}'
     + '.ppl-d{font-size:12px;line-height:1.35;color:var(--pp-mu);overflow-wrap:anywhere}'
     + '.ppl-tag{position:absolute;top:8px;right:8px;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
@@ -140,7 +141,7 @@
     h += '<div class="ppl-g" role="group" aria-label="' + esc(o.titulo || 'Tu trabajo') + '">';
     pilas.forEach(function (p) {
       var n = Number(p.n) || 0;
-      h += '<button type="button" class="ppl-p' + (n ? '' : ' cero') + '" data-ppl="' + esc(p.k) + '" aria-pressed="' + (!!p.on) + '"'
+      h += '<button type="button" class="ppl-p' + (n ? '' : ' cero') + (p.tag ? ' con-tag' : (p.on ? ' con-x' : '')) + '" data-ppl="' + esc(p.k) + '" aria-pressed="' + (!!p.on) + '"'
         + ' data-tono="' + (TONOS[p.tono] ? p.tono : 'azul') + '"' + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>'
         + '<span class="ppl-t">' + esc(p.t) + '</span><span class="ppl-n">' + esc(p.txt != null ? p.txt : fmt.format(n)) + '</span>'
         + (p.d ? '<span class="ppl-d">' + esc(p.d) + '</span>' : '')
