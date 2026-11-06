@@ -38,7 +38,11 @@
 /* Portal PROFASE · menú Usuarios › Usuarios del portal (30-oct-2026, decisiones de Daniel, 18:44 a 20:50). Altas,
    bajas (suaves: nada se borra; se corta el acceso al momento), códigos de un solo uso para crear o cambiar la contraseña
    y reingresos (entran como usuario nuevo). Lo hacen Daniel y Fernando Cadengo, nunca con la dirección; HNR solo ve.
-   Todo por funciones usr_* (portal/sql/82_usuarios.sql); la página no lee tablas. El código se ve una sola vez. */
+   Todo por funciones usr_* (portal/sql/82_usuarios.sql); la página no lee tablas. El código se ve una sola vez.
+   (298, 5-nov-2026; pedido de Francisco Rivera, Héctor Daniel Nava: «Solo a ese permiso»): en la ficha de cada persona,
+   «Permisos» › «Puede cerrar avisos del Buzón tributario». Lo dan y lo quitan los gerentes y la dirección (bzt_permiso_*);
+   los gerentes que no administran usuarios entran solo a eso: la lista de quienes están en el portal y, en la ficha, ese
+   permiso con sus movimientos (nada de altas, bajas, códigos, últimas entradas ni Accesos). */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -186,6 +190,20 @@ tr.click:hover td{background:var(--navy-soft)}
 .rh-b{display:grid;gap:8px;padding:12px 14px}
 .rh-b .fila{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
 .rh-b .fila>div{min-width:0}
+/* (298) el interruptor de un permiso (el mismo del Calendario) */
+.sw{display:flex;gap:10px;align-items:flex-start;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative;min-width:0}
+.sw.dis{cursor:default}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.swb{flex:none;width:40px;height:24px;border-radius:999px;background:var(--line-strong);position:relative;transition:background .15s;margin-top:1px}
+.swb::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}
+.sw input:checked+.swb{background:var(--accent)}
+.sw input:checked+.swb::after{left:19px}
+.sw input:disabled+.swb{opacity:.55}
+.sw input:focus-visible+.swb{outline:2px solid var(--accent);outline-offset:2px}
+.sw b{display:block;font-size:14px}
+.sw small{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.sw>span:last-child{min-width:0;overflow-wrap:anywhere}
+.mut{color:var(--muted)}
 /* «Quién puede qué» (31-oct-2026, 102_permisos_ver.sql): solo ver */
 .puestos{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px 14px}
 .puestos>div{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--surface-2);min-width:0;font-size:13px;overflow-wrap:anywhere}
@@ -200,7 +218,7 @@ tr.click:hover td{background:var(--navy-soft)}
     <div style="min-width:0">
       <div class="eti">Usuarios</div>
       <h1>Usuarios del portal</h1>
-      <p>Quién entra al portal: altas, bajas, contraseñas olvidadas y regresos. Nada se borra: cada baja deja su antes y su después.</p>
+      <p id="b-txt">Quién entra al portal: altas, bajas, contraseñas olvidadas y regresos. Nada se borra: cada baja deja su antes y su después.</p>
     </div>
   </div>
   <div class="acts" id="acts"><button class="btn acento" type="button" id="b-alta" hidden>Dar de alta</button></div>
@@ -218,7 +236,7 @@ tr.click:hover td{background:var(--navy-soft)}
       <div class="rh-b" id="rh-l"></div>
     </div>
 
-    <div class="tabs" role="tablist" aria-label="Usuarios">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Usuarios">
       <button type="button" role="tab" data-t="activo" aria-selected="true">Activos <span class="cta" id="n-activo">0</span></button>
       <button type="button" role="tab" data-t="pendiente" aria-selected="false">Por entrar <span class="cta" id="n-pendiente">0</span></button>
       <button type="button" role="tab" data-t="baja" aria-selected="false">Dados de baja <span class="cta" id="n-baja">0</span></button>
@@ -253,6 +271,8 @@ tr.click:hover td{background:var(--navy-soft)}
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
   var EST = null, ADMIN = false, LISTA = [], RHB = [], TAB = 'activo', PERM = null;
+  // (298) el permiso de cerrar avisos del Buzón: PB es la lista (bzt_permiso_lista); SOLO_PERM, un gerente que entra solo a eso
+  var PB = null, SOLO_PERM = false;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function mty(s, conHora) {
@@ -309,28 +329,45 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- La lista ---------- */
   async function carga() {
+    if (SOLO_PERM) {
+      PB = await rpc('bzt_permiso_lista') || { personas: [] };
+      LISTA = (PB.personas || []).map(function (x) { return { usuario: x.usuario, nombre: x.nombre, rol: x.rol, estado: 'activo', direccion: x.rol === 'director' }; });
+      RHB = []; PERM = null; pinta(); return;
+    }
     LISTA = await rpc('usr_lista') || []; PERM = null;
     try { RHB = await rpc('usr_rh_bajas') || []; } catch (e) { RHB = []; }
+    try { PB = EST && EST.permisos ? await rpc('bzt_permiso_lista') : null; } catch (e) { PB = null; }
     pinta();
+  }
+  function pb(u) { return (PB && (PB.personas || []).filter(function (x) { return x.usuario === u; })[0]) || null; }
+  // la celda del permiso en la lista de quien entra solo a eso
+  function celdaPermiso(f) {
+    if (!f) return '';
+    if (f.consulta) return '<span class="mut">Solo consulta</span>';
+    if (f.puesto) return '<span class="mut">Por su puesto</span>';
+    return f.tiene ? chip('Sí', 'ok') + (f.por ? '<div class="mut">Se lo dio ' + esc(f.por) + '</div>' : '') : '<span class="mut">No</span>';
   }
   function cuantos(t) { return LISTA.filter(function (x) { return x.estado === t; }).length; }
   function pinta() {
     ['activo', 'pendiente', 'baja'].forEach(function (t) { $('n-' + t).textContent = cuantos(t); });
     document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === TAB ? 'true' : 'false'); });
-    $('perm-card').hidden = TAB !== 'permisos'; $('lista-card').hidden = TAB === 'permisos'; $('pie').hidden = TAB === 'permisos';
+    $('perm-card').hidden = TAB !== 'permisos'; $('lista-card').hidden = TAB === 'permisos'; $('pie').hidden = SOLO_PERM || TAB === 'permisos';
     if (TAB === 'permisos') { pintaRH(); return permisos(); }
     $('h-lista').textContent = { activo: 'Activos', pendiente: 'Por entrar', baja: 'Dados de baja' }[TAB];
-    $('sub-lista').textContent = { activo: 'Quienes hoy entran al portal.', pendiente: 'Ya tienen su código, pero todavía no crean su contraseña.', baja: 'Ya no entran al portal; su historial se queda. Si alguien regresa, entra como usuario nuevo.' }[TAB];
+    $('sub-lista').textContent = SOLO_PERM ? 'Quienes hoy entran al portal y si pueden cerrar avisos del Buzón tributario. Abre a la persona para darle o quitarle el permiso.' : { activo: 'Quienes hoy entran al portal.', pendiente: 'Ya tienen su código, pero todavía no crean su contraseña.', baja: 'Ya no entran al portal; su historial se queda. Si alguien regresa, entra como usuario nuevo.' }[TAB];
     var q = norm($('q').value);
     var L = LISTA.filter(function (x) { return x.estado === TAB && (!q || norm(x.nombre + ' ' + x.usuario + ' ' + (x.nombre_wf || '')).indexOf(q) >= 0); });
-    var th = TAB === 'activo' ? ['Nombre', 'Rol', 'Desde', 'Última entrada', 'Equipos', '']
+    var th = SOLO_PERM ? ['Nombre', 'Puesto', 'Cierra avisos del Buzón', ''] : TAB === 'activo' ? ['Nombre', 'Rol', 'Desde', 'Última entrada', 'Equipos', '']
       : TAB === 'pendiente' ? ['Nombre', 'Rol', 'Código dado', '', '', ''] : ['Nombre', 'Rol', 'Estuvo', 'Baja', 'Quién la dio', ''];
     $('th').innerHTML = th.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('');
     if (!L.length) { $('lista').innerHTML = '<tr><td class="vacio" colspan="6">' + (q ? 'Nadie con esa búsqueda.' : 'Nadie por ahora.') + '</td></tr>'; return; }
     $('lista').innerHTML = L.map(function (x, i) {
       var nom = '<td class="w" data-l="Nombre"><div class="rs">' + esc(x.nombre) + '</div><div class="mut">' + esc(x.usuario) + '</div></td>';
-      var rol = '<td data-l="Rol">' + esc(ROL[x.rol] || x.rol) + (x.direccion ? ' ' + chip('Dirección', 'az') : '') + '</td>';
+      var pbx = pb(x.usuario);
+      var rol = '<td data-l="' + (SOLO_PERM ? 'Puesto' : 'Rol') + '">' + esc(ROL[x.rol] || x.rol) + (x.direccion && !SOLO_PERM ? ' ' + chip('Dirección', 'az') : '')
+        + (!SOLO_PERM && pbx && pbx.tiene ? ' ' + chip('Cierra avisos del Buzón', 'ok') : '') + '</td>';
       var ver = '<td data-l=""><button class="btn chico" type="button" data-i="' + i + '">Ver</button></td>';
+      if (SOLO_PERM) return '<tr class="click" data-i="' + i + '">' + nom + rol + '<td data-l="Cierra avisos del Buzón">' + celdaPermiso(pbx) + '</td>' + ver + '</tr>';
       if (TAB === 'activo') return '<tr class="click" data-i="' + i + '">' + nom + rol + '<td data-l="Desde">' + esc(mty(x.desde)) + '</td>'
         + '<td data-l="Última entrada">' + (x.ultima === undefined || (x.direccion && !EST.todo) ? '—' : esc(hace(x.ultima))) + (x.codigo ? ' ' + chip('Código sin usar', 'ojo') : '') + '</td>'
         + '<td data-l="Equipos">' + (x.sesiones == null ? '—' : esc(x.sesiones)) + '</td>' + ver + '</tr>';
@@ -394,11 +431,66 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   function hoy() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Monterrey' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
 
+  /* ---------- (298) El permiso de cerrar avisos del Buzón tributario, en la ficha ---------- */
+  function textoPermiso(f) {
+    if (f.consulta) return 'Es de solo consulta: no cierra ni reabre avisos.';
+    if (f.puesto) return 'Por su puesto (' + String(ROL[f.rol] || f.rol).toLowerCase() + ') ya cierra y reabre avisos; no necesita este permiso.';
+    if (f.tiene) return 'Se lo dio ' + (f.por || '') + (f.en ? ' el ' + mty(f.en, true) : '') + '. Si se lo quitas, deja de ver «Cerrado»; lo que ya cerró se queda cerrado.';
+    return 'Apagado. Al prenderlo le llega un aviso y desde ese momento ve «Cerrado» en «Camino».';
+  }
+  function secPermiso(f, msg) {
+    var on = (f.puesto && !f.consulta) || !!f.tiene, dis = !f.cambia || !!P.consulta;
+    return '<div class="sec" id="f-perm"><h3>Permisos</h3><div class="in">'
+      + '<label class="sw' + (dis ? ' dis' : '') + '"><input type="checkbox" role="switch" id="p-bzt"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + '><span class="swb" aria-hidden="true"></span>'
+      + '<span><b>Puede cerrar avisos del Buzón tributario</b><small>Ve «Cerrado» en «Camino» y cierra y reabre los avisos que ya ve, con las mismas reglas: a quién se asignó, el concepto y al menos una nota en «Seguimiento».</small></span></label>'
+      + '<p class="mut" id="p-txt" style="margin:8px 0 0">' + esc(textoPermiso(f)) + '</p>'
+      + '<div class="msg bien" id="p-ok"' + (msg ? '' : ' hidden') + ' role="status" style="margin-top:8px">' + esc(msg || '') + '</div>'
+      + '<div class="msg mal" id="p-err" hidden role="alert" style="margin-top:8px"></div></div></div>';
+  }
+  function histPermiso(h) {
+    if (!h || !h.length) return '';
+    return '<div class="sec"><h3>Movimientos del permiso</h3><div class="in"><ul class="lista-b">' + h.map(function (b) {
+      return '<li><b>' + esc(b.que) + '</b> · ' + esc(mty(b.en, true)) + ' · ' + esc(b.quien) + (b.detalle ? '<div class="mut">' + esc(b.detalle) + '</div>' : '') + '</li>';
+    }).join('') + '</ul></div></div>';
+  }
+  function ligaPermiso(x) {
+    var i = $('p-bzt'); if (!i || i.disabled) return;
+    i.onchange = async function () {
+      var si = i.checked;
+      $('p-ok').hidden = true; $('p-err').hidden = true;
+      var ok = await pregunta(si ? '¿Le das a ' + x.nombre + ' el permiso de cerrar y reabrir avisos del Buzón tributario? Le llega un aviso.'
+                                 : '¿Le quitas a ' + x.nombre + ' el permiso de cerrar y reabrir avisos del Buzón tributario? Lo que ya cerró se queda cerrado.',
+                              si ? 'Sí, darle el permiso' : 'Sí, quitárselo');
+      if (!ok) { i.checked = !si; return; }
+      i.disabled = true;
+      try {
+        await rpc('bzt_permiso_cambia', { p_usuario: x.usuario, p_si: si });
+        await carga();
+        await ficha(x, null, si ? 'Listo: ' + x.nombre + ' ya puede cerrar y reabrir avisos del Buzón tributario. Le llegó el aviso.'
+                                : 'Listo: ' + x.nombre + ' ya no cierra avisos del Buzón tributario. Le llegó el aviso.');
+      } catch (e) { i.checked = !si; i.disabled = false; $('p-err').textContent = falla(e); $('p-err').hidden = false; }
+    };
+  }
+  // quien entra solo a dar el permiso (un gerente que no administra usuarios): sus datos, el permiso y sus movimientos
+  async function fichaPermiso(x, msg) {
+    abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), '<div class="cargando">Cargando…</div>');
+    var f = null;
+    try { f = await rpc('bzt_permiso_ficha', { p_usuario: x.usuario }); }
+    catch (e) { abre(x.nombre, x.usuario, '<div class="msg mal" role="alert">' + esc(falla(e)) + '</div>'); return; }
+    abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol),
+      '<div class="sec"><h3>Datos</h3><div class="in dl"><span>Usuario</span><span>' + esc(x.usuario) + '</span><span>Puesto</span><span>' + esc(ROL[x.rol] || x.rol) + '</span></div></div>'
+      + secPermiso(f, msg) + histPermiso(f.historial));
+    ligaPermiso(x);
+  }
+
   /* ---------- La ficha de una persona ---------- */
-  async function ficha(x, rhb) {
+  async function ficha(x, rhb, msgPerm) {
+    if (SOLO_PERM) return fichaPermiso(x, msgPerm);
     abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), '<div class="cargando">Cargando…</div>');
     var h = null;
     try { h = await rpc('usr_historia', { p_usuario: x.usuario }); } catch (e) { h = { periodos: [], bitacora: [], pendientes: {} }; }
+    var fp = null;   // (298) el permiso de cerrar avisos del Buzón (solo a quien está en el portal)
+    if (x.estado === 'activo' && EST && EST.permisos) { try { fp = await rpc('bzt_permiso_ficha', { p_usuario: x.usuario }); } catch (e) { fp = null; } }
     var puede = ADMIN && !x.direccion;
     var c = '';
     c += '<div class="sec"><h3>Datos</h3><div class="in dl">'
@@ -408,6 +500,7 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<span>Estado</span><span>' + ({ activo: 'Entra al portal', pendiente: 'Todavía no crea su contraseña', baja: x.reingreso ? 'Dado de baja; ya tiene su código para regresar' : 'Dado de baja: ya no entra' }[x.estado]) + '</span>'
       + (x.estado === 'activo' && (EST.todo || !x.direccion) ? '<span>Última entrada</span><span>' + esc(x.ultima ? mty(x.ultima, true) : 'Nunca') + '</span>' : '')
       + '</div></div>';
+    if (fp) c += secPermiso(fp, msgPerm);
     if (puede) {
       c += '<div class="sec"><h3>Qué hacer</h3><div class="in acciones" id="f-acc">';
       if (x.estado === 'activo') c += '<button class="btn" type="button" id="a-cod">Código para cambiar su contraseña</button><button class="btn peligro" type="button" id="a-baja">Dar de baja</button>';
@@ -439,6 +532,7 @@ tr.click:hover td{background:var(--navy-soft)}
       }).join('') + '</ul></div></div>';
     }
     abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), c);
+    if (fp) ligaPermiso(x);
     if (!puede) return;
     if ($('a-cod')) $('a-cod').onclick = function () { codigo(x); };
     if ($('a-baja')) $('a-baja').onclick = function () { formBaja(x, pe, rhb); };
@@ -537,6 +631,22 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   $('b-alta').onclick = formAlta;
 
+  /* (298) lo nuevo, desde la campanita o «Nuevos cambios» (usr_tab.js, clave ver|permiso-buzon|…): la lista y qué hacer */
+  window.__usrAbre = function (x) {
+    if (String(x || '') !== 'ver:permiso-buzon') return;
+    var t = 0, ilu = function () {
+      if (!EST || !$('cargando').hidden || $('todo').hidden) { if (t++ < 60) setTimeout(ilu, 150); return; }
+      if (!EST.permisos) return;
+      if (TAB !== 'activo') { TAB = 'activo'; pinta(); }
+      var el = $('lista-card');
+      el.style.outline = '3px solid var(--accent)'; el.style.outlineOffset = '2px';
+      try { el.scrollIntoView({ block: 'start' }); } catch (e) {}
+      setTimeout(function () { el.style.outline = ''; el.style.outlineOffset = ''; }, 6000);
+      avisa('Nuevo: en la ficha de cada persona, «Puede cerrar avisos del Buzón tributario». Pica «Ver» en la persona y préndelo o apágalo.');
+    };
+    ilu();
+  };
+
   /* =============================== Arranque =============================== */
   async function arranca() {
     try {
@@ -544,14 +654,21 @@ tr.click:hover td{background:var(--navy-soft)}
       var p = await P.listo; if (!p) return;
       if (window.top === window.self) $('logo').hidden = false;
       EST = await rpc('usr_estado');
-      if (!EST || !EST.puede) throw new Error('Esta pantalla es para Daniel y Fernando Cadengo.');
+      if (!EST || (!EST.puede && !EST.permisos)) throw new Error('Esta pantalla es para la dirección y los gerentes.');
+      SOLO_PERM = !EST.puede;   // (298) un gerente que entra solo a dar el permiso de cerrar avisos del Buzón
       ADMIN = EST.puede === 'admin' && !P.consulta;
-      $('consulta').hidden = ADMIN;
+      $('consulta').hidden = ADMIN || (SOLO_PERM && EST.permisos === 'cambia' && !P.consulta);
       $('b-alta').hidden = !ADMIN;
+      if (SOLO_PERM) {
+        $('tabs').hidden = true;
+        $('b-txt').textContent = 'Aquí das o quitas el permiso de cerrar y reabrir avisos del Buzón tributario a quien no es gerente ni de la dirección. '
+          + 'Las altas, bajas y contraseñas las dan H\u00e9ctor Daniel Nava y Fernando Cadengo.';
+      }
       await carga();
       $('todo').hidden = false; $('cargando').hidden = true;
       var u = new URLSearchParams(location.search).get('u');
       if (u) { var x = LISTA.filter(function (z) { return z.usuario === u; })[0]; if (x) ficha(x); }
+      if (new URLSearchParams(location.search).get('ver') === 'permiso-buzon') window.__usrAbre('ver:permiso-buzon');
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   arranca();
