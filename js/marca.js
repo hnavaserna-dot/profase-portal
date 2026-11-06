@@ -30,15 +30,19 @@
   function cierraMenu() {
     if (!MENU) return;
     var m = MENU; MENU = null;
-    m.el.remove(); document.removeEventListener('keydown', m.tecla, true); document.removeEventListener('pointerdown', m.fuera, true);
-    window.removeEventListener('resize', m.cierra); window.removeEventListener('scroll', m.cierra, true);
+    m.el.remove(); m.D.removeEventListener('keydown', m.tecla, true); m.D.removeEventListener('pointerdown', m.fuera, true);
+    m.W.removeEventListener('resize', m.cierra); m.W.removeEventListener('scroll', m.cierra, true);
     try { if (m.btn && m.btn.focus && m.devuelve) m.btn.focus(); } catch (e) { /* sin foco */ }
   }
   /* El menú junto al botón: cb(true) = original, cb(false) = con marca. Esc o picar fuera lo cierra sin bajar nada. */
   function eligeMarca(btn, cb, que) {
     cierraMenu();
-    if (!document.getElementById('pm-css')) {
-      var st = document.createElement('style'); st.id = 'pm-css';
+    // el menú sale en la página del botón: si el botón vive en otra (la vista previa del chat va en la página de arriba,
+    // encima de toda la pantalla: 6-nov-2026), ahí mismo, junto a él y encima de todo
+    var D = document, W = window;
+    try { if (btn && btn.ownerDocument && btn.ownerDocument.body && btn.ownerDocument.defaultView) { D = btn.ownerDocument; W = D.defaultView; } } catch (e) { D = document; W = window; }
+    if (!D.getElementById('pm-css')) {
+      var st = D.createElement('style'); st.id = 'pm-css';
       st.textContent = '.pm-menu{position:fixed;z-index:2147483000;min-width:236px;max-width:calc(100vw - 16px);background:var(--surface,#fff);color:var(--ink,#132036);'
         + 'border:1px solid var(--line-strong,#C4CDDA);border-radius:12px;box-shadow:0 12px 32px rgba(10,18,32,.28);padding:6px;font-family:var(--f-body,Arial,sans-serif)}'
         + '.pm-menu .pm-t{font-size:12px;color:var(--muted,#5A6577);padding:6px 10px 4px;font-weight:600}'
@@ -49,25 +53,25 @@
         + '.pm-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--accent,#F07A1E)}'
         + '.pm-menu .pm-ic{display:inline-block;width:14px;height:16px;margin-right:7px;vertical-align:-3px;object-fit:contain}'
         + '.pm-menu .pm-ori .pm-ic{width:11px;height:14px;border:1.5px solid currentColor;border-radius:2px;margin-left:1px;margin-right:9px;box-sizing:border-box}';
-      document.head.appendChild(st);
+      (D.head || D.documentElement).appendChild(st);
     }
-    var el = document.createElement('div');
+    var el = D.createElement('div');
     el.className = 'pm-menu'; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', '¿Cómo lo bajo?');
     el.innerHTML = '<div class="pm-t">' + (que ? 'Bajar ' + que : '¿Cómo lo bajo?') + '</div>'
       + '<button type="button" role="menuitem" class="pm-con" data-pm="0"><span><img class="pm-ic" src="img/logo.png" alt="">Con marca PROFASE</span><small>Con el signo y la marca, como siempre</small></button>'
       + '<button type="button" role="menuitem" class="pm-ori" data-pm="1"><span><i class="pm-ic"></i>Original (sin marca)</span><small>Sin la marca PROFASE, para entregar o imprimir</small></button>';
-    document.body.appendChild(el);
+    D.body.appendChild(el);
     // junto al botón, sin salirse de la pantalla (abajo si cabe; si no, arriba)
     var r = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : { left: 8, right: 8, top: 8, bottom: 8 };
-    var w = el.offsetWidth, h = el.offsetHeight, vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
+    var w = el.offsetWidth, h = el.offsetHeight, vw = D.documentElement.clientWidth || W.innerWidth, vh = W.innerHeight;
     var x = Math.max(8, Math.min(r.left, vw - w - 8)), y = r.bottom + 6 + h <= vh - 8 ? r.bottom + 6 : Math.max(8, r.top - h - 6);
     el.style.left = x + 'px'; el.style.top = y + 'px';
-    var m = { el: el, btn: btn, devuelve: true };
+    var m = { el: el, btn: btn, devuelve: true, D: D, W: W };
     m.cierra = function () { m.devuelve = false; cierraMenu(); };
     m.tecla = function (ev) {
       if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cierraMenu(); return; }
       if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Tab') {
-        var bs = el.querySelectorAll('button'), i = Array.prototype.indexOf.call(bs, document.activeElement);
+        var bs = el.querySelectorAll('button'), i = Array.prototype.indexOf.call(bs, D.activeElement);
         ev.preventDefault(); bs[(i + (ev.key === 'ArrowUp' || (ev.key === 'Tab' && ev.shiftKey) ? bs.length - 1 : 1)) % bs.length].focus();
       }
     };
@@ -80,15 +84,21 @@
       m.devuelve = false; cierraMenu();
       cb(orig);
     });
-    document.addEventListener('keydown', m.tecla, true);
-    setTimeout(function () { if (MENU === m) document.addEventListener('pointerdown', m.fuera, true); }, 0);
-    window.addEventListener('resize', m.cierra); window.addEventListener('scroll', m.cierra, true);
+    D.addEventListener('keydown', m.tecla, true);
+    setTimeout(function () { if (MENU === m) D.addEventListener('pointerdown', m.fuera, true); }, 0);
+    W.addEventListener('resize', m.cierra); W.addEventListener('scroll', m.cierra, true);
     MENU = m;
     try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu('marca'); } catch (e) { /* sin aviso */ }
     try { el.querySelector('button').focus(); } catch (e) { /* sin foco */ }
   }
   // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
-  document.addEventListener('profase-menu', function (e) { if (MENU && e.detail !== 'marca') MENU.cierra(); });
+  document.addEventListener('profase-menu', function (e) {
+    if (!MENU || e.detail === 'marca') return;
+    // el menú vive en la página de arriba (la vista previa del chat): un toque allá les avisa «afuera» a los marcos, también
+    // el toque sobre el menú mismo; lo que de verdad es afuera ya lo cierra m.fuera en esa página
+    if (e.detail === 'afuera' && MENU.D !== document) return;
+    MENU.cierra();
+  });
   /* Los botones de bajar (Excel, su PDF de al lado y los que llevan data-descarga): a quien se le ofrece el original,
      primero el menú; luego el mismo botón sigue como siempre, ya sabiendo cómo lo quiere. */
   function interceptaDescargas(ev) {

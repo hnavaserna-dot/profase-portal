@@ -3,6 +3,7 @@
    de XML del SAT, Héctor Daniel Nava, 3-nov-2026). Antes vivía dentro de chat.html.
      PROFASE_CFDI.ficha(doc)          la ficha (HTML) de un CFDI 3.3 o 4.0 ya leído con DOMParser, o '' si no es CFDI
      PROFASE_CFDI.bonito(raiz, max)   el XML acomodado y con colores (HTML), hasta «max» letras (3 MB si no se dice)
+     PROFASE_CFDI.estilos(doc)        pone sus estilos en otra página (el chat: la vista previa va en la de arriba)
    Todo lo que viene del XML va escapado (esc). Pone sus estilos una sola vez; los colores salen de las variables de cada
    página (--ink, --line, --navy…), en claro y en oscuro. No baja, no sube ni guarda nada. */
 (function () {
@@ -42,10 +43,12 @@
     ".cf-t th{color:var(--muted);font-weight:600;font-size:11.5px;background:var(--surface-2)}" +
     ".cf-t .n{text-align:right}.cf-t td.d{white-space:normal;min-width:220px}" +
     "@media (max-width:759px){.cf-2,.cf-g{grid-template-columns:1fr}.cf-tots{max-width:none}}";
-  function estilos() {
-    if (document.getElementById('profase-cfdi-css')) return;
-    var st = document.createElement('style'); st.id = 'profase-cfdi-css'; st.textContent = CSS;
-    (document.head || document.documentElement).appendChild(st);
+  // estilos(D): en otra página (la vista previa del chat va en la de arriba, encima de toda la pantalla: 6-nov-2026)
+  function estilos(D) {
+    D = D || document;
+    if (D.getElementById('profase-cfdi-css')) return;
+    var st = D.createElement('style'); st.id = 'profase-cfdi-css'; st.textContent = CSS;
+    (D.head || D.documentElement).appendChild(st);
   }
   estilos();
   function bonito(raiz, max) {
@@ -158,5 +161,5 @@
     }
     return x + '</div>';
   }
-  window.PROFASE_CFDI = { ficha: ficha, bonito: bonito };
+  window.PROFASE_CFDI = { ficha: ficha, bonito: bonito, estilos: estilos };
 })();

@@ -26,7 +26,10 @@
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton);
          (cada documento d lleva su id o, si no, su ruta: con eso se reconoce lo ya traído; sin ninguno no se guarda)
          V.bajaVarios([{d, ruta: 'Carpeta/'}], boton, 'nombre del zip', (i, n) => {})   (expediente, 3-nov-2026: un ZIP)
-         con aLaVez: n en nuevo({…}) trae hasta n archivos a la vez para el ZIP (Centauro, los XML: 4-nov-2026) */
+         con aLaVez: n en nuevo({…}) trae hasta n archivos a la vez para el ZIP (Centauro, los XML: 4-nov-2026)
+         con capa: () => document en nuevo({…}), «Ver» abre la vista previa en ESA página (el chat interno la pone en la de
+         arriba, la vista, encima de toda la pantalla: Héctor Daniel, 6-nov-2026), con sus colores; y con tache: true el botón
+         de cerrar es una ✕ (también se cierra con Esc o picando afuera). */
 (function () {
   'use strict';
   var PDFJS = 'js/lib/pdfjs/pdf.min.js', PDFJS_TRABAJADOR = 'js/lib/pdfjs/pdf.worker.min.js';
@@ -129,7 +132,28 @@
     + '.pv-gira{width:30px;height:30px;border-radius:50%;border:3px solid var(--line,#DCE2EB);border-top-color:var(--accent,#F07A1E);animation:pv-g .8s linear infinite}'
     + '@keyframes pv-g{to{transform:rotate(360deg)}}'
     + '@media (prefers-reduced-motion:reduce){.pv-gira{animation-duration:2.4s}}'
-    + '@media (max-width:700px){.pv-velo{padding:0}.pv-caja{width:100%;border-radius:0}.pv-cab{padding:8px 8px 8px 12px}.pv-acc button{padding:7px 10px}.pv-hojas{padding:8px;gap:8px}}';
+    + '@media (max-width:700px){.pv-velo{padding:0}.pv-caja{width:100%;border-radius:0}.pv-cab{padding:8px 8px 8px 12px}.pv-acc button{padding:7px 10px}.pv-hojas{padding:8px;gap:8px}}'
+    // la ✕ (op.tache) y la capa en la página de arriba, encima de toda la pantalla (op.capa; el chat interno, 6-nov-2026)
+    + '.pv-acc .pv-x{width:36px;height:36px;padding:0;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.45)}'
+    + '.pv-acc .pv-x svg{width:20px;height:20px;display:block}'
+    + '.pv-acc .pv-x:hover{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E)}'
+    + '.pv-velo.pv-arriba{z-index:9000;margin:0;background:rgba(5,10,20,.72);font-size:14.5px;line-height:1.35;-webkit-text-size-adjust:100%;overscroll-behavior:contain;'
+    + 'padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}'
+    + '.pv-velo.pv-arriba *{box-sizing:border-box}'
+    + '.pv-velo.pv-arriba .pv-caja{width:min(1200px,100%)}'
+    + '@media (max-width:700px){.pv-velo.pv-arriba{padding:0}'
+    + '.pv-velo.pv-arriba .pv-cab{padding-top:max(8px,env(safe-area-inset-top,0px));padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}'
+    + '.pv-velo.pv-arriba .pv-cuerpo{margin-bottom:env(safe-area-inset-bottom,0px)}}'
+    + '@media print{.pv-velo.pv-arriba{display:none!important}}';
+  var PV_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  // los colores de la página que pidió la vista previa, para que en la de arriba se vea igual (claro u oscuro)
+  var VARS = ['--surface', '--surface-2', '--ink', '--muted', '--line', '--line-strong', '--navy', '--navy-ink', '--accent', '--band-dim', '--f-body'];
+  function copiaVars(el) {
+    try {
+      var cs = getComputedStyle(document.documentElement);
+      VARS.forEach(function (v) { var x = cs.getPropertyValue(v).trim(); if (x) el.style.setProperty(v, x); });
+    } catch (e) { /* con los colores de la página de arriba */ }
+  }
 
   function nuevo(op) {
     var guardados = new Map();   // id → { p: promesa de los bytes, n: tamaño }
@@ -290,29 +314,44 @@
     }
 
     /* ---------- Ver: la capa encima de la ficha ---------- */
-    function ponCSS() {
-      if (document.getElementById('pv-css')) return;
-      var st = document.createElement('style'); st.id = 'pv-css'; st.textContent = CSS; document.head.appendChild(st);
+    // la página donde sale la capa: esta o, con op.capa, la que diga (el chat: la de arriba)
+    function docCapa() {
+      try { var D = op.capa && op.capa(); if (D && D.body && D.defaultView) return D; } catch (e) { /* aquí mismo */ }
+      return document;
     }
-    function cierraCapa() {
+    function ponCSS(D) {
+      var st = D.getElementById('pv-css');
+      if (st && st.textContent === CSS) return;
+      if (!st) { st = D.createElement('style'); st.id = 'pv-css'; (D.head || D.documentElement).appendChild(st); }
+      st.textContent = CSS;
+    }
+    function cierraCapa(sinFoco) {
       var c = CAPA; if (!c) return;
       CAPA = null; c.cerrada = true;
       try { if (c.pdf) c.pdf.destroy(); } catch (e) { /* ya estaba cerrado */ }
       if (c.obs) c.obs.disconnect();
-      if (c.url) setTimeout(function () { URL.revokeObjectURL(c.url); }, 1000);
+      if (c.url) { var W = c.W, u = c.url; setTimeout(function () { try { W.URL.revokeObjectURL(u); } catch (e) { /* ya no está */ } }, 1000); }
       c.el.remove();
-      document.removeEventListener('keydown', c.tecla, true);
-      try { if (c.antes && c.antes.focus) c.antes.focus(); } catch (e) { /* el botón ya no existe */ }
+      c.D.removeEventListener('keydown', c.tecla, true);
+      if (c.D !== document) document.removeEventListener('keydown', c.tecla, true);
+      if (sinFoco === true) return;
+      // el foco regresa al botón «Ver» (si la capa iba en la página de arriba, primero a esta página)
+      try { if (c.D !== document) window.focus(); if (c.antes && c.antes.focus) c.antes.focus({ preventScroll: true }); } catch (e) { /* el botón ya no existe */ }
     }
     function abreCapa(d) {
-      ponCSS(); cierraCapa();
-      var el = document.createElement('div');
-      el.className = 'pv-velo';
+      cierraCapa();
+      var D = docCapa(), arriba = D !== document;
+      ponCSS(D);
+      var el = D.createElement('div');
+      el.className = 'pv-velo' + (arriba ? ' pv-arriba' : '');
       el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Vista previa de ' + nombre(d));
+      if (arriba) { el.setAttribute('data-sin-jalar', ''); copiaVars(el); }
       el.innerHTML = '<div class="pv-caja"><div class="pv-cab"><div class="pv-tit"><b>' + esc(nombre(d)) + '</b><span>Vista previa con la marca PROFASE</span></div>'
-        + '<div class="pv-acc"><button type="button" data-pv="baja" disabled>Bajar</button><button type="button" data-pv="cierra" aria-label="Cerrar la vista previa">Cerrar</button></div></div>'
+        + '<div class="pv-acc"><button type="button" data-pv="baja" disabled>Bajar</button>'
+        + (op.tache ? '<button type="button" class="pv-x" data-pv="cierra" aria-label="Cerrar (Esc)" title="Cerrar (Esc)">' + PV_X + '</button>'
+          : '<button type="button" data-pv="cierra" aria-label="Cerrar la vista previa">Cerrar</button>') + '</div></div>'
         + '<div class="pv-cuerpo"><div class="pv-msg" role="status"><div class="pv-gira" aria-hidden="true"></div><div>Abriendo el documento…</div></div></div></div>';
-      var c = { el: el, d: d, cerrada: false, antes: document.activeElement, cuerpo: el.querySelector('.pv-cuerpo'), bBaja: el.querySelector('[data-pv="baja"]') };
+      var c = { el: el, d: d, D: D, W: D.defaultView || window, cerrada: false, antes: document.activeElement, cuerpo: el.querySelector('.pv-cuerpo'), bBaja: el.querySelector('[data-pv="baja"]') };
       el.addEventListener('click', function (ev) {
         ev.stopPropagation();   // que la ficha de abajo no se entere
         var b = ev.target.closest('[data-pv]');
@@ -325,29 +364,38 @@
           if (ofrece(d)) window.PROFASE_MARCA.eligeMarca(b, sale, 'el PDF'); else sale(false);
         }
       });
+      // en la fase de captura, en la página de la capa y en esta (por si el foco se quedó aquí): Esc solo cierra la capa
       c.tecla = function (ev) {
-        if (document.querySelector('.pm-menu')) return;   // el menú de «Original» abierto encima: él atiende las teclas
+        if (!el.isConnected) return;
+        // el menú de «Original» o «Tu archivo está listo» abiertos encima: ellos atienden las teclas
+        if (D.querySelector('.pm-menu,.pba-velo') || (arriba && document.querySelector('.pm-menu'))) return;
         if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cierraCapa(); return; }
         if (ev.key === 'Tab') {   // el foco se queda dentro de la vista previa
           var f = Array.prototype.filter.call(el.querySelectorAll('button:not([disabled]),iframe,[tabindex="0"]'), function (x) { return x.offsetParent !== null; });
           if (!f.length) return;
-          var i = f.indexOf(document.activeElement);
+          var i = f.indexOf(D.activeElement);
           if (ev.shiftKey && i <= 0) { ev.preventDefault(); f[f.length - 1].focus(); }
-          else if (!ev.shiftKey && i === f.length - 1) { ev.preventDefault(); f[0].focus(); }
+          else if (!ev.shiftKey && (i < 0 || i === f.length - 1)) { ev.preventDefault(); f[0].focus(); }
         }
       };
-      document.addEventListener('keydown', c.tecla, true);
-      document.body.appendChild(el);
+      D.addEventListener('keydown', c.tecla, true);
+      if (arriba) document.addEventListener('keydown', c.tecla, true);
+      D.body.appendChild(el);
+      if (arriba) {
+        // la rueda del mouse y el dedo no mueven la página de abajo (solo las hojas del documento)
+        el.addEventListener('wheel', function (ev) { if (!ev.ctrlKey && !(ev.target.closest && ev.target.closest('.pv-hojas'))) ev.preventDefault(); }, { passive: false });
+        try { if (window.PORTAL && window.PORTAL.deslizaDentro) window.PORTAL.deslizaDentro(el); } catch (e) { /* sin él */ }
+      }
       CAPA = c;
-      try { el.querySelector('[data-pv="cierra"]').focus(); } catch (e) { /* sin foco */ }
+      try { el.querySelector('[data-pv="cierra"]').focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
       return c;
     }
     function mensaje(c, txt) {
       c.cuerpo.innerHTML = '<div class="pv-msg" role="status"><div>' + esc(txt) + '</div></div>';
     }
     function conLector(c, b) {
-      c.url = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
-      var fr = document.createElement('iframe');
+      c.url = c.W.URL.createObjectURL(new c.W.Blob([b], { type: 'application/pdf' }));
+      var fr = c.D.createElement('iframe');
       fr.title = 'Vista previa de ' + nombre(c.d);
       fr.src = c.url + '#view=FitH';
       c.cuerpo.innerHTML = ''; c.cuerpo.appendChild(fr);
@@ -359,7 +407,7 @@
       var pdf = await L.getDocument({ data: b.slice(), isEvalSupported: false }).promise;
       if (c.cerrada) { pdf.destroy(); return; }
       c.pdf = pdf;
-      var caja = document.createElement('div'); caja.className = 'pv-hojas'; caja.tabIndex = 0;
+      var caja = c.D.createElement('div'); caja.className = 'pv-hojas'; caja.tabIndex = 0;
       caja.setAttribute('aria-label', 'Hojas del documento (' + pdf.numPages + ')');
       c.cuerpo.innerHTML = ''; c.cuerpo.appendChild(caja);
       var p1 = await pdf.getPage(1);
@@ -367,7 +415,7 @@
       var v1 = p1.getViewport({ scale: 1 }), prop = v1.height / v1.width;
       var hojas = [];
       for (var i = 1; i <= pdf.numPages; i++) {
-        var h = document.createElement('div'); h.className = 'pv-hoja'; h.dataset.n = i;
+        var h = c.D.createElement('div'); h.className = 'pv-hoja'; h.dataset.n = i;
         h.style.aspectRatio = '1 / ' + prop.toFixed(4);
         h.innerHTML = '<span class="pv-n">' + i + ' de ' + pdf.numPages + '</span>';
         caja.appendChild(h); hojas.push(h);
@@ -380,7 +428,7 @@
           if (c.cerrada) return;
           var v = pg.getViewport({ scale: 1 }), ancho = Math.max(200, h.clientWidth || caja.clientWidth - 24);
           var dpr = Math.min(window.devicePixelRatio || 1, 2), esc2 = ancho / v.width * dpr;
-          var vp = pg.getViewport({ scale: esc2 }), cv = document.createElement('canvas');
+          var vp = pg.getViewport({ scale: esc2 }), cv = c.D.createElement('canvas');
           cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
           cv.setAttribute('aria-label', 'Hoja ' + n);
           h.style.aspectRatio = v.width + ' / ' + v.height;
@@ -390,8 +438,8 @@
         }).catch(function () { delete h.dataset.lista; });
       }
       dibuja(hojas[0]);
-      if ('IntersectionObserver' in window) {
-        c.obs = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) dibuja(e.target); }); }, { root: caja, rootMargin: '600px 0px' });
+      if ('IntersectionObserver' in c.W) {
+        c.obs = new c.W.IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) dibuja(e.target); }); }, { root: caja, rootMargin: '600px 0px' });
         hojas.forEach(function (h) { c.obs.observe(h); });
       } else hojas.forEach(dibuja);
     }
