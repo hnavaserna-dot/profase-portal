@@ -1877,7 +1877,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function pagoSv(x) {
     if (x.estado === 'pagado') {
-      return '<span class="chip az">Pagado el ' + esc(fecha(x.entregado_el)) + '</span>'
+      return '<span class="chip az">' + (x.entregado_el ? 'Pagado el ' + esc(fecha(x.entregado_el)) : 'Pagado, sin fecha') + '</span>'
+        + (!x.entregado_el && x.pago_origen === 'antes' ? '<div class="mut">antes de tu Excel IVAS</div>' : '')   // 310
         + (x.sv_pagado != null && Math.abs(Number(x.sv_pagado) - Number(x.sv)) > 0.005 ? '<div class="mut">se le pagaron ' + esc(dinero(x.sv_pagado)) + '</div>' : '')
         + (x.entregado_por ? '<div class="mut">' + esc(x.entregado_por) + '</div>' : '')
         + (x.pago_id ? '<div class="mut">pago SV #' + esc(x.pago_id) + '</div>' : '');
@@ -1953,25 +1954,30 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       L.map(function (x) {
         return [x.cliente || '', x.mes_txt || '', x.devuelto, pctTxt(x.sv_pct), Number(x.sv), pctTxt(x.pf_pct), Number(x.pf), Number(x.total), Number(x.factura_iva),
                 x.folio || '', x.fac_fecha ? fecha(x.fac_fecha) : '', cobroTxt(x), E(x),
-                fecha(x.estado === 'pagado' ? x.entregado_el : x.paga_el), x.estado === 'pagado' ? Number(x.sv_pagado) : '', x.nota || ''];
+                x.estado === 'pagado' ? (x.entregado_el ? fecha(x.entregado_el) : 'Sin fecha') : fecha(x.paga_el), x.estado === 'pagado' ? Number(x.sv_pagado) : '', x.nota || ''];
       }),
       [3, 5, 7, 8, 9, 15], [30, 12, 16, 9, 14, 11, 14, 15, 15, 14, 14, 16, 18, 13, 14, 30],
       L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), '', sumaDev(L, 'sv'), '', sumaDev(L, 'pf'), sumaDev(L, 'total'), sumaDev(L, 'factura_iva')]] : null);
   }
   /* «Para SV»: solo lo que le toca ver a SV (Héctor Daniel, 5-nov-2026, 12:22): cliente, mes devuelto, lo que devolvió el
-     SAT, lo de SV y la fecha en que se le pagó o «Por pagar». Con los filtros de la lista; sin las que no llevan SV. */
+     SAT, lo de SV y la fecha en que se le pagó o «Por pagar». Con los filtros de la lista; sin las que no llevan SV.
+     310 (Héctor Daniel Nava, 6-nov-2026: «corrige su PDF y su Excel»): «Por pagar» es solo lo que de verdad se le debe (por
+     entregar o cuando pague el cliente); lo pagado sin fecha dice «Pagado (sin fecha)» y lo que no se sabe si se pagó,
+     «Sin fecha de pago», cada uno con su total arriba (antes las tres iban como «Por pagar»). */
   function excelSv(b) {
     var L = listaDev().filter(function (x) { return x.estado !== 'no_lleva' && Number(x.sv) > 0; });
     var pcts = L.map(function (x) { return x.sv_pct == null ? '' : String(Number(x.sv_pct)); }).filter(function (p, i, a) { return a.indexOf(p) === i; });
     var tSv = pcts.length === 1 && pcts[0] !== '' ? 'SV (' + pctTxt(pcts[0]) + ')' : 'SV';
-    var pag = L.filter(function (x) { return x.estado === 'pagado'; }), por = L.filter(function (x) { return x.estado !== 'pagado'; });
+    var pag = L.filter(function (x) { return x.estado === 'pagado'; }), sinF = L.filter(function (x) { return x.estado === 'sin_fecha'; });
+    var por = L.filter(function (x) { return x.estado !== 'pagado' && x.estado !== 'sin_fecha'; });
     var lin = DLIS.cli ? ['Cliente: ' + DLIS.cli] : [];
-    lin.push('Pagado: ' + dinero(sumaDev(pag, 'sv')) + ' · Por pagar: ' + dinero(sumaDev(por, 'sv')));
+    lin.push('Pagado: ' + dinero(sumaDev(pag, 'sv')) + ' · Por pagar: ' + dinero(sumaDev(por, 'sv'))
+             + (sinF.length ? ' · Sin fecha de pago: ' + dinero(sumaDev(sinF, 'sv')) : ''));
     excel(b, 'Devoluciones de IVA para SV PROFASE', 'Devoluciones de IVA y SV', lin,
       ['Cliente', 'Mes devuelto', 'Cantidad devuelta', tSv, 'Fecha de pago'],
       L.map(function (x) {
         return [x.cliente || '', x.mes_txt || '', x.devuelto == null ? '' : Number(x.devuelto), Number(x.sv),
-                x.estado === 'pagado' && x.entregado_el ? fecha(x.entregado_el) : 'Por pagar'];
+                x.estado === 'pagado' ? (x.entregado_el ? fecha(x.entregado_el) : 'Pagado (sin fecha)') : x.estado === 'sin_fecha' ? 'Sin fecha de pago' : 'Por pagar'];
       }),
       [3, 4], [34, 16, 18, 16, 16],
       L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), sumaDev(L, 'sv'), '']] : null);
@@ -1995,7 +2001,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       + campo('dh-pfp', '% PROFASE (sobre lo devuelto)', inp('dh-pfp', x ? x.pf_pct : '', ' inputmode="decimal" autocomplete="off"'))
       + campo('dh-pago', 'Pago a SV', '<select id="dh-pago"' + (enPago ? ' disabled' : '') + '><option value="por_entregar"' + (pago === 'por_entregar' ? ' selected' : '') + '>Por entregar</option>'
               + '<option value="pagado"' + (pago === 'pagado' ? ' selected' : '') + '>Ya se le pagó</option><option value="sin_fecha"' + (pago === 'sin_fecha' ? ' selected' : '') + '>Sin fecha</option></select>'
-              + (enPago ? '<span class="mut">Está en el pago SV #' + esc(x.pago_id) + ': su pago se cambia desde «Pagos a SV».</span>' : ''))
+              + (enPago ? '<span class="mut">Está en el pago SV #' + esc(x.pago_id) + (x.sin_fecha_pago ? ' (pagado, sin fecha)' : '') + ': su pago se cambia desde «Pagos a SV».</span>' : ''))
       + '<div class="campo" id="dh-fec-c"><label for="dh-fec" id="dh-fec-l"></label><input type="date" id="dh-fec" value="' + esc(fec) + '"' + (enPago ? ' disabled' : '') + '></div>'
       + campo('dh-nota', 'Nota (opcional)', '<textarea id="dh-nota" maxlength="600">' + esc(x ? x.nota : '') + '</textarea>', true)
       + '</div><p class="mut" style="margin:8px 0 0">Lo de SV, lo de PROFASE, el total y la factura con IVA los calcula el sistema con lo devuelto y sus porcentajes.</p></section>'
@@ -2005,7 +2011,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function devHisFecha() {
     var v = $('dh-pago') && $('dh-pago').value; if (!v) return;
-    $('dh-fec-c').hidden = v === 'sin_fecha';
+    $('dh-fec-c').hidden = v === 'sin_fecha' || (v === 'pagado' && !!(EDITA && EDITA.x && EDITA.x.sin_fecha_pago));   // 310
     $('dh-fec-l').textContent = v === 'pagado' ? 'Se le pagó el' : 'Toca entregarlo el';
     $('dh-mes').disabled = !$('dh-anio').value;
   }
@@ -2095,7 +2101,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function svEscogidas() { return porPagarSv().filter(function (x) { return SVSEL[x.clave]; }); }
   function svEstado(g) {
     if (g.estado === 'programado') return '<span class="chip ojo">' + (String(g.programado_el).slice(0, 10) <= hoyDev() ? 'Ya toca' : 'Programado') + '</span><div class="mut">para el ' + esc(fecha(g.programado_el)) + '</div>';
-    if (g.estado === 'pagado') return '<span class="chip ok">Pagado el ' + esc(fecha(g.pagado_el)) + '</span>';
+    if (g.estado === 'pagado') return '<span class="chip ok">' + (g.pagado_el ? 'Pagado el ' + esc(fecha(g.pagado_el)) : 'Pagado, sin fecha') + '</span>';
     return '<span class="chip">' + esc(SV_EST[g.estado] || g.estado) + '</span>' + (g.cerrado_en ? '<div class="mut">el ' + esc(fechaHora(g.cerrado_en)) + '</div>' : '');
   }
   function pintaPagosSv() {
@@ -2121,7 +2127,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('t-dpag').tHead.innerHTML = '<tr><th>Pago</th><th>Estado</th><th class="monto">Devoluciones</th><th class="monto">Se le paga</th><th>Cómo</th><th>Registró</th></tr>';
     $('t-dpag').tBodies[0].innerHTML = G.map(function (g) {
       return '<tr class="click" tabindex="0" data-svpago="' + esc(g.id) + '">'
-        + '<td data-l="Pago"><strong>#' + esc(g.id) + '</strong>' + (g.origen === 'excel' ? '<div class="mut">de tu Excel IVAS</div>' : '') + (g.nota ? '<div class="mut">' + esc(g.nota) + '</div>' : '') + '</td>'
+        + '<td data-l="Pago"><strong>#' + esc(g.id) + '</strong>' + (g.origen === 'excel' ? '<div class="mut">de tu Excel IVAS</div>' : g.origen === 'antes' ? '<div class="mut">de antes de tu Excel IVAS</div>' : '') + (g.nota ? '<div class="mut">' + esc(g.nota) + '</div>' : '') + '</td>'
         + '<td data-l="Estado">' + svEstado(g) + '</td>'
         + '<td class="monto" data-l="Devoluciones">' + esc(g.n) + '</td>'
         + '<td class="monto" data-l="Se le paga"><strong>' + esc(dinero(aPagarDe(g))) + '</strong>'
@@ -2205,6 +2211,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var F = [['Estado', svEstado(g)]];
     if (g.programado_el) F.push(['Programado para', esc(fecha(g.programado_el))]);
     if (g.pagado_el) F.push(['Se le pagó el', '<strong>' + esc(fecha(g.pagado_el)) + '</strong>']);
+    else if (g.estado === 'pagado') F.push(['Se le pagó el', '<strong>Sin fecha</strong><div class="mut">' + (g.origen === 'antes' ? 'se le pagó antes de tu Excel IVAS' : '') + '</div>']);   // 310
     F.push(['Cómo', esc(FORMAS[g.forma || ''])]);
     if (g.nota) F.push(['Nota', esc(g.nota)]);
     F.push(['Lo registró', esc(g.creado_por || '') + (g.origen !== 'excel' && g.creado ? ' · ' + esc(fechaHora(g.creado)) : '')]);
@@ -2250,11 +2257,11 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var g = EDITA && EDITA.g, d = DEV.d || {}; if (!g) return;
     var prog = g.estado === 'programado', otras = prog ? porPagarSv() : [];
     EDITA = { tipo: 'svcambia', id: g.id, g: g };
-    abre(cab('Devoluciones de IVA', 'Cambiar el pago SV #' + g.id, prog ? 'Programado para el ' + fecha(g.programado_el) : 'Pagado el ' + fecha(g.pagado_el))
+    abre(cab('Devoluciones de IVA', 'Cambiar el pago SV #' + g.id, prog ? 'Programado para el ' + fecha(g.programado_el) : g.pagado_el ? 'Pagado el ' + fecha(g.pagado_el) : 'Pagado, sin fecha')
       + '<div class="cuerpo"><section class="sec"><div class="in campos">'
       + (prog ? fecCampo('Se le va a pagar el', g.programado_el)
-         : d.regresa || g.origen === 'excel' ? fecCampo('Se le pagó el (la fecha de Amazon)', g.pagado_el)
-         : '<div class="campo"><label for="sv-fec-ro">Se le pagó el</label><input id="sv-fec-ro" readonly value="' + esc(fecha(g.pagado_el)) + '"><span class="mut">La fecha de un pago ya registrado la cambia Héctor Daniel Nava.</span></div>')
+         : d.regresa || g.origen === 'excel' ? fecCampo(g.pagado_el ? 'Se le pagó el (la fecha de Amazon)' : 'Se le pagó el (si la encuentras; si no, déjala vacía)', g.pagado_el)
+         : '<div class="campo"><label for="sv-fec-ro">Se le pagó el</label><input id="sv-fec-ro" readonly value="' + esc(g.pagado_el ? fecha(g.pagado_el) : 'Sin fecha') + '"><span class="mut">La fecha de un pago ya registrado la cambia Héctor Daniel Nava.</span></div>')
       + campo('sv-forma', 'Cómo', selForma(g.forma))
       + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600">' + esc(g.nota || '') + '</textarea>', true)
       + '</div></section>'
@@ -2268,7 +2275,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   async function svCambia(b) {
     if (!EDITA || EDITA.tipo !== 'svcambia') return;
     var id = EDITA.id, p = { forma: $('sv-forma').value, nota: $('sv-nota').value.trim() }, ag = [];
-    if ($('sv-fec')) { if (!$('sv-fec').value) { msgEn('Escribe la fecha.'); return; } p.fecha = $('sv-fec').value; }
+    var sinFec = EDITA.g && EDITA.g.estado === 'pagado' && !EDITA.g.pagado_el;   // 310: el pago de antes puede seguir sin fecha
+    if ($('sv-fec')) { if ($('sv-fec').value) p.fecha = $('sv-fec').value; else if (!sinFec) { msgEn('Escribe la fecha.'); return; } }
     document.querySelectorAll('[data-svag]').forEach(function (c) { if (c.checked) ag.push(c.getAttribute('data-svag')); });
     if (ag.length) p.agrega = ag;
     b.disabled = true;
@@ -2307,7 +2315,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var G = (DEV.d || {}).pagos || [], L = porPagarSv(), filas = [];
     G.forEach(function (g) {
       (g.devs || []).forEach(function (x, i) {   // «Se le paga» (lo del pago, cerrado a cientos) va en su primer renglón
-        filas.push(['#' + g.id, SV_EST[g.estado] || g.estado, fecha(g.programado_el), fecha(g.pagado_el), g.forma ? FORMAS[g.forma] : '', x.cliente || '', x.mes_txt || '', Number(x.sv),
+        filas.push(['#' + g.id, SV_EST[g.estado] || g.estado, fecha(g.programado_el), g.estado === 'pagado' && !g.pagado_el ? 'Sin fecha' : fecha(g.pagado_el), g.forma ? FORMAS[g.forma] : '', x.cliente || '', x.mes_txt || '', Number(x.sv),
                     i === 0 ? Number(aPagarDe(g)) : '', g.nota || '', g.creado_por || '', g.motivo || '']);
       });
     });
