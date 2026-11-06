@@ -1,0 +1,660 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Costos de sistemas</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script>
+<style>
+/* Portal PROFASE · Administración › Costos de sistemas (Héctor Daniel Nava, 6-nov-2026: «para saber cuánto he gastado y
+   cuánto se ha consumido, al día, en cada sistema: CRM PROFASE, Quo Contabilita y Quo Facturita… para que mañana, cuando
+   cobremos Quo a terceros, sepamos cuánto cuesta cada uno»; «abajo de los números me pongas usd o mxn»; «una opción que diga
+   ver en MXN»). UX PROFASE: la barra (buscar, el mes, FILTROS, «Ver en MXN», Excel con su PDF, «Actualizar» y «Más ▾»), las
+   pilas de cada sistema y las de «Tu trabajo», la lista por páginas y, al picar un renglón, su ficha con el detalle por mes y
+   la regla de reparto en palabras. Lo ven Héctor Daniel Nava y Héctor Nava Ramos (solo consulta); lo cambia solo Héctor
+   Daniel Nava (cos_estado(), portal/sql/304_costos_sistemas.sql). La página solo llama sus funciones cos_*. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabla tr.fila:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.nota ul{margin:6px 0 0;padding-left:20px}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.mon{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted);margin:1px 2px 1px 0}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+.chip[data-s]::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--cs)}
+.chip[data-s="crm"]{--cs:#1F3864}.chip[data-s="contabilita"]{--cs:#2F855A}.chip[data-s="facturita"]{--cs:#6B46C1}.chip[data-s="quo_aws"]{--cs:#D9620B}
+:root[data-theme="dark"] .chip[data-s="crm"]{--cs:#8FB3F0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .chip[data-s="crm"]{--cs:#8FB3F0}}
+#cos-bar{margin:16px 0 12px}
+#sis{margin-top:4px}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla th.der,.tabla td.der{text-align:right}
+.tabla td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .serv{font-weight:700}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.barra{display:block;height:5px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-top:4px;max-width:160px}
+.barra i{display:block;height:100%;background:var(--navy)}
+.barra i.ojo{background:#B7791F}.barra i.mal{background:var(--red)}
+:root[data-theme="dark"] .barra i{background:#8FB3F0}
+.vacio{padding:20px 16px;color:var(--muted)}
+@media (max-width:760px){
+  .tabla thead{display:none}
+  .tabla,.tabla tbody,.tabla tr,.tabla td{display:block;width:100%}
+  .tabla tr.fila{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla td{border:0;padding:2px 0}
+  .tabla td.der{text-align:left}
+  .tabla td[data-e]::before{content:attr(data-e) " · ";color:var(--muted);font-size:12px;font-weight:600}
+}
+/* Ventanas */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:760px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:19px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+.pregunta>div>.acciones:last-child{position:sticky;bottom:-18px;z-index:2;background:var(--surface);margin:16px -18px -18px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.campo{display:grid;gap:4px;margin:0 0 10px;min-width:0}
+.campo label,.campo .et{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0;width:100%}
+.campo textarea{min-height:70px;resize:vertical;line-height:1.45}
+.dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0 12px}
+.radios{display:flex;flex-wrap:wrap;gap:8px 16px}
+.radios label{display:flex;gap:6px;align-items:center;font-weight:600;color:var(--ink);font-size:13.5px;white-space:nowrap}
+.campo input[type="radio"],.campo input[type="checkbox"]{width:auto;padding:0;margin:0}
+.pct{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px}
+.pct label{display:grid;gap:2px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.pct input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 8px;width:100%;min-width:0}
+.msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere;margin:0 0 10px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.az{background:var(--navy-soft);color:var(--ink)}
+.dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 14px;margin:0 0 12px}
+.dl dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.sec{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.sec h4{font-family:var(--f-display);font-stretch:85%;font-size:15px;margin:0 0 6px}
+.bit{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.bit li{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.bit b{color:var(--ink);font-weight:600}
+.meses td,.meses th{padding:6px 8px}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:700px){
+  input,select,textarea,.campo input,.campo select,.campo textarea{font-size:16px}
+  .band h1{font-size:22px}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .dl dt{margin-top:4px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Administración</div>
+      <h1>Costos de sistemas</h1>
+      <p>Cuánto se gasta y se consume, al día, en cada sistema: CRM PROFASE, Quo Contabilita, Quo Facturita y el Quo de hoy en Amazon.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <!-- UX PROFASE: la barra (buscar, el mes, FILTROS, «Ver en MXN», Excel con su PDF, «Actualizar» y «Más ▾») -->
+    <div id="cos-bar" hidden>
+      <input type="search" id="f-q" placeholder="Busca un servicio o proveedor" aria-label="Buscar">
+      <select id="f-mes" aria-label="Mes"></select>
+      <button class="btn" type="button" id="b-mxn" aria-pressed="false" title="Pasa todo a pesos con el tipo de cambio">Ver en MXN</button>
+      <button class="btn" type="button" data-excel id="x-lista">Excel</button>
+      <button class="btn acento" type="button" id="b-act" hidden>Actualizar</button>
+      <button class="btn" type="button" id="b-cap" hidden>Capturar un costo</button>
+      <button class="btn" type="button" id="b-como">Cómo se lee</button>
+    </div>
+    <div hidden><select id="f-sis" aria-label="Sistema"></select><select id="f-fuente" aria-label="De dónde sale"></select></div>
+    <section id="sis" aria-label="Cada sistema" hidden></section>
+    <div class="nota info" id="faltan" hidden></div>
+    <section id="kpis" aria-label="Tu trabajo" hidden></section>
+    <section class="caja" id="caja-lista">
+      <header><h2 id="t-lista">Servicios</h2><span class="mut" id="t-cuenta"></span></header>
+      <div class="desliza"><table class="tabla" id="tabla">
+        <thead><tr><th>Servicio</th><th>Sistema</th><th class="der">Gastado</th><th>Consumido</th><th>De dónde sale</th></tr></thead>
+        <tbody id="lista"></tbody>
+      </table></div>
+      <div class="vacio" id="lista-vacia" hidden></div>
+      <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+    </section>
+    <p class="pie" id="pie"></p>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false, PUEDE = false, DATOS = null, MES = '', Q = '', SIS = '', FUENTE = '', VISTA = '', MXN = false;
+  var SEL = null, PAG = null, BAR = null, LISTA = [], COLA = [], ABIERTO = null;
+  try { MXN = localStorage.getItem('profase-cos-mxn') === '1'; } catch (e) {}
+  var TONO = { crm: 'azul', contabilita: 'verde', facturita: 'violeta', quo_aws: 'naranja' };
+  var FUENTES = { lee_github: 'Lo lee de GitHub', lee_amazon: 'Lo lee de Amazon', lista_supabase: 'Lista de precios de Supabase',
+    base: 'Lo cuenta la base', capturado: 'Lo capturas tú', semilla: 'Del plan o la factura' };
+  var CADA = { mes: 'Cada mes', anio: 'Al año (va entre 12 cada mes)', unico: 'En cada compra', uso: 'Por lo que se usa' };
+  var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c, s) { return '<span class="chip ' + (c || '') + '"' + (s ? ' data-s="' + esc(s) + '"' : '') + '>' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var F2 = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var F0 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 });
+  function dinero(v) { if (v == null || isNaN(v)) return '—'; v = Number(v); return (v < 0 ? '−$' : '$') + F2.format(Math.abs(v)); }
+  function nombreMes(ym) { if (!ym) return ''; var p = String(ym).split('-'); return MESES[+p[1] - 1] + ' de ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1].slice(0, 3) + ' ' + p[0]; }
+  function sisNombre(k) { var s = (DATOS && DATOS.sistemas || []).filter(function (x) { return x.k === k; })[0]; return s ? s.nombre : k; }
+  function filas() { return (DATOS && DATOS.filas) || []; }
+
+  /* Lo de un renglón: lo que le toca al sistema escogido (si hay uno) o todo lo de los sistemas; en su moneda o en pesos */
+  function parteDe(f) {
+    var c = f.cargo; if (!c) return null;
+    if (SIS) { var r = (c.reparto || []).filter(function (x) { return x.k === SIS; })[0]; return r ? { usd: f.moneda === 'USD' ? r.monto : 0, mxn: r.mxn, monto: r.monto } : { monto: 0, mxn: 0 }; }
+    return { monto: c.sis, mxn: c.sis_mxn };
+  }
+  function cifra(monto, moneda, mxn) {   // el número con su moneda abajo (Héctor Daniel: «abajo de los números me pongas usd o mxn»)
+    if (MXN) return '<div class="num">' + dinero(mxn) + '</div><div class="mon">MXN</div>';
+    return '<div class="num">' + dinero(monto) + '</div><div class="mon">' + esc(moneda) + '</div>';
+  }
+  function equiv(f) { var p = parteDe(f); return p && p.mxn != null ? Number(p.mxn) : -1; }
+  function tocaSis(f, k) {
+    if (f.cargo && (f.cargo.reparto || []).some(function (r) { return r.k === k && r.frac > 0; })) return true;
+    var g = f.regla || {}; if (g.tipo === 'fijo') return g.sistema === k;
+    if (g.tipo === 'pct') return !!(g.pct && g.pct[k]);
+    if (Array.isArray(g.sistemas)) return g.sistemas.indexOf(k) >= 0;
+    return k !== 'quo_aws';
+  }
+  function sistemas(f) {   // los chips de a quién va
+    var c = f.cargo, l = c && c.reparto && c.reparto.length ? c.reparto.map(function (r) { return r.k; }) : null;
+    if (!l) { var g = f.regla || {}; l = g.tipo === 'fijo' ? [g.sistema] : g.tipo === 'pct' ? Object.keys(g.pct || {}) : (g.sistemas || ['crm', 'contabilita', 'facturita']); }
+    if (l.length === 1) return chip(sisNombre(l[0]), '', l[0]);
+    return chip('Repartido', 'az') + '<div class="mut">' + l.map(function (k) {
+      var r = c && (c.reparto || []).filter(function (x) { return x.k === k; })[0];
+      return esc(sisNombre(k)) + (r ? ' ' + Math.round(r.frac * 100) + ' %' : '');
+    }).join(' · ') + '</div>';
+  }
+  function consumo(f) {
+    var c = f.cargo || {}, u = c.unidad || f.unidad || '', v = c.consumido, inc = c.incluido != null ? c.incluido : f.incluido, tope = f.tope;
+    if (v == null && inc == null && tope == null) return '<span class="mut">—</span>';
+    if (v == null && inc != null) return '<span class="num">' + esc(F0.format(inc)) + '</span> ' + esc(u) + '<div class="mut">' + (f.cada === 'unico' ? 'comprados' : 'incluidos') + '</div>';
+    var h = v != null ? '<span class="num">' + esc(F0.format(v)) + '</span> ' + esc(u) : '';
+    var lim = tope != null && f.moneda === 'USD' && u.indexOf('US$') < 0 ? null : (inc != null ? inc : tope);
+    if (lim != null && v != null && lim > 0) {
+      var pct = Math.min(100, v / lim * 100), cl = pct >= 90 ? 'mal' : pct >= 75 ? 'ojo' : '';
+      h += '<div class="mut">de ' + esc(F0.format(lim)) + ' incluidos</div><span class="barra"><i class="' + cl + '" style="width:' + pct.toFixed(1) + '%"></i></span>';
+    } else if (tope != null) {
+      h += '<div class="mut">tope del mes: US$' + esc(F0.format(tope)) + '</div>';
+      var g = f.cargo && f.cargo.monto != null ? Math.min(100, f.cargo.monto / tope * 100) : null;
+      if (g != null) h += '<span class="barra"><i class="' + (g >= 90 ? 'mal' : g >= 75 ? 'ojo' : '') + '" style="width:' + g.toFixed(1) + '%"></i></span>';
+    }
+    return h;
+  }
+  function cerca(f) {   // cerca del tope o de lo incluido
+    var c = f.cargo; if (!c) return false;
+    if (f.tope && c.monto != null && f.moneda === 'USD' && (c.unidad || '').indexOf('US$') < 0 && c.monto / f.tope >= 0.75) return true;
+    var inc = c.incluido != null ? c.incluido : f.incluido;
+    return c.consumido != null && inc > 0 && c.consumido / inc >= 0.75;
+  }
+  var VISTAS = [
+    ['capturar', 'Por capturar', function (f) { return f.por_capturar; }, 'naranja'],
+    ['tope', 'Cerca del tope', cerca, 'rojo'],
+    ['estimado', 'Estimados', function (f) { return f.cargo && f.cargo.estimado; }, 'ambar'],
+    ['sin', 'Sin dato este mes', function (f) { return !f.cargo && !f.por_capturar; }, 'gris']
+  ];
+  function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0]; }
+
+  /* ---------- la barra ---------- */
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('cos-bar'), { caja: true, buscar: $('f-q'), periodo: [$('f-mes')],
+      filtros: d ? { grupos: [{ t: 'COSTOS', campos: [d($('f-sis'), { t: 'SISTEMA' }), d($('f-fuente'), { t: 'DE DÓNDE SALE' })] }],
+        limpiar: function () { ['f-sis', 'f-fuente'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' servicio' : ' servicios'); } } : null,
+      botones: [$('b-mxn'), $('x-lista'), $('b-act')], mas: [[$('b-cap')], [$('b-como')]] });
+  }
+  function pintaSelects() {
+    $('f-mes').innerHTML = (DATOS.meses || []).map(function (m) { return '<option value="' + esc(m) + '"' + (m === DATOS.mes ? ' selected' : '') + '>' + esc(nombreMes(m)) + '</option>'; }).join('');
+    $('f-sis').innerHTML = '<option value="">Todos los sistemas</option>' + (DATOS.sistemas || []).map(function (s) {
+      return '<option value="' + esc(s.k) + '"' + (SIS === s.k ? ' selected' : '') + '>' + esc(s.nombre) + '</option>'; }).join('');
+    var hay = {}; filas().forEach(function (f) { hay[f.fuente] = (hay[f.fuente] || 0) + 1; });
+    $('f-fuente').innerHTML = '<option value="">De todas partes</option>' + Object.keys(FUENTES).filter(function (k) { return hay[k]; }).map(function (k) {
+      return '<option value="' + k + '"' + (FUENTE === k ? ' selected' : '') + '>' + esc(FUENTES[k]) + ' (' + hay[k] + ')</option>'; }).join('');
+    $('b-mxn').setAttribute('aria-pressed', MXN ? 'true' : 'false');
+    $('b-mxn').textContent = MXN ? 'Ver cada uno en su moneda' : 'Ver en MXN';
+  }
+
+  /* ---------- las pilas: cada sistema y «Tu trabajo» ---------- */
+  function pintaSistemas() {
+    if (!window.PROFASE_PILAS) return;
+    var tc = DATOS.tc_hoy;
+    PROFASE_PILAS.pinta($('sis'), {
+      titulo: 'Cada sistema · ' + nombreMes(DATOS.mes),
+      meta: MXN ? (tc ? 'Todo en pesos · dólar a $' + F2.format(tc) + (DATOS.tc_dia ? ' (' + fecha(DATOS.tc_dia) + ')' : '') : 'Todo en pesos') : 'Gastado del mes; abajo, su moneda y lo acumulado',
+      pilas: (DATOS.sistemas || []).filter(function (s) { return s.activo; }).map(function (s) {
+        var m = s.mes || {}, a = s.acum || {}, d, txt;
+        if (MXN) { txt = dinero(m.mxn || 0); d = 'MXN · acumulado ' + dinero(a.mxn || 0) + ' MXN'; }
+        else {
+          var u = Number(m.USD || 0), x = Number(m.MXN || 0);
+          txt = u || !x ? dinero(u) : dinero(x);
+          d = (u || !x ? 'USD' + (x ? ' + ' + dinero(x) + ' MXN' : '') : 'MXN')
+            + ' · acumulado ' + [Number(a.USD || 0) ? dinero(a.USD) + ' USD' : '', Number(a.MXN || 0) ? dinero(a.MXN) + ' MXN' : ''].filter(Boolean).join(' + ') ;
+          if (!Number(a.USD || 0) && !Number(a.MXN || 0)) d += '$0.00';
+        }
+        return { k: s.k, t: s.nombre, n: Number(m.mxn || 0), txt: txt, d: d, tono: TONO[s.k] || 'azul', on: SIS === s.k,
+          title: s.nota || '' };
+      }),
+      alPicar: function (k) { SIS = SIS === k ? '' : k; $('f-sis').value = SIS; if (PAG) PAG.inicio(); pinta(); }
+    });
+  }
+  function pintaKpis() {
+    if (!window.PROFASE_PILAS) return;
+    var base = baseLista();
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · costos',
+      pilas: VISTAS.map(function (v) {
+        var n = base.filter(v[2]).length;
+        return { k: v[0], t: v[1], n: n, tono: v[3], on: VISTA === v[0], tag: PUEDE && n && v[0] === 'capturar' ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { VISTA = VISTA === k ? '' : k; if (PAG) PAG.inicio(); pinta(); },
+      boton: { t: 'Empezar a revisar', n: LISTA.length, alPicar: function () { if (!LISTA.length) return; COLA = LISTA.map(function (f) { return f.id; }); ficha(COLA[0]); } },
+      nota: 'Abre el primero de la lista; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
+  }
+  function baseLista() {   // lo que pasa la búsqueda, el sistema y de dónde sale (sin la pila de «Tu trabajo»)
+    var q = norm(Q).split(/\s+/).filter(Boolean);
+    return filas().filter(function (f) {
+      if (SIS && !tocaSis(f, SIS)) return false;
+      if (FUENTE && f.fuente !== FUENTE) return false;
+      if (!q.length) return true;
+      var t = norm([f.nombre, f.proveedor, f.grupo, FUENTES[f.fuente] || ''].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function filtradas() {
+    var l = baseLista(), v = VISTA && vista(VISTA);
+    if (v) l = l.filter(v[2]);
+    return l.sort(function (a, b) { return (b.por_capturar ? 1 : 0) - (a.por_capturar ? 1 : 0) || equiv(b) - equiv(a) || String(a.nombre).localeCompare(String(b.nombre)); });
+  }
+  function pintaFaltan() {
+    var c = DATOS.config || {}, l = (c.faltan || []).slice();
+    var h = '';
+    if (l.length) h += '<b>Para que se lea solo, falta:</b><ul>' + l.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    h += '<div class="mut" style="margin-top:6px">' + (c.ultima ? 'Se puso al día el ' + esc(fechaHora(c.ultima)) + '.' : 'Todavía no se pone al día por primera vez.')
+      + (c.pedido && (!c.ultima || c.pedido > c.ultima) ? ' Se está poniendo al día (lo pediste el ' + esc(fechaHora(c.pedido)) + ').' : '') + '</div>';
+    $('faltan').innerHTML = h; $('faltan').hidden = false;
+  }
+
+  /* ---------- la lista ---------- */
+  function pinta() {
+    var l = filtradas(); LISTA = l;
+    pintaSistemas(); pintaKpis();
+    if (BAR && BAR.f) BAR.f.pinta();
+    var v = VISTA && vista(VISTA);
+    $('t-lista').textContent = (v ? v[1] : 'Servicios') + (SIS ? ' · ' + sisNombre(SIS) : '') + ' · ' + nombreMes(DATOS.mes);
+    $('t-cuenta').textContent = l.length + (l.length === 1 ? ' servicio' : ' servicios');
+    var pag = PAG ? PAG.corta(l) : l;
+    $('lista').innerHTML = pag.map(function (f) {
+      var c = f.cargo, p = parteDe(f), gast;
+      if (!c) gast = f.por_capturar ? chip('Por capturar', 'na') : '<span class="mut">Sin dato</span>';
+      else {
+        gast = cifra(p.monto, f.moneda, p.mxn);
+        if (!MXN && f.moneda === 'USD' && p.mxn != null) gast += '<div class="mut">' + dinero(p.mxn) + ' MXN</div>';
+        if (SIS && c.sis !== p.monto) gast += '<div class="mut">de ' + (MXN ? dinero(c.sis_mxn) + ' MXN' : dinero(c.sis) + ' ' + esc(f.moneda)) + '</div>';
+        if (c.parte < 1) gast += '<div class="mut">' + Math.round(c.parte * 100) + ' % de ' + (MXN ? dinero(c.mxn) + ' MXN' : dinero(c.monto) + ' ' + esc(f.moneda)) + '</div>';
+        if (c.estimado) gast += chip('Estimado', 'ojo');
+      }
+      return '<tr class="fila' + (SEL === f.id ? ' sel' : '') + '" tabindex="0" data-id="' + esc(f.id) + '">'
+        + '<td><div class="serv">' + esc(f.nombre) + '</div><div class="mut">' + esc(f.proveedor || '') + (f.activo ? '' : ' · dado de baja') + '</div></td>'
+        + '<td data-e="Sistema">' + sistemas(f) + '</td>'
+        + '<td class="der" data-e="Gastado">' + gast + '</td>'
+        + '<td data-e="Consumido">' + consumo(f) + '</td>'
+        + '<td data-e="De dónde sale"><div>' + esc((c && c.fuente_txt) || f.fuente_txt || FUENTES[f.fuente] || '') + '</div>'
+        + (c && c.actualizado ? '<div class="mut">' + esc(fechaHora(c.actualizado)) + '</div>' : '') + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = l.length > 0;
+    $('lista-vacia').textContent = Q || SIS || FUENTE || VISTA ? 'Nada coincide con lo que escogiste.' : 'Todavía no hay costos de este mes.';
+  }
+
+  /* ---------- ventanas ---------- */
+  var antes = null;
+  function abre(html, foco) {
+    antes = document.activeElement;
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    var tecl = true; try { tecl = P.conTeclado ? !!P.conTeclado() : true; } catch (e) {}
+    try { (foco && tecl ? $(foco) : $('dlg-c').querySelector('button')).focus({ preventScroll: true }); } catch (e) {}
+    try { $('dlg-c').scrollTop = 0; } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('costos', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = ''; ABIERTO = null;
+    try { if (P.escribiendo) P.escribiendo('costos', false); } catch (e) {}
+    try { if (antes) antes.focus(); } catch (e) {}
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) cierra(); });
+
+  /* ---------- la ficha de un servicio ---------- */
+  async function ficha(id) {
+    try { var a = await rpc('cos_ficha', { p_id: id }); ABIERTO = id; SEL = id; pintaFicha(a); }
+    catch (e) { error(falla(e)); }
+  }
+  function reparto(m) {
+    return (m.reparto || []).map(function (r) {
+      return chip(sisNombre(r.k) + ' ' + Math.round(r.frac * 100) + ' %', '', r.k) + ' <span class="mut">' + (MXN ? dinero(r.mxn) + ' MXN' : dinero(r.monto) + ' ' + esc(m.moneda || '')) + '</span>';
+    }).join('<br>');
+  }
+  function pintaFicha(a) {
+    var h = '<h3 id="dlg-t">' + esc(a.nombre) + '</h3><div style="margin:0 0 10px">' + chip(FUENTES[a.fuente] || a.fuente, 'az')
+      + (a.por_capturar ? chip('Por capturar', 'na') : '') + (a.activo ? '' : chip('Dado de baja', 'mal')) + '</div>'
+      + '<dl class="dl">'
+      + (a.proveedor ? '<dt>Proveedor</dt><dd>' + esc(a.proveedor) + '</dd>' : '')
+      + '<dt>De dónde sale</dt><dd>' + esc(a.fuente_txt || FUENTES[a.fuente] || '') + '</dd>'
+      + '<dt>Se cobra</dt><dd>' + esc(CADA[a.cada] || a.cada) + (a.monto_fijo != null ? ': ' + dinero(a.monto_fijo) + ' ' + esc(a.moneda) : '') + (a.desde ? ' · desde el ' + esc(fecha(a.desde)) : '') + (a.hasta ? ' · hasta el ' + esc(fecha(a.hasta)) : '') + '</dd>'
+      + '<dt>Moneda</dt><dd>' + (a.moneda === 'USD' ? 'Dólares (USD); en pesos con el tipo de cambio del mes' : 'Pesos (MXN)') + '</dd>'
+      + '<dt>Cómo se reparte</dt><dd>' + esc(a.regla_txt || '') + (a.regla_por === 'daniel.nava' ? '<div class="mut">La regla la pusiste tú.</div>' : '<div class="mut">La regla la pone Claude con su criterio; si quieres otra, captúrala.</div>') + '</dd>'
+      + (a.parte < 1 ? '<dt>Qué parte es de los sistemas</dt><dd>' + Math.round(a.parte * 100) + ' %' + (a.parte_txt ? '<div class="mut">' + esc(a.parte_txt) + '</div>' : '') + '</dd>' : '')
+      + (a.incluye ? '<dt>Incluye</dt><dd>' + esc(a.incluye) + '</dd>' : '')
+      + (a.tope != null ? '<dt>Tope</dt><dd>US$' + esc(F2.format(a.tope)) + ' al mes</dd>' : '')
+      + (a.nota ? '<dt>Nota</dt><dd>' + esc(a.nota) + '</dd>' : '')
+      + '</dl>';
+    var ms = a.meses || [];
+    if (ms.length) h += '<div class="sec"><h4>Mes por mes</h4><div class="desliza"><table class="tabla meses"><thead><tr><th>Mes</th><th class="der">Gastado</th><th>Consumido</th><th>Cómo se repartió</th></tr></thead><tbody>'
+      + ms.map(function (m) {
+        m.moneda = a.moneda;
+        var cons = m.consumido != null ? esc(F0.format(m.consumido)) + ' ' + esc(m.unidad || '') + (m.incluido != null ? '<div class="mut">de ' + esc(F0.format(m.incluido)) + '</div>' : '')
+          : m.incluido != null ? esc(F0.format(m.incluido)) + ' ' + esc(m.unidad || a.unidad || '') + '<div class="mut">' + (a.cada === 'unico' ? 'comprados' : 'incluidos') + '</div>' : '<span class="mut">—</span>';
+        var calc = m.detalle && (m.detalle.calculo || m.detalle.nota) ? '<div class="mut">' + esc([m.detalle.calculo, m.detalle.nota].filter(Boolean).join(' ')) + '</div>' : '';
+        var comp = m.detalle && m.detalle.compras ? '<div class="mut">' + m.detalle.compras.map(function (x) { return esc(fecha(x.fecha)) + ': ' + dinero(x.monto) + (x.cantidad ? ' (' + esc(F0.format(x.cantidad)) + ' ' + esc(a.unidad || '') + ')' : '') + (x.nota ? ' · ' + esc(x.nota) : ''); }).join('<br>') + '</div>' : '';
+        return '<tr><td>' + esc(nombreMes(m.mes)) + (m.estimado ? '<div>' + chip('Estimado', 'ojo') + '</div>' : '') + '</td>'
+          + '<td class="der">' + cifra(m.monto, a.moneda, m.mxn) + (!MXN && a.moneda === 'USD' && m.mxn != null ? '<div class="mut">' + dinero(m.mxn) + ' MXN' + (m.tc ? ' · dólar a $' + F2.format(m.tc) : '') + '</div>' : '')
+          + (m.parte < 1 ? '<div class="mut">' + Math.round(m.parte * 100) + ' % es de los sistemas</div>' : '') + '</td>'
+          + '<td>' + cons + '</td><td>' + reparto(m) + (m.reparto_txt ? '<div class="mut">' + esc(m.reparto_txt) + '</div>' : '') + calc + comp + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+    else h += '<div class="sec mut">Todavía no tiene ningún mes.</div>';
+    if ((a.bitacora || []).length) h += '<div class="sec"><h4>Bitácora</h4><ul class="bit">' + a.bitacora.map(function (b) {
+      return '<li><b>' + esc(b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(fechaHora(b.hora)) + (b.texto ? '<br>' + esc(b.texto) : '') + '</li>'; }).join('') + '</ul></div>';
+    var bs = ['<button class="btn" type="button" id="f-cierra">Cerrar</button>'];
+    if (PUEDE && a.activo) bs.unshift('<button class="btn peligro" type="button" id="f-baja">Dar de baja</button>');
+    if (PUEDE && a.capturable) bs.unshift('<button class="btn acento" type="button" id="f-cap">' + (a.por_capturar ? 'Capturar' : 'Capturar o corregir') + '</button>');
+    h += '<div class="acciones">' + bs.join('') + '</div>';
+    abre(h, 'f-cierra');
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: ABIERTO, abre: ficha, antes: $('f-cierra'), clase: 'btn' });
+    $('f-cierra').onclick = function () { cierra(); pinta(); };
+    if ($('f-cap')) $('f-cap').onclick = function () { forma(a); };
+    if ($('f-baja')) $('f-baja').onclick = function () { baja(a); };
+  }
+  function baja(a) {
+    abre('<h3 id="dlg-t">Dar de baja · ' + esc(a.nombre) + '</h3><p>Deja de contar desde hoy; lo de antes se queda.</p>'
+      + '<div class="campo"><label for="b-n">¿Por qué?</label><textarea id="b-n" maxlength="600"></textarea></div><div class="msg mal" id="b-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="b-no">Cancelar</button><button class="btn peligro" type="button" id="b-si">Dar de baja</button></div>', 'b-n');
+    $('b-no').onclick = function () { ficha(a.id); };
+    $('b-si').onclick = async function () {
+      this.disabled = true;
+      try { await rpc('cos_quita', { p_id: a.id, p_motivo: $('b-n').value }); avisa('Listo: quedó dado de baja.'); await carga(); ficha(a.id); }
+      catch (e) { $('b-e').textContent = falla(e); $('b-e').hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- capturar o corregir un costo ---------- */
+  function forma(a) {
+    var S = (DATOS.sistemas || []), g = (a && a.regla) || { tipo: 'fijo', sistema: 'crm' }, t = g.tipo === 'uso' ? 'iguales' : g.tipo;
+    var hoy = DATOS.hoy, ult = a && (a.meses || [])[0];
+    var sOpt = S.map(function (s) { return '<option value="' + esc(s.k) + '"' + (g.sistema === s.k ? ' selected' : '') + '>' + esc(s.nombre) + '</option>'; }).join('');
+    var sIg = S.map(function (s) { var on = Array.isArray(g.sistemas) ? g.sistemas.indexOf(s.k) >= 0 : !s.aparte; return '<label><input type="checkbox" name="k-ig" value="' + esc(s.k) + '"' + (on ? ' checked' : '') + '> ' + esc(s.nombre) + '</label>'; }).join('');
+    var sPct = S.map(function (s) { var v = g.pct && g.pct[s.k] != null ? g.pct[s.k] : ''; return '<label>' + esc(s.nombre) + '<input type="number" min="0" max="100" step="1" inputmode="decimal" name="k-pct" data-k="' + esc(s.k) + '" value="' + esc(v) + '" placeholder="0"> </label>'; }).join('');
+    var cada = a ? a.cada : 'mes';
+    abre('<h3 id="dlg-t">' + (a ? 'Capturar · ' + esc(a.nombre) : 'Capturar un costo') + '</h3>'
+      + '<div class="msg az">Lo de cada sistema se calcula solo con la regla que escojas. Si es una compra (como timbres o una recarga), escoge «Una compra»: se suma en su mes.</div>'
+      + (a ? '' : '<div class="dos"><div class="campo"><label for="k-nom">Qué es</label><input id="k-nom" maxlength="120" placeholder="Por ejemplo: Timbox, timbres"></div>'
+          + '<div class="campo"><label for="k-prov">Proveedor</label><input id="k-prov" maxlength="80"></div></div>')
+      + '<div class="campo"><span class="et">Cada cuándo se cobra</span><div class="radios">'
+      + [['mes', 'Cada mes'], ['anio', 'Al año'], ['unico', 'Una compra']].map(function (x) { return '<label><input type="radio" name="k-cada" value="' + x[0] + '"' + ((cada === x[0] || (cada === 'uso' && x[0] === 'mes')) ? ' checked' : '') + '> ' + x[1] + '</label>'; }).join('')
+      + '</div></div>'
+      + '<div class="dos"><div class="campo"><label for="k-monto">Monto</label><input id="k-monto" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(a && a.monto_fijo != null ? a.monto_fijo : '') + '"></div>'
+      + '<div class="campo"><span class="et">Moneda</span><div class="radios">'
+      + ['MXN', 'USD'].map(function (m) { return '<label><input type="radio" name="k-mon" value="' + m + '"' + (((a && a.moneda) || 'MXN') === m ? ' checked' : '') + '> ' + m + '</label>'; }).join('')
+      + '</div></div>'
+      + '<div class="campo"><label for="k-f" id="k-f-et">Desde cuándo</label><input id="k-f" type="date" value="' + esc((a && a.desde) || hoy) + '" max="' + esc(hoy) + '"></div></div>'
+      + '<div class="dos" id="k-cant-w"><div class="campo"><label for="k-cant">Cantidad (opcional)</label><input id="k-cant" type="number" min="0" step="1" inputmode="numeric" placeholder="Por ejemplo: 1000"></div>'
+      + '<div class="campo"><label for="k-uni">De qué</label><input id="k-uni" maxlength="30" value="' + esc((a && a.unidad) || '') + '" placeholder="timbres, créditos…"></div></div>'
+      + '<div class="campo"><span class="et">De qué sistema es</span><div class="radios">'
+      + [['fijo', 'De uno solo'], ['iguales', 'En partes iguales'], ['pct', 'Por porcentajes']].map(function (x) { return '<label><input type="radio" name="k-rg" value="' + x[0] + '"' + (t === x[0] ? ' checked' : '') + '> ' + x[1] + '</label>'; }).join('')
+      + '</div></div>'
+      + '<div class="campo" id="k-rg-fijo"><select id="k-sis" aria-label="Sistema">' + sOpt + '</select></div>'
+      + '<div class="campo radios" id="k-rg-iguales">' + sIg + '</div>'
+      + '<div class="pct" id="k-rg-pct">' + sPct + '</div>'
+      + '<div class="campo"><label for="k-nota">Nota (opcional)</label><textarea id="k-nota" maxlength="600"></textarea></div>'
+      + (ult && ult.detalle && ult.detalle.compras ? '<div class="mut">Ya hay ' + ult.detalle.compras.length + ' compra(s) en ' + esc(nombreMes(ult.mes)) + '; esta se suma.</div>' : '')
+      + '<div class="msg mal" id="k-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="k-no">Cancelar</button><button class="btn acento" type="button" id="k-si">Guardar</button></div>', a ? 'k-monto' : 'k-nom');
+    function val(n) { var x = $('dlg-c').querySelector('input[name="' + n + '"]:checked'); return x ? x.value : ''; }
+    function ver() {
+      var r = val('k-rg'), c = val('k-cada');
+      $('k-rg-fijo').hidden = r !== 'fijo'; $('k-rg-iguales').hidden = r !== 'iguales'; $('k-rg-pct').hidden = r !== 'pct';
+      $('k-cant-w').hidden = c !== 'unico';
+      $('k-f-et').textContent = c === 'unico' ? 'Día de la compra' : 'Desde cuándo';
+    }
+    $('dlg-c').addEventListener('change', ver); ver();
+    $('k-no').onclick = function () { if (a) ficha(a.id); else cierra(); };
+    $('k-si').onclick = async function () {
+      var r = val('k-rg'), regla = { tipo: r };
+      if (r === 'fijo') regla.sistema = $('k-sis').value;
+      if (r === 'iguales') regla.sistemas = Array.prototype.map.call($('dlg-c').querySelectorAll('input[name="k-ig"]:checked'), function (x) { return x.value; });
+      if (r === 'pct') { regla.pct = {}; Array.prototype.forEach.call($('dlg-c').querySelectorAll('input[name="k-pct"]'), function (x) { var v = parseFloat(x.value); if (v > 0) regla.pct[x.getAttribute('data-k')] = v; }); }
+      if (r === 'iguales' && !regla.sistemas.length) { $('k-e').textContent = 'Escoge al menos un sistema.'; $('k-e').hidden = false; return; }
+      var p = { id: a ? a.id : null, nombre: a ? '' : $('k-nom').value, proveedor: a ? '' : $('k-prov').value, moneda: val('k-mon'), cada: val('k-cada'),
+        monto: $('k-monto').value, fecha: $('k-f').value, cantidad: val('k-cada') === 'unico' ? $('k-cant').value : '', unidad: $('k-uni').value, regla: regla, nota: $('k-nota').value };
+      this.disabled = true;
+      try { var x = await rpc('cos_captura', { p: p }); avisa('Listo: quedó capturado y repartido.'); await carga(); ficha(x.id); }
+      catch (e) { $('k-e').textContent = falla(e); $('k-e').hidden = false; this.disabled = false; }
+    };
+  }
+  function como() {
+    abre('<h3 id="dlg-t">Cómo se lee</h3>'
+      + '<p><b>Cada sistema</b> suma lo que le toca de cada servicio del mes que escojas. Abajo de cada número va su moneda: lo que se cobra en dólares se queda en dólares y lo que se cobra en pesos, en pesos; con «Ver en MXN» todo se pasa a pesos con el tipo de cambio FIX del DOF del mes.</p>'
+      + '<p><b>Lo compartido se reparte solo:</b> por lo que usa cada sistema cuando se puede medir (los minutos de cada repositorio en GitHub, lo que ocupa cada uno en la base de Quo, los cambios que hizo Claude en cada sistema) y, si no, en partes iguales entre los sistemas que ya existían ese mes. Cada renglón dice su regla en palabras en su ficha.</p>'
+      + '<p><b>De dónde sale cada dato:</b> GitHub y Amazon se leen solos con llaves de solo lectura; Supabase se calcula con su lista de precios y lo que mide cada base (se confirma con la factura); SuperConta y WhatsApp los cuenta la base; lo demás lo capturas tú una vez y se queda. Lo marcado «Estimado» se confirma con la factura.</p>'
+      + '<p><b>Los planes de Claude:</b> solo cuenta la parte que es de los sistemas (lo demás es trabajo del despacho); Claude la revisa cada mes con lo que se usó.</p>'
+      + '<p><b>Se pone al día solo</b> cada mañana y al momento con «Actualizar». Amazon cobra US$0.01 por cada consulta: se lee una vez al día y, con «Actualizar», como mucho cada 3 horas.</p>'
+      + '<div class="acciones"><button class="btn" type="button" id="c-ok">Cerrar</button></div>', 'c-ok');
+    $('c-ok').onclick = cierra;
+  }
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = filtradas(), titulo = 'Costos de sistemas · ' + nombreMes(DATOS.mes);
+      var S = (DATOS.sistemas || []);
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo);
+      var w1 = wb.addWorksheet('Por sistema'), h1 = ['Sistema', 'Gastado del mes (USD)', 'Gastado del mes (MXN)', 'Todo en pesos (MXN)', 'Acumulado (USD)', 'Acumulado (MXN)', 'Acumulado en pesos (MXN)'];
+      w1.columns = [28, 18, 18, 20, 18, 18, 22].map(function (x) { return { width: x }; });
+      var a0 = MK.encabezado(wb, w1, h1.length, { titulo: titulo, lineas: ['Dólar a $' + (DATOS.tc_hoy ? F2.format(DATOS.tc_hoy) : '—') + ' (FIX del DOF)', 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      w1.getRow(a0).values = h1; MK.cabecera(w1, a0, 1, h1.length);
+      S.forEach(function (s, i) { var m = s.mes || {}, x = s.acum || {}; w1.getRow(a0 + 1 + i).values = [s.nombre, +m.USD || 0, +m.MXN || 0, +m.mxn || 0, +x.USD || 0, +x.MXN || 0, +x.mxn || 0]; });
+      if (S.length) MK.cuerpo(w1, a0 + 1, a0 + S.length, 1, h1.length);
+      for (var c = 2; c <= h1.length; c++) w1.getColumn(c).numFmt = '#,##0.00';
+      MK.impresion(w1, { repetir: a0 });
+      var ws = wb.addWorksheet('Servicios');
+      var head = ['Servicio', 'Proveedor', 'Moneda', 'Gastado', 'En pesos (MXN)', 'Tipo de cambio', 'Parte de los sistemas'].concat(S.map(function (s) { return s.nombre + ' (en pesos)'; }))
+        .concat(['Consumido', 'Unidad', 'Incluido o tope', 'Cómo se reparte', 'De dónde sale', 'Estimado']);
+      ws.columns = [34, 16, 9, 14, 15, 12, 12].concat(S.map(function () { return 15; })).concat([12, 16, 14, 50, 34, 10]).map(function (x) { return { width: x }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' servicio' : ' servicios') + (SIS ? ' · ' + sisNombre(SIS) : '') + (Q ? ' · búsqueda: ' + Q : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (f, i) {
+        var c = f.cargo || {}, rep = {}; (c.reparto || []).forEach(function (r) { rep[r.k] = r.mxn; });
+        var r = ws.getRow(f0 + 1 + i);
+        r.values = [f.nombre, f.proveedor || '', f.moneda, c.monto != null ? +c.monto : (f.por_capturar ? 'Por capturar' : ''), c.mxn != null ? +c.mxn : '', c.tc != null ? +c.tc : '',
+          c.parte != null ? +c.parte : ''].concat(S.map(function (s) { return rep[s.k] != null ? +rep[s.k] : ''; }))
+          .concat([c.consumido != null ? +c.consumido : '', c.unidad || f.unidad || '', c.incluido != null ? +c.incluido : (f.tope != null ? +f.tope : ''), f.regla_txt || '', c.fuente_txt || f.fuente_txt || '', c.estimado ? 'Sí' : '']);
+        r.getCell(head.length - 2).alignment = { wrapText: true, vertical: 'top' };
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      [4, 5].concat(S.map(function (s, i) { return 8 + i; })).forEach(function (c) { ws.getColumn(c).numFmt = '#,##0.00'; });
+      ws.getColumn(6).numFmt = '0.0000'; ws.getColumn(7).numFmt = '0%';
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Costos de sistemas ' + DATOS.mes + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- traer ---------- */
+  async function carga() {
+    DATOS = await rpc('cos_lista', { p: { mes: MES || null } });
+    MES = DATOS.mes;
+    PUEDE = !!DATOS.puede && !CONSULTA;
+    $('todo').hidden = false;
+    $('b-act').hidden = !PUEDE; $('b-cap').hidden = !PUEDE;
+    barra(); pintaSelects(); pintaFaltan(); pinta();
+    $('pie').textContent = 'Los dólares se pasan a pesos con el tipo de cambio FIX que publica el DOF (el último del mes; el de hoy en el mes en curso). Nada de esto sale de esta pantalla: no va en avisos, SuperConta ni resúmenes.';
+  }
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
+  $('f-mes').onchange = async function () { MES = this.value; if (PAG) PAG.inicio(); try { await carga(); } catch (e) { error(falla(e)); } };
+  $('f-sis').onchange = function () { SIS = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-fuente').onchange = function () { FUENTE = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('b-mxn').onclick = function () { MXN = !MXN; try { localStorage.setItem('profase-cos-mxn', MXN ? '1' : '0'); } catch (e) {} pintaSelects(); pinta(); };
+  $('b-cap').onclick = function () { forma(null); };
+  $('b-como').onclick = function () { como(); };
+  $('b-act').onclick = async function () {
+    var b = this; b.disabled = true;
+    var antes = DATOS && DATOS.config && DATOS.config.ultima;
+    try {
+      var r = await rpc('cos_pide');
+      avisa(r && r.ya ? 'Ya se está poniendo al día: en unos minutos se ve lo nuevo.' : r && r.ok ? 'Listo: en unos minutos se pone al día (GitHub, Amazon, Supabase y lo demás). Esta pantalla se actualiza sola.' : 'No se pudo pedir ahora; vuelve a intentar en un momento.');
+      var n = 0;
+      (function espera() {   // revisa cada 20 s, hasta 8 minutos, si ya se puso al día
+        if (++n > 24) { b.disabled = false; return; }
+        setTimeout(async function () {
+          try { var d = await rpc('cos_lista', { p: { mes: MES || null } }); if (d.config && d.config.ultima && d.config.ultima !== antes) { await carga(); avisa('Se puso al día.'); b.disabled = false; return; } } catch (e) {}
+          espera();
+        }, 20000);
+      })();
+    } catch (e) { error(falla(e)); b.disabled = false; }
+  };
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { COLA = LISTA.map(function (f) { return f.id; }); ficha(tr.getAttribute('data-id')); } });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); COLA = LISTA.map(function (f) { return f.id; }); ficha(tr.getAttribute('data-id')); } });
+  // la campanita o el Inicio: «ver:capturar» abre la captura; «ver:por-capturar» la pila; «ver:<servicio>» su ficha
+  window.__cosAbre = function (que) {
+    var s = String(que || '').replace(/^ver:/, '');
+    if (!DATOS) return false;
+    if (s === 'capturar') { if (PUEDE) forma(null); return true; }
+    if (s === 'por-capturar') { VISTA = 'capturar'; pinta(); return true; }
+    if (s === 'sistemas') { try { $('sis').scrollIntoView({ block: 'start' }); } catch (e) {} return true; }
+    if (filas().some(function (f) { return f.id === s; })) { SEL = s; pinta(); ficha(s); return true; }
+    return false;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('cos_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para la dirección.');
+      CONSULTA = !!P.consulta || !!EST.consulta; $('consulta').hidden = !CONSULTA;
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'costos.servicios', nombre: 'Servicios', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      await carga();
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) carga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>

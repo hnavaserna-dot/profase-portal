@@ -151,7 +151,7 @@
       { k: 'rh-colaboradores', v: 'rhc', t: 'Colaboradores', d: 'Cumpleaños, ingreso y área de cada colaborador.' },
       { k: 'rh-altas', v: 'rhm', t: 'Altas y bajas', d: 'Ingresos y salidas del personal.' },
       { k: 'rh-expedientes', v: 'rhx', t: 'Expedientes del personal', d: 'Los documentos de cada colaborador: INE, domicilio, acta y lo demás.' }] },
-    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores, el IMPI y cambios al portal.', subs: [
+    { k: 'adm', t: 'Administración', d: 'Lo del despacho: caja chica, cotizadores, el IMPI, los costos de los sistemas y cambios al portal.', subs: [
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
@@ -161,6 +161,9 @@
       // IMPI (Héctor Daniel, 3-nov-2026, 17:15: «podemos subir lo del IMPI a CRM? Administración - IMPI?»; «Solo tú y HNR
       // (lector)»): el control de las notificaciones de su cuenta PASE (impi_estado(), 204_impi.sql; bloque impi_tab.js)
       { k: 'impi', v: 'imp', t: 'IMPI', d: 'Las notificaciones del IMPI: cada oficio, qué pide y su fecha límite para contestar.' },
+      // Costos de sistemas (Héctor Daniel Nava, 6-nov-2026: «para saber cuánto he gastado y cuánto se ha consumido, al día, en
+      // cada sistema»; «Lo ven solo daniel.nava y hnava»): cos_estado(), 304_costos_sistemas.sql; bloque cos_tab.js
+      { k: 'costos-sistemas', v: 'cos', t: 'Costos de sistemas', d: 'Cuánto se gasta y se consume en cada sistema: CRM, Quo Contabilita, Quo Facturita y el Quo de hoy.' },
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
