@@ -121,6 +121,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .kpi .v{font-family:var(--f-mono);font-weight:500;font-size:clamp(18px,3.4vw,23px);margin-top:5px;color:var(--band-fg);font-variant-numeric:tabular-nums}
 .kpi .s{font-size:11.5px;color:var(--band-dim);margin-top:3px}
 .kpi.flag .v{color:var(--accent)}
+/* la barrita de «En caja hoy»: cuánto queda del fondo y la marca del límite (la misma idea que la de la pestaña Fondo) */
+.kpi .gz{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.14);margin-top:9px}
+.kpi .gz i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--band-fg)}
+.kpi .gz i.bajo{background:var(--accent)}
+.kpi .gz b{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--accent)}
 @media (max-width:520px){.kpi:last-child:nth-child(odd){grid-column:1/-1}}
 
 /* ---------- cuerpo ---------- */
@@ -1034,14 +1039,14 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   function conPila(rows){ var f=PILAS_CAJA[state.pila]; return f ? rows.filter(f) : rows; }
   // Lo rechazado no cuenta en los montos: nadie lo debe hasta que se corrija
   function totales(rows){
-    var t={total:0, vueltas:0, interno:0, porAutorizar:0, pagadoPersonas:0, rechazados:0, km:0, n:0, clientes:{}};
+    var t={total:0, vueltas:0, interno:0, porAutorizar:0, nPorAut:0, pagadoPersonas:0, rechazados:0, km:0, n:0, clientes:{}};
     rows.forEach(function(m){
       var imp=Number(m.importe)||0, e=est(m);
       if(e==='rechazado'){ t.rechazados++; return; }
       t.n++; t.total+=imp; t.km+=Number(m.km)||0;
       if(tipoOf(m)==='interno') t.interno+=imp; else t.vueltas+=imp;
       if(m.cliente) t.clientes[m.cliente]=1;
-      if(e==='registrado') t.porAutorizar+=imp;
+      if(e==='registrado'){ t.porAutorizar+=imp; t.nPorAut++; }
       if((e==='autorizado' || e==='reembolsado') && propio(m)) t.pagadoPersonas+=imp;
     });
     return t;
@@ -1080,20 +1085,43 @@ tr.clic:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
     $('exportBtn').hidden = !dl || !lista.length || !veLista();
   }
 
+  // La franja de arriba (Fernando Cadengo, 5-nov-2026: que se entienda sola). «En caja hoy» es lo de hoy y no cambia con
+  // el periodo; las demás son del mes que se ve. Mismas cifras de siempre, dichas en palabras.
+  function money0(n){ return money(n).replace(/\.00$/,''); }
+  function n_g(n){ return n===1 ? '1 gasto' : n+' gastos'; }
   function renderKpis(rows){
-    var t=totales(rows), nCli=Object.keys(t.clientes).length;
+    var t=totales(rows), nCli=Object.keys(t.clientes).length, mes=nombreMes(state.periodo).split(' ')[0].toLowerCase();
     var F=state.fondo, items=[];
     // lo que hay en caja solo lo ven Fernando, Eva y la dirección: lo da la base (caja_fondo_estado)
-    if(F && F.iniciado) items.push({k:'En caja', v:money(F.disponible), s:'de '+money(F.fondo)+' · se repone bajo '+money(F.limite), flag:+F.disponible<+F.limite});
+    if(F && F.iniciado){
+      var disp=+F.disponible, fondo=+F.fondo, lim=+F.limite, bajo=disp<lim;
+      items.push({k:'En caja hoy', v:money(disp), flag:bajo,
+        s:'Fondo '+money0(fondo)+' · se repone al bajar de '+money0(lim)+(bajo && !F.abierta ? ' · ya se puede pedir' : ''),
+        bar:{pct:fondo ? Math.max(0, Math.min(100, disp/fondo*100)) : 0, lim:fondo ? Math.max(0, Math.min(100, lim/fondo*100)) : 0, bajo:bajo}});
+    }
     if(F && F.abierta && !F.maneja) items.push({k:F.abierta.estado==='solicitada'?'Por depositar':'Depositada', v:money(F.abierta.monto), s:F.abierta.folio, flag:F.abierta.estado==='solicitada' && F.deposita});
-    items.push({k:captura() && !esAut() ? 'Mis gastos del periodo' : 'Total del periodo', v:money(t.total), s:'Vueltas '+money(t.vueltas)+' · Interno '+money(t.interno)});
-    items.push({k:'Por autorizar', v:money(t.porAutorizar), s:'Registrado, sin autorizar', flag:t.porAutorizar>0 && esAut()});
-    items.push({k:'Gastos', v:String(t.n), s:t.rechazados ? t.rechazados+(t.rechazados===1?' rechazado':' rechazados') : (nCli===1?'1 cliente':nCli+' clientes')});
-    items.push({k:'Kilómetros', v:kms(t.km), s:'Recorridos en el periodo'});
+    var det=[n_g(t.n)];
+    if(t.vueltas || t.interno){
+      if(t.vueltas) det.push('Vueltas a clientes '+money0(t.vueltas)+(nCli ? ' ('+(nCli===1 ? '1 cliente' : nCli+' clientes')+')' : ''));
+      if(t.interno) det.push('Gasto interno '+money0(t.interno));
+    }
+    if(t.rechazados) det.push(t.rechazados+(t.rechazados===1?' rechazado':' rechazados'));
+    items.push({k:(captura() && !esAut() ? 'Mis gastos de ' : 'Gastado en ')+mes, v:money(t.total), s:det.join(' · ')});
+    items.push({k:'Por autorizar', v:money(t.porAutorizar), flag:t.porAutorizar>0 && esAut(),
+      s:!t.nPorAut ? 'Nada pendiente' : n_g(t.nPorAut)+(t.nPorAut===1 ? ' espera' : ' esperan')+(esAut() ? ' tu visto bueno' : ' visto bueno')});
+    if(t.km>0) items.push({k:'Kilómetros', v:kms(t.km)+' km', s:'Recorridos en '+mes});
     var box=$('kpis'); box.textContent='';
     items.forEach(function(it){
       var d=document.createElement('div'); d.className='kpi'+(it.flag?' flag':'');
-      [['k',it.k],['v',it.v],['s',it.s]].forEach(function(p){ var x=document.createElement('div'); x.className=p[0]; x.textContent=p[1]; d.appendChild(x); });
+      [['k',it.k],['v',it.v]].forEach(function(p){ var x=document.createElement('div'); x.className=p[0]; x.textContent=p[1]; d.appendChild(x); });
+      if(it.bar){
+        var g=document.createElement('div'); g.className='gz'; g.setAttribute('role','img');
+        g.setAttribute('aria-label', it.v+' de '+money(state.fondo.fondo)+'; se repone al bajar de '+money(state.fondo.limite));
+        var i=document.createElement('i'); i.style.width=it.bar.pct.toFixed(1)+'%'; if(it.bar.bajo) i.className='bajo';
+        var m=document.createElement('b'); m.style.left=it.bar.lim.toFixed(1)+'%';
+        g.appendChild(i); g.appendChild(m); d.appendChild(g);
+      }
+      var x=document.createElement('div'); x.className='s'; x.textContent=it.s; d.appendChild(x);
       box.appendChild(d);
     });
   }
