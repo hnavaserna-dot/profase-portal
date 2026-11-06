@@ -339,6 +339,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
         <details class="masf" id="masf"><summary>Más filtros</summary><div class="filtros">
           <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
+          <select id="f-dmes" aria-label="Mes que se solicita" hidden><option value="">Todos los meses que se solicitan</option></select>
           <select id="f-act" aria-label="Actividad"><option value="">Todas las actividades</option></select>
           <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
           <select id="f-cont" aria-label="Contador asignado"><option value="">Todos los contadores asignados</option></select>
@@ -468,7 +469,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   // Filtros fijos (2-nov-2026, pedido de Gabriel): lo que cada quien escoge se queda, aunque cambie de pestaña, recargue
   // o cierre el portal, hasta que pique «Limpiar filtros». Se guarda solo en su navegador (no en la base) y por usuario.
-  var FIJOS = ['f-anio', 'f-mes', 'f-buscar', 'f-est', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'], FIJO_OK = false;
+  var FIJOS = ['f-anio', 'f-mes', 'f-buscar', 'f-est', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'], FIJO_OK = false;
   function fijoClave() { return 'profase-wft-filtros|' + (YO || ''); }
   function fijoLee() { try { return JSON.parse(localStorage.getItem(fijoClave()) || 'null'); } catch (e) { return null; } }
   function fijoGuarda() {
@@ -488,8 +489,9 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('f-buscar').value = g['f-buscar'] || '';
       ['f-est', 'f-pla', 'f-resp', 'f-cont', 'f-aut', 'f-per'].forEach(function (k) { if (g[k] && [].some.call($(k).options, function (o) { return o.value === g[k]; })) $(k).value = g[k]; });
       actividades();
+      if (g['f-dmes'] && [].some.call($('f-dmes').options, function (o) { return o.value === g['f-dmes']; })) $('f-dmes').value = g['f-dmes'];
       if (g['f-act'] && [].some.call($('f-act').options, function (o) { return o.value === g['f-act']; })) $('f-act').value = g['f-act'];
-      if (['f-buscar', 'f-est', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'].some(function (k) { return g[k]; }) && $('masf')) $('masf').open = true;
+      if (['f-buscar', 'f-est', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'].some(function (k) { return g[k]; }) && $('masf')) $('masf').open = true;
     }
     FIJO_OK = true; fijoGuarda();
   }
@@ -529,10 +531,30 @@ tr.fila:hover td{background:var(--navy-soft)}
     opciones(); mostrar = PAGINA; pinta();
   }
 
+  // Devoluciones de IVA en los filtros (5-nov-2026, pedido de Fernando Cadengo: «que la devoluciones no hagan tanto bulto en
+  // el filtro de plantillas»; «sí, así es»): cada solicitud lleva su título como plantilla («Devolución de IVA · abril 2026 (2)»),
+  // así que en «Plantilla» van todas en un solo renglón y, al escogerlo, sale «Mes que se solicita» (sin el «(2)», que solo
+  // distingue dos solicitudes del mismo cliente). En la lista y en el Excel cada actividad sigue con su título.
+  var DEV_PLA = 'Devolución de IVA', DEV_PRE = /^Devolución de IVA · /,
+    MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  function plaDe(a) { return a.dev_caso ? DEV_PLA : a.plantilla; }
+  function devMes(a) { return a.dev_caso ? String(a.plantilla || '').replace(DEV_PRE, '').replace(/\s*\(\d+\)$/, '') : ''; }
+  function devMesOrden(t) { var m = /^(\S+) (\d{4})$/.exec(t), i = m ? MESES_ES.indexOf(m[1]) : -1; return i >= 0 ? (+m[2]) * 12 + i : -1; }
+  function devMeses() {
+    var ve = $('f-pla').value === DEV_PLA, v = $('f-dmes').value, o = {}, L = [];
+    if (ve) {
+      A.forEach(function (a) { var t = devMes(a); if (t) o[t] = 1; });
+      L = Object.keys(o).sort(function (x, y) { return devMesOrden(y) - devMesOrden(x) || x.localeCompare(y); });
+    }
+    $('f-dmes').innerHTML = '<option value="">Todos los meses que se solicitan</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    $('f-dmes').value = L.indexOf(v) >= 0 ? v : '';
+    $('f-dmes').hidden = !ve;
+  }
+
   function opciones() {
     var sel = function (id, todos, lista) { var v = $(id).value; $(id).innerHTML = '<option value="">' + todos + '</option>' + lista.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join(''); if (lista.indexOf(v) >= 0) $(id).value = v; };
     var u = function (f) { var o = {}; A.forEach(function (a) { var x = f(a); if (x) o[x] = 1; }); return Object.keys(o).sort(function (x, y) { return x.localeCompare(y); }); };
-    sel('f-pla', 'Todas las plantillas', u(function (a) { return a.plantilla; }));
+    sel('f-pla', 'Todas las plantillas', u(plaDe));
     actividades();
     sel('f-resp', 'Todos los responsables', u(function (a) { return a.resp_nombre; }));
     sel('f-cont', 'Todos los contadores asignados', u(cont));
@@ -543,7 +565,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
   function actividades() {
     var pl = $('f-pla').value, v = $('f-act').value, o = {};
-    A.forEach(function (a) { if (!pl || a.plantilla === pl) o[a.actividad] = 1; });
+    devMeses();
+    A.forEach(function (a) { if (!pl || plaDe(a) === pl) o[a.actividad] = 1; });
     var L = Object.keys(o).sort(function (x, y) { return x.localeCompare(y); });
     $('f-act').innerHTML = '<option value="">Todas las actividades</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
     if (L.indexOf(v) >= 0) $('f-act').value = v;
@@ -551,9 +574,10 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   function filtradas(sinEstatus) {
     var q = norm($('f-buscar').value.trim()), pl = $('f-pla').value, ac = $('f-act').value, r = $('f-resp').value, c = $('f-cont').value,
-      au = $('f-aut').value, es = $('f-est').value, pe = +$('f-per').value || 0;
+      au = $('f-aut').value, es = $('f-est').value, pe = +$('f-per').value || 0, dm = pl === DEV_PLA ? $('f-dmes').value : '';
     return A.filter(function (a) {
-      if (pl && a.plantilla !== pl) return false;
+      if (pl && plaDe(a) !== pl) return false;
+      if (dm && devMes(a) !== dm) return false;
       if (ac && a.actividad !== ac) return false;
       if (r && a.resp_nombre !== r) return false;
       if (c && cont(a) !== c) return false;
@@ -1003,7 +1027,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     nota.textContent = t === 'devolucion-facturas'
       ? 'Nuevo: en las devoluciones de IVA, al marcar el depósito nacen las dos facturas. Cada una se sube como su XML en la ficha de la devolución y se da de alta sola en Facturación; el gerente que autoriza captura ahí el monto devuelto.'
       : 'Nuevo: las devoluciones de IVA van una por solicitud, con las fechas de ley de cada paso y los botones de «¿Qué contestó el SAT?» en la ficha.'
-        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla («Devolución de IVA · …»).');
+        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla › «Devolución de IVA» (y, si quieres, el mes que se solicita).');
     var b = $('dev-abre');
     if (b && !b.hidden) { b.classList.add('nuevo'); try { b.scrollIntoView({ block: 'center' }); } catch (e) {} setTimeout(function () { b.classList.remove('nuevo'); }, 12000); }
     else { try { nota.scrollIntoView({ block: 'center' }); } catch (e) {} }
@@ -1765,9 +1789,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('f-anio').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-mes').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-pla').addEventListener('change', function () { actividades(); mostrar = PAGINA; pinta(); });
-  ['f-buscar', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  ['f-buscar', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
   $('limpia').onclick = function () {
-    ['f-buscar', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; });
+    ['f-buscar', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; });
     fijoBorra();
     // el periodo regresa al de siempre (el mes contable que se trabaja)
     var y0 = $('f-anio').value, m0 = $('f-mes').value; periodos();
