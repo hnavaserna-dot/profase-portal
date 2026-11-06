@@ -1916,6 +1916,22 @@
     pronto();
   }
 
+  /* Una colección completa, de 1,000 en 1,000 (5-nov-2026, pedido de Gabriel Cavazos): la base entrega máximo 1,000
+     renglones por pedido y antes se pedía de una sola vez. En Variaciones (var_est, var_com) ya pasan de 1,000: lo que
+     quedaba después del renglón 1,000 (por id) se guardaba bien, pero al ponerse al día la página dejaba de verlo y
+     regresaba a «Sin revisión». Mismo orden por id que docs_firmas() (85_docs_firmas.sql), para que la firma coincida. */
+  var TANDA_COL = 1000;
+  async function todaLaCol(col, campos) {
+    var todas = [];
+    for (var de = 0; ; de += TANDA_COL) {
+      var t = await sb.from('docs').select(campos).eq('col', col).order('id').range(de, de + TANDA_COL - 1);
+      if (t.error) throw error(t.error);
+      var filas = t.data || [];
+      todas = todas.concat(filas);
+      if (filas.length < TANDA_COL) return todas;
+    }
+  }
+
   /* Vigilancia: la página pide «avísame si cambia»; se revisa la versión y solo se baja lo que cambió */
   var VIG = new Set(), revisando = false, reloj = null;
   async function revisa(w) {
@@ -1928,13 +1944,9 @@
         var fila = r.data ? await leer(w.col, w.id) : null;
         w.firma = f; w.cb(foto(w.id, fila));
       } else {
-        var q = await sb.from('docs').select('id,version').eq('col', w.col).order('id');
-        if (q.error) throw q.error;
-        var f2 = (q.data || []).map(function (x) { return x.id + ':' + x.version; }).join(',');
+        var f2 = (await todaLaCol(w.col, 'id,version')).map(function (x) { return x.id + ':' + x.version; }).join(',');
         if (f2 === w.firma) return;
-        var t = await sb.from('docs').select('id,data,version').eq('col', w.col).order('id');
-        if (t.error) throw t.error;
-        var docs = (t.data || []).map(function (x) { return foto(x.id, x); });
+        var docs = (await todaLaCol(w.col, 'id,data,version')).map(function (x) { return foto(x.id, x); });
         w.firma = f2; w.cb({ docs: docs, size: docs.length, empty: !docs.length });
       }
     } catch (e) { if (w.err) { try { w.err(error(e)); } catch (_) {} } }
@@ -2017,9 +2029,7 @@
         return docRef(col + '/' + id);
       },
       get: async function () {
-        var t = await sb.from('docs').select('id,data').eq('col', col).order('id');
-        if (t.error) throw error(t.error);
-        var docs = (t.data || []).map(function (x) { return foto(x.id, x); });
+        var docs = (await todaLaCol(col, 'id,data')).map(function (x) { return foto(x.id, x); });
         return { docs: docs, size: docs.length, empty: !docs.length };
       },
       onSnapshot: function (cb, err) { return vigila({ doc: false, col: col, cb: cb, err: err, firma: null }); }

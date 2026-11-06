@@ -150,6 +150,11 @@
     + 'color:var(--sg-ink);font-size:14px;line-height:1.4;text-align:left}'
     + '.segv *{box-sizing:border-box}'
     + '.segv [hidden]{display:none!important}'
+    + '.sg-conf{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--sg-scrim)}'
+    + '.sg-conf>div{width:100%;max-width:380px;border-radius:14px;border:1px solid var(--sg-ln2);background:var(--sg-sf);box-shadow:var(--sg-sh);padding:18px 20px}'
+    + '.sg-conf b{display:block;font-size:15px;margin-bottom:6px;color:var(--sg-ink)}'
+    + '.sg-conf p{margin:0 0 14px;font-size:13px;color:var(--sg-ink2)}'
+    + '.sg-conf .sg-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}'
     + '.sg-modal{width:100%;max-width:760px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;'
     + 'border:1px solid var(--sg-ln2);background:var(--sg-sf);box-shadow:var(--sg-sh);animation:sgpop .18s cubic-bezier(.2,.9,.3,1.2)}'
     + '@keyframes sgpop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}'
@@ -352,13 +357,42 @@
       host.innerHTML = '';
       if (o.alCerrar) o.alCerrar();
     }
+    /* Que no se pierda lo escrito (5-nov-2026, pedido de Gabriel Cavazos: a Sebastián Sánchez se le cerraba la ventana al
+       desplazarse y perdía su comentario). La parte oscura solo cierra con un clic que empieza y termina en ella (antes,
+       arrastrar la barra o seleccionar texto y soltar afuera la cerraba), y si hay algo sin guardar (estatus, comentario o
+       una corrección abierta) primero pregunta: «Seguir escribiendo» o «Cerrar sin guardar». */
+    var conf = null, abajoFuera = false;
+    function pendiente() { return sucio() || !!hiloBox.querySelector('[data-edtx]'); }
+    function quitaConf() { if (conf) { conf.remove(); conf = null; } }
+    function pideCerrar() {
+      if (ocupado) return;
+      if (!pendiente()) { cerrar(); return; }
+      if (conf) return;
+      conf = document.createElement('div');
+      conf.className = 'sg-conf';
+      conf.setAttribute('role', 'alertdialog'); conf.setAttribute('aria-modal', 'true');
+      conf.innerHTML = '<div><b>Tienes cambios sin guardar</b><p>Si cierras ahora, se pierde lo que escribiste o el estatus que escogiste.</p>'
+        + '<div class="sg-acts"><button type="button" class="sg-b2" data-conf-sale>Cerrar sin guardar</button>'
+        + '<button type="button" class="sg-b1" data-conf-sigue>Seguir escribiendo</button></div></div>';
+      scrim.appendChild(conf);
+      conf.querySelector('[data-conf-sigue]').focus();
+    }
     function alTeclado(ev) {
       if (ev.key !== 'Escape' || !document.body.contains(scrim)) return;
-      ev.stopPropagation(); cerrar();
+      ev.stopPropagation();
+      if (conf) { quitaConf(); if (txt) txt.focus(); } else pideCerrar();
     }
     document.addEventListener('keydown', alTeclado, true);
+    scrim.addEventListener('pointerdown', function (ev) { abajoFuera = ev.target === scrim; });
     scrim.addEventListener('click', function (ev) {
-      if (ev.target === scrim || ev.target.closest('[data-x],[data-cancelar]')) cerrar();
+      if (conf && conf.contains(ev.target)) {
+        if (ev.target.closest('[data-conf-sale]')) cerrar();
+        else if (ev.target.closest('[data-conf-sigue]')) { quitaConf(); if (txt) txt.focus(); }
+        return;
+      }
+      if (ev.target === scrim) { if (abajoFuera) pideCerrar(); abajoFuera = false; return; }
+      abajoFuera = false;
+      if (ev.target.closest('[data-x],[data-cancelar]')) pideCerrar();
     });
     ponFotos(hiloBox);
     // los minutos para corregir o borrar lo propio corren solos mientras la ventana está abierta
