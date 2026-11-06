@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/filtros.js?v=46f3a7a51e"></script><script src="js/pilas.js?v=ed7f02db96"></script>
 <style>
 /* Portal PROFASE · Tesorería › Facturación (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): alta masiva del mes
    (propuesta con los servicios contratados y su precio vigente), alta y cambio a mano, folios y bajas con motivo, como
@@ -129,6 +129,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 .ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
 .ficha .cab .rfc{color:var(--band-dim)}
 .ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cab .ppl-nav{margin-left:auto}
+@media (max-width:640px){.ficha .cab{flex-wrap:wrap}.ficha .cab .ppl-nav{margin-left:0}}
+#fac-bar{margin:16px 0 12px}
 .ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
 .sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
 .sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
@@ -241,24 +244,23 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div class="cargando" id="cargando">Cargando las facturas…</div>
 
   <div id="principal" hidden>
-    <section class="kpis" aria-label="Resumen">
-      <div class="kpi"><div class="l">Facturas</div><div class="v num" id="k-n">–</div><div class="s" id="k-n-s">&nbsp;</div></div>
-      <div class="kpi"><div class="l">Facturado</div><div class="v num" id="k-tot">–</div><div class="s">con IVA</div></div>
-      <div class="kpi"><div class="l">Cobrado</div><div class="v num" id="k-cob">–</div><div class="s" id="k-cob-s">&nbsp;</div></div>
-      <div class="kpi" id="k-sal-c"><div class="l">Saldo</div><div class="v num" id="k-sal">–</div><div class="s" id="k-sal-s">&nbsp;</div></div>
-    </section>
+    <!-- UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (buscar, el periodo, FILTROS y Excel con su PDF), «Tu trabajo»
+         (las facturas por estado, con su monto) y la lista por páginas; los <select> de antes los usa FILTROS -->
+    <div id="fac-bar" hidden>
+      <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio, concepto)" aria-label="Buscar">
+      <select id="f-mes" aria-label="Mes de la factura"></select>
+      <select id="f-anio" aria-label="Año de la factura"></select>
+      <select id="f-dia" aria-label="Día de la factura" hidden></select>
+      <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
+    </div>
+    <div hidden>
+      <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
+      <select id="f-est" aria-label="Estado"><option value="">Pagadas y con saldo</option><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="sinfolio">Sin folio</option></select>
+    </div>
+    <section id="fac-pilas" hidden></section>
     <section class="card" aria-labelledby="h-lista">
       <header>
         <div><h2 id="h-lista">Facturas</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio, concepto)" aria-label="Buscar">
-          <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
-          <select id="f-anio" aria-label="Año de la factura"></select>
-          <select id="f-mes" aria-label="Mes de la factura"></select>
-          <select id="f-dia" aria-label="Día de la factura" hidden></select>
-          <select id="f-est" aria-label="Estado"><option value="">Pagadas y con saldo</option><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="sinfolio">Sin folio</option></select>
-          <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
-        </div>
       </header>
       <div class="tabla"><table id="lista"><thead><tr><th>Folio</th><th>Cliente</th><th>Estado</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Saldo</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="lista-vacia" hidden>Ninguna factura con estos filtros.</div>
@@ -352,8 +354,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('f-dia').value = $('f-mes').value ? d0 : '';
   }
 
-  function filtradas() {
-    var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = $('f-est').value;
+  function filtradas(sinEstado) {
+    var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = sinEstado ? '' : $('f-est').value;
     var dd = m && !$('f-dia').hidden ? (+$('f-dia').value || 0) : 0;
     return F.filter(function (f) {
       if (c && String(f.compania) !== c) return false;
@@ -368,14 +370,45 @@ tr.fila:hover td{background:var(--navy-soft)}
     });
   }
 
+  /* UX PROFASE: la barra y «Tu trabajo». Las pilas son los estados de «Estado» (con saldo, pagadas, sin folio), contadas con
+     los demás filtros; picar una deja el estado en eso (otra vez, lo quita). «Revisar una por una» abre la primera y en su
+     ficha «‹ N de M Siguiente ›». */
+  var BAR = null, LISTA = [], FCOLA = [];
+  function armaBarra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('fac-bar'), {
+      caja: true, buscar: $('f-buscar'), periodo: [$('f-mes'), $('f-anio'), $('f-dia')],
+      filtros: d ? { grupos: [{ t: 'FACTURAS', campos: [d($('f-est'), { t: 'ESTADO' }), d($('f-cia'), { t: 'COMPAÑÍA QUE COBRA' })] }],
+        limpiar: function () { ['f-est', 'f-cia'].forEach(function (k) { var x = $(k); if (x.value !== '' && [].some.call(x.options, function (o) { return o.value === ''; })) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + (LISTA.length === 1 ? '1 factura' : LISTA.length + ' facturas'); } } : null,
+      botones: [$('x-fac')]
+    });
+  }
+  function pintaPilas(base) {
+    if (!window.PROFASE_PILAS) return;
+    var n = { saldo: 0, pagada: 0, sinfolio: 0 }, m = { saldo: 0, pagada: 0, sinfolio: 0 }, tot = 0, cob = 0;
+    base.forEach(function (f) { tot += f.total; cob += f.pagado; if (f.pagada) { n.pagada++; m.pagada += f.total; } else { n.saldo++; m.saldo += f.saldo; } if (!f.folio) { n.sinfolio++; m.sinfolio += f.total; } });
+    var e = $('f-est').value, alta = !P.consulta && ciasAlta().length;
+    var cola = e ? LISTA : base.filter(function (f) { return !f.pagada; });
+    PROFASE_PILAS.pinta($('fac-pilas'), {
+      titulo: 'Tu trabajo · las facturas',
+      meta: plural(base.length, 'factura', 'facturas') + ' · ' + dineroCorto(tot) + ' facturado' + (tot ? ' · ' + Math.round(100 * cob / tot) + ' % cobrado' : ''),
+      pilas: [
+        { k: 'saldo', t: 'Con saldo', n: n.saldo, d: dineroCorto(m.saldo) + ' por cobrar', tono: 'naranja', on: e === 'saldo' },
+        { k: 'sinfolio', t: 'Sin folio', n: n.sinfolio, d: n.sinfolio ? 'Les falta su folio' : 'Todas traen folio', tono: 'rojo', on: e === 'sinfolio', tag: alta && n.sinfolio ? 'Te toca' : '' },
+        { k: 'pagada', t: 'Pagadas', n: n.pagada, d: dineroCorto(m.pagada), tono: 'verde', on: e === 'pagada' }],
+      alPicar: function (k) { var x = $('f-est'); x.value = x.value === k ? '' : k; x.dispatchEvent(new Event('change', { bubbles: true })); },
+      boton: { t: e ? 'Revisar estas' : 'Revisar las de saldo', n: cola.length, alPicar: function () { if (!cola.length) return; FCOLA = cola.map(function (f) { return f.id; }); abreFactura(FCOLA[0]); } },
+      nota: 'Abre la primera; en su ficha, «Siguiente ›» pasa a la que sigue.'
+    });
+  }
+  function plural(n, a, b) { return n + ' ' + (n === 1 ? a : b); }
   function pinta() {
-    var L = filtradas(), tot = 0, cob = 0, sal = 0, conSaldo = 0, varias = !$('f-cia').hidden;
-    L.forEach(function (f) { tot += f.total; cob += f.pagado; if (!f.pagada) { sal += f.saldo; conSaldo++; } });
-    $('k-n').textContent = L.length; $('k-n-s').textContent = conSaldo + ' con saldo';
-    $('k-tot').textContent = dineroCorto(tot); $('k-cob').textContent = dineroCorto(cob);
-    $('k-cob-s').textContent = tot ? Math.round(100 * cob / tot) + ' % de lo facturado' : ' ';
-    $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = conSaldo === 1 ? '1 factura' : conSaldo + ' facturas';
-    $('k-sal-c').className = 'kpi' + (sal >= 1 ? ' ojo' : '');
+    armaBarra();
+    var L = filtradas(), varias = !$('f-cia').hidden; LISTA = L;
+    pintaPilas(filtradas(true));
+    if (BAR && BAR.f) BAR.f.pinta();
     $('lista-sub').textContent = L.length === 1 ? '1 factura' : L.length + ' facturas';
     $('lista').tBodies[0].innerHTML = PAG.corta(L).map(function (f) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '</td>'
@@ -424,6 +457,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       : '<div class="vacio">' + (f.origen === 'portal' || f.creado_por ? 'Sin cambios anotados.' : 'Viene del Access (antes del portal no se anotaba quién hizo cada cosa).') + '</div>');
     h += '</div>';
     abre(h);
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: FCOLA, id: id, abre: abreFactura, antes: $('cerrar'), clase: 'btn' });   // ‹ N de M Siguiente ›
     if (f.compania === 1) devFac(f.id);
   }
   async function devFac(id, aviso) {
@@ -739,7 +773,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     var fila = t.closest && t.closest('tr.fila[data-id]');
-    if (fila) { abreFactura(+fila.getAttribute('data-id')); return; }
+    if (fila) { FCOLA = LISTA.map(function (f) { return f.id; }); abreFactura(+fila.getAttribute('data-id')); return; }
     if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
     if (t.id === 'a-editar') { abreManual(+t.getAttribute('data-f')); return; }
     if (t.id === 'a-folio') { zonaFolio(+t.getAttribute('data-f')); return; }

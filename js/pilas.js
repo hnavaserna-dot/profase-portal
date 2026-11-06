@@ -242,7 +242,7 @@
     }
     if (o.periodo && o.periodo.length) {   // lo que recarga los datos (año, mes o periodo): a la vista, no dentro de FILTROS
       var pp = document.createElement('span'); pp.className = 'ppl-per';
-      o.periodo.forEach(function (n) { if (n) { n.hidden = false; pp.appendChild(n); } });
+      o.periodo.forEach(function (n) { if (n) pp.appendChild(n); });   // lo que la pantalla esconde (p. ej. el día sin mes) sigue escondido
       donde.appendChild(pp);
     }
     if (o.filtros && window.PROFASE_FILTROS) {
