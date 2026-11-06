@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Cambios al portal (29-oct-2026, pedido de Daniel). Gabo (Gabriel Cavazos) propone cambios desde su
    Claude; Daniel o Fernando Cadengo los revisan aquí y, con «Autorizar», se publican solos. Quién ve y hace qué lo
@@ -103,7 +103,11 @@ button,select,input,textarea{font:inherit;color:inherit}
 .tabs button{flex:none;border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;min-height:36px}
 .tabs button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
 :root[data-theme="dark"] .tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent)}
-.lista{display:grid;gap:10px;margin:0 0 24px}
+.lista{display:grid;gap:10px;margin:0 0 12px}
+/* UX PROFASE (6-nov-2026): la barra con el buscador, las pilas de «Tu trabajo» y, en lo abierto, «‹ N de M Siguiente ›» */
+.chg-bar{margin:0 0 4px}
+.det-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:16px 0 0}.det-cab .volver{margin:0}
+.pgn:empty{display:none}.pgn{margin:0 0 12px}
 .item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-strong);border-radius:12px;padding:12px 14px;cursor:pointer}
 .item:hover{border-color:var(--navy);border-left-color:inherit}
 .item.verde{border-left-color:var(--ok)}.item.amarillo{border-left-color:var(--accent)}.item.rojo,.item.bloqueada{border-left-color:var(--red)}
@@ -259,7 +263,10 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       <button type="button" data-g="pend" aria-pressed="true">Por decidir</button>
       <button type="button" data-g="hist" aria-pressed="false">Decididas</button>
     </div>
+    <div class="chg-bar" id="pc-bar"><input type="search" id="q-pc" placeholder="Buscar qué pide, el área o de quién es la idea" aria-label="Buscar peticiones"></div>
+    <div id="pc-pilas"></div>
     <div class="lista" id="plista"></div>
+    <nav class="pgn" id="pc-pag" aria-label="Páginas de peticiones"></nav>
     <p class="pie" id="ppie"></p>
   </section>
 
@@ -270,7 +277,10 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       <button type="button" data-f="pend" aria-pressed="true">Pendientes</button>
       <button type="button" data-f="hist" aria-pressed="false">Historial</button>
     </div>
+    <div class="chg-bar" id="pg-bar"><input type="search" id="q-pg" placeholder="Buscar el número, qué pide o de quién es" aria-label="Buscar propuestas"></div>
+    <div id="pg-pilas"></div>
     <div class="lista" id="lista"></div>
+    <nav class="pgn" id="pg-pag" aria-label="Páginas de propuestas"></nav>
     <p class="pie" id="pie"></p>
   </section>
 
@@ -294,6 +304,8 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   var ROL = null, YO = null, FILTRO = 'pend', FILAS = [], VISTO = {}, NOMBRES = {}, ABIERTA = null, CAMBIO = {}, MSJS = [], FIRMA = '', URLS = {}, cargando = false;
   // Filtro «Cadengo» / «Gabo» (2-nov-2026; 144_peticiones_cadengo.sql): PCAD es lo que dice pcad_estado() (solo la
   // dirección; null para los demás: a ellos la ventana les queda igual). PFILAS, las peticiones; PABIERTA, la abierta.
+  // UX PROFASE (6-nov-2026): GFX/PPX, la pila escogida (dentro de la pestaña); COLA/PCOLA, el orden de lo abierto
+  var GFX = '', PPX = '', COLA = [], PCOLA = [], GVISTA = [], PVISTA = [], PGG = null, PGC = null, FIRG = '', FIRC = '';
   var QUIEN = 'gab', PCAD = null, PFILAS = [], PFILTRO = 'pend', PABIERTA = null, PDET = null, pcargando = false, SUB = {}, LEER_GAB = '', pFiltroAuto = true;
   var PEND = ['por_autorizar', 'choca', 'error', 'autorizada', 'deshaciendo'];
   var ESTADO = { por_autorizar: 'Por autorizar', autorizada: 'Publicándose', publicada: 'Publicada', rechazada: 'Rechazada',
@@ -315,6 +327,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var d = Math.round(h / 24); return 'hace ' + d + (d === 1 ? ' día' : ' días');
   }
   function nombre(u) { return u ? (NOMBRES[u] || u) : ''; }
+  function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function puedeEscribir() { return !P.consulta && ROL !== 'consulta'; }
   function aviso(t, cls) { var a = $('aviso'); a.className = 'nota' + (cls ? ' ' + cls : ''); a.textContent = t; a.hidden = !t; }
   function avisaArriba() { try { window.parent.postMessage({ tipo: 'cambios-avisos' }, location.origin); } catch (e) { /* abierta sola */ } }
@@ -373,6 +386,16 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       $('leer').hidden = !RESP.respaldo;
     }
     try { var n = await sb.rpc('cambios_nombres'); (n.data || []).forEach(function (x) { NOMBRES[x.usuario] = x.nombre; }); } catch (e) {}
+    if (window.PROFASE_PILAS) {
+      PROFASE_PILAS.barra($('pc-bar'), { caja: true, buscar: $('q-pc') });
+      PROFASE_PILAS.barra($('pg-bar'), { caja: true, buscar: $('q-pg') });
+    }
+    if (window.PROFASE_PAGINAS) {
+      PGC = PROFASE_PAGINAS.crea({ donde: $('pc-pag'), clave: 'cambios-pcad', nombre: 'Peticiones', arriba: $('plista'), cambio: function () { pintaPcad(); } });
+      PGG = PROFASE_PAGINAS.crea({ donde: $('pg-pag'), clave: 'cambios-gabo', nombre: 'Propuestas', arriba: $('lista'), cambio: function () { pintaLista(); } });
+    }
+    $('q-pc').addEventListener('input', function () { pintaPcad(); });
+    $('q-pg').addEventListener('input', function () { pintaLista(); });
     var hs = location.hash, id = +(hs.match(/^#p(\d+)$/) || [])[1], pk = (hs.match(/^#c([0-9a-z-]{13,110})$/) || [])[1];
     // la dirección abre en «Cadengo» (la última instancia: ya pasó por él); en «Gabo» si viene a una propuesta. Fernando
     // abre en «Gabo» (es lo que él revisa), salvo que venga a una petición suya
@@ -451,11 +474,36 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var pend = PFILAS.filter(function (p) { return p.estado === 'por_decidir'; }), hist = PFILAS.filter(function (p) { return p.estado !== 'por_decidir'; });
     document.querySelector('#v-pcad [data-g="pend"]').textContent = 'Por decidir' + (pend.length ? ' (' + pend.length + ')' : '');
     document.querySelector('#v-pcad [data-g="hist"]').textContent = 'Decididas' + (hist.length ? ' (' + hist.length + ')' : '');
-    var l = PFILTRO === 'pend' ? pend : hist;
-    $('plista').innerHTML = l.length ? l.map(itemP).join('') : '<div class="vacio">' + (PFILTRO === 'pend'
+    var base = PFILTRO === 'pend' ? pend : hist, q = norm($('q-pc').value);
+    if (q) base = base.filter(function (p) { return norm([p.titulo, p.area, origen(p), p.decision, p.archivo].join(' ')).indexOf(q) >= 0; });
+    // «Tu trabajo» de la pestaña: cada pila deja la lista con esas (picarla otra vez la quita)
+    var PRED = { nue: function (p) { return p.nueva; }, mov: seMovio, si: function (p) { return p.sentido === 'si'; }, no: function (p) { return p.sentido === 'no'; } };
+    var cuenta = function (k) { return base.filter(PRED[k]).length; }, decido = papel() === 'decide' && !P.consulta;
+    if ((PFILTRO === 'pend' ? ['nue', 'mov'] : ['si', 'no', 'nue']).indexOf(PPX) < 0) PPX = '';
+    var pilas = PFILTRO === 'pend'
+      ? [{ k: '', t: 'Por decidir', n: base.length, d: quienDecide() ? 'esperan a H\u00e9ctor Daniel Nava' : 'esperan tu «sí» o tu «no»', tono: 'naranja', on: false, tag: decido && base.length ? 'Te toca' : '' },
+        { k: 'nue', t: 'Nuevas', n: cuenta('nue'), d: 'no las has leído', tono: 'azul', on: PPX === 'nue' },
+        { k: 'mov', t: 'Se actualizaron', n: cuenta('mov'), d: 'Fernando les agregó algo', tono: 'violeta', on: PPX === 'mov' }]
+      : [{ k: '', t: 'Decididas', n: base.length, d: 'todas', tono: 'azul', on: false },
+        { k: 'si', t: 'Autorizadas', n: cuenta('si'), d: 'les dijo que sí', tono: 'verde', on: PPX === 'si' },
+        { k: 'no', t: 'No autorizadas', n: cuenta('no'), d: 'les dijo que no', tono: 'rojo', on: PPX === 'no' },
+        { k: 'nue', t: 'Nuevas', n: cuenta('nue'), d: papel() === 'pide' ? 'ya decididas, sin verlas' : 'no las has leído', tono: 'naranja', on: PPX === 'nue' }];
+    var l = PPX && PRED[PPX] ? base.filter(PRED[PPX]) : base;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('pc-pilas'), {
+      titulo: 'Tu trabajo · ' + (papel() === 'pide' ? 'tus peticiones' : 'las peticiones de Cadengo'),
+      pilas: pilas,
+      alPicar: function (k) { PPX = PPX === k ? '' : k; pintaPcad(); },
+      boton: decido && PFILTRO === 'pend' ? { t: 'Empezar a revisar', n: l.length, alPicar: function () { if (!l.length) return; PCOLA = l.map(function (p) { return p.archivo; }); abrePet(l[0].archivo); } } : null
+    });
+    var firma = [PFILTRO, PPX, q].join('|');
+    if (PGC && firma !== FIRC) PGC.inicio();
+    FIRC = firma;
+    var V = PGC ? PGC.corta(l) : l;
+    $('plista').innerHTML = V.length ? V.map(itemP).join('') : '<div class="vacio">' + (q || PPX ? 'Nada con lo que escogiste.' : PFILTRO === 'pend'
       ? (papel() === 'pide' ? 'No tienes peticiones esperando a H\u00e9ctor Daniel Nava. Cuando tu Claude le pida autorizar algo, aparece aquí; cuando la decida, te llega el aviso.'
         : papel() === 'consulta' ? 'No hay peticiones de Fernando Cadengo por decidir.' : 'No hay peticiones de Cadengo por decidir. Cuando su Claude te pida autorizar algo, aparece aquí y te llega el aviso a la campanita.')
       : 'Todavía no hay peticiones decididas.') + '</div>';
+    PVISTA = l;
     $('ppie').textContent = pend.length ? pend.length + (pend.length === 1 ? ' petición espera ' : ' peticiones esperan ') + (quienDecide() ? 'la decisión de H\u00e9ctor Daniel Nava.' : 'tu decisión.') : '';
     pintaCuentas();
   }
@@ -491,7 +539,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   }
   async function pintaPet(refresco) {
     var p = PFILAS.find(function (x) { return x.archivo === PABIERTA; });
-    var vol = '<button type="button" class="volver" id="pvolver">← Todas las peticiones</button>';
+    var vol = '<div class="det-cab" id="pcab"><button type="button" class="volver" id="pvolver">← Todas las peticiones</button></div>';
     if (!p) {
       if (refresco && PDET === false) return;
       PDET = false;
@@ -516,6 +564,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       + (sec.pre ? tarjeta('De qué se trata', sec.pre) : '')
       + sec.list.filter(function (x) { return x !== dec; }).map(function (x) { return tarjeta(x.t, x.md); }).join('');
     $('pvolver').onclick = cierraPet;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: PCOLA, id: p.archivo, donde: $('pcab'), clase: 'btn chico', abre: function (x) { abrePet(x); } });
     var cp = $('copiar');
     if (cp) cp.onclick = function () {
       var t = $('frase').textContent;
@@ -646,14 +695,42 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var porAut = pend.filter(function (p) { return p.estado === 'por_autorizar'; }).length;
     document.querySelector('#v-lista .tabs [data-f="pend"]').textContent = 'Pendientes' + (pend.length ? ' (' + pend.length + ')' : '');
     document.querySelector('#v-lista .tabs [data-f="hist"]').textContent = 'Historial' + (hist.length ? ' (' + hist.length + ')' : '');
-    var l = FILTRO === 'pend' ? pend : hist;
-    if (!l.length) {
-      $('lista').innerHTML = '<div class="vacio">' + (FILTRO === 'pend'
+    var base = FILTRO === 'pend' ? pend : hist, q = norm($('q-pg').value);
+    if (q) base = base.filter(function (p) { return norm(['#' + p.id, p.id, p.titulo, p.rama, nombre(p.proponente), p.github, ESTADO[p.estado]].join(' ')).indexOf(q) >= 0; });
+    // «Tu trabajo» de la pestaña (UX PROFASE, 6-nov-2026): cada pila deja la lista con esas (picarla otra vez la quita)
+    var es = function () { var a = [].slice.call(arguments); return function (p) { return a.indexOf(p.estado) >= 0; }; };
+    var PRED = { aut: es('por_autorizar'), prob: es('choca', 'error'), cam: es('autorizada', 'deshaciendo'), nue: nuevo,
+      pub: es('publicada'), rec: es('rechazada'), ret: es('retirada'), des: es('deshecha') };
+    if ((FILTRO === 'pend' ? ['aut', 'prob', 'cam', 'nue'] : ['pub', 'rec', 'ret', 'des']).indexOf(GFX) < 0) GFX = '';
+    var n = function (k) { return base.filter(PRED[k]).length; };
+    var autorizo = ROL === 'autoriza' && puedeEscribir(), propongo = ROL === 'propone' && puedeEscribir();
+    var pil = function (k, t, d, tono, tag) { var c = n(k); return { k: k, t: t, n: c, d: d, tono: tono, on: GFX === k, tag: tag && c ? 'Te toca' : '' }; };
+    var pilas = FILTRO === 'pend'
+      ? [pil('aut', 'Por autorizar', RESP.respaldo ? 'las revisa ' + encargados() : 'esperan su revisión', 'naranja', autorizo && !RESP.respaldo),
+        pil('prob', 'Con problema', 'chocan o no se publicaron', 'rojo', propongo),
+        pil('cam', 'Publicándose', 'ya autorizadas', 'azul'),
+        pil('nue', 'Nuevas para ti', 'no las has visto', 'violeta')]
+      : [pil('pub', 'Publicadas', 'ya están en el portal', 'verde'), pil('rec', 'Rechazadas', 'les dijeron que no', 'rojo'),
+        pil('ret', 'Retiradas', 'las retiró quien las propuso', 'gris'), pil('des', 'Deshechas', 'se regresaron', 'gris')];
+    var l = GFX ? base.filter(PRED[GFX]) : base, cola = l.filter(PRED.aut);
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('pg-pilas'), {
+      titulo: 'Tu trabajo · ' + (ROL === 'propone' ? 'tus propuestas' : 'las propuestas de Gabo'),
+      pilas: pilas,
+      alPicar: function (k) { GFX = GFX === k ? '' : k; pintaLista(); },
+      boton: autorizo && FILTRO === 'pend' ? { t: 'Empezar a revisar', n: cola.length, alPicar: function () { if (!cola.length) return; COLA = cola.map(function (p) { return p.id; }); abre(cola[0].id); } } : null
+    });
+    var firma = [FILTRO, GFX, q].join('|');
+    if (PGG && firma !== FIRG) PGG.inicio();
+    FIRG = firma;
+    GVISTA = l;
+    var V = PGG ? PGG.corta(l) : l;
+    if (!V.length) {
+      $('lista').innerHTML = '<div class="vacio">' + (q || GFX ? 'Nada con lo que escogiste.' : FILTRO === 'pend'
         ? (ROL === 'propone' ? 'No tienes propuestas pendientes. Pídele a tu Claude un cambio del portal; cuando lo suba, pica «Mandar a autorizar».'
           : 'No hay propuestas pendientes. Cuando Gabo mande una, aparece aquí y te sale el aviso en el menú.')
         : 'Todavía no hay propuestas publicadas, rechazadas ni retiradas.') + '</div>';
     } else {
-      $('lista').innerHTML = l.map(function (p) {
+      $('lista').innerHTML = V.map(function (p) {
         var rev = p.revision || {}, n = (rev.areas || []).length, li = rev.lineas || {};
         return '<button type="button" class="item ' + esc(p.semaforo) + '" data-id="' + p.id + '">'
           + '<div class="t"><span class="h">#' + p.id + ' · ' + esc(p.titulo || p.rama) + '</span>' + (nuevo(p) ? '<span class="chip nuevo">Nuevo</span>' : '') + '</div>'
@@ -704,7 +781,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     var abiertoTec = document.querySelector('#v-det details.tec[open]');
     var borrador = $('m-txt') ? $('m-txt').value : '';
     var rev = p.revision || {};
-    var h = '<button type="button" class="volver" id="volver">← Todas las propuestas</button>'
+    var h = '<div class="det-cab" id="dcab"><button type="button" class="volver" id="volver">← Todas las propuestas</button></div>'
       + '<h2>#' + p.id + ' · ' + esc(p.titulo || p.rama) + '</h2>'
       + '<div class="m">De ' + esc(nombre(p.proponente) || p.github || 'alguien sin reconocer') + ' · llegó ' + esc(hora(p.creada)) + (p.actualizada !== p.creada ? ' · último movimiento ' + esc(hace(p.actualizada)) : '')
       + ' · rama <code>' + esc(p.rama) + '</code></div>'
@@ -719,6 +796,7 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       + conversacion(p);
     $('v-det').innerHTML = h;
     $('volver').onclick = cierra;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: p.id, donde: $('dcab'), clase: 'btn chico', abre: function (x) { abre(x); } });
     var tec = $('tec');
     tec.addEventListener('toggle', function () { if (tec.open) cambio(p); });
     if (tec.open) cambio(p);
@@ -945,14 +1023,14 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
 
   document.querySelectorAll('#v-lista .tabs button').forEach(function (b) {
     b.onclick = function () {
-      FILTRO = b.dataset.f;
+      FILTRO = b.dataset.f; GFX = '';
       document.querySelectorAll('#v-lista .tabs button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
       pintaLista();
     };
   });
   document.querySelectorAll('#v-pcad .tabs button').forEach(function (b) {
     b.onclick = function () {
-      PFILTRO = b.dataset.g; pFiltroAuto = false;
+      PFILTRO = b.dataset.g; pFiltroAuto = false; PPX = '';
       document.querySelectorAll('#v-pcad .tabs button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
       pintaPcad();
     };
@@ -965,8 +1043,8 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       if (QUIEN === 'cad') cargaPcad(true); else carga(true);
     };
   });
-  $('lista').addEventListener('click', function (e) { var it = e.target.closest('.item'); if (it) abre(+it.dataset.id); });
-  $('plista').addEventListener('click', function (e) { var it = e.target.closest('.item'); if (it) abrePet(it.dataset.a); });
+  $('lista').addEventListener('click', function (e) { var it = e.target.closest('.item'); if (it) { COLA = GVISTA.map(function (p) { return p.id; }); abre(+it.dataset.id); } });
+  $('plista').addEventListener('click', function (e) { var it = e.target.closest('.item'); if (it) { PCOLA = PVISTA.map(function (p) { return p.archivo; }); abrePet(it.dataset.a); } });
   $('recargar').onclick = function () { if (QUIEN === 'cad') cargaPcad(); else carga(); };
   $('leer').onclick = async function () {
     var b = this;

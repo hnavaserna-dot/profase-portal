@@ -81,7 +81,7 @@
     + '.ppl-extra{display:inline-flex;flex-wrap:wrap;gap:8px;min-width:0}'
     + '.ppl-extra:empty{display:none}'
     + '@media (max-width:600px){.ppl-g{grid-template-columns:1fr 1fr;gap:8px}'
-    + '.ppl-g .ppl-p:last-child:nth-child(odd){grid-column:1/-1}.ppl-n{font-size:20px}.ppl-p{padding:9px 10px 10px}.ppl-go{width:100%}.ppl-hint{flex-basis:100%}}'
+    + '.ppl-g .ppl-p:last-child:nth-child(odd){grid-column:1/-1}.ppl-n{font-size:20px}.ppl-p{padding:9px 10px 10px}.ppl-t{letter-spacing:.03em}.ppl-go{width:100%}.ppl-hint{flex-basis:100%}}'
     // «Más ▾»
     + '.ppl-masw{position:relative;display:inline-flex}'
     + '.ppl-masb{display:inline-flex;align-items:center;gap:6px}'
@@ -120,6 +120,10 @@
     + '.ppl-nav{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;flex:none}'
     + '.ppl-navn{font-size:12.5px;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap}'
     + '.ppl-nav [disabled]{opacity:.45;cursor:default}'
+    /* en el celular, «‹ 1 de 5 Siguiente ›» baja a su propio renglón debajo del título de la ficha (si no, el título queda
+       de una o dos palabras por renglón; revisión del 6-nov-2026) */
+    + '@media (max-width:600px){.ppl-navp{flex-wrap:wrap!important}.ppl-navp>:not(.ppl-nav):not(.ppl-navc){flex:1 1 100%}'
+    + '.ppl-navp>.ppl-nav{order:99;flex:1 1 auto;margin-top:2px}.ppl-navp>.ppl-navc{order:100;margin-left:auto;margin-top:2px}}'
     + '@media (max-width:600px){.ppl-q,.ppl-qn{flex-basis:100%}.ppl-q input{font-size:16px}.ppl-per select,.ppl-per input{font-size:16px}}';
 
   function estilos() {
@@ -285,7 +289,10 @@
       var x = ids[ix + Number(b.getAttribute('data-nav'))];
       if (x != null && o.abre) o.abre(x);
     });
-    if (o.antes && o.antes.parentNode) o.antes.parentNode.insertBefore(w, o.antes); else o.donde.appendChild(w);
+    if (o.antes && o.antes.parentNode) {
+      var pa = o.antes.parentNode; pa.insertBefore(w, o.antes);
+      try { if (/flex/.test(getComputedStyle(pa).display)) { pa.classList.add('ppl-navp'); o.antes.classList.add('ppl-navc'); } } catch (e) { /* nada */ }
+    } else o.donde.appendChild(w);
     return { w: w, sig: ix < n - 1 ? ids[ix + 1] : null, ant: ix ? ids[ix - 1] : null };
   }
 

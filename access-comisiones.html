@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/buscador.js?v=514b1d6650"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/pilas.js?v=0acf1106d6"></script>
 <style>
 /* Portal PROFASE · Tesorería › Comisiones (comisiones del equipo; antes Access › Comisiones). 30-oct-2026: las calcula el
    portal (portal/sql/84_comisiones_equipo.sql), igual que el Access (las fórmulas se reconstruyeron con sus datos), con las
@@ -84,14 +84,7 @@ button,select,input{font:inherit;color:inherit}
 .tabs::-webkit-scrollbar{display:none}
 .tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
 .tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
-.kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.kpi .v{font-family:var(--f-display);font-size:28px;font-weight:750;margin-top:2px}
-.kpi .s{font-size:12.5px;color:var(--muted)}
-.kpi.mal .v{color:var(--red)}
-.kpi.ojo .v{color:var(--accent-ink)}
-@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ceq-bar{margin:16px 0 14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
 .card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
 .card h2{font-size:18px;font-weight:700}
@@ -398,20 +391,11 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   <div class="cargando" id="cargando">Cargando las comisiones…</div>
 
   <div id="p-mes" role="tabpanel" aria-labelledby="t-mes" hidden>
-    <section class="kpis" aria-label="Resumen">
-      <div class="kpi"><div class="l">Comisión</div><div class="v num" id="k-tot">–</div><div class="s" id="k-tot-s">&nbsp;</div></div>
-      <div class="kpi"><div class="l">Pagado</div><div class="v num" id="k-pag">–</div><div class="s" id="k-pag-s">&nbsp;</div></div>
-      <div class="kpi" id="k-dif-c"><div class="l">Por pagar</div><div class="v num" id="k-dif">–</div><div class="s" id="k-dif-s">&nbsp;</div></div>
-      <div class="kpi"><div class="l">Personas</div><div class="v num" id="k-per">–</div><div class="s">con comisión</div></div>
-    </section>
+    <div class="ceq-bar" id="ceq-bar"><div class="seg" role="group" aria-label="Agrupar"><button type="button" id="v-per" aria-pressed="true">Por persona</button><button type="button" id="v-mes" aria-pressed="false">Por mes</button></div><div class="fbar" id="fb-mes"></div><button class="btn" type="button" id="x-mes" data-excel>Excel</button></div>
+    <div id="kpis"></div>
     <section class="card" aria-labelledby="h-mes">
       <header>
         <div><h2 id="h-mes">Por persona y mes contable</h2><div class="sub" id="mes-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <div class="seg" role="group" aria-label="Agrupar"><button type="button" id="v-per" aria-pressed="true">Por persona</button><button type="button" id="v-mes" aria-pressed="false">Por mes</button></div>
-          <div class="fbar" id="fb-mes"></div>
-          <button class="btn" type="button" id="x-mes" data-excel>Excel</button>
-        </div>
       </header>
       <div class="oculto" aria-hidden="true">
         <select id="f-anio" tabindex="-1"></select><select id="f-mes" tabindex="-1"><option value="">Todos los meses</option></select>
@@ -625,15 +609,29 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
     if (g.parte) return '<span class="chip">parte de tu departamento</span>';
     return g.dif >= 1 ? '<span class="chip pp">Por pagar ' + esc(dinero(g.dif)) + '</span>' : '<span class="chip ok">✓ Al corriente</span>';
   }
+  /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (agrupar, FILTROS y Excel) y las pilas de «Tu trabajo»: la
+     comisión con tus filtros y lo que está por pagar (la pila deja la lista con eso; picarla otra vez quita el filtro).
+     Quien paga tiene «Ir a pagar», que abre la pestaña «Por pagar». Mismos números y mismas reglas de siempre. */
+  var BAR = null;
+  function pintaPilas(L, tot, pag, dif, nper) {
+    if (!window.PROFASE_PILAS) return;
+    if (!BAR) BAR = PROFASE_PILAS.barra($('ceq-bar'), { caja: true, periodo: [$('ceq-bar').querySelector('.seg')], botones: [$('fb-mes'), $('x-mes')] });
+    var pend = $('f-pend').value === '1', tuyo = E && !E.todo, deb = E && E.pagar && E.modo === 'portal' && !$('t-deb').hidden ? debePorPersona().length : 0;
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · las comisiones' + (tuyo ? ' (lo tuyo)' : ''),
+      meta: 'Pagado ' + dineroCorto(pag) + ' · ' + nper + (nper === 1 ? ' persona con comisión' : ' personas con comisión'),
+      pilas: [
+        { k: 'tot', t: 'Comisión', n: L.length, txt: dineroCorto(tot), d: L.length + (L.length === 1 ? ' renglón' : ' renglones'), tono: 'azul', on: !pend },
+        { k: 'dif', t: 'Por pagar', n: dif >= 1 ? 1 : 0, txt: dineroCorto(dif), d: dif >= 1 ? 'falta pagarlo' : 'al corriente', tono: 'naranja', on: pend, tag: deb && dif >= 1 ? 'Te toca' : '' }],
+      alPicar: function (k) { $('f-pend').value = k === 'dif' && !pend ? '1' : ''; if (FM) FM.pinta(); pintaMeses(); },
+      boton: deb ? { t: 'Ir a pagar', n: deb, alPicar: function () { muestra('deb'); } } : null
+    });
+  }
   function pintaMeses() {
     var L = mesesFiltrados(), tot = 0, pag = 0, dif = 0, per = {}, porMes = VISTA === 'mes';
     L.forEach(function (x) { tot += x.tot || 0; pag += x.pag || 0; if (x.dif > 0) dif += x.dif; per[x.p] = 1; });
-    $('k-tot').textContent = dineroCorto(tot); $('k-tot-s').textContent = L.length + (L.length === 1 ? ' renglón' : ' renglones');
-    $('k-pag').textContent = dineroCorto(pag); $('k-dif').textContent = dineroCorto(dif);
-    $('k-pag-s').textContent = E && !E.todo ? 'lo tuyo' : ' '; $('k-dif-s').textContent = E && !E.todo ? 'lo tuyo' : ' ';
-    $('k-dif-c').className = 'kpi' + (dif >= 1 ? ' ojo' : '');
     var nper = Object.keys(per).length;
-    $('k-per').textContent = nper;
+    pintaPilas(L, tot, pag, dif, nper);
     $('th-quien').textContent = porMes ? 'Mes contable' : 'Persona';
     $('th-meses').textContent = porMes ? 'Personas' : 'Meses';
     var G = {}, orden = [];

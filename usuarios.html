@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · menú Usuarios › Usuarios del portal (30-oct-2026, decisiones de Daniel, 18:44 a 20:50). Altas,
    bajas (suaves: nada se borra; se corta el acceso al momento), códigos de un solo uso para crear o cambiar la contraseña
@@ -101,6 +101,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .filtros{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
 .filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%;min-width:0}
 .filtros input[type="search"]{width:220px}
+.usr-bar{margin:0 0 14px}
 .tabs{display:flex;gap:4px;margin:16px 0 12px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
@@ -242,6 +243,9 @@ tr.click:hover td{background:var(--navy-soft)}
       <button type="button" role="tab" data-t="baja" aria-selected="false">Dados de baja <span class="cta" id="n-baja">0</span></button>
       <button type="button" role="tab" data-t="permisos" aria-selected="false">Quién puede qué</button>
     </div>
+    <div class="usr-bar" id="usr-bar"><input type="search" id="q" placeholder="Buscar nombre o usuario" aria-label="Buscar nombre o usuario"></div>
+    <div hidden id="usr-sel"><select id="f-rol" aria-label="Puesto"><option value="">Todos los puestos</option><option value="contador">Contador</option><option value="gerente">Gerente</option><option value="director">Dirección</option></select></div>
+    <div id="kpis"></div>
     <div class="card" id="perm-card" hidden>
       <header><div><h2>Quién puede qué</h2><div class="sub">Lo que hace cada puesto y, además, los permisos que tiene cada persona. Solo para ver: los permisos los decide la dirección.</div></div></header>
       <div class="puestos" id="puestos"></div>
@@ -251,8 +255,8 @@ tr.click:hover td{background:var(--navy-soft)}
     </div>
     <div class="card" id="lista-card">
       <header><div><h2 id="h-lista">Activos</h2><div class="sub" id="sub-lista"></div></div></header>
-      <div class="filtros"><input type="search" id="q" placeholder="Buscar nombre o usuario" aria-label="Buscar nombre o usuario"></div>
       <div class="tabla"><table class="resp"><thead><tr id="th"></tr></thead><tbody id="lista"></tbody></table></div>
+      <nav class="pgn" id="usr-pag" aria-label="Páginas de usuarios"></nav>
     </div>
     <p class="pie" id="pie">Las contraseñas nunca se ven ni se escriben aquí: a cada quien se le da un código de un solo uso y con él crea su contraseña en la entrada del portal («¿Primera vez u olvidaste tu contraseña?»). Las altas, bajas y contraseñas de la dirección no se cambian desde aquí.</p>
   </section>
@@ -318,9 +322,14 @@ tr.click:hover td{background:var(--navy-soft)}
     $('ficha').innerHTML = '<div class="fcab"><div style="min-width:0"><h2 id="v-tit">' + esc(titulo) + '</h2>' + (sub ? '<div class="mut">' + esc(sub) + '</div>' : '') + '</div>'
       + '<button class="btn chico" type="button" id="v-cierra">Cerrar</button></div><div class="cuerpo">' + cuerpo + '</div>';
     $('velo').hidden = false; $('v-cierra').onclick = cierra;
+    // uno por uno: ‹ › junto a «Cerrar» con las personas de la lista que se tenía a la vista
+    if (CUR && NAV && NAV.length > 1 && NAV.indexOf(CUR) >= 0 && window.PROFASE_PILAS)
+      PROFASE_PILAS.nav({ ids: NAV, id: CUR, antes: $('v-cierra'), clase: 'btn chico', abre: function (u) {
+        var y = LISTA.filter(function (z) { return z.usuario === u; })[0]; if (y) ficha(y);
+      } });
     try { $('v-cierra').focus(); } catch (e) {}
   }
-  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; }
+  function cierra() { $('velo').hidden = true; $('ficha').innerHTML = ''; CUR = null; }
   $('velo').addEventListener('click', function (e) { if (e.target === $('velo')) cierra(); });
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
@@ -348,7 +357,48 @@ tr.click:hover td{background:var(--navy-soft)}
     return f.tiene ? chip('Sí', 'ok') + (f.por ? '<div class="mut">Se lo dio ' + esc(f.por) + '</div>' : '') : '<span class="mut">No</span>';
   }
   function cuantos(t) { return LISTA.filter(function (x) { return x.estado === t; }).length; }
+  /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (buscar y FILTROS con el puesto), las pilas de «Tu trabajo»
+     (activos, con código sin usar, por entrar, dados de baja y las bajas que avisó RH; a quien solo da el permiso del
+     Buzón, quién lo tiene y quién no), «‹ ›» en la ficha para pasar a la siguiente persona y las páginas comunes. */
+  var BAR = null, PG = null, FIRMA = '', PFX = '', NAV = null, CUR = null;
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('usr-bar'), { caja: true, buscar: $('q'),
+      filtros: d ? { grupos: [{ t: 'USUARIOS', campos: [d($('f-rol'), { t: 'PUESTO' })] }], limpiar: function () { if ($('f-rol').value) { $('f-rol').value = ''; pinta(); } } } : null });
+    if (window.PROFASE_PAGINAS) PG = PROFASE_PAGINAS.crea({ donde: $('usr-pag'), clave: 'usuarios', nombre: 'Personas', arriba: $('lista-card'), cambio: function () { pinta(); } });
+  }
+  function pintaPilas() {
+    if (!window.PROFASE_PILAS) return;
+    var act = LISTA.filter(function (x) { return x.estado === 'activo'; }), pl;
+    if (SOLO_PERM) {
+      var si = act.filter(function (x) { var f = pb(x.usuario); return f && f.tiene; }).length;
+      var no = act.filter(function (x) { var f = pb(x.usuario); return f && !f.tiene && !f.puesto && !f.consulta; }).length;
+      pl = [{ k: '', t: 'Activos', n: act.length, d: 'entran al portal', tono: 'azul', on: !PFX },
+        { k: 'tiene', t: 'Cierran avisos del Buzón', n: si, d: 'con el permiso', tono: 'verde', on: PFX === 'tiene' },
+        { k: 'no', t: 'Sin el permiso', n: no, d: 'se lo puedes dar', tono: 'gris', on: PFX === 'no' }];
+    } else {
+      var cod = act.filter(function (x) { return x.codigo; }).length;
+      pl = [{ k: 'activo', t: 'Activos', n: act.length, d: 'entran al portal', tono: 'azul', on: TAB === 'activo' && !PFX },
+        { k: 'cod', t: 'Código sin usar', n: cod, d: 'se les dio un código y no lo han usado', tono: 'ambar', on: TAB === 'activo' && PFX === 'cod' },
+        { k: 'pendiente', t: 'Por entrar', n: cuantos('pendiente'), d: 'ya tienen su código', tono: 'naranja', on: TAB === 'pendiente' },
+        { k: 'baja', t: 'Dados de baja', n: cuantos('baja'), d: 'su historial se queda', tono: 'gris', on: TAB === 'baja' }];
+      if (RHB.length || ADMIN) pl.push({ k: 'rh', t: 'Bajas que avisó RH', n: RHB.length, d: RHB.length ? 'falta confirmarlas' : 'nada por confirmar', tono: 'rojo', on: false, tag: ADMIN && RHB.length ? 'Te toca' : '' });
+    }
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: SOLO_PERM ? 'Tu trabajo · el permiso del Buzón tributario' : 'Tu trabajo · los usuarios del portal',
+      pilas: pl,
+      alPicar: function (k) {
+        if (k === 'rh') { try { $('rh-card').scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} return; }
+        if (SOLO_PERM) { PFX = PFX === k ? '' : k; pinta(); return; }
+        if (k === 'cod') { PFX = TAB === 'activo' && PFX === 'cod' ? '' : 'cod'; TAB = 'activo'; pinta(); return; }
+        PFX = ''; TAB = k; pinta();
+      }
+    });
+  }
   function pinta() {
+    barra(); pintaPilas();
+    $('usr-bar').hidden = TAB === 'permisos';
     ['activo', 'pendiente', 'baja'].forEach(function (t) { $('n-' + t).textContent = cuantos(t); });
     document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.t === TAB ? 'true' : 'false'); });
     $('perm-card').hidden = TAB !== 'permisos'; $('lista-card').hidden = TAB === 'permisos'; $('pie').hidden = SOLO_PERM || TAB === 'permisos';
@@ -356,12 +406,23 @@ tr.click:hover td{background:var(--navy-soft)}
     $('h-lista').textContent = { activo: 'Activos', pendiente: 'Por entrar', baja: 'Dados de baja' }[TAB];
     $('sub-lista').textContent = SOLO_PERM ? 'Quienes hoy entran al portal y si pueden cerrar avisos del Buzón tributario. Abre a la persona para darle o quitarle el permiso.' : { activo: 'Quienes hoy entran al portal.', pendiente: 'Ya tienen su código, pero todavía no crean su contraseña.', baja: 'Ya no entran al portal; su historial se queda. Si alguien regresa, entra como usuario nuevo.' }[TAB];
     var q = norm($('q').value);
-    var L = LISTA.filter(function (x) { return x.estado === TAB && (!q || norm(x.nombre + ' ' + x.usuario + ' ' + (x.nombre_wf || '')).indexOf(q) >= 0); });
+    var rol = $('f-rol').value;
+    var L = LISTA.filter(function (x) {
+      if (x.estado !== TAB || (q && norm(x.nombre + ' ' + x.usuario + ' ' + (x.nombre_wf || '')).indexOf(q) < 0) || (rol && x.rol !== rol)) return false;
+      if (PFX === 'cod') return !!x.codigo;
+      if (PFX === 'tiene' || PFX === 'no') { var f = pb(x.usuario); return PFX === 'tiene' ? !!(f && f.tiene) : !!(f && !f.tiene && !f.puesto && !f.consulta); }
+      return true;
+    });
+    var firma = [TAB, PFX, rol, $('q').value].join('|');
+    if (PG && firma !== FIRMA) PG.inicio();
+    FIRMA = firma;
+    var V = PG ? PG.corta(L) : L, base = PG && V.length ? L.indexOf(V[0]) : 0;
     var th = SOLO_PERM ? ['Nombre', 'Puesto', 'Cierra avisos del Buzón', ''] : TAB === 'activo' ? ['Nombre', 'Rol', 'Desde', 'Última entrada', 'Equipos', '']
       : TAB === 'pendiente' ? ['Nombre', 'Rol', 'Código dado', '', '', ''] : ['Nombre', 'Rol', 'Estuvo', 'Baja', 'Quién la dio', ''];
     $('th').innerHTML = th.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('');
-    if (!L.length) { $('lista').innerHTML = '<tr><td class="vacio" colspan="6">' + (q ? 'Nadie con esa búsqueda.' : 'Nadie por ahora.') + '</td></tr>'; return; }
-    $('lista').innerHTML = L.map(function (x, i) {
+    if (!L.length) { $('lista').innerHTML = '<tr><td class="vacio" colspan="6">' + (q || rol || PFX ? 'Nadie con estos filtros.' : 'Nadie por ahora.') + '</td></tr>'; pintaRH(); return; }
+    $('lista').innerHTML = V.map(function (x, j) {
+      var i = base + j;
       var nom = '<td class="w" data-l="Nombre"><div class="rs">' + esc(x.nombre) + '</div><div class="mut">' + esc(x.usuario) + '</div></td>';
       var pbx = pb(x.usuario);
       var rol = '<td data-l="' + (SOLO_PERM ? 'Puesto' : 'Rol') + '">' + esc(ROL[x.rol] || x.rol) + (x.direccion && !SOLO_PERM ? ' ' + chip('Dirección', 'az') : '')
@@ -377,12 +438,13 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td data-l="Quién la dio">' + esc(x.baja_por || '') + '</td>' + ver + '</tr>';
     }).join('');
     $('lista').querySelectorAll('[data-i]').forEach(function (el) {
-      el.onclick = function (e) { e.stopPropagation(); ficha(L[+el.dataset.i]); };
+      el.onclick = function (e) { e.stopPropagation(); NAV = L.map(function (y) { return y.usuario; }); ficha(L[+el.dataset.i]); };
     });
     pintaRH();
   }
   document.querySelectorAll('.tabs [data-t]').forEach(function (b) { b.onclick = function () { TAB = b.dataset.t; pinta(); }; });
   $('q').addEventListener('input', pinta);
+  $('f-rol').addEventListener('change', pinta);
 
   /* ---------- Quién puede qué (la «Configuración de perfiles» del Access; solo ver, usr_permisos de 102_permisos_ver.sql).
      En el portal no hay perfiles: cada quien tiene su puesto y, además, los permisos que la dirección le dio uno por uno.
@@ -473,6 +535,7 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   // quien entra solo a dar el permiso (un gerente que no administra usuarios): sus datos, el permiso y sus movimientos
   async function fichaPermiso(x, msg) {
+    CUR = x.usuario;
     abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), '<div class="cargando">Cargando…</div>');
     var f = null;
     try { f = await rpc('bzt_permiso_ficha', { p_usuario: x.usuario }); }
@@ -486,6 +549,7 @@ tr.click:hover td{background:var(--navy-soft)}
   /* ---------- La ficha de una persona ---------- */
   async function ficha(x, rhb, msgPerm) {
     if (SOLO_PERM) return fichaPermiso(x, msgPerm);
+    CUR = x.usuario;
     abre(x.nombre, x.usuario + ' · ' + (ROL[x.rol] || x.rol), '<div class="cargando">Cargando…</div>');
     var h = null;
     try { h = await rpc('usr_historia', { p_usuario: x.usuario }); } catch (e) { h = { periodos: [], bitacora: [], pendientes: {} }; }
@@ -542,6 +606,7 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- El código (se ve una sola vez) ---------- */
   function muestraCodigo(r, que) {
+    CUR = null;
     var txt = 'Entra a https://crmprofase.com.mx, pica «¿Primera vez u olvidaste tu contraseña?», escribe tu usuario ' + r.usuario + ' y este código: ' + r.codigo + '. Ahí creas tu contraseña (mínimo 10 caracteres). El código sirve una sola vez.';
     abre(que, r.nombre || r.usuario,
       '<div class="sec"><h3>Su código</h3><div class="in"><p class="paso">Usuario: <b>' + esc(r.usuario) + '</b></p><div class="codigo" id="c-cod">' + esc(r.codigo) + '</div>'
@@ -562,6 +627,7 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- Alta ---------- */
   function formAlta() {
+    CUR = null;
     abre('Dar de alta a alguien en el portal', 'Contadores y gerentes',
       '<div class="sec"><h3>Sus datos</h3><div class="in"><div class="campos">'
       + '<div class="campo ancho"><label for="n-nom">Nombre completo</label><input id="n-nom" autocomplete="off" placeholder="Nombre y apellidos"></div>'

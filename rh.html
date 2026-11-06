@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · menú RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna). Tres pantallas en esta misma página
    (?s=vac, ?s=pre, ?s=mov): Vacaciones y permisos, Préstamos, y Altas y bajas. Las ven solo Alex Luna, HNR (solo
@@ -204,6 +204,8 @@ tr.click:hover td{background:var(--navy-soft)}
 .docs-l .acciones{flex:none}
 .exp-sube{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px 10px;align-items:end}
 .exp-sube .campo input[type=file]{padding:5px}
+/* UX PROFASE (6-nov-2026): la barra con buscar, el periodo, FILTROS y Excel, las pilas de «Tu trabajo» y las páginas */
+.rh-bar{margin:12px 0 0}.rh-bar input[type=search]{min-width:0}.pgn:empty{display:none}.pgn{margin:10px 0 0}
 .img-velo{position:fixed;inset:0;z-index:60;background:rgba(10,18,32,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px}
 .img-velo img{max-width:100%;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px);border-radius:8px;background:#fff}
 @media (max-width:700px){.exp-sube{grid-template-columns:minmax(0,1fr)}}
@@ -229,31 +231,33 @@ tr.click:hover td{background:var(--navy-soft)}
   <!-- Vacaciones y permisos -->
   <section id="s-vac" hidden>
     <div class="nota carga" id="carga-n" hidden><span id="carga-t"></span><span class="acciones"><button class="btn acento" type="button" id="carga-b">Capturar días y sueldo</button><button class="btn" type="button" id="carga-p" hidden>Cargar préstamo de antes</button><button class="btn" type="button" id="carga-l" hidden>Ya cargué los préstamos</button><button class="btn" type="button" id="carga-0" hidden>No hay préstamos vigentes</button></span></div>
-    <div class="kpis" id="vac-kpis"></div>
+    <div class="rh-bar" id="vac-bar"><input type="search" id="f-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off">
+      <select id="f-cuando" aria-label="Cuándo"><option value="prox">Hoy y próximas</option><option value="pas">Pasadas</option><option value="todo">Todas</option></select>
+      <button class="btn" type="button" id="x-aus" data-excel>Excel</button><button class="btn" type="button" id="x-dias" data-excel hidden>Excel</button></div>
+    <div id="vac-sel" hidden><select id="f-tipo" aria-label="Tipo"><option value="">Todos los tipos</option></select></div>
+    <div id="vac-kpis"></div>
     <div class="tabs" role="tablist" aria-label="Vacaciones y permisos">
       <button type="button" role="tab" data-vt="aus" aria-selected="true">Ausencias</button>
       <button type="button" role="tab" data-vt="dias" aria-selected="false">Días y sueldo</button>
     </div>
     <section class="card" id="vt-aus" aria-labelledby="h-aus">
       <header><div><h2 id="h-aus">Ausencias</h2><div class="sub">Vacaciones, permisos, incapacidades y faltas. En el Calendario, los gerentes y la dirección ven quién está fuera (sin las notas ni las faltas).</div></div>
-        <div class="acciones"><button class="btn" type="button" id="x-aus" data-excel>Excel</button></div></header>
-      <div class="filtros">
-        <select id="f-cuando" aria-label="Cuándo"><option value="prox">Hoy y próximas</option><option value="pas">Pasadas</option><option value="todo">Todas</option></select>
-        <select id="f-tipo" aria-label="Tipo"><option value="">Todos los tipos</option></select>
-        <input type="search" id="f-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off">
-      </div>
+      </header>
       <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Tipo</th><th>Del</th><th>Al</th><th class="monto">Días</th><th>Regresa</th><th>Buscar a</th><th>Nota</th><th></th></tr></thead><tbody id="aus-b"></tbody></table></div>
+      <nav class="pgn" id="aus-pag" aria-label="Páginas de ausencias"></nav>
     </section>
     <section class="card" id="vt-dias" hidden aria-labelledby="h-dias">
       <header><div><h2 id="h-dias">Días de vacaciones y sueldo</h2><div class="sub">Desde la carga inicial, en cada aniversario se le suman solos los días que le tocan por su antigüedad, y las vacaciones capturadas se restan. El sueldo lo ven solo RH y la dirección.</div></div>
-        <div class="acciones"><button class="btn" type="button" id="x-dias" data-excel>Excel</button></div></header>
+      </header>
       <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Área</th><th>Ingreso</th><th>Antigüedad</th><th class="monto">Le quedan</th><th class="monto">Programadas</th><th>Próximo aniversario</th><th>Desde</th><th class="monto">Sueldo mensual</th><th></th></tr></thead><tbody id="dias-b"></tbody></table></div>
+      <nav class="pgn" id="dias-pag" aria-label="Páginas de colaboradores"></nav>
     </section>
   </section>
 
   <!-- Préstamos -->
   <section id="s-pre" hidden>
-    <div class="kpis" id="pre-kpis"></div>
+    <div class="rh-bar" id="pre-bar"><input type="search" id="p-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off"><button class="btn" type="button" id="x-pre" data-excel>Excel</button></div>
+    <div id="pre-kpis"></div>
     <div class="tabs" role="tablist" aria-label="Préstamos">
       <button type="button" role="tab" data-pt="curso" aria-selected="true">En curso<span class="cta" id="pt-n1">0</span></button>
       <button type="button" role="tab" data-pt="todo" aria-selected="false">Historial</button>
@@ -261,27 +265,32 @@ tr.click:hover td{background:var(--navy-soft)}
     </div>
     <section class="card" aria-labelledby="h-pre">
       <header><div><h2 id="h-pre">En curso</h2><div class="sub" id="pre-sub">Por autorizar y autorizados que todavía se están descontando.</div></div>
-        <div class="acciones"><button class="btn" type="button" id="x-pre" data-excel>Excel</button></div></header>
-      <div class="filtros" id="pre-f"><input type="search" id="p-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador" autocomplete="off"></div>
+      </header>
       <div class="tabla"><table class="resp"><thead id="pre-h"></thead><tbody id="pre-b"></tbody></table></div>
+      <nav class="pgn" id="pre-pag" aria-label="Páginas de préstamos"></nav>
     </section>
   </section>
 
   <!-- Altas y bajas -->
   <section id="s-exp" hidden>
+    <div class="rh-bar" id="exp-bar"><input type="search" id="e-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador"><button class="btn" type="button" id="x-exp" data-excel>Excel</button></div>
+    <div id="exp-sel" hidden><select id="e-f" aria-label="Cuáles"><option value="">Todos</option><option value="falta">Les falta algo obligatorio</option><option value="completo">Con lo obligatorio completo</option></select></div>
+    <div id="exp-kpis"></div>
     <section class="card" style="margin-top:16px" aria-labelledby="h-exp">
       <header><div><h2 id="h-exp">Expedientes del personal</h2><div class="sub">Los documentos de cada colaborador. Al dar de alta son obligatorios el INE, el comprobante de domicilio y el acta de nacimiento; lo demás se puede subir cuando se tenga. Nada se borra: un documento nuevo del mismo tipo deja el anterior guardado.</div></div>
-        <div class="acciones"><button class="btn" type="button" id="x-exp" data-excel>Excel</button></div></header>
-      <div class="filtros"><input type="search" id="e-q" placeholder="Buscar colaborador" aria-label="Buscar colaborador">
-        <select id="e-f" aria-label="Cuáles"><option value="">Todos</option><option value="falta">Les falta algo obligatorio</option><option value="completo">Con lo obligatorio completo</option></select></div>
+      </header>
       <div class="tabla"><table class="resp"><thead><tr><th>Colaborador</th><th>Área</th><th>Obligatorios</th><th>Documentos</th></tr></thead><tbody id="exp-b"></tbody></table></div>
+      <nav class="pgn" id="exp-pag" aria-label="Páginas de expedientes"></nav>
     </section>
   </section>
   <section id="s-mov" hidden>
+    <div class="rh-bar" id="mov-bar"><input type="search" id="m-q" placeholder="Buscar colaborador, área o motivo" aria-label="Buscar movimientos"><button class="btn" type="button" id="x-mov" data-excel>Excel</button></div>
+    <div id="mov-kpis"></div>
     <section class="card" style="margin-top:16px" aria-labelledby="h-mov">
       <header><div><h2 id="h-mov">Altas y bajas de personal</h2><div class="sub">Con el alta, la persona entra a los colaboradores y al Calendario (si ya trabajó aquí, regresa con su mismo historial). La baja que registra RH es un aviso: solo Daniel o Fernando Cadengo la confirman, y hasta entonces la persona sigue igual. Ya confirmada, sale del Calendario el día después de su último día y su historial se queda.</div></div>
-        <div class="acciones"><button class="btn" type="button" id="x-mov" data-excel>Excel</button></div></header>
+      </header>
       <div class="tabla"><table class="resp"><thead><tr><th>Movimiento</th><th>Colaborador</th><th>Área</th><th>Fecha</th><th>Motivo</th><th>Usuario del portal</th><th>Registró</th><th></th></tr></thead><tbody id="mov-b"></tbody></table></div>
+      <nav class="pgn" id="mov-pag" aria-label="Páginas de altas y bajas"></nav>
     </section>
   </section>
 </div>
@@ -309,6 +318,11 @@ tr.click:hover td{background:var(--navy-soft)}
   if (['vac', 'pre', 'mov', 'exp'].indexOf(SEC) < 0) SEC = 'vac';
   var EST = null, CONSULTA = false, CAPTURA = false, AUTORIZA = false, CORRIGE = false;
   var COL = [], AUS = [], PRE = [], MOV = [], VT = 'aus', PT = 'curso';
+  // UX PROFASE (6-nov-2026): VFX/PFX/MFX, la pila escogida; PG*, las páginas; COLA*, el orden de lo abierto (‹ ›)
+  var VFX = '', PFX = '', MFX = '', PGA = null, PGD = null, PGP = null, PGE = null, PGM = null, FIR = {}, COLAP = [], COLAE = [];
+  function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function pag(pg, k, firma, L) { if (pg && FIR[k] !== firma) pg.inicio(); FIR[k] = firma; return pg ? pg.corta(L) : L; }
+  function pagina(id, clave, nombre, fn) { return window.PROFASE_PAGINAS ? PROFASE_PAGINAS.crea({ donde: $(id), clave: clave, nombre: nombre, arriba: $(id).closest('.card'), cambio: fn }) : null; }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
@@ -413,18 +427,21 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* =============================== VACACIONES Y PERMISOS =============================== */
   function ausFiltradas() {
-    var hoy = hoyISO(), cu = $('f-cuando').value, ti = $('f-tipo').value, q = $('f-q').value.trim().toLowerCase();
+    var hoy = hoyISO(), cu = $('f-cuando').value, ti = $('f-tipo').value, q = norm($('f-q').value.trim()), h = fechaD(hoy);
     return AUS.filter(function (a) {
+      if (VFX === 'fuera' && !(a.desde <= hoy && a.hasta >= hoy)) return false;
+      if (VFX === 'prox' && !(a.desde > hoy && (fechaD(a.desde) - h) / 864e5 <= 15)) return false;
       if (cu === 'prox' && a.hasta < hoy) return false;
       if (cu === 'pas' && a.hasta >= hoy) return false;
       if (ti && a.tipo !== ti) return false;
-      if (q && String(a.nombre).toLowerCase().indexOf(q) < 0) return false;
+      if (q && norm(a.nombre).indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) { return cu === 'prox' ? (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0) : (a.desde < b.desde ? 1 : a.desde > b.desde ? -1 : 0); });
   }
   function pintaAus() {
     var L = ausFiltradas(), hoy = hoyISO();
-    $('aus-b').innerHTML = L.length ? L.map(function (a) {
+    var V = pag(PGA, 'aus', [$('f-cuando').value, $('f-tipo').value, $('f-q').value, VFX].join('|'), L);
+    $('aus-b').innerHTML = V.length ? V.map(function (a) {
       var ahora = a.desde <= hoy && a.hasta >= hoy;
       return '<tr><td data-l="Colaborador" class="rs">' + esc(a.nombre) + (ahora ? ' ' + chip('Hoy fuera', 'na') : '') + '</td>'
         + '<td data-l="Tipo">' + chip(TIPOS[a.tipo] || a.tipo, TIPO_CHIP[a.tipo]) + '</td>'
@@ -433,10 +450,22 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td data-l="Regresa">' + (a.tipo === 'falta' ? '' : esc(fecha(a.regresa))) + '</td>'
         + '<td data-l="Buscar a" class="mut">' + esc(a.cubre || '') + '</td><td data-l="Nota" class="mut w">' + esc(a.nota || '') + '</td>'
         + '<td data-l="" class="w">' + (CAPTURA ? '<span class="acciones"><button class="btn chico" type="button" data-aus-ed="' + a.id + '">Editar</button><button class="btn chico peligro" type="button" data-aus-bo="' + a.id + '">Quitar</button></span>' : '') + '</td></tr>';
-    }).join('') : '<tr><td class="vacio" colspan="9">' + ($('f-cuando').value === 'prox' ? 'Nadie está fuera hoy ni tiene ausencias programadas.' : 'No hay ausencias con ese filtro.') + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="9">' + ($('f-cuando').value === 'prox' && !VFX && !$('f-q').value && !$('f-tipo').value ? 'Nadie está fuera hoy ni tiene ausencias programadas.' : 'No hay ausencias con ese filtro.') + '</td></tr>';
+  }
+  function sinCarga(c) { return (c.vac && c.vac.pendiente) || c.sueldo == null; }
+  function diasFiltrados() { var q = norm($('f-q').value.trim()); return COL.filter(function (c) { return (!q || norm(c.nombre + ' ' + (c.area || '')).indexOf(q) >= 0) && (VFX !== 'sin' || sinCarga(c)); }); }
+  // la pestaña de Vacaciones y lo que le toca de la barra (el periodo, FILTROS y su Excel solo en Ausencias)
+  function ponVT(v) {
+    VT = v;
+    document.querySelectorAll('[data-vt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-vt') === v ? 'true' : 'false'); });
+    $('vt-aus').hidden = v !== 'aus'; $('vt-dias').hidden = v !== 'dias';
+    $('f-cuando').hidden = v !== 'aus'; $('x-aus').hidden = v !== 'aus'; $('x-dias').hidden = v !== 'dias';
+    var bf = $('vac-bar').querySelector('.ppl-bf'); if (bf) bf.style.display = v === 'aus' ? '' : 'none';
+    $('f-q').placeholder = v === 'aus' ? 'Buscar colaborador' : 'Buscar colaborador o área';
   }
   function pintaDias() {
-    $('dias-b').innerHTML = COL.length ? COL.map(function (c) {
+    var L = diasFiltrados(), V = pag(PGD, 'dias', [$('f-q').value, VFX].join('|'), L);
+    $('dias-b').innerHTML = V.length ? V.map(function (c) {
       var v = c.vac || {}, pend = v.pendiente;
       return '<tr><td data-l="Colaborador" class="rs">' + esc(c.nombre) + (c.baja ? ' ' + chip((c.baja_confirmada ? 'Baja el ' : 'Baja por confirmar: ') + fecha(c.baja), c.baja_confirmada ? 'mal' : 'ojo') : '') + '</td>'
         + '<td data-l="Área">' + esc(c.area) + '</td><td data-l="Ingreso">' + (c.ingreso ? esc(fecha(c.ingreso)) : '<span class="mut">Sin fecha de ingreso</span>') + '</td>'
@@ -448,15 +477,26 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<td data-l="Sueldo mensual" class="monto">' + (c.sueldo != null ? esc(dinero(c.sueldo)) : chip('Falta', 'ojo')) + '</td>'
         + '<td data-l="" class="w"><span class="acciones">' + (CORRIGE && !pend ? '<button class="btn chico" type="button" data-corrige="' + esc(c.id) + '">Corregir días</button>' : '')
         + (CAPTURA && c.sueldo != null ? '<button class="btn chico" type="button" data-sueldo="' + esc(c.id) + '">Sueldo</button>' : '') + '</span></td></tr>';
-    }).join('') : '<tr><td class="vacio" colspan="10">No hay colaboradores. Se agregan en RH › Colaboradores o con un alta.</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="10">' + (COL.length ? 'Nadie coincide.' : 'No hay colaboradores. Se agregan en RH › Colaboradores o con un alta.') + '</td></tr>';
   }
   function pintaVacKpis() {
     var hoy = hoyISO(), fuera = AUS.filter(function (a) { return a.desde <= hoy && a.hasta >= hoy; });
     var prox = AUS.filter(function (a) { var d = fechaD(a.desde), h = fechaD(hoy); return a.desde > hoy && (d - h) / 864e5 <= 15; });
-    var pend = COL.filter(function (c) { return (c.vac && c.vac.pendiente) || c.sueldo == null; }).length;
-    $('vac-kpis').innerHTML = '<div class="kpi"><div class="l">Fuera hoy</div><div class="v">' + fuera.length + '</div><div class="s">' + esc(fuera.map(function (a) { return a.nombre.split(' ')[0]; }).slice(0, 4).join(', ') || 'Todos están') + '</div></div>'
-      + '<div class="kpi"><div class="l">Próximos 15 días</div><div class="v">' + prox.length + '</div><div class="s">Salen pronto</div></div>'
-      + '<div class="kpi"><div class="l">Colaboradores</div><div class="v">' + COL.length + '</div><div class="s">' + (pend ? pend + ' sin carga inicial' : 'Todos con sus días') + '</div></div>';
+    var pend = COL.filter(sinCarga).length;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('vac-kpis'), {
+      titulo: 'Tu trabajo · vacaciones y permisos',
+      pilas: [
+        { k: 'fuera', t: 'Fuera hoy', n: fuera.length, d: fuera.map(function (a) { return a.nombre.split(' ')[0]; }).slice(0, 4).join(', ') || 'todos están', tono: 'naranja', on: VFX === 'fuera' },
+        { k: 'prox', t: 'Próximos 15 días', n: prox.length, d: 'salen pronto', tono: 'azul', on: VFX === 'prox' },
+        { k: 'col', t: 'Colaboradores', n: COL.length, d: 'sus días y su sueldo', tono: 'verde', on: VT === 'dias' && !VFX },
+        { k: 'sin', t: 'Sin carga inicial', n: pend, d: pend ? 'les faltan sus días o su sueldo' : 'todos con sus días', tono: 'rojo', on: VFX === 'sin', tag: (CAPTURA || CORRIGE) && pend ? 'Te toca' : '' }],
+      alPicar: function (k) {
+        if (k === 'col') { VFX = ''; ponVT('dias'); }
+        else if (VFX === k) VFX = '';
+        else { VFX = k; if (k === 'sin') ponVT('dias'); else { ponVT('aus'); $('f-cuando').value = 'prox'; } }
+        pintaVacKpis(); pintaAus(); pintaDias();
+      }
+    });
     var c = EST.carga || {}, faltaPre = !c.prestamos, n = c.pendientes || 0;
     $('carga-n').hidden = !((n > 0 || faltaPre) && CAPTURA);
     $('carga-b').hidden = !(n > 0);
@@ -704,41 +744,58 @@ tr.click:hover td{background:var(--navy-soft)}
   function debe(p) { return Math.round((Number(p.monto) - Number(p.pagado || 0)) * 100) / 100; }
   function cada(p) { return p.plan && p.plan.length ? Number(p.plan[0].monto) : Number(p.monto) / p.pagos; }
   function preFiltrados() {
-    var q = $('p-q').value.trim().toLowerCase();
+    var q = norm($('p-q').value.trim()), EP = { aut: 'solicitado', viv: 'autorizado', liq: 'liquidado' }[PFX];
     return PRE.filter(function (p) {
       if (PT === 'curso' && ['solicitado', 'autorizado'].indexOf(p.estado) < 0) return false;
-      return !q || String(p.nombre).toLowerCase().indexOf(q) >= 0;
+      if (EP && p.estado !== EP) return false;
+      return !q || norm(p.nombre).indexOf(q) >= 0;
     });
   }
   function pintaPre() {
     var cur = PRE.filter(function (p) { return p.estado === 'solicitado' || p.estado === 'autorizado'; });
     $('pt-n1').textContent = cur.length;
     var porAut = PRE.filter(function (p) { return p.estado === 'solicitado'; }), vivos = PRE.filter(function (p) { return p.estado === 'autorizado'; });
-    $('pre-kpis').innerHTML = '<div class="kpi"><div class="l">Por autorizar</div><div class="v">' + porAut.length + '</div><div class="s">' + (porAut.length ? esc(dinero(porAut.reduce(function (s, p) { return s + Number(p.monto); }, 0))) : 'Nada esperando') + '</div></div>'
-      + '<div class="kpi"><div class="l">Por descontar</div><div class="v">' + esc(dinero(vivos.reduce(function (s, p) { return s + debe(p); }, 0))) + '</div><div class="s">' + vivos.length + (vivos.length === 1 ? ' préstamo autorizado' : ' préstamos autorizados') + '</div></div>';
+    var liq = PRE.filter(function (p) { return p.estado === 'liquidado'; });
+    if (PT === 'colab') PFX = '';
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('pre-kpis'), {
+      titulo: 'Tu trabajo · los préstamos',
+      pilas: [
+        { k: 'aut', t: 'Por autorizar', n: porAut.length, d: porAut.length ? dinero(porAut.reduce(function (s, p) { return s + Number(p.monto); }, 0)) : 'nada esperando', tono: 'naranja', on: PFX === 'aut', tag: AUTORIZA && porAut.length ? 'Te toca' : '' },
+        { k: 'viv', t: 'Por descontar', n: vivos.length, txt: dinero(vivos.reduce(function (s, p) { return s + debe(p); }, 0)), d: vivos.length + (vivos.length === 1 ? ' préstamo autorizado' : ' préstamos autorizados'), tono: 'azul', on: PFX === 'viv' },
+        { k: 'liq', t: 'Pagados', n: liq.length, d: 'ya se terminaron de pagar', tono: 'verde', on: PFX === 'liq' }],
+      alPicar: function (k) {
+        PFX = PFX === k ? '' : k;
+        var pt = PFX === 'liq' ? 'todo' : PFX ? 'curso' : PT;
+        if (pt !== PT) { PT = pt; document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pt') === PT ? 'true' : 'false'); }); }
+        pintaPre();
+      },
+      boton: AUTORIZA && porAut.length ? { t: 'Empezar a revisar', n: porAut.length, alPicar: function () { COLAP = porAut.map(function (p) { return p.id; }); fichaPre(porAut[0].id); } } : null
+    });
     $('h-pre').textContent = { curso: 'En curso', todo: 'Historial', colab: 'Por colaborador' }[PT];
     $('pre-sub').textContent = { curso: 'Por autorizar y autorizados que todavía se están descontando.', todo: 'Todos los préstamos, con su estado.', colab: 'Cuánto se le ha prestado a cada quien y cuánto debe.' }[PT];
     if (PT === 'colab') {
       var g = {};
       PRE.forEach(function (p) { if (p.estado === 'rechazado' || p.estado === 'cancelado') return; var x = g[p.colab_id] = g[p.colab_id] || { nombre: p.nombre, n: 0, prestado: 0, pagado: 0, debe: 0 };
         x.n++; x.prestado += Number(p.monto); x.pagado += Number(p.pagado || 0); if (p.estado === 'autorizado') x.debe += debe(p); });
-      var L = Object.keys(g).map(function (k) { return g[k]; }).filter(function (x) { var q = $('p-q').value.trim().toLowerCase(); return !q || x.nombre.toLowerCase().indexOf(q) >= 0; })
+      var L = Object.keys(g).map(function (k) { return g[k]; }).filter(function (x) { var q = norm($('p-q').value.trim()); return !q || norm(x.nombre).indexOf(q) >= 0; })
         .sort(function (a, b) { return a.nombre.localeCompare(b.nombre); });
+      var VC = pag(PGP, 'pre', [PT, $('p-q').value].join('|'), L);
       $('pre-h').innerHTML = '<tr><th>Colaborador</th><th class="monto">Préstamos</th><th class="monto">Prestado</th><th class="monto">Pagado</th><th class="monto">Debe</th></tr>';
-      $('pre-b').innerHTML = L.length ? L.map(function (x) {
+      $('pre-b').innerHTML = VC.length ? VC.map(function (x) {
         return '<tr><td data-l="Colaborador" class="rs w">' + esc(x.nombre) + '</td><td data-l="Préstamos" class="monto">' + x.n + '</td><td data-l="Prestado" class="monto">' + esc(dinero(x.prestado)) + '</td>'
           + '<td data-l="Pagado" class="monto">' + esc(dinero(x.pagado)) + '</td><td data-l="Debe" class="monto"><b>' + esc(dinero(x.debe)) + '</b></td></tr>';
       }).join('') : '<tr><td class="vacio" colspan="5">Sin préstamos.</td></tr>';
       return;
     }
-    var L2 = preFiltrados();
+    var L2 = preFiltrados(), V2 = pag(PGP, 'pre', [PT, PFX, $('p-q').value].join('|'), L2);
+    COLAP = L2.map(function (p) { return p.id; });
     $('pre-h').innerHTML = '<tr><th>Colaborador</th><th class="monto">Monto</th><th>Pagos</th><th class="monto">Por pago</th><th class="monto">Pagado</th><th class="monto">Debe</th><th>Estado</th><th>Pedido</th></tr>';
-    $('pre-b').innerHTML = L2.length ? L2.map(function (p) {
+    $('pre-b').innerHTML = V2.length ? V2.map(function (p) {
       return '<tr class="click" tabindex="0" data-pre="' + p.id + '"><td data-l="Colaborador" class="rs w">' + esc(p.nombre) + '</td><td data-l="Monto" class="monto">' + esc(dinero(p.monto)) + '</td>'
         + '<td data-l="Pagos">' + p.pagos + ' ' + esc(p.pagos === 1 ? PER[p.periodicidad] : PER_PL[p.periodicidad]) + '</td><td data-l="Por pago" class="monto">' + esc(dinero(cada(p))) + '</td>'
         + '<td data-l="Pagado" class="monto">' + esc(dinero(p.pagado)) + '</td><td data-l="Debe" class="monto">' + (p.estado === 'autorizado' ? '<b>' + esc(dinero(debe(p))) + '</b>' : '') + '</td>'
         + '<td data-l="Estado">' + chip(EST_TXT[p.estado] || p.estado, EST_CHIP[p.estado]) + '</td><td data-l="Pedido" class="mut">' + esc(fecha(String(p.solicitado).slice(0, 10))) + '</td></tr>';
-    }).join('') : '<tr><td class="vacio" colspan="8">' + (PT === 'curso' ? 'No hay préstamos en curso.' : 'Sin préstamos.') + '</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="8">' + (PFX || $('p-q').value ? 'Nada con lo que escogiste.' : PT === 'curso' ? 'No hay préstamos en curso.' : 'Sin préstamos.') + '</td></tr>';
   }
   async function cargaPre() {
     var r = await Promise.all([rpc('rh_prestamos_lista'), rpc('rh_colaboradores')]);
@@ -772,11 +829,14 @@ tr.click:hover td{background:var(--navy-soft)}
       + (CAPTURA && p.estado === 'solicitado' ? '<button class="btn" type="button" id="p-ed">Cambiar</button><button class="btn peligro" type="button" id="p-can">Cancelar solicitud</button>' : '')
       + (CAPTURA && p.estado === 'autorizado' ? '<button class="btn" type="button" id="p-liq">Pagó todo de una vez</button>' : '')
       + '<button class="btn" type="button" id="x-plan" data-excel>Excel</button></div>');
+    var NV = window.PROFASE_PILAS ? PROFASE_PILAS.nav({ ids: COLAP, id: p.id, antes: $('v-cierra'), clase: 'btn chico', abre: function (x) { fichaPre(x); } }) : null;
     async function resuelve(aut) {
       var r = await pregunta(aut ? '¿Autorizar el préstamo de ' + p.nombre + ' por ' + dinero(p.monto) + '?' : '¿Rechazar el préstamo de ' + p.nombre + '?',
         aut ? 'Comentario (opcional)' : 'Escribe por qué se rechaza', aut ? 'Autorizar' : 'Rechazar');
       if (!r || !r.ok) return;
-      try { await rpc('rh_prestamo_resuelve', { p_id: p.id, p_autoriza: aut, p_comentario: r.texto || '' }); cierra(); avisa(aut ? 'Autorizado. A Alex le llega el aviso.' : 'Rechazado.'); await cargaPre(); }
+      var sig = NV && NV.sig;
+      try { await rpc('rh_prestamo_resuelve', { p_id: p.id, p_autoriza: aut, p_comentario: r.texto || '' }); cierra(); avisa(aut ? 'Autorizado. A Alex le llega el aviso.' : 'Rechazado.'); await cargaPre();
+        var y = sig && PRE.filter(function (z) { return z.id === sig; })[0]; if (y && y.estado === 'solicitado') { COLAP = PRE.filter(function (z) { return z.estado === 'solicitado'; }).map(function (z) { return z.id; }); fichaPre(sig); } }
       catch (e) { msgEn(falla(e)); }
     }
     if ($('p-aut')) { $('p-aut').onclick = function () { resuelve(true); }; $('p-rec').onclick = function () { resuelve(false); }; }
@@ -862,8 +922,20 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* =============================== ALTAS Y BAJAS =============================== */
   function pintaMov() {
-    var hoy = hoyISO();
-    $('mov-b').innerHTML = MOV.length ? MOV.map(function (m) {
+    var hoy = hoyISO(), q = norm($('m-q').value.trim());
+    var porConf = MOV.filter(function (m) { return m.tipo === 'baja' && !m.confirmada; });
+    var PM = { por: function (m) { return m.tipo === 'baja' && !m.confirmada; }, alta: function (m) { return m.tipo === 'alta'; }, baja: function (m) { return m.tipo === 'baja'; } };
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('mov-kpis'), {
+      titulo: 'Tu trabajo · altas y bajas',
+      pilas: [
+        { k: 'por', t: 'Bajas por confirmar', n: porConf.length, d: 'las confirma Héctor Daniel Nava o Fernando Cadengo', tono: 'naranja', on: MFX === 'por', tag: CORRIGE && porConf.length ? 'Te toca' : '' },
+        { k: 'alta', t: 'Altas', n: MOV.filter(PM.alta).length, d: 'ingresos registrados', tono: 'verde', on: MFX === 'alta' },
+        { k: 'baja', t: 'Bajas', n: MOV.filter(PM.baja).length, d: 'avisos y confirmadas', tono: 'rojo', on: MFX === 'baja' }],
+      alPicar: function (k) { MFX = MFX === k ? '' : k; pintaMov(); }
+    });
+    var L = MOV.filter(function (m) { return (!MFX || PM[MFX](m)) && (!q || norm([m.nombre, m.area, m.motivo, m.nota].join(' ')).indexOf(q) >= 0); });
+    var V = pag(PGM, 'mov', [q, MFX].join('|'), L);
+    $('mov-b').innerHTML = V.length ? V.map(function (m) {
       var est = m.tipo === 'alta' ? '' : !m.confirmada ? chip('Por confirmar (Daniel o Cadengo)', 'ojo')
         : (m.aplicado ? chip('Confirmada · ya salió', '') : chip('Confirmada · sale después del ' + fecha(m.fecha), 'az'));
       return '<tr><td data-l="Movimiento">' + chip(m.tipo === 'alta' ? 'Alta' : 'Baja', m.tipo === 'alta' ? 'ok' : 'mal') + '</td><td data-l="Colaborador" class="rs">' + esc(m.nombre) + '</td>'
@@ -875,7 +947,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + (CORRIGE && m.tipo === 'baja' && !m.confirmada ? '<button class="btn chico acento" type="button" data-confirma="' + m.id + '">Confirmar baja</button>' : '')
         + (CAPTURA && m.tipo === 'baja' && (!m.confirmada || CORRIGE) ? '<button class="btn chico" type="button" data-deshace="' + m.id + '">Deshacer</button>' : '')
         + (m.confirmo ? '<span class="mut">Confirmó ' + esc(m.confirmo) + '</span>' : '') + '</span></td></tr>';
-    }).join('') : '<tr><td class="vacio" colspan="8">Todavía no hay altas ni bajas registradas aquí.</td></tr>';
+    }).join('') : '<tr><td class="vacio" colspan="8">' + (MOV.length ? 'Nada con lo que escogiste.' : 'Todavía no hay altas ni bajas registradas aquí.') + '</td></tr>';
   }
   async function cargaMov() {
     var r = await Promise.all([rpc('rh_movimientos_lista'), rpc('rh_colaboradores')]);
@@ -947,9 +1019,21 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   function completo(c) { return EXP_TIPOS.filter(function (t) { return t.ob; }).every(function (t) { return (c.tiene || []).indexOf(t.k) >= 0; }); }
   function pintaExp() {
-    var q = ($('e-q').value || '').toLowerCase(), f = $('e-f').value;
-    var L = EXP.filter(function (c) { return (!q || c.nombre.toLowerCase().indexOf(q) >= 0) && (!f || (f === 'completo') === completo(c)); });
-    $('exp-b').innerHTML = L.length ? L.map(function (c) {
+    var q = norm($('e-q').value || ''), f = $('e-f').value;
+    var L = EXP.filter(function (c) { return (!q || norm(c.nombre + ' ' + (c.area || '')).indexOf(q) >= 0) && (!f || (f === 'completo') === completo(c)); });
+    var falta = EXP.filter(function (c) { return !completo(c); }), comp = EXP.length - falta.length;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('exp-kpis'), {
+      titulo: 'Tu trabajo · los expedientes',
+      pilas: [
+        { k: 'falta', t: 'Les falta algo obligatorio', n: falta.length, d: 'INE, domicilio o acta', tono: 'rojo', on: f === 'falta', tag: CAPTURA && falta.length ? 'Te toca' : '' },
+        { k: 'completo', t: 'Completos', n: comp, d: 'con lo obligatorio', tono: 'verde', on: f === 'completo' },
+        { k: '', t: 'Todos', n: EXP.length, d: 'colaboradores', tono: 'azul', on: !f }],
+      alPicar: function (k) { $('e-f').value = f === k ? '' : k; pintaExp(); },
+      boton: CAPTURA && falta.length ? { t: 'Empezar por los que les falta', n: falta.length, alPicar: function () { COLAE = falta.map(function (c) { return c.id; }); fichaExp(falta[0].id); } } : null
+    });
+    var V = pag(PGE, 'exp', [q, f].join('|'), L);
+    COLAE = L.map(function (c) { return c.id; });
+    $('exp-b').innerHTML = V.length ? V.map(function (c) {
       return '<tr class="click" data-exp="' + esc(c.id) + '" tabindex="0"><td data-l="Colaborador" class="w"><span class="rs">' + esc(c.nombre) + '</span></td><td data-l="Área">' + esc(c.area || '') + '</td>'
         + '<td data-l="Obligatorios" class="w"><div class="ob">' + obligatorios(c) + '</div></td><td data-l="Documentos">' + c.n + '</td></tr>';
     }).join('') : '<tr><td colspan="4" class="vacio">' + (EXP.length ? 'Nadie coincide.' : 'Todavía no hay colaboradores.') + '</td></tr>';
@@ -972,6 +1056,7 @@ tr.click:hover td{background:var(--navy-soft)}
         + '<div class="campo"><label for="x-tipo">Qué es</label><select id="x-tipo"><option value="">Escoge…</option>' + EXP_TIPOS.map(function (t) { return '<option value="' + t.k + '">' + esc(t.t) + '</option>'; }).join('') + '</select></div>'
         + '<div class="campo"><label for="x-arch">Archivo (PDF o foto, hasta 15 MB)</label><input type="file" id="x-arch" accept=".pdf,image/*"></div>'
         + '</div></div><div class="msg" id="v-msg" hidden></div><div class="acciones" style="padding:0 14px 12px"><button class="btn acento" type="button" id="x-ok">Subir</button></div></div>' : ''));
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLAE, id: id, antes: $('v-cierra'), clase: 'btn chico', abre: function (x) { fichaExp(x); } });
     $('ficha').querySelectorAll('[data-xver]').forEach(function (b) {
       b.onclick = function () { var d = EXP_DOCS.filter(function (x) { return x.id === +b.getAttribute('data-xver'); })[0]; if (!d) return; if (esPdfExp(d) && VISOR) VISOR.ver(d, b); else verFoto(d, b); };
     });
@@ -1104,32 +1189,46 @@ tr.click:hover td{background:var(--navy-soft)}
       document.title = 'Portal PROFASE · ' + $('titulo').textContent;
       botones();
       $('s-' + SEC).hidden = false;
+      var dS = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
       if (SEC === 'vac') {
         $('f-tipo').innerHTML += Object.keys(TIPOS).map(function (k) { return '<option value="' + k + '">' + TIPOS[k] + '</option>'; }).join('');
-        ['f-cuando', 'f-tipo', 'f-q'].forEach(function (id) { $(id).addEventListener('input', pintaAus); });
+        if (window.PROFASE_PILAS) PROFASE_PILAS.barra($('vac-bar'), { caja: true, buscar: $('f-q'), periodo: [$('f-cuando')], botones: [$('x-aus'), $('x-dias')],
+          filtros: dS ? { grupos: [{ t: 'AUSENCIAS', campos: [dS($('f-tipo'), { t: 'TIPO' })] }], limpiar: function () { if ($('f-tipo').value) { $('f-tipo').value = ''; pintaAus(); } } } : null });
+        PGA = pagina('aus-pag', 'rh-ausencias', 'Ausencias', function () { pintaAus(); });
+        PGD = pagina('dias-pag', 'rh-dias', 'Colaboradores', function () { pintaDias(); });
+        ponVT('aus');
+        ['f-cuando', 'f-tipo'].forEach(function (id) { $(id).addEventListener('input', pintaAus); });
+        $('f-q').addEventListener('input', function () { pintaAus(); pintaDias(); });
         $('carga-b').onclick = function () { formCarga(); };
         await cargaVac();
         if (/carga=1/.test(location.search) && EST.carga && EST.carga.pendientes > 0 && (CAPTURA || CORRIGE)) formCarga();
       } else if (SEC === 'pre') {
+        if (window.PROFASE_PILAS) PROFASE_PILAS.barra($('pre-bar'), { caja: true, buscar: $('p-q'), botones: [$('x-pre')] });
+        PGP = pagina('pre-pag', 'rh-prestamos', 'Préstamos', function () { pintaPre(); });
         $('p-q').addEventListener('input', pintaPre);
         await cargaPre();
         var q = /[?&]prestamo=(\d+)/.exec(location.search); if (q) fichaPre(+q[1]);
       } else if (SEC === 'exp') {
+        if (window.PROFASE_PILAS) PROFASE_PILAS.barra($('exp-bar'), { caja: true, buscar: $('e-q'), botones: [$('x-exp')] });
+        PGE = pagina('exp-pag', 'rh-expedientes', 'Expedientes', function () { pintaExp(); });
         ['e-q', 'e-f'].forEach(function (id) { $(id).addEventListener('input', pintaExp); });
         $('x-exp').onclick = function () { excelExp(this); };
         await cargaExp();
-      } else await cargaMov();
+      } else {
+        if (window.PROFASE_PILAS) PROFASE_PILAS.barra($('mov-bar'), { caja: true, buscar: $('m-q'), botones: [$('x-mov')] });
+        PGM = pagina('mov-pag', 'rh-movimientos', 'Movimientos', function () { pintaMov(); });
+        $('m-q').addEventListener('input', pintaMov);
+        await cargaMov();
+      }
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   document.addEventListener('click', async function (ev) {
     var t = ev.target.closest('button,tr.click'); if (!t) return;
     if (t.matches('[data-vt]')) {
-      VT = t.getAttribute('data-vt');
-      document.querySelectorAll('[data-vt]').forEach(function (b) { b.setAttribute('aria-selected', b === t ? 'true' : 'false'); });
-      $('vt-aus').hidden = VT !== 'aus'; $('vt-dias').hidden = VT !== 'dias'; return;
+      VFX = ''; ponVT(t.getAttribute('data-vt')); pintaVacKpis(); pintaAus(); pintaDias(); return;
     }
     if (t.matches('[data-pt]')) {
-      PT = t.getAttribute('data-pt');
+      PT = t.getAttribute('data-pt'); PFX = '';
       document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b === t ? 'true' : 'false'); });
       pintaPre(); return;
     }

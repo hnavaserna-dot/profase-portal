@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=ad354184dd"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Expediente del cliente, Pendientes y Reuniones (31-oct-2026, pedido de Daniel: «llevar un expediente
    digital… por grupo y la razón social… tomar notas y de ahí mismo mandar pendientes al equipo PROFASE o a mí mismo, con
@@ -151,6 +151,7 @@ tr.click:hover td{background:var(--navy-soft)}
 .ficha .fcab .ppl-nav{margin-left:auto}
 @media (max-width:640px){.ficha .fcab{flex-wrap:wrap}.ficha .fcab .ppl-nav{margin-left:0}}
 #pen-bar{margin:0 0 12px}
+#exp-bar{margin:16px 0 0}#exp-pag:empty{display:none}
 .ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
 .ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
 .sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
@@ -544,14 +545,14 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
   <!-- ===== Expedientes ===== -->
   <section id="s-exp" hidden>
     <div id="exp-lista">
-      <div class="card" style="margin-top:16px">
-        <header><div><h2>Expedientes de clientes</h2><div class="sub">Cada grupo con sus razones sociales: reuniones, notas, pendientes y documentos.</div></div></header>
-        <div class="filtros">
-          <input type="search" id="q-exp" placeholder="Buscar grupo, razón social o RFC" aria-label="Buscar expediente">
-          <select id="f-exp" aria-label="Estatus"><option value="act">Activos e incubados</option><option value="todos">Todos (también inactivos)</option></select>
-        </div>
+      <div class="exp-bar" id="exp-bar"><input type="search" id="q-exp" placeholder="Buscar grupo, razón social o RFC" aria-label="Buscar expediente"></div>
+      <div hidden><select id="f-exp" aria-label="Estatus"><option value="act">Activos e incubados</option><option value="todos">Todos (también inactivos)</option></select></div>
+      <div id="exp-pilas"></div>
+      <div class="card">
+        <header><div><h2>Expedientes de clientes</h2><div class="sub" id="exp-sub">Cada grupo con sus razones sociales: reuniones, notas, pendientes y documentos.</div></div></header>
         <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Razones sociales</th><th>Pendientes</th><th>Notas</th><th>Documentos</th></tr></thead>
           <tbody id="exp-l"></tbody></table></div>
+        <nav class="pgn" id="exp-pag" aria-label="Páginas de expedientes"></nav>
       </div>
       <div class="card" id="pros-card" hidden>
         <header><div><h2>Prospectos</h2><div class="sub">Con quienes hay citas y todavía no son clientes. Cuando uno se vuelve cliente, Héctor Daniel Nava lo liga a su grupo.</div></div></header>
@@ -1602,7 +1603,17 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
   // pilas arriba (cada una resume su sección y al picarla abre solo esa sección) y un solo «+ Nuevo».
   function palabras(q) { return norm(q).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean); }
   function coincide(texto, ps) { if (!ps.length) return true; var t = ' ' + norm(texto).replace(/[^a-z0-9ñ]+/g, ' ') + ' '; return ps.every(function (p) { return t.indexOf(p) >= 0; }); }
+  // UX PROFASE (6-nov-2026): la barra (buscar y FILTROS con el estatus), «Tu trabajo» y las páginas de la lista
+  var EXP_BAR = null, EXP_PG = null, EXP_FIRMA = '', EFX = '';
+  function barraExp() {
+    if (EXP_BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    EXP_BAR = PROFASE_PILAS.barra($('exp-bar'), { caja: true, buscar: $('q-exp'),
+      filtros: d ? { grupos: [{ t: 'EXPEDIENTES', campos: [d($('f-exp'), { t: 'ESTATUS DEL CLIENTE', defecto: function () { return 'act'; } })] }], limpiar: function () { if ($('f-exp').value !== 'act') { $('f-exp').value = 'act'; pintaLista(); } } } : null });
+    if (window.PROFASE_PAGINAS) EXP_PG = PROFASE_PAGINAS.crea({ donde: $('exp-pag'), clave: 'expedientes', nombre: 'Expedientes', arriba: $('exp-l').closest('.card'), cambio: function () { pintaLista(); } });
+  }
   function pintaLista() {
+    barraExp();
     var ps = palabras($('q-exp').value), todos = $('f-exp').value === 'todos', filas = [];
     CLIS.forEach(function (c) {
       var es = c.e.filter(function (x) { return todos || x.st !== 0; });
@@ -1611,7 +1622,25 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       // si lo buscado es una razón social (o su RFC), sale su renglón y abre directo esa razón social
       es.filter(function (x) { return coincide(x.r + ' ' + x.rfc, ps); }).forEach(function (x) { filas.push({ c: c, e: x }); });
     });
-    $('exp-l').innerHTML = filas.length ? filas.map(function (f) {
+    var PEX = { pend: function (f) { return !f.e && f.c.np > 0; }, venc: function (f) { return !f.e && f.c.nv > 0; }, docs: function (f) { return !f.e && f.c.nd > 0; }, notas: function (f) { return !f.e && f.c.nn > 0; } };
+    var cnt = function (k) { return filas.filter(PEX[k]).length; };
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('exp-pilas'), {
+      titulo: 'Tu trabajo · los expedientes',
+      pilas: [
+        { k: 'venc', t: 'Con pendientes vencidos', n: cnt('venc'), d: 'algo ya pasó de su fecha', tono: 'rojo', on: EFX === 'venc' },
+        { k: 'pend', t: 'Con pendientes', n: cnt('pend'), d: 'abiertos', tono: 'naranja', on: EFX === 'pend' },
+        { k: 'notas', t: 'Con notas', n: cnt('notas'), d: 'de las reuniones y del equipo', tono: 'azul', on: EFX === 'notas' },
+        { k: 'docs', t: 'Con documentos', n: cnt('docs'), d: 'en su expediente', tono: 'verde', on: EFX === 'docs' }]
+        .concat(PROS.length ? [{ k: 'pros', t: 'Prospectos', n: PROS.length, d: 'con citas, sin ser clientes', tono: 'violeta', on: false }] : []),
+      alPicar: function (k) { if (k === 'pros') { try { $('pros-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} return; } EFX = EFX === k ? '' : k; pintaLista(); }
+    });
+    if (EFX) filas = filas.filter(PEX[EFX]);
+    var firma = [$('q-exp').value, $('f-exp').value, EFX].join('|');
+    if (EXP_PG && firma !== EXP_FIRMA) EXP_PG.inicio();
+    EXP_FIRMA = firma;
+    var vista = EXP_PG ? EXP_PG.corta(filas) : filas;
+    $('exp-sub').textContent = plural(filas.length, 'expediente', 'expedientes') + ' · cada grupo con sus razones sociales: reuniones, notas, pendientes y documentos.';
+    $('exp-l').innerHTML = vista.length ? vista.map(function (f) {
       var c = f.c, x = f.e;
       if (x) return '<tr class="click" tabindex="0" data-g="' + c.g + '" data-e="' + x.id + '"><td data-l="Cliente" class="w"><span class="rs">' + esc(x.r) + '</span> ' + chip('Razón social', 'az')
         + '<div class="mut">' + esc(x.rfc) + ' · de ' + esc(c.n) + '</div></td>'
@@ -1621,7 +1650,7 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
         + '<td data-l="Razones sociales">' + esc(c.e.length === 1 ? c.e[0].r : plural(c.e.length, 'razón social', 'razones sociales')) + '</td>'
         + '<td data-l="Pendientes">' + (c.np ? chip(String(c.np), 'az') + (c.nv ? ' ' + chip(plural(c.nv, 'vencido', 'vencidos'), 'mal') : '') : '<span class="mut">—</span>') + '</td>'
         + '<td data-l="Notas">' + (c.nn || '<span class="mut">—</span>') + '</td><td data-l="Documentos">' + (c.nd || '<span class="mut">—</span>') + '</td></tr>';
-    }).join('') : '<tr><td colspan="5" class="vacio">' + (CLIS.length ? 'Nada coincide con la búsqueda.' : 'Todavía no tienes expedientes de clientes.') + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="vacio">' + (CLIS.length ? (EFX ? 'Nada con lo que escogiste.' : 'Nada coincide con la búsqueda.') : 'Todavía no tienes expedientes de clientes.') + '</td></tr>';
     $('exp-l').querySelectorAll('[data-g]').forEach(function (tr) {
       var g = +tr.getAttribute('data-g'), e = +tr.getAttribute('data-e') || null;
       tr.onclick = function () { abreExp(g, e, null); };

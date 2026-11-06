@@ -28,7 +28,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Calendario</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -227,6 +227,7 @@ td.nw{white-space:nowrap}
 .pill{display:inline-block;font-size:11.5px;border-radius:999px;padding:1px 8px;background:var(--ok-soft);color:var(--ok);font-weight:500;white-space:nowrap}
 .pill.no{background:var(--danger-soft);color:var(--danger)}
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.col-bar{margin:0 0 4px}#col-pag:empty{display:none}
 .filters input,.filters select{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:14px;min-width:0}
 .filters input{flex:1 1 220px}
 .link{background:none;border:0;color:var(--brand-ink);font-weight:500;padding:2px 4px;text-decoration:underline;text-underline-offset:2px;font-size:13.5px}
@@ -690,20 +691,25 @@ button.kpi:focus-visible{outline-offset:-3px}
               <button type="button" class="btn primary solo-colab" data-acc="nuevo-col">Agregar colaborador</button>
               <button type="button" class="btn solo-colab" data-acc="subir">Subir Excel</button>
               <button type="button" class="btn solo-colab" data-acc="plantilla">Bajar plantilla</button>
-              <button type="button" class="btn" data-excel data-acc="excel-col">Descargar Excel</button>
             </div>
           </div>
           <div class="sincumple" id="sinCumple" role="status" hidden></div>
           <input type="file" id="xlsIn" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-          <div class="filters">
+          <!-- UX PROFASE (6-nov-2026): la barra (buscar, FILTROS con el área y el mes, Excel), «Tu trabajo» y las páginas -->
+          <div class="col-bar" id="col-bar">
             <input type="search" id="q" placeholder="Buscar por nombre" aria-label="Buscar por nombre">
+            <button type="button" class="btn" data-excel data-acc="excel-col">Descargar Excel</button>
+          </div>
+          <div hidden>
             <select id="fArea" aria-label="Área"><option value="">Todas las áreas</option></select>
             <select id="fMes" aria-label="Mes de cumpleaños"><option value="">Todos los meses</option></select>
           </div>
+          <div id="col-pilas"></div>
           <div class="tablebox"><table>
             <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th class="solo-colab"></th></tr></thead>
             <tbody id="colBody"></tbody>
           </table></div>
+          <nav class="pgn" id="col-pag" aria-label="Páginas de colaboradores"></nav>
           <p class="note" style="margin-top:10px" id="colNota"></p>
         </section>
 
@@ -2287,16 +2293,36 @@ button.kpi:focus-visible{outline-offset:-3px}
     var q=norm($('q').value), a=$('fArea').value, fm=$('fMes').value;
     return colab.filter(function(c){ return (!q||norm(c.nombre).indexOf(q)>=0)&&(!a||c.area===a)&&(!fm||c.mes===+fm); }).sort(ordenCol);
   }
+  var COLX='', COL_PG=null, COL_FIRMA='';
+  function barraCol(){
+    if(barraCol.listo||!window.PROFASE_PILAS) return; barraCol.listo=true;
+    var d=window.PROFASE_FILTROS&&window.PROFASE_FILTROS.deSelect;
+    PROFASE_PILAS.barra($('col-bar'),{caja:true,buscar:$('q'),botones:[$('col-bar').querySelector('[data-acc="excel-col"]')],
+      filtros:d?{grupos:[{t:'COLABORADORES',campos:[d($('fArea'),{t:'ÁREA'}),d($('fMes'),{t:'MES DE CUMPLEAÑOS'})]}],limpiar:function(){ $('fArea').value=''; $('fMes').value=''; renderCol(); }}:null});
+    if(window.PROFASE_PAGINAS) COL_PG=PROFASE_PAGINAS.crea({donde:$('col-pag'),clave:'rh-colaboradores',nombre:'Colaboradores',arriba:$('p-col'),cambio:function(){ renderCol(); }});
+  }
   function renderCol(){
-    var rows=filtrados(), cap=capCol();
-    $('colBody').innerHTML=rows.length?rows.map(function(c){
+    barraCol();
+    var base=filtrados(), cap=capCol(), mesHoy=HOY.getMonth()+1;
+    var PC={mes:function(c){ return c.mes===mesHoy; }, aniv:function(c){ return !!c.ingreso&&parse(c.ingreso).getMonth()+1===mesHoy&&parse(c.ingreso).getFullYear()<HOY.getFullYear(); }, sin:function(c){ return !c.ingreso; }};
+    var n=function(k){ return base.filter(PC[k]).length; };
+    if(window.PROFASE_PILAS) PROFASE_PILAS.pinta($('col-pilas'),{titulo:'Colaboradores · '+MESES[mesHoy-1],
+      pilas:[{k:'mes',t:'Cumplen años este mes',n:n('mes'),d:'salen en el Calendario',tono:'naranja',on:COLX==='mes'},
+        {k:'aniv',t:'Aniversario este mes',n:n('aniv'),d:'años en PROFASE',tono:'azul',on:COLX==='aniv'},
+        {k:'sin',t:'Sin fecha de ingreso',n:n('sin'),d:'sin aniversario ni vacaciones',tono:'rojo',on:COLX==='sin',tag:cap&&n('sin')?'Te toca':''}],
+      alPicar:function(k){ COLX=COLX===k?'':k; renderCol(); }});
+    var rows=COLX?base.filter(PC[COLX]):base, firma=[$('q').value,$('fArea').value,$('fMes').value,COLX].join('|');
+    if(COL_PG&&firma!==COL_FIRMA) COL_PG.inicio();
+    COL_FIRMA=firma;
+    var V=COL_PG?COL_PG.corta(rows):rows;
+    $('colBody').innerHTML=V.length?V.map(function(c){
       var i=c.ingreso?parse(c.ingreso):null, an=anios(c);
       return '<tr><td><div class="who">'+avatar(c)+(cap?'<button type="button" class="nomb" data-edit-col="'+esc(c.id)+'" aria-label="Editar a '+esc(c.nombre)+'">'+esc(c.nombre)+LAPIZ+'</button>':esc(c.nombre))+'</div></td><td class="nw">'+esc(c.area||'')+'</td>'
         +'<td class="nw">'+c.dia+' de '+MESES[c.mes-1]+'</td>'
         +'<td class="nw">'+(i?'<span class="num">'+i.getDate()+'-'+MES3[i.getMonth()]+'-'+i.getFullYear()+'</span> · '+(an<1?'menos de un año':an+(an===1?' año':' años')):'—')+'</td>'
         +(cap?'<td class="nw"><button type="button" class="link" data-edit-col="'+esc(c.id)+'">Editar</button><button type="button" class="link danger" data-del-col="'+esc(c.id)+'">Quitar</button></td>':'')
         +'</tr>';
-    }).join(''):'<tr><td colspan="5" class="empty">'+(colab.length?'Nadie coincide con la búsqueda.':'Todavía no hay colaboradores capturados.')+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">'+(colab.length?(COLX?'Nadie con lo que escogiste.':'Nadie coincide con la búsqueda.'):'Todavía no hay colaboradores capturados.')+'</td></tr>';
     $('colNota').textContent=cap
       ? 'Del cumpleaños solo se guarda el día y el mes, sin el año, para no exponer la edad. Todos salen en el Calendario, en el aviso del día y en su felicitación. La fecha de ingreso lleva el año porque con ella se calculan los aniversarios y los días de vacaciones. Si alguien deja el despacho, regístralo en RH › Altas y bajas (así queda su baja); «Quitar» es solo para un error de captura.'
       : colabCap ? 'Los colaboradores se capturan en RH › Colaboradores.'

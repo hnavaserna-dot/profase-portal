@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=0acf1106d6"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Access › WorkFlow (etapa 1 de la migración del Access, 29-oct-2026): cada actividad del WorkFlow
    como en la ficha del Access, solo para consultar: estatus completo, comentario, bitácora y documentos. Los datos los
@@ -94,6 +94,8 @@ button,select,input{font:inherit;color:inherit}
 .card>header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
 .card h2{font-size:18px;font-weight:700}
 .card .sub{color:var(--muted);font-size:12.5px}
+/* UX PROFASE (6-nov-2026): la barra, «Tu trabajo» y las páginas */
+.axw-bar{margin:16px 0 0}.pgn:empty{display:none}.pgn{margin:10px 0 0}
 .filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .filtros select,.filtros input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px;max-width:100%}
 .filtros input{width:230px}
@@ -213,28 +215,25 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div class="nota" id="error" hidden></div>
   <div class="cargando" id="cargando">Cargando el WorkFlow…</div>
 
-  <section class="kpis" id="kpis" aria-label="Resumen" hidden>
-    <div class="kpi"><div class="l">Actividades</div><div class="v num" id="k-tot">–</div><div class="s" id="k-tot-s">&nbsp;</div></div>
-    <div class="kpi"><div class="l">Por iniciar</div><div class="v num" id="k-pi">–</div><div class="s" id="k-pi-s">&nbsp;</div></div>
-    <div class="kpi"><div class="l">En proceso</div><div class="v num" id="k-ep">–</div><div class="s" id="k-ep-s">&nbsp;</div></div>
-    <div class="kpi"><div class="l">Terminadas</div><div class="v num" id="k-te">–</div><div class="s" id="k-te-s">&nbsp;</div></div>
-  </section>
+  <div class="axw-bar" id="axw-bar" hidden>
+    <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, actividad)" aria-label="Buscar">
+    <select id="f-mes" aria-label="Mes del WorkFlow"></select>
+    <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
+  </div>
+  <div id="axw-sel" hidden>
+    <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
+    <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
+    <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
+  </div>
+  <div id="kpis" hidden></div>
 
   <section class="card" id="p-lista" aria-labelledby="h-lista" hidden>
     <header>
       <div><h2 id="h-lista">Actividades</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
-      <div class="filtros">
-        <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, actividad)" aria-label="Buscar">
-        <select id="f-mes" aria-label="Mes del WorkFlow"></select>
-        <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
-        <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
-        <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
-        <button class="btn" type="button" id="x-lista" data-excel>Excel</button>
-      </div>
     </header>
     <div class="tabla"><table id="lista"><thead><tr><th>Cliente</th><th>Actividad</th><th>Estatus</th><th>Responsable</th><th>Vence</th><th>Docs</th></tr></thead><tbody></tbody></table></div>
     <div class="vacio" id="lista-vacia" hidden>Ninguna actividad con estos filtros.</div>
-    <div class="mas" id="mas" hidden><button class="btn" type="button" id="ver-mas">Ver más</button></div>
+    <nav class="pgn" id="axw-pag" aria-label="Páginas de actividades"></nav>
   </section>
   <p class="pie" id="pie">El vencimiento es el del WorkFlow del portal (por ley y por las reglas de Daniel). La bitácora de cambios de estatus empieza en agosto de 2025, cuando el Access la empezó a guardar.</p>
 </div>
@@ -245,8 +244,8 @@ tr.fila:hover td{background:var(--navy-soft)}
 (function(){
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
-  var ZONA = 'America/Monterrey', PAGINA = 150;
-  var D = null, T = [], POR_ID = {}, mostrar = PAGINA, ROL = '', ABIERTA = null;
+  var ZONA = 'America/Monterrey';
+  var D = null, T = [], POR_ID = {}, ROL = '', ABIERTA = null, PG = null, FIRMA = '', COLA = [], VISTA = [];
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var ORDEN_EST = [5, 4, 3, 2, 6];
@@ -303,7 +302,8 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('hora').textContent = doc.refreshedAt ? 'Datos al ' + new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(doc.refreshedAt)).replace(/\./g, '') : '';
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como están en el Access, para consultar: estatus, comentario, bitácora y documentos. Desde el lunes 2 de noviembre el WorkFlow se trabaja en el CRM, en Workflow › Panel de trabajo.';
       opciones();
-      $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false;
+      $('cargando').hidden = true; $('kpis').hidden = false; $('p-lista').hidden = false; $('axw-bar').hidden = false;
+      barra();
       pinta();
       var h = /^#a(\d+)$/.exec(location.hash); if (h && POR_ID[+h[1]]) abre(+h[1]);
     } catch (e) {
@@ -335,16 +335,35 @@ tr.fila:hover td{background:var(--navy-soft)}
     });
   }
 
+  // la barra de UX PROFASE (6-nov-2026): buscar, el mes, FILTROS (estatus, responsable y plantilla) y Excel; y las páginas
+  function barra() {
+    if (!window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    PROFASE_PILAS.barra($('axw-bar'), { caja: true, buscar: $('f-buscar'), periodo: [$('f-mes')], botones: [$('x-lista')],
+      filtros: d ? { grupos: [{ t: 'ACTIVIDADES', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-resp'), { t: 'RESPONSABLE', buscar: true }), d($('f-pla'), { t: 'PLANTILLA', buscar: true })] }],
+        limpiar: function () { ['f-est', 'f-resp', 'f-pla'].forEach(function (k) { $(k).value = ''; }); pinta(); } } : null });
+    if (window.PROFASE_PAGINAS) PG = PROFASE_PAGINAS.crea({ donde: $('axw-pag'), clave: 'access-wf', nombre: 'Actividades', arriba: $('p-lista'), cambio: function () { pinta(); } });
+  }
   function pinta() {
-    var base = filtrados(true), cuenta = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, docs = 0;
+    var base = filtrados(true), cuenta = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, docs = 0, es = $('f-est').value;
     base.forEach(function (t) { cuenta[t[I.est]] = (cuenta[t[I.est]] || 0) + 1; if (t[I.docs]) docs++; });
-    $('k-tot').textContent = base.length; $('k-tot-s').textContent = docs + ' con documentos';
-    $('k-pi').textContent = cuenta[5]; $('k-pi-s').textContent = base.length ? Math.round(100 * cuenta[5] / base.length) + ' %' : ' ';
-    $('k-ep').textContent = cuenta[4]; $('k-ep-s').textContent = base.length ? Math.round(100 * cuenta[4] / base.length) + ' %' : ' ';
-    $('k-te').textContent = cuenta[2]; $('k-te-s').textContent = (cuenta[3] ? cuenta[3] + ' rechazadas · ' : '') + (base.length ? Math.round(100 * cuenta[2] / base.length) + ' %' : '');
-    var L = filtrados(false);
+    var pc = function (n) { return base.length ? Math.round(100 * n / base.length) + ' %' : ''; };
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Las actividades del mes', meta: base.length + (base.length === 1 ? ' actividad' : ' actividades') + ' · ' + docs + ' con documentos',
+      pilas: [
+        { k: '5', t: 'Por iniciar', n: cuenta[5], d: pc(cuenta[5]), tono: 'naranja', on: es === '5' },
+        { k: '4', t: 'En proceso', n: cuenta[4], d: pc(cuenta[4]), tono: 'azul', on: es === '4' },
+        { k: '2', t: 'Terminadas', n: cuenta[2], d: pc(cuenta[2]), tono: 'verde', on: es === '2' },
+        { k: '3', t: 'Rechazadas', n: cuenta[3], d: pc(cuenta[3]), tono: 'rojo', on: es === '3' }],
+      alPicar: function (k) { $('f-est').value = es === k ? '' : k; pinta(); },
+      boton: { t: 'Ver una por una', n: filtrados(false).length, alPicar: function () { var L = filtrados(false); if (!L.length) return; COLA = L.map(function (t) { return t[I.id]; }); abre(L[0][I.id]); } }
+    });
+    var L = filtrados(false), firma = [$('f-buscar').value, $('f-mes').value, es, $('f-resp').value, $('f-pla').value].join('|');
+    if (PG && firma !== FIRMA) PG.inicio();
+    FIRMA = firma; VISTA = L;
+    var V = PG ? PG.corta(L) : L;
     $('lista-sub').textContent = L.length === 1 ? '1 actividad' : L.length + ' actividades';
-    $('lista').tBodies[0].innerHTML = L.slice(0, mostrar).map(function (t) {
+    $('lista').tBodies[0].innerHTML = V.map(function (t) {
       var e = emp(t);
       return '<tr class="fila" tabindex="0" data-id="' + esc(t[I.id]) + '"><td><div class="rs">' + esc(e[1]) + '</div><div class="rfc">' + esc(e[2]) + (e[3] ? ' · ' + esc(e[3]) : '') + '</div></td>'
         + '<td><div>' + esc(actTxt(t)) + '</div><div class="rfc">' + esc(plaTxt(t)) + ' · ' + esc(mesTxt(t[I.ym])) + '</div></td>'
@@ -354,7 +373,6 @@ tr.fila:hover td{background:var(--navy-soft)}
         + '<td>' + (t[I.docs] ? '<span class="clip">' + esc(t[I.docs]) + (t[I.docs] === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>') + '</td></tr>';
     }).join('');
     $('lista-vacia').hidden = L.length > 0;
-    $('mas').hidden = L.length <= mostrar;
   }
 
   /* ---------- ficha de la actividad ---------- */
@@ -387,6 +405,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     }).join('') + '</ul>', String(otras.length));
     h += '</div>';
     $('ficha').innerHTML = h;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: id, antes: $('cerrar'), clase: 'btn', abre: function (x) { abre(x); } });
     $('velo').hidden = false;
     $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
@@ -481,19 +500,18 @@ tr.fila:hover td{background:var(--navy-soft)}
     b.disabled = false;
   }
 
-  ['f-buscar', 'f-mes', 'f-est', 'f-resp', 'f-pla'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
-  $('ver-mas').onclick = function () { mostrar += PAGINA; pinta(); };
+  ['f-buscar', 'f-mes', 'f-est', 'f-resp', 'f-pla'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { pinta(); }); });
   $('x-lista').onclick = function () { excel(this); };
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-dbaja],[data-dver]');
     if (b) { if (b.hasAttribute('data-dbaja')) baja(b); else ver(b); return; }
     var t = ev.target.closest('[data-id]');
-    if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { abre(+t.getAttribute('data-id')); return; }
+    if (t && (t.classList.contains('fila') || t.classList.contains('link'))) { if (t.classList.contains('fila')) COLA = VISTA.map(function (x) { return x[I.id]; }); abre(+t.getAttribute('data-id')); return; }
     if (ev.target.id === 'cerrar' || ev.target === $('velo')) cierra();
   });
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape' && !$('velo').hidden) cierra();
-    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) abre(+ev.target.getAttribute('data-id'));
+    if (ev.key === 'Enter' && ev.target.classList && ev.target.classList.contains('fila')) { COLA = VISTA.map(function (x) { return x[I.id]; }); abre(+ev.target.getAttribute('data-id')); }
   });
   carga();
 })();
