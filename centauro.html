@@ -467,7 +467,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     </div>
     <div class="card" id="c-porcli">
       <header><div><h2>Revisión con el SAT, por cliente</h2><div class="sub" id="c-ult"></div></div></header>
-      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Revisado</th><th>e.firma</th><th class="num">Canceladas</th><th class="num">Activas en QUO</th><th></th></tr></thead>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Revisado</th><th>e.firma</th><th class="num">Canceladas</th><th class="num">En el Tablero QUO</th><th></th></tr></thead>
         <tbody id="c-clis"></tbody></table></div>
     </div>
   </section>
@@ -718,7 +718,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   if (['boveda', 'canceladas', '69b', 'reportes', 'declaraciones', 'riesgos', 'ficha', 'semaforo'].indexOf(S) < 0) S = 'boveda';
   var TIT = {
     boveda: ['Bóveda XML', 'Las facturas de cada cliente, tal cual las entrega el SAT, para buscarlas, verlas y bajarlas.'],
-    canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y cómo están en QUO: las que siguen activas en QUO hay que cancelarlas.'],
+    canceladas: ['Canceladas SAT vs QUO', 'Las facturas que el SAT tiene canceladas y dónde están en QUO: las que siguen en el Tablero QUO hay que quitarlas del Tablero.'],
     '69b': ['Lista 69-B', 'Los proveedores de los clientes que el SAT publica como presuntos o definitivos en la lista del artículo 69-B del CFF.'],
     declaraciones: ['Declaraciones', 'Las declaraciones provisionales o definitivas de cada cliente (normales y complementarias), con su acuse, tal cual las tiene el SAT.'],
     riesgos: ['Riesgos fiscales', 'Todo lo que encontró la revisión fiscal de las declaraciones, de todos los clientes, en una sola lista: el riesgo, qué puede pasar y qué lo resuelve.'],
@@ -1739,51 +1739,54 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('xml').hidden) cierraXml(); });
 
   /* =============================== Canceladas SAT vs QUO =============================== */
-  var C = { estado: 'activa', donde: '', cli: '', lado: '', res: null, filas: [], vis: [],
-            f: { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], donde: [] } };
+  /* 311 (6-nov-2026, petición 20261106-1106-cartera-canceladas-tablero de Fernando Cadengo; Héctor Daniel Nava: «sí»): lo que el SAT
+     canceló se agrupa por dónde está en QUO: en el Tablero QUO (suma en la contabilidad: quitarlas), solo en Sincronizados (no
+     suma) y no están en QUO. «Corregida en QUO el…» es el día en que ya no está en el Tablero. */
+  var C = { lugar: 'tablero', estado: '', cli: '', lado: '', res: null, filas: [], vis: [],
+            f: { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], bloque: [] } };
   // 251 (petición 20261104-1356 de Fernando): la de activas se llama «Activas en QUO · canceladas en el SAT» y se parte según
   // dónde está en QUO; «Canceladas en QUO con saldo» sale aparte de «Bien en QUO»
-  var KPI = [['activa', 'Activas en QUO · canceladas en el SAT', 'por_cancelar', 'ojo'], ['no_esta', 'No están en QUO', 'no_estan', ''], ['corregida', 'Corregidas en QUO', 'corregidas', ''],
-             ['bien', 'Bien en QUO', 'bien', ''], ['cancel_saldo', 'Canceladas en QUO con saldo', 'cancel_saldo', 'ojo'], ['raros', 'Para revisar', 'raros', 'ojo']];
-  var KPI_SUB = { bien: 'Canceladas en los dos, sin saldo', cancel_saldo: 'Limpiar el saldo en QUO' };
-  var DONDE = { cartera: ['Con saldo (salen en la Cartera)', 'con_saldo'], sinc: ['Solo en Sincronizados', 'sinc'], tablero: ['Sin saldo en QUO', 'sin_saldo'] };
-  var DONDE_TXT = { cartera: 'Con saldo en su cartera', sinc: 'Solo en Sincronizados', tablero: 'Sin saldo (ya pagada)' };
-  var QUO = { activa: ['Activa en QUO: hay que cancelarla', 'mal'], cancelada: ['Cancelada en QUO', 'ok'], no_esta: ['No está en QUO', ''], sustituida: ['Sustituida', 'ok'], otro: ['Otro estatus en QUO', 'ojo'], pendiente: ['Por cruzar', ''] };
+  var LUGAR = { tablero: 'En el Tablero QUO · quitarlas', sinc: 'Solo en Sincronizados · no suman', no_esta: 'No están en QUO', corregida: 'Ya no están en el Tablero QUO' };
+  var BLOQUE = { 1: 'Con el 100 % de su saldo', 2: 'Saldo distinto al total' };
+  function dondeTxt(f) {
+    var l = f.quo_lugar;
+    if (l === 'tablero') return 'En el Tablero QUO · ' + (+f.quo_bloque === 2 ? 'saldo distinto al total' : 'con el 100 % de su saldo');
+    if (l === 'sinc') return 'Solo en Sincronizados (no suma)';
+    if (l === 'no_esta') return 'No está en QUO';
+    return '';
+  }
+  var QUO = { activa: ['Activa en QUO', 'mal'], cancelada: ['Cancelada en QUO', 'ok'], no_esta: ['No está en QUO', ''], sustituida: ['Sustituida', 'ok'], otro: ['Otro estatus en QUO', 'ojo'], pendiente: ['Por cruzar', ''] };
   /* 302: UX PROFASE: lo que eran las tarjetas (y los tres renglones de las activas en QUO) son las pilas de «Tu trabajo»: cada una
      filtra la lista; picarla otra vez regresa a todas las activas en QUO */
-  var C_PILAS = [['activa|cartera', 'Activas en QUO con saldo', 'salen en la Cartera: cancelarlas en QUO', 'rojo'],
-                 ['activa|sinc', 'Activas solo en Sincronizados', 'cancelarlas en QUO', 'ambar'],
-                 ['activa|tablero', 'Activas sin saldo en QUO', 'ya pagadas: cancelarlas en QUO', 'ambar'],
-                 ['cancel_saldo', 'Canceladas en QUO con saldo', 'limpiar el saldo en QUO', 'naranja'],
-                 ['raros', 'Para revisar', 'otro estatus en QUO', 'violeta'],
-                 ['no_esta', 'No están en QUO', 'canceladas en el SAT que QUO no trae', 'gris'],
-                 ['corregida', 'Corregidas en QUO', 'ya se cancelaron en QUO', 'verde'],
-                 ['bien', 'Bien en QUO', 'canceladas en los dos, sin saldo', 'verde']];
+  /* 311: tres pilas (las de la petición: en el Tablero QUO, solo en Sincronizados y no están en QUO) y, para ver el avance, las
+     que ya salieron del Tablero; cada una filtra la lista y picarla otra vez regresa a las del Tablero */
   function pintaKpis() {
     if (!window.PROFASE_PILAS) return;
-    var k = (C.res && C.res.cuadros) || {}, act = k.por_cancelar || {};
-    var num = function (v) { return typeof v === 'object' && v ? +v.n || 0 : +v || 0; }, mon = function (v) { return typeof v === 'object' && v ? v.monto : null; };
-    var pilas = C_PILAS.map(function (x) {
-      var p = x[0].split('|'), n, m = null;
-      if (p[0] === 'activa') n = +(act && act[DONDE[p[1]][1]]) || 0;
-      else { var kk = KPI.filter(function (z) { return z[0] === p[0]; })[0], v = kk ? k[kk[2]] : 0; n = num(v); m = mon(v); }
-      return { k: x[0], t: x[1], n: n, d: x[2] + (m ? ' · ' + dinero(m) : ''), tono: x[3],
-               on: p[0] === 'activa' ? (C.estado === 'activa' && C.donde === p[1]) : C.estado === p[0], tag: x[0] === 'activa|cartera' && n ? 'Te toca' : '' };
-    });
-    var tot = num(act), sinDato = +(act && act.sin_dato) || 0;
+    var k = (C.res && C.res.cuadros) || {}, tb = k.tablero || {}, sc = k.sinc || {}, ne = k.no_estan || {}, co = k.corregidas || {};
+    var n = function (v) { return (+v || 0).toLocaleString('es-MX'); };
+    var pilas = [
+      { k: 'tablero', t: LUGAR.tablero, n: +tb.n || 0, tono: 'rojo', tag: +tb.n ? 'Te toca' : '',
+        d: n(tb.b1) + ' con el 100 % de su saldo · ' + n(tb.b2) + ' con saldo distinto; ' + n(tb.activas) + ' activas en QUO · ' + n(tb.canceladas) + ' canceladas en QUO' },
+      { k: 'sinc', t: LUGAR.sinc, n: +sc.n || 0, tono: 'ambar',
+        d: n(sc.activas) + ' activas · ' + n(sc.canceladas) + ' canceladas' + (+sc.activas ? ' · ⚠ las activas: no pasarlas al Tablero' : '') },
+      { k: 'no_esta', t: LUGAR.no_esta, n: +ne.n || 0, tono: 'gris', d: 'no aparecen en lo que se trae de QUO, tampoco en los meses viejos del Tablero' },
+      { k: 'corregida', t: LUGAR.corregida, n: +co.n || 0, tono: 'verde', d: '«Corregida en QUO el…»: el día en que salieron del Tablero' }
+    ].map(function (x) { x.on = C.estado === 'corregida' ? x.k === 'corregida' : C.lugar === x.k; return x; });
+    var sinLugar = +k.sin_lugar || 0;
     PROFASE_PILAS.pinta($('c-kpis'), {
       titulo: 'Tu trabajo · canceladas en el SAT',
-      meta: cuenta(tot, 'activa en QUO', 'activas en QUO') + (mon(act) ? ' · ' + dinero(mon(act)) : '') + (sinDato ? ' · ' + cuenta(sinDato, 'por acomodar en el siguiente cruce', 'por acomodar en el siguiente cruce') : ''),
+      meta: cuenta(+tb.n || 0, 'sigue en el Tablero QUO', 'siguen en el Tablero QUO') + (sinLugar ? ' · ' + cuenta(sinLugar, 'por acomodar en el siguiente cruce', 'por acomodar en el siguiente cruce') : ''),
       pilas: pilas,
       alPicar: function (key) {
-        var p = key.split('|'), ya = p[0] === 'activa' ? (C.estado === 'activa' && C.donde === p[1]) : C.estado === p[0];
-        if (ya) { C.estado = 'activa'; C.donde = ''; }
-        else if (p[0] === 'activa') { C.estado = 'activa'; C.donde = p[1]; }
-        else { C.estado = p[0]; C.donde = ''; }
+        var ya = key === 'corregida' ? C.estado === 'corregida' : (C.lugar === key && C.estado !== 'corregida');
+        if (ya || key === 'tablero') { C.lugar = 'tablero'; C.estado = ''; }
+        else if (key === 'corregida') { C.lugar = ''; C.estado = 'corregida'; }
+        else { C.lugar = key; C.estado = ''; }
         pintaKpis(); listaC();
       },
       boton: null,
-      nota: 'Las activas en QUO se corrigen allá; la siguiente carga las marca «Corregida en QUO» sola.'
+      nota: 'Todo lo que está en el Tablero QUO suma en la contabilidad, aunque esté cancelado: hay que quitarlo del Tablero; la siguiente carga de Quo las marca solas «Corregida en QUO». '
+        + 'La Depuración de CxC / CxP cuenta además lo que QUO ya canceló y sigue en el Tablero sin estar en lo que se le preguntó al SAT (sobre todo de 2023 y 2024): por eso su pila «Canceladas» trae más.'
     });
   }
   /* 251: la lista con las piezas comunes de las demás pantallas: FILTROS (js/filtros.js) y páginas (js/paginas.js) */
@@ -1806,7 +1809,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       if (g.tot[0] !== '' && t < +g.tot[0]) return false;
       if (g.tot[1] !== '' && t > +g.tot[1]) return false;
       if (g.quo.length && g.quo.indexOf(enQuo(f)) < 0) return false;
-      if (g.donde.length && g.donde.indexOf(f.quo_donde || '') < 0) return false;
+      if (g.bloque.length && g.bloque.indexOf(String(f.quo_lugar === 'tablero' ? (+f.quo_bloque === 2 ? 2 : 1) : '')) < 0) return false;
       return true;
     });
   }
@@ -1823,9 +1826,9 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
                                 campo('ca', 'Cancelada el', 'rango', { entrada: 'fecha', etiquetas: ['Desde', 'Hasta'] })] },
         { t: 'Monto', campos: [campo('tot', 'Total', 'rango', { entrada: 'numero', etiquetas: ['Desde', 'Hasta'] })] },
         { t: 'En QUO', campos: [campo('quo', 'En QUO', 'varios', { lista: true, opciones: opc(function (f) { var k = enQuo(f); return [k, QUO_TXT(k)]; }) }),
-                                campo('donde', 'Dónde está en QUO', 'varios', { lista: true, opciones: opc(function (f) { return f.quo_donde ? [f.quo_donde, DONDE_TXT[f.quo_donde]] : [undefined]; }) })] }],
+                                campo('bloque', 'Saldo (en el Tablero QUO)', 'varios', { lista: true, opciones: opc(function (f) { if (f.quo_lugar !== 'tablero') return [undefined]; var b = +f.quo_bloque === 2 ? '2' : '1'; return [b, BLOQUE[b]]; }) })] }],
       cambio: function () { if (PC) PC.inicio(); pintaC(); },
-      limpiar: function () { C.f = { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], donde: [] }; },
+      limpiar: function () { C.f = { cli: [], de: '', uuid: '', em: ['', ''], ca: ['', ''], tot: ['', ''], quo: [], bloque: [] }; },
       resultados: function () { var n = visiblesC().length; return 'Ver ' + n.toLocaleString('es-MX') + (n === 1 ? ' factura' : ' facturas'); }
     });
     if (window.PROFASE_PAGINAS) PC = window.PROFASE_PAGINAS.crea({ donde: $('c-pag'), clave: 'centauro.canceladas', nombre: 'Facturas', arriba: $('c-lista').closest('.card'), cambio: function () { pintaC(); } });
@@ -1844,8 +1847,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         + '<td data-l="De / para"><span class="rs">' + esc(dp[0] || dp[1]) + '</span><div class="mut">' + esc(dp[1]) + '</div></td>'
         + '<td data-l="Total" class="num">' + dinero(f.total) + '</td>'
         + '<td data-l="Cancelada el" class="nowrap">' + esc(f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : 'Se vio el ' + fecha(f.detectada)) + '</td>'
-        + '<td data-l="En QUO">' + chip(f.corregida_el ? 'Corregida en QUO el ' + fecha(f.corregida_el) : q[0], f.corregida_el ? 'ok' : q[1]) + (f.raro ? ' ' + chip('Trae saldo en QUO', 'ojo') : '') + (f.fuera_rango ? '<div class="mut">De antes de lo que trae QUO</div>' : '') + '</td>'
-        + '<td data-l="Dónde está en QUO">' + (f.quo_donde ? esc(DONDE_TXT[f.quo_donde]) : f.quo_cancel_saldo ? esc('Cancelada, con saldo en su cartera') : '<span class="mut">—</span>') + '</td></tr>';
+        + '<td data-l="En QUO">' + chip(f.corregida_el ? 'Corregida en QUO el ' + fecha(f.corregida_el) : q[0], f.corregida_el ? 'ok' : f.quo_lugar === 'tablero' ? 'mal' : (f.estado_quo === 'activa' ? 'ojo' : q[1])) + (f.raro ? ' ' + chip('Trae saldo en QUO', 'ojo') : '') + (f.fuera_rango ? '<div class="mut">De antes de lo que trae QUO</div>' : '') + '</td>'
+        + '<td data-l="Dónde está en QUO">' + (dondeTxt(f) ? esc(dondeTxt(f)) + (f.quo_lugar === 'tablero' ? '<div class="mut">Quitarla del Tablero QUO</div>' : f.quo_lugar === 'sinc' && f.estado_quo === 'activa' ? '<div class="mut">No pasarla al Tablero</div>' : '') : '<span class="mut">—</span>') + '</td></tr>';
     }).join('');
   }
   async function listaC() {
@@ -1854,9 +1857,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       filtrosC();
       vacio(tb, 8, 'Cargando…');
       // «Bien en QUO» (sin las que QUO canceló con saldo) y «Canceladas en QUO con saldo» los filtra la base (251), igual que sus tarjetas
-      C.filas = await rpc('sat_lista', { p: { estado: C.estado, donde: C.estado === 'activa' ? C.donde : '', rfc: C.cli, lado: C.lado, max: 20000 } }) || [];
-      var x = KPI.filter(function (k) { return k[0] === C.estado; })[0];
-      $('c-h').textContent = (x ? x[1] : 'Canceladas en el SAT') + (C.estado === 'activa' && C.donde ? ' · ' + DONDE[C.donde][0] : '');
+      C.filas = await rpc('sat_lista', { p: { estado: C.estado, lugar: C.estado === 'corregida' ? '' : C.lugar, rfc: C.cli, lado: C.lado, max: 20000 } }) || [];
+      $('c-h').textContent = C.estado === 'corregida' ? LUGAR.corregida : (LUGAR[C.lugar] || 'Canceladas en el SAT');
       if (PC) PC.inicio();
       if (FC) FC.pinta();
       pintaC();
@@ -1867,8 +1869,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     var a = null;
     try { a = JSON.parse(sessionStorage.getItem('cen-canc-abre') || 'null'); sessionStorage.removeItem('cen-canc-abre'); } catch (e) {}
     if (!a || !a.rfc) return false;
-    C.estado = 'activa'; C.donde = ''; C.cli = String(a.rfc).toUpperCase();
-    C.f.donde = Array.isArray(a.donde) ? a.donde.slice() : [];
+    C.estado = ''; C.lugar = LUGAR[a.lugar] && a.lugar !== 'corregida' ? a.lugar : 'tablero'; C.cli = String(a.rfc).toUpperCase();
+    C.f.bloque = [];
     if (bC && bC.pon) bC.pon([C.cli]);
     return true;
   }
@@ -1882,7 +1884,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         + '<td data-l="Revisado">' + (c.revisado ? esc(fechaHora(c.revisado)) + '<div class="mut">' + esc({ efirma: 'con la e.firma', verificador: 'con el verificador del SAT', manual: 'con lo que se subió' }[c.como] || '') + '</div>' : '<span class="mut">Todavía no</span>') + '</td>'
         + '<td data-l="e.firma">' + esc(c.efirma || '—') + (c.efirma_vence ? '<div class="mut">Vence el ' + esc(fecha(c.efirma_vence)) + '</div>' : '') + '</td>'
         + '<td data-l="Canceladas" class="num">' + (+c.canceladas || 0).toLocaleString('es-MX') + '</td>'
-        + '<td data-l="Activas en QUO" class="num">' + ((+c.por_cancelar || 0) ? chip(String(c.por_cancelar), 'mal') : '0') + '</td>'
+        + '<td data-l="En el Tablero QUO" class="num">' + ((+c.en_tablero || 0) ? chip(String(c.en_tablero), 'mal') : '0') + '</td>'
         + '<td>' + (puede ? '<button class="btn chico" type="button" data-pide="' + esc(c.rfc) + '">Revisar ahora con el SAT</button>' : '') + '</td></tr>';
     }).join('');
     tb.querySelectorAll('[data-pide]').forEach(function (b) {
@@ -1909,10 +1911,11 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   uxMas('c-mas', [['Revisión con el SAT, por cliente', function () { try { $('c-porcli').scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} },
     'Cuándo se revisó cada cliente con el SAT y si su e.firma sirve']]);
   $('x-canceladas').onclick = function () {
-    var x = KPI.filter(function (k) { return k[0] === C.estado; })[0], l = visiblesC();   // todo lo que dejan los filtros, no solo la página
+    var l = visiblesC();   // todo lo que dejan los filtros, no solo la página
     excel(this, 'Canceladas SAT vs QUO', ['Cliente', 'RFC del cliente', 'Emitida o recibida', 'Emitida el', 'UUID', 'RFC emisor', 'Emisor', 'RFC receptor', 'Receptor', 'Total', 'Cancelada el', 'En QUO', 'Dónde está en QUO', 'Corregida en QUO el'],
-      l.map(function (f) { return [f.cliente, f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', fecha(f.fecha_emision), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.total == null ? '' : +f.total, f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : '', (QUO[f.estado_quo] || [f.estado_quo])[0], f.quo_donde ? DONDE_TXT[f.quo_donde] : (f.quo_cancel_saldo ? 'Cancelada, con saldo en su cartera' : ''), f.corregida_el ? fecha(f.corregida_el) : '']; }),
-      [34, 15, 12, 12, 38, 15, 34, 15, 34, 14, 12, 28, 24, 14], [(x ? x[1] : '') + (C.estado === 'activa' && C.donde ? ' · ' + DONDE[C.donde][0] : '') + ' · ' + cuenta(l.length, 'factura', 'facturas')]);
+      l.map(function (f) { return [f.cliente, f.rfc, f.lado === 'emitida' ? 'Emitida' : 'Recibida', fecha(f.fecha_emision), f.uuid, f.rfc_emisor, f.nombre_emisor, f.rfc_receptor, f.nombre_receptor, f.total == null ? '' : +f.total, f.fecha_cancelacion ? fecha(f.fecha_cancelacion) : '', (QUO[f.estado_quo] || [f.estado_quo])[0], dondeTxt(f), f.corregida_el ? fecha(f.corregida_el) : '']; }),
+      [34, 15, 12, 12, 38, 15, 34, 15, 34, 14, 12, 18, 40, 14], [(C.estado === 'corregida' ? LUGAR.corregida : (LUGAR[C.lugar] || 'Canceladas en el SAT')) + ' · ' + cuenta(l.length, 'factura', 'facturas'),
+        'Todo lo que está en el Tablero QUO suma en la contabilidad, aunque esté cancelado: hay que quitarlo del Tablero QUO. Lo de Sincronizados no suma.']);
   };
 
   /* =============================== Lista 69-B =============================== */
