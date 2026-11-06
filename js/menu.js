@@ -163,7 +163,7 @@
       { k: 'impi', v: 'imp', t: 'IMPI', d: 'Las notificaciones del IMPI: cada oficio, qué pide y su fecha límite para contestar.' },
       // Costos de sistemas (Héctor Daniel Nava, 6-nov-2026: «para saber cuánto he gastado y cuánto se ha consumido, al día, en
       // cada sistema»; «Lo ven solo daniel.nava y hnava»): cos_estado(), 304_costos_sistemas.sql; bloque cos_tab.js
-      { k: 'costos-sistemas', v: 'cos', t: 'Costos de sistemas', d: 'Cuánto se gasta y se consume en cada sistema: CRM, Quo Contabilita, Quo Facturita y el Quo de hoy.' },
+      { k: 'costos-sistemas', v: 'cos', t: 'Costos de sistemas', d: 'Cuánto se gasta y se consume en cada sistema de PROFASE: CRM, Quo Contabilita y Quo Facturita.' },
       { k: 'cambios', v: 'chg', t: 'Cambios al portal', d: 'Propuestas de cambios y su autorización.' }] },   // propuestas de Gabo; las autorizan Daniel o Fernando Cadengo
     // Usuarios (30-oct-2026, decisiones de Daniel, 18:44 a 20:50): quién entra al portal y la bitácora de Accesos.
     // Daniel y Fernando Cadengo dan altas, bajas y códigos; HNR solo ve; Cadengo ve Accesos sin lo de la dirección
