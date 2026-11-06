@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/filtros.js?v=46f3a7a51e"></script><script src="js/pilas.js?v=ed7f02db96"></script>
 <style>
 /* Portal PROFASE · Tesorería › Pagos (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): como el Access «Registro de
    Pagos» de Dora Montalvo y Eva Rangel, con sus errores corregidos: «Facturas disponibles», pagar varias facturas con su
@@ -126,6 +126,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 .ficha .cab h2{font-size:21px;font-weight:750;overflow-wrap:anywhere}
 .ficha .cab .rfc{color:var(--band-dim)}
 .ficha .cab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+.ficha .cab .ppl-nav{margin-left:auto}
+@media (max-width:640px){.ficha .cab{flex-wrap:wrap}.ficha .cab .ppl-nav{margin-left:0}}
+.pbar{margin:0 0 12px}
 .ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
 .sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
 .sec>h3{font-size:15.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
@@ -242,23 +245,22 @@ tr.fila:hover td{background:var(--navy-soft)}
   <div class="cargando" id="cargando">Cargando los pagos…</div>
 
   <div id="p-fac" role="tabpanel" aria-labelledby="t-fac" hidden>
-    <section class="kpis" aria-label="Resumen">
-      <div class="kpi"><div class="l">Facturas</div><div class="v num" id="k-n">–</div><div class="s" id="k-n-s">&nbsp;</div></div>
-      <div class="kpi"><div class="l">Facturado</div><div class="v num" id="k-tot">–</div><div class="s">con IVA</div></div>
-      <div class="kpi"><div class="l">Abonado</div><div class="v num" id="k-cob">–</div><div class="s" id="k-cob-s">&nbsp;</div></div>
-      <div class="kpi" id="k-sal-c"><div class="l">Saldo</div><div class="v num" id="k-sal">–</div><div class="s" id="k-sal-s">&nbsp;</div></div>
-    </section>
+    <!-- UX PROFASE (Héctor Daniel Nava, 5-nov-2026): en cada pestaña, la barra (buscar, el periodo, FILTROS y Excel con su
+         PDF), «Tu trabajo» y la lista por páginas; los <select> de antes los usa FILTROS -->
+    <div class="pbar" id="fac-bar" hidden>
+      <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio)" aria-label="Buscar">
+      <select id="f-mes" aria-label="Mes de la factura"></select>
+      <select id="f-anio" aria-label="Año de la factura"></select>
+      <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
+    </div>
+    <div hidden>
+      <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
+      <select id="f-est" aria-label="Pagadas"><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="">Todas</option></select>
+    </div>
+    <section id="fac-pilas" hidden></section>
     <section class="card" aria-labelledby="h-lista">
       <header>
         <div><h2 id="h-lista">Facturas</h2><div class="sub" id="lista-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <input id="f-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio)" aria-label="Buscar">
-          <select id="f-cia" aria-label="Compañía que cobra" hidden></select>
-          <select id="f-anio" aria-label="Año de la factura"></select>
-          <select id="f-mes" aria-label="Mes de la factura"></select>
-          <select id="f-est" aria-label="Pagadas"><option value="saldo">Con saldo</option><option value="pagada">Pagadas</option><option value="">Todas</option></select>
-          <button class="btn" type="button" id="x-fac" data-excel>Excel</button>
-        </div>
       </header>
       <div class="liq" id="liq-caja" hidden><label for="f-liq">Fecha del pago para «Liquidar»</label><input id="f-liq" type="date"></div>
       <div class="tabla"><table id="lista"><thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Abonado</th><th class="monto">Saldo</th><th><span class="oculto">Liquidar</span></th></tr></thead><tbody></tbody></table></div>
@@ -269,23 +271,20 @@ tr.fila:hover td{background:var(--navy-soft)}
   </div>
 
   <div id="p-pag" role="tabpanel" aria-labelledby="t-pag" hidden>
-    <section class="kpis" aria-label="Resumen de pagos">
-      <div class="kpi"><div class="l">Pagos</div><div class="v num" id="kp-n">–</div><div class="s" id="kp-n-s">&nbsp;</div></div>
-      <div class="kpi"><div class="l">Recibido</div><div class="v num" id="kp-tot">–</div><div class="s">con IVA</div></div>
-      <div class="kpi"><div class="l">Aplicado</div><div class="v num" id="kp-apl">–</div><div class="s">a facturas</div></div>
-      <div class="kpi" id="kp-afa-c"><div class="l">Por aplicar</div><div class="v num" id="kp-afa">–</div><div class="s" id="kp-afa-s">saldo a favor</div></div>
-    </section>
+    <div class="pbar" id="pag-bar" hidden>
+      <input id="g-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio)" aria-label="Buscar pagos">
+      <select id="g-mes" aria-label="Mes del pago"></select>
+      <select id="g-anio" aria-label="Año del pago"></select>
+      <button class="btn" type="button" id="x-pag" data-excel>Excel</button>
+    </div>
+    <div hidden>
+      <select id="g-cia" aria-label="Compañía" hidden></select>
+      <select id="g-tipo" aria-label="Tipo"><option value="">Pagos y notas de crédito</option><option value="afavor">Con saldo a favor</option><option value="pago">Solo pagos</option><option value="nc">Solo notas de crédito</option></select>
+    </div>
+    <section id="pag-pilas" hidden></section>
     <section class="card" aria-labelledby="h-pagos">
       <header>
         <div><h2 id="h-pagos">Registro de pagos</h2><div class="sub" id="pagos-sub">&nbsp;</div></div>
-        <div class="filtros">
-          <input id="g-buscar" type="search" placeholder="Buscar (cliente, RFC, grupo, folio)" aria-label="Buscar pagos">
-          <select id="g-cia" aria-label="Compañía" hidden></select>
-          <select id="g-anio" aria-label="Año del pago"></select>
-          <select id="g-mes" aria-label="Mes del pago"></select>
-          <select id="g-tipo" aria-label="Tipo"><option value="">Pagos y notas de crédito</option><option value="afavor">Con saldo a favor</option><option value="pago">Solo pagos</option><option value="nc">Solo notas de crédito</option></select>
-          <button class="btn" type="button" id="x-pag" data-excel>Excel</button>
-        </div>
       </header>
       <div class="tabla"><table id="pagos"><thead><tr><th>Pago</th><th>Cliente</th><th>Fecha</th><th class="monto">Monto</th><th class="monto">Aplicado</th><th class="monto">Por aplicar</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="pagos-vacia" hidden>Ningún pago con estos filtros.</div>
@@ -366,8 +365,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   /* ---------- Facturas disponibles ---------- */
-  function filtradas() {
-    var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = $('f-est').value;
+  function filtradas(sinEstado) {
+    var q = norm($('f-buscar').value.trim()), c = $('f-cia').hidden ? '' : $('f-cia').value, a = $('f-anio').value, m = +$('f-mes').value || 0, e = sinEstado ? '' : $('f-est').value;
     return F.filter(function (f) {
       if (f.total <= 0) return false;
       if (c && String(f.compania) !== c) return false;
@@ -379,14 +378,67 @@ tr.fila:hover td{background:var(--navy-soft)}
       return true;
     });
   }
+  /* UX PROFASE: la barra y «Tu trabajo» de cada pestaña. Las pilas son las opciones de «Estado» (facturas) y de «Tipo»
+     (pagos), contadas con los demás filtros; picar una deja eso (otra vez, lo quita). El botón abre la primera y su ficha
+     trae «‹ N de M Siguiente ›». */
+  var BARF = null, BARP = null, LISTA = [], LISTAP = [], COLA = [], COLAP = [];
+  function plural(n, a, b) { return n + ' ' + (n === 1 ? a : b); }
+  function limpia(ids) { ids.forEach(function (k) { var x = $(k), v = k === 'f-est' ? 'saldo' : ''; if (x.value !== v) { x.value = v; x.dispatchEvent(new Event('change', { bubbles: true })); } }); }
+  function armaBarras() {
+    if (BARF || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BARF = PROFASE_PILAS.barra($('fac-bar'), {
+      caja: true, buscar: $('f-buscar'), periodo: [$('f-mes'), $('f-anio')],
+      filtros: d ? { grupos: [{ t: 'FACTURAS', campos: [d($('f-est'), { t: 'ESTADO', defecto: function () { return 'saldo'; } }), d($('f-cia'), { t: 'COMPAÑÍA QUE COBRA' })] }],
+        limpiar: function () { limpia(['f-est', 'f-cia']); }, resultados: function () { return 'Ver ' + plural(LISTA.length, 'factura', 'facturas'); } } : null,
+      botones: [$('x-fac')]
+    });
+    BARP = PROFASE_PILAS.barra($('pag-bar'), {
+      caja: true, buscar: $('g-buscar'), periodo: [$('g-mes'), $('g-anio')],
+      filtros: d ? { grupos: [{ t: 'PAGOS', campos: [d($('g-tipo'), { t: 'TIPO' }), d($('g-cia'), { t: 'COMPAÑÍA' })] }],
+        limpiar: function () { limpia(['g-tipo', 'g-cia']); }, resultados: function () { return 'Ver ' + plural(LISTAP.length, 'pago', 'pagos'); } } : null,
+      botones: [$('x-pag')]
+    });
+  }
+  function pilasFac(base) {
+    if (!window.PROFASE_PILAS) return;
+    var n = { saldo: 0, pagada: 0 }, m = { saldo: 0, pagada: 0 }, tot = 0, cob = 0;
+    base.forEach(function (f) { tot += f.total; cob += f.pagado; if (conSaldo(f)) { n.saldo++; m.saldo += f.saldo; } if (f.pagada) { n.pagada++; m.pagada += f.total; } });
+    var e = $('f-est').value, cola = e ? LISTA : base.filter(conSaldo);
+    PROFASE_PILAS.pinta($('fac-pilas'), {
+      titulo: 'Tu trabajo · lo que falta cobrar',
+      meta: plural(base.length, 'factura', 'facturas') + ' · ' + dineroCorto(tot) + ' facturado' + (tot ? ' · ' + Math.round(100 * cob / tot) + ' % abonado' : ''),
+      pilas: [
+        { k: 'saldo', t: 'Con saldo', n: n.saldo, d: dineroCorto(m.saldo) + ' por cobrar', tono: 'naranja', on: e === 'saldo' },
+        { k: 'pagada', t: 'Pagadas', n: n.pagada, d: dineroCorto(m.pagada), tono: 'verde', on: e === 'pagada' }],
+      alPicar: function (k) { var x = $('f-est'); x.value = x.value === k ? '' : k; x.dispatchEvent(new Event('change', { bubbles: true })); },
+      boton: { t: 'Revisar una por una', n: cola.length, alPicar: function () { if (!cola.length) return; COLA = cola.map(function (f) { return f.id; }); abreFactura(COLA[0]); } },
+      nota: 'Abre la primera; en su ficha, «Siguiente ›» pasa a la que sigue.'
+    });
+  }
+  function pilasPag(base) {
+    if (!window.PROFASE_PILAS) return;
+    var n = { afavor: 0, pago: 0, nc: 0 }, afa = 0, tot = 0, apl = 0;
+    base.forEach(function (x) { tot += x.monto; apl += x.aplicado; if (x.por_aplicar > 0.009) { n.afavor++; afa += x.por_aplicar; } if (x.nota_credito) n.nc++; else n.pago++; });
+    var t = $('g-tipo').value, cola = t ? LISTAP : base.filter(function (x) { return x.por_aplicar > 0.009; });
+    var alta = !P.consulta && base.some(function (x) { return puedeAlta(x.compania); });
+    PROFASE_PILAS.pinta($('pag-pilas'), {
+      titulo: 'Tu trabajo · los pagos',
+      meta: plural(base.length, 'pago', 'pagos') + ' · ' + dineroCorto(tot) + ' recibido · ' + dineroCorto(apl) + ' aplicado',
+      pilas: [
+        { k: 'afavor', t: 'Con saldo a favor', n: n.afavor, d: dineroCorto(afa) + ' por aplicar', tono: 'naranja', on: t === 'afavor', tag: alta && n.afavor ? 'Te toca' : '' },
+        { k: 'pago', t: 'Pagos', n: n.pago, d: '', tono: 'azul', on: t === 'pago' },
+        { k: 'nc', t: 'Notas de crédito', n: n.nc, d: '', tono: 'violeta', on: t === 'nc' }],
+      alPicar: function (k) { var x = $('g-tipo'); x.value = x.value === k ? '' : k; x.dispatchEvent(new Event('change', { bubbles: true })); },
+      boton: { t: t ? 'Revisar estos' : 'Aplicar los de saldo a favor', n: cola.length, alPicar: function () { if (!cola.length) return; COLAP = cola.map(function (x) { return x.id; }); abrePago(COLAP[0]); } },
+      nota: 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
+  }
   function pinta() {
-    var L = filtradas(), tot = 0, cob = 0, sal = 0, n = 0, varias = !$('f-cia').hidden;
-    L.forEach(function (f) { tot += f.total; cob += f.pagado; if (conSaldo(f)) { sal += f.saldo; n++; } });
-    $('k-n').textContent = L.length; $('k-n-s').textContent = n + ' con saldo';
-    $('k-tot').textContent = dineroCorto(tot); $('k-cob').textContent = dineroCorto(cob);
-    $('k-cob-s').textContent = tot ? Math.round(100 * cob / tot) + ' % de lo facturado' : ' ';
-    $('k-sal').textContent = dineroCorto(sal); $('k-sal-s').textContent = n === 1 ? '1 factura' : n + ' facturas';
-    $('k-sal-c').className = 'kpi' + (sal >= 1 ? ' ojo' : '');
+    armaBarras();
+    var L = filtradas(), varias = !$('f-cia').hidden; LISTA = L;
+    pilasFac(filtradas(true));
+    if (BARF && BARF.f) BARF.f.pinta();
     $('lista-sub').textContent = L.length === 1 ? '1 factura' : L.length + ' facturas';
     $('lista').tBodies[0].innerHTML = PAG.fac.corta(L).map(function (f) {
       return '<tr class="fila" tabindex="0" data-id="' + esc(f.id) + '"><td><div class="rs">' + (esc(f.folio) || '<span class="no">Sin folio</span>') + '</div>' + (varias ? '<div class="rfc">' + esc(cia(f.compania)) + '</div>' : '') + '<div>' + chipEst(f) + '</div></td>'
@@ -399,8 +451,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   /* ---------- Registro de pagos ---------- */
-  function pagosFiltrados() {
-    var q = norm($('g-buscar').value.trim()), c = $('g-cia').hidden ? '' : $('g-cia').value, a = $('g-anio').value, m = +$('g-mes').value || 0, t = $('g-tipo').value;
+  function pagosFiltrados(sinTipo) {
+    var q = norm($('g-buscar').value.trim()), c = $('g-cia').hidden ? '' : $('g-cia').value, a = $('g-anio').value, m = +$('g-mes').value || 0, t = sinTipo ? '' : $('g-tipo').value;
     return PG.filter(function (x) {
       if (c && String(x.compania) !== c) return false;
       if (a && (x.fecha || '').slice(0, 4) !== a) return false;
@@ -413,12 +465,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     });
   }
   function pintaPagos() {
-    var L = pagosFiltrados(), tot = 0, apl = 0, afa = 0, n = 0, varias = !$('g-cia').hidden;
-    L.forEach(function (x) { tot += x.monto; apl += x.aplicado; if (x.por_aplicar > 0.009) { afa += x.por_aplicar; n++; } });
-    $('kp-n').textContent = L.length; $('kp-n-s').textContent = L.filter(function (x) { return x.nota_credito; }).length + ' notas de crédito';
-    $('kp-tot').textContent = dineroCorto(tot); $('kp-apl').textContent = dineroCorto(apl); $('kp-afa').textContent = dineroCorto(afa);
-    $('kp-afa-s').textContent = n === 1 ? '1 pago con saldo a favor' : n + ' pagos con saldo a favor';
-    $('kp-afa-c').className = 'kpi' + (afa >= 1 ? ' ojo' : '');
+    armaBarras();
+    var L = pagosFiltrados(), varias = !$('g-cia').hidden; LISTAP = L;
+    pilasPag(pagosFiltrados(true));
+    if (BARP && BARP.f) BARP.f.pinta();
     $('pagos-sub').textContent = L.length === 1 ? '1 pago' : L.length + ' pagos';
     $('pagos').tBodies[0].innerHTML = PAG.pag.corta(L).map(function (x) {
       return '<tr class="fila" tabindex="0" data-pago="' + esc(x.id) + '"><td><div class="rs">' + (x.nota_credito ? 'Nota de crédito ' + esc(x.folio_nc) : 'Pago ' + esc(x.id)) + '</div>' + (varias ? '<div class="rfc">' + esc(cia(x.compania)) + '</div>' : '') + (x.folios ? '<div class="rfc">Folios ' + esc(x.folios) + '</div>' : '') + '</td>'
@@ -465,6 +515,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     h += sec('Conceptos', d.conceptos.length ? '<ul class="lista">' + d.conceptos.map(function (c) { return '<li><div class="t">' + esc(c.concepto) + ' · ' + esc(dinero(c.precio)) + '</div><div class="d">' + esc(c.razon) + '</div></li>'; }).join('') + '</ul>' : '<div class="vacio">Sin conceptos.</div>');
     h += '</div>';
     abre(h);
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: id, abre: abreFactura, antes: $('cerrar'), clase: 'btn' });
   }
 
   /* Detalle de un pago */
@@ -487,6 +538,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         + '<span class="f">Por aplicar</span><span class="r f">' + esc(dinero(p.por_aplicar)) + '</span></div>', String(d.aplicaciones.length));
     h += historia(d.historia) + '</div>';
     abre(h);
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLAP, id: id, abre: abrePago, antes: $('cerrar'), clase: 'btn' });
   }
   function zona(html, foco) { $('a-zona').innerHTML = html; if (foco && $(foco)) $(foco).focus(); }
   function zonaEdita(id) {
@@ -710,7 +762,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (t.getAttribute && t.getAttribute('data-todo')) { var id = +t.getAttribute('data-todo'), f = C.facturas.filter(function (x) { return x.id === id; })[0]; ponAbono(id, f ? f.saldo : 0, document.querySelector('[data-ab="' + id + '"]')); return; }
     if (t.getAttribute && t.getAttribute('data-quita')) { zonaMotivo('quita', +t.getAttribute('data-pg'), +t.getAttribute('data-quita')); return; }
     var fila = t.closest && t.closest('tr.fila');
-    if (fila) { if (fila.hasAttribute('data-pago')) abrePago(+fila.getAttribute('data-pago')); else abreFactura(+fila.getAttribute('data-id')); return; }
+    if (fila) { if (fila.hasAttribute('data-pago')) { COLAP = LISTAP.map(function (x) { return x.id; }); abrePago(+fila.getAttribute('data-pago')); } else { COLA = LISTA.map(function (f) { return f.id; }); abreFactura(+fila.getAttribute('data-id')); } return; }
     if (t.classList && t.classList.contains('link') && t.getAttribute('data-pago')) { abrePago(+t.getAttribute('data-pago')); return; }
     if (t.id === 'cerrar' || t === $('velo')) { cierra(); return; }
     if (t.id === 'a-edita') { zonaEdita(+t.getAttribute('data-pg')); return; }

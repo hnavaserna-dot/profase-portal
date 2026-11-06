@@ -177,6 +177,7 @@
       return h;
     }
     function campo(c, i) {
+      if (c.ver && !c.ver()) return '';   // un campo que hoy no aplica (deSelect: su <select> está escondido)
       var h = '<div class="pf-campo" data-i="' + i + '"><span class="pf-lbl">' + esc(c.t) + '</span>';
       if (c.tipo === 'texto') {
         return h + '<div class="pf-q">' + ICQ + '<input type="text" data-txt="' + i + '" value="' + esc(lista(c)[0] || '') + '" placeholder="Escribe…" autocomplete="off" spellcheck="false"></div></div>';
@@ -441,5 +442,46 @@
              abierto: function () { return abierto; }, destruye: destruye };
   }
 
-  window.PROFASE_FILTROS = { crea: crea, norm: norm, pasa: pasa };
+  /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026: «que todos los menús y sub menús tengan el UX profase»): un campo de FILTROS
+     que trabaja sobre un <select> que la pantalla ya tenía. El <select> se queda (escondido) y sigue siendo lo que la
+     pantalla lee: al escoger en FILTROS se le pone el valor y se le avisa con «change», como si lo hubiera escogido la
+     persona; así la pantalla filtra igual que antes, sin otra versión de sus filtros.
+       PROFASE_FILTROS.deSelect(sel, { t: 'ESTATUS', todos: 'Todos', defecto: true, tipo: 'uno' })
+     - las opciones son las del <select> (menos la vacía, que es «Todos»), y se leen cada vez (si cambian, cambian);
+     - defecto: true para un <select> que siempre trae algo escogido (año, mes): lo que traía al crearse no cuenta como
+       filtro y «Limpiar» lo regresa ahí; o una función que dice cuál es ese valor (si la pantalla lo pone después). Su
+       opción vacía (p. ej. «Todo el año») sale como una opción más;
+     - si el <select> está escondido o apagado, el campo no sale en FILTROS (ver(); p. ej. un filtro que solo aplica a una
+       plantilla). */
+  function deSelect(sel, o) {
+    o = o || {};
+    if (!sel) return null;
+    var vacia = Array.prototype.some.call(sel.options, function (x) { return x.value === ''; });
+    var ini = sel.value;
+    function base() { return typeof o.defecto === 'function' ? String(o.defecto() || '') : ini; }
+    var fijo = !!o.defecto || !vacia;   // siempre trae algo escogido: su opción vacía («Todo el año») es una más
+    var c = {
+      k: o.k || sel.id, tipo: 'uno', buscar: !!o.buscar, ver: function () { return !sel.hidden && !sel.disabled; },
+      t: o.t || String(sel.getAttribute('aria-label') || sel.id || '').toUpperCase(),
+      opciones: function () {
+        return Array.prototype.filter.call(sel.options, function (x) { return (x.value !== '' || fijo) && !x.hidden && !x.disabled; })
+          .map(function (x) { return { v: x.value, t: x.textContent.trim() }; });
+      },
+      valor: function () { return sel.value || fijo ? [sel.value] : []; },
+      pon: function (v) {
+        var nv = v && v.length ? String(v[v.length - 1]) : (o.defecto || !vacia ? base() : '');
+        if (sel.value === nv) return;
+        sel.value = nv;
+        try { sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* nada */ }
+      }
+    };
+    if (o.todos) c.todos = o.todos;
+    else if (vacia) { var op0 = Array.prototype.filter.call(sel.options, function (x) { return x.value === ''; })[0]; c.todos = op0 ? op0.textContent.trim() : 'Todos'; }
+    if (o.defecto || !vacia) Object.defineProperty(c, 'defecto', { enumerable: true, get: function () { return [base()]; } });
+    if (o.chip) c.chip = o.chip;
+    if (o.lista) c.lista = true;
+    return c;
+  }
+
+  window.PROFASE_FILTROS = { crea: crea, norm: norm, pasa: pasa, deSelect: deSelect };
 })();

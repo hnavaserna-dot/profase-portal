@@ -33,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=2066d04e35"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/quo-al-dia.js"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=04a9886acb"></script><script src="js/marca.js?v=2584e29945"></script><script src="js/visor.js?v=d3fa95d8b4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js?v=46f3a7a51e"></script><script src="js/pilas.js?v=ed7f02db96"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · Expediente del cliente, Pendientes y Reuniones (31-oct-2026, pedido de Daniel: «llevar un expediente
    digital… por grupo y la razón social… tomar notas y de ahí mismo mandar pendientes al equipo PROFASE o a mí mismo, con
@@ -148,6 +148,9 @@ tr.click:hover td{background:var(--navy-soft)}
 .ficha .fcab{position:sticky;top:0;z-index:2;background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
 .ficha .fcab h2{font-size:20px;font-weight:750;overflow-wrap:anywhere}
 .ficha .fcab .mut{color:var(--band-dim)}
+.ficha .fcab .ppl-nav{margin-left:auto}
+@media (max-width:640px){.ficha .fcab{flex-wrap:wrap}.ficha .fcab .ppl-nav{margin-left:0}}
+#pen-bar{margin:0 0 12px}
 .ficha .fcab .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
 .ficha .cuerpo{padding:14px 16px 28px;display:grid;gap:12px;min-width:0}
 .sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
@@ -522,15 +525,19 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       <button type="button" role="tab" data-pv="revisar" aria-selected="false">Por revisar <span class="cta" id="n-rev">0</span></button>
       <button type="button" role="tab" data-pv="todos" aria-selected="false" id="t-todos" hidden>Todos</button>
     </div>
+    <!-- UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (buscar, cuáles, FILTROS y Excel), «Tu trabajo» con su botón
+         para ir uno por uno y la lista por páginas -->
+    <div id="pen-bar" hidden>
+      <input type="search" id="q-pen" placeholder="Buscar qué, cliente o persona" aria-label="Buscar en los pendientes">
+      <select id="f-pen" aria-label="Cuáles"><option value="abiertos">Abiertos</option><option value="hechos">Hechos y cancelados</option><option value="todos">Todos</option></select>
+      <button class="btn" type="button" data-excel id="x-pen">Excel</button>
+    </div>
+    <section id="pen-pilas" hidden></section>
     <div class="card">
-      <header><div><h2 id="h-pen">Mis pendientes</h2><div class="sub" id="pen-sub"></div></div>
-        <div class="acciones"><button class="btn" type="button" data-excel id="x-pen">Excel</button></div></header>
-      <div class="filtros">
-        <input type="search" id="q-pen" placeholder="Buscar qué, cliente o persona" aria-label="Buscar en los pendientes">
-        <select id="f-pen" aria-label="Cuáles"><option value="abiertos">Abiertos</option><option value="hechos">Hechos y cancelados</option><option value="todos">Todos</option></select>
-      </div>
+      <header><div><h2 id="h-pen">Mis pendientes</h2><div class="sub" id="pen-sub"></div></div></header>
       <div class="tabla"><table class="resp"><thead><tr><th>Qué</th><th>Cliente</th><th>Quién</th><th>Para cuándo</th><th>Estatus</th></tr></thead>
         <tbody id="pen-l"></tbody></table></div>
+      <nav class="pgn" id="pen-pag" aria-label="Páginas de pendientes"></nav>
     </div>
   </section>
 
@@ -679,15 +686,101 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
     PEN = await rpc('pend_lista', { p: { vista: PV, estatus: $('f-pen').value } });
     pintaPen();
   }
-  function penFiltrados() {
+  /* UX PROFASE: FILTROS (cliente, quién lo hace, quién lo pidió, prioridad), las pilas de «Tu trabajo» (por cuándo vence) y
+     el botón para ir uno por uno; las pilas cuentan lo mismo que trae la lista (con todos los filtros menos el de la pila). */
+  var PF = { cli: [], resp: [], por: [], prio: [] }, PPILA = '', PCOLA = [], PEN_BAR = null, PEN_PG = null, PEN_FIRMA = '';
+  var PPILAS = [
+    { k: 'ven', t: 'Vencidos', d: 'Ya pasó su fecha', tono: 'rojo' },
+    { k: 'hoy', t: 'Hoy o mañana', d: 'Vencen ya', tono: 'ambar' },
+    { k: 'prox', t: 'Más adelante', d: 'Con fecha después de mañana', tono: 'azul' },
+    { k: 'sin', t: 'Sin fecha', d: 'Abiertos sin fecha', tono: 'gris' },
+    { k: 'rev', t: 'Por revisar', d: 'Ya entregados: falta darlos por hechos', tono: 'violeta' },
+    { k: 'hecho', t: 'Hechos', d: '', tono: 'verde' },
+    { k: 'canc', t: 'Cancelados', d: '', tono: 'gris' }];
+  function penPila(x) {
+    if (x.estatus === 'hecho') return 'hecho';
+    if (x.estatus === 'cancelado') return 'canc';
+    if (x.estatus === 'revision') return 'rev';
+    var d = dias(x.vence);
+    return d == null ? 'sin' : d < 0 ? 'ven' : d <= 1 ? 'hoy' : 'prox';
+  }
+  function penQuien(x) { return x.resp_n || x.externo || ''; }
+  function penBase() {
     var q = norm($('q-pen').value);
-    return PEN.filter(function (x) { return !q || norm([x.titulo, x.detalle, x.cliente, x.grupo, x.resp_n, x.externo, x.por_n, x.revisa_n].join(' ')).indexOf(q) >= 0; });
+    return PEN.filter(function (x) {
+      if (q && norm([x.titulo, x.detalle, x.cliente, x.grupo, x.resp_n, x.externo, x.por_n, x.revisa_n].join(' ')).indexOf(q) < 0) return false;
+      if (PF.cli.length && PF.cli.indexOf(x.cliente || 'Interno') < 0) return false;
+      if (PF.resp.length && PF.resp.indexOf(penQuien(x)) < 0) return false;
+      if (PF.por.length && PF.por.indexOf(x.por_n || '') < 0) return false;
+      if (PF.prio.length && PF.prio.indexOf(String(x.prioridad)) < 0) return false;
+      return true;
+    });
+  }
+  function penFiltrados() { return penBase().filter(function (x) { return !PPILA || penPila(x) === PPILA; }); }
+  function penOpc(f) {
+    var o = {}; PEN.forEach(function (x) { var v = f(x); if (v) o[v] = (o[v] || 0) + 1; });
+    return Object.keys(o).sort(function (a, b) { return a.localeCompare(b); }).map(function (v) { return { v: v, t: v, n: o[v] }; });
+  }
+  function penCampo(k, t, f, extra) {
+    var c = { k: k, t: t, tipo: 'varios', opciones: function () { return penOpc(f); }, valor: function () { return PF[k]; }, pon: function (v) { PF[k] = v; } };
+    Object.keys(extra || {}).forEach(function (x) { c[x] = extra[x]; });
+    return c;
+  }
+  function penBarra() {
+    if (PEN_BAR || !window.PROFASE_PILAS) return;
+    PEN_BAR = PROFASE_PILAS.barra($('pen-bar'), {
+      caja: true, buscar: $('q-pen'), periodo: [$('f-pen')],
+      filtros: window.PROFASE_FILTROS ? {
+        grupos: [{ t: 'PENDIENTES', campos: [
+          penCampo('cli', 'CLIENTE', function (x) { return x.cliente || 'Interno'; }, { buscar: true }),
+          penCampo('resp', 'LO HACE', penQuien),
+          penCampo('por', 'LO PIDIÓ', function (x) { return x.por_n; }),
+          { k: 'prio', t: 'PRIORIDAD', tipo: 'varios', opciones: function () { return [{ v: '1', t: 'ALTA' }, { v: '2', t: 'NORMAL' }, { v: '3', t: 'BAJA' }]; }, valor: function () { return PF.prio; }, pon: function (v) { PF.prio = v; } }] }],
+        cambio: function () { pintaPen(); },
+        limpiar: function () { PF = { cli: [], resp: [], por: [], prio: [] }; },
+        resultados: function () { var n = penFiltrados().length; return 'Ver ' + plural(n, 'pendiente', 'pendientes'); }
+      } : null,
+      botones: [$('x-pen')]
+    });
+    if (window.PROFASE_PAGINAS) PEN_PG = PROFASE_PAGINAS.crea({ donde: $('pen-pag'), clave: 'pendientes', nombre: 'Pendientes', arriba: $('pen-l').closest('.card'), cambio: function () { pintaPen(); } });
+  }
+  function penPilas(base, L) {
+    if (!window.PROFASE_PILAS) return;
+    var n = {}; PPILAS.forEach(function (p) { n[p.k] = 0; });
+    base.forEach(function (x) { n[penPila(x)]++; });
+    var cuales = $('f-pen').value, abiertos = cuales !== 'hechos', cerrados = cuales !== 'abiertos';
+    var orden = { ven: 0, hoy: 1, rev: 2, prox: 3, sin: 4 };
+    var cola = PPILA ? L : base.filter(function (x) { return orden[penPila(x)] != null; }).sort(function (a, b) {
+      return (orden[penPila(a)] - orden[penPila(b)]) || String(a.vence || '9').localeCompare(String(b.vence || '9')) || (a.prioridad - b.prioridad);
+    });
+    var toca = PV === 'mios' ? 'ven' : PV === 'revisar' ? 'rev' : '';
+    PROFASE_PILAS.pinta($('pen-pilas'), {
+      titulo: PV === 'mios' ? 'Tu trabajo · lo que te toca' : PV === 'revisar' ? 'Tu trabajo · lo que revisas' : 'Cómo van',
+      meta: plural(base.length, 'pendiente', 'pendientes'),
+      pilas: PPILAS.map(function (p) {
+        var ab = ['hecho', 'canc'].indexOf(p.k) < 0;
+        return { k: p.k, t: p.t, n: n[p.k], d: p.d, tono: p.tono, on: PPILA === p.k, oculta: ab ? !abiertos : !cerrados,
+          tag: p.k === toca && n[p.k] && !P.consulta ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { PPILA = PPILA === k ? '' : k; pintaPen(); },
+      boton: abiertos ? { t: PPILA ? 'Revisar estos' : 'Empezar a revisar', n: cola.length,
+        alPicar: function () { if (!cola.length) return; PCOLA = cola.map(function (x) { return x.id; }); verPend(PCOLA[0]); } } : null,
+      nota: abiertos ? 'Abre el primero (lo vencido primero y luego por fecha); con «Siguiente ›» pasas al que sigue.' : ''
+    });
   }
   function pintaPen() {
     document.querySelectorAll('[data-pv]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pv') === PV ? 'true' : 'false'); });
     $('h-pen').textContent = VISTAS_P[PV][0]; $('pen-sub').textContent = VISTAS_P[PV][1];
-    var L = penFiltrados();
-    $('pen-l').innerHTML = L.length ? L.map(function (x) {
+    penBarra();
+    var base = penBase(), L = penFiltrados();
+    var firma = [PV, $('f-pen').value, $('q-pen').value, JSON.stringify(PF), PPILA, PEN.length].join('|');
+    if (PEN_PG && firma !== PEN_FIRMA) PEN_PG.inicio();
+    PEN_FIRMA = firma;
+    penPilas(base, L);
+    if (PEN_BAR && PEN_BAR.f) PEN_BAR.f.pinta();
+    $('pen-sub').textContent = VISTAS_P[PV][1] + ' · ' + plural(L.length, 'pendiente', 'pendientes');
+    var V = PEN_PG ? PEN_PG.corta(L) : L;
+    $('pen-l').innerHTML = V.length ? V.map(function (x) {
       return '<tr class="click" tabindex="0" data-pend="' + x.id + '"><td data-l="Qué" class="w"><span class="rs' + (x.prioridad === 1 ? ' prio1' : '') + '">' + esc(x.titulo) + '</span>'
         + (x.prioridad === 1 ? ' ' + chip('Alta', 'mal') : '') + (x.privado ? ' ' + chip('Privado') : '') + (x.ndocs ? ' ' + chip(plural(x.ndocs, 'archivo', 'archivos')) : '')
         + (x.detalle ? '<div class="mut">' + esc(x.detalle.slice(0, 140)) + (x.detalle.length > 140 ? '…' : '') + '</div>' : '') + '</td>'
@@ -697,15 +790,15 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
     }).join('') : '<tr><td colspan="5" class="vacio">' + (PEN.length ? 'Nada coincide con la búsqueda.' : PV === 'mios' && $('f-pen').value === 'abiertos' ? 'No tienes pendientes abiertos. 🎉' : 'No hay pendientes aquí.') + '</td></tr>';
     $('pen-l').querySelectorAll('[data-pend]').forEach(function (tr) {
       var id = +tr.getAttribute('data-pend');
-      tr.onclick = function () { verPend(id); };
-      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verPend(id); } };
+      tr.onclick = function () { PCOLA = L.map(function (x) { return x.id; }); verPend(id); };
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); PCOLA = L.map(function (x) { return x.id; }); verPend(id); } };
     });
   }
   async function cuentaMios() {
     try { EST = await rpc('exp_estado'); } catch (e) { return; }
     $('n-mios').textContent = EST.mios.abiertos; $('n-rev').textContent = EST.mios.revisar;
   }
-  document.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = async function () { PV = b.getAttribute('data-pv'); try { await cargaPen(); } catch (e) { error(falla(e)); } }; });
+  document.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = async function () { PV = b.getAttribute('data-pv'); PPILA = ''; try { await cargaPen(); } catch (e) { error(falla(e)); } }; });
   $('q-pen').oninput = pintaPen;
   $('f-pen').onchange = async function () { try { await cargaPen(); } catch (e) { error(falla(e)); } };
   $('x-pen').onclick = async function () {
@@ -756,6 +849,8 @@ body.con-ficha .band .wrap{padding-top:10px;padding-bottom:10px}
       + '</ul><div class="campo ancho" style="margin-top:10px"><label for="p-com">Comentario</label><textarea id="p-com" placeholder="Escribe un avance, una duda o lo que haga falta"></textarea></div>'
       + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="p-comenta">Comentar</button></div></div></div>');
     DESPUES = tras || refrescaTodo;
+    // uno por uno («Empezar a revisar» o al picar un renglón): ‹ 3 de 25 Siguiente › junto a «Cerrar»
+    if (window.PROFASE_PILAS && PCOLA.indexOf(x.id) >= 0) PROFASE_PILAS.nav({ ids: PCOLA, id: x.id, abre: function (i) { verPend(i, tras); }, antes: $('v-cierra'), clase: 'btn chico' });
     $('v-cuerpo').querySelectorAll('[data-acc]').forEach(function (b) {
       b.onclick = async function () {
         var a = ACCIONES.filter(function (z) { return z[0] === b.getAttribute('data-acc'); })[0], t = '';

@@ -181,12 +181,18 @@
       guardados.set(k, g);
       return g.p;
     }
-    function guardaArchivo(b, d) {
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([b], { type: op.esPdf(d) ? 'application/pdf' : 'application/octet-stream' }));
+    // Se baja en la página del botón (5-nov-2026): la foto en grande del chat sale en la página de arriba, encima de toda
+    // la pantalla (chat.html, verImagen); su «Bajar» baja ahí, para que en la app del iPhone y del iPad la ventanita «Tu
+    // archivo está listo» (js/portal.js) salga encima de la foto y no escondida en el marco del chat. Con el botón en la
+    // misma página (todo lo demás), igual que siempre.
+    function guardaArchivo(b, d, btn) {
+      var D = document, W = window;
+      try { if (btn && btn.ownerDocument && btn.ownerDocument.defaultView && btn.ownerDocument.body) { D = btn.ownerDocument; W = D.defaultView; } } catch (e) { D = document; W = window; }
+      var a = D.createElement('a');
+      a.href = W.URL.createObjectURL(new W.Blob([b], { type: op.esPdf(d) ? 'application/pdf' : 'application/octet-stream' }));
       a.download = nombre(d); a.rel = 'noopener'; a.style.display = 'none';
-      document.body.appendChild(a); a.click();
-      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      D.body.appendChild(a); a.click();
+      setTimeout(function () { W.URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     }
 
     /* ---------- Bajar ---------- */
@@ -210,7 +216,7 @@
       if (btn) btn.disabled = true;
       var aviso = btn ? setTimeout(function () { btn.textContent = 'Bajando…'; }, 120) : 0;
       bytes(d).then(function (b) {
-        guardaArchivo(cual(b, orig), d);
+        guardaArchivo(cual(b, orig), d, btn);
         try { if (op.alBajar) op.alBajar(d, orig); } catch (e) { /* la descarga ya salió */ }
         if (btn) btn.textContent = 'Listo';
       }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); } }).then(function () {
@@ -313,7 +319,7 @@
         if (ev.target === el || (b && b.getAttribute('data-pv') === 'cierra')) { cierraCapa(); return; }
         if (b && b.getAttribute('data-pv') === 'baja' && c.bytes) {
           var sale = function (orig) {
-            guardaArchivo(cual(c.bytes, orig), d);
+            guardaArchivo(cual(c.bytes, orig), d, b);
             try { if (op.alBajar) op.alBajar(d, orig); } catch (e) { /* ya salió */ }
           };
           if (ofrece(d)) window.PROFASE_MARCA.eligeMarca(b, sale, 'el PDF'); else sale(false);
