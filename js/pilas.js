@@ -16,7 +16,23 @@
    PROFASE_PILAS.mas({id, etiqueta: 'Más'}) → {w, b, nb, m, abre(v), pon(nodos), cuenta(n, title)}
      Un menú del portal: avisa al abrirse (PORTAL.abreMenu) y se cierra si se abre otro, al picar afuera o con Esc. Lo que se
      pica adentro lo cierra (salvo lo que lleva data-mas-queda). Siempre cabe: si abajo no hay lugar, abre hacia arriba, y si
-     es más alto que la pantalla, se desliza por dentro. */
+     es más alto que la pantalla, se desliza por dentro. Si nada de lo de adentro se ve (todo escondido para quien entró),
+     «Más ▾» no sale.
+
+   UX PROFASE (Héctor Daniel Nava, 5-nov-2026, 23:08: «quiero que… todos los menús y sub menús tengan el UX profase… si no
+   lo tienen hazlo; y recuerda: ese UX Profase ya es regla para todo lo nuevo»). La barra de trabajo de arriba, la misma en
+   todas las pantallas (antes cada una la armaba a mano):
+   PROFASE_PILAS.barra(donde, {
+     buscar: elInput | {id, placeholder, alEscribir: q => …},   // el buscador (si la pantalla ya tenía uno, se mueve aquí)
+     periodo: [nodos],                                          // lo que recarga los datos (año, mes, periodo), a la vista
+     filtros: {grupos, cambio, …},                              // lo de PROFASE_FILTROS.crea, sin «donde» → r.f
+     botones: [nodos],                                          // lo que siempre se ve (Excel con su PDF, la acción del día)
+     mas: [[nodos], [nodos]],                                   // lo que se usa menos, por grupos → r.mas
+     caja: true })                                              // con su recuadro (cuando va suelta, arriba de las pilas)
+   → {w, q, f, mas}. Los nodos que ya existían se mueven (no se copian): sus botones siguen haciendo lo mismo.
+   PROFASE_PILAS.nav({ids, id, abre: id => …, antes: el | donde: el, clase: 'btn'})   // «‹ 3 de 25 Siguiente ›»
+     Para ir uno por uno en la ficha o ventana que abre la pantalla («Empezar a revisar»): se pone junto a su «Cerrar» y
+     abre el anterior o el siguiente de la lista. Regresa {sig, ant} (el id del siguiente y del anterior) o null. */
 (function () {
   'use strict';
   if (window.PROFASE_PILAS) return;
@@ -77,7 +93,31 @@
     + '.ppl-masm .ppl-masi:empty{display:none}'
     + '.ppl-masm .ppl-masi + .ppl-masi{border-top:1px solid var(--line-2,var(--line,#E6EAF0));padding-top:6px}'
     + '.ppl-masm .ppl-masi > button,.ppl-masm .ppl-masi > a,.ppl-masm .ppl-masi > label{width:100%;justify-content:flex-start;text-align:left;margin:0}'
-    + '.ppl-masm .ppl-masi > [hidden]{display:none!important}';
+    + '.ppl-masm .ppl-masi > [hidden]{display:none!important}'
+    + '.ppl-masw[hidden]{display:none!important}'
+    // la barra de trabajo (UX PROFASE)
+    + '.ppl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 12px;min-width:0;max-width:100%;box-sizing:border-box}'
+    + '.ppl-bar[hidden]{display:none!important}'
+    + '.ppl-bar.caja{background:var(--surface,#FFFFFF);border:1px solid var(--line,#DDE3EA);border-radius:12px;padding:11px 14px}'
+    + '.ppl-q{flex:1 1 260px;min-width:0;position:relative;display:flex;align-items:center;margin:0}'
+    + '.ppl-q svg{position:absolute;left:10px;width:15px;height:15px;color:var(--muted,var(--ink-3,#7B8A9B));pointer-events:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}'
+    + '.ppl-q input{width:100%;max-width:none;font:inherit;font-size:13.5px;padding:9px 12px 9px 33px;min-height:38px;border:1px solid var(--line,#DDE3EA);'
+    + 'border-radius:10px;background:var(--surface-2,#F3F5F8);color:var(--ink,var(--fg,#132036));box-sizing:border-box;margin:0}'
+    + '.ppl-q input:focus{outline:none;border-color:#F07A1E;box-shadow:0 0 0 2px rgba(240,122,30,.2)}'
+    + '.ppl-bf{display:contents}.ppl-bar .pf{margin:0}'
+    + '.ppl-per{display:inline-flex;flex-wrap:wrap;gap:8px;min-width:0}'
+    + '.ppl-per select,.ppl-per input{font:inherit;font-size:13.5px;padding:8px 10px;min-height:38px;max-width:100%;border:1px solid var(--line,#DDE3EA);'
+    + 'border-radius:10px;background:var(--surface,#FFFFFF);color:var(--ink,var(--fg,#132036));box-sizing:border-box;margin:0}'
+    + '.ppl-bb{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}.ppl-bb:empty{display:none}'
+    + '.ppl-bb > [hidden]{display:none!important}'
+    + '.ppl-bar .ppl-masb{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line,#DDE3EA);border-radius:10px;'
+    + 'background:var(--surface,#FFFFFF);color:var(--ink,var(--fg,#132036));padding:8px 13px;min-height:38px;cursor:pointer;box-sizing:border-box}'
+    + '.ppl-bar .ppl-masb:hover{background:var(--surface-2,#F3F5F8)}'
+    + '.ppl-masm .btn{width:100%;justify-content:flex-start;text-align:left;margin:0}'
+    + '.ppl-nav{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;flex:none}'
+    + '.ppl-navn{font-size:12.5px;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    + '.ppl-nav [disabled]{opacity:.45;cursor:default}'
+    + '@media (max-width:600px){.ppl-q{flex-basis:100%}.ppl-q input{font-size:16px}.ppl-per select,.ppl-per input{font-size:16px}}';
 
   function estilos() {
     if (document.getElementById('ppl-css')) return;
@@ -167,11 +207,80 @@
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !m.hidden) { abre(false); try { b.focus(); } catch (e) { /* nada */ } } });
     document.addEventListener('profase-menu', function (ev) { if (ev.detail !== id && !m.hidden) abre(false); });
     window.addEventListener('resize', function () { if (!m.hidden) coloca(); });
+    // si nada de lo de adentro se ve, «Más ▾» no sale (cada pantalla esconde lo que no le toca a quien entró)
+    function revisa() {
+      var hay = Array.prototype.some.call(m.querySelectorAll('.ppl-masi > *'), function (x) {
+        return !x.hidden && x.style.display !== 'none' && !(x.classList && x.classList.contains('oculto'));
+      });
+      if (w.hidden === hay) w.hidden = !hay;
+      if (!hay && !m.hidden) abre(false);
+    }
+    try { new MutationObserver(revisa).observe(m, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'style', 'class'] }); } catch (e) { /* sin observador */ }
     function grupo() { var g = document.createElement('div'); g.className = 'ppl-masi'; m.appendChild(g); return g; }
-    function pon(nodos) { var g = grupo(); (nodos || []).forEach(function (n) { if (n) g.appendChild(n); }); return g; }
+    function pon(nodos) { var g = grupo(); (nodos || []).forEach(function (n) { if (n) g.appendChild(n); }); revisa(); return g; }
     function cuenta(n, title) { nb.hidden = !n; nb.textContent = n ? fmt.format(n) : ''; b.title = n && title ? title : ''; }
-    return { w: w, b: b, nb: nb, m: m, abre: abre, pon: pon, grupo: grupo, cuenta: cuenta };
+    return { w: w, b: b, nb: nb, m: m, abre: abre, pon: pon, grupo: grupo, cuenta: cuenta, revisa: revisa };
   }
 
-  window.PROFASE_PILAS = { pinta: pinta, mas: mas };
+  var LUPA = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>';
+  function barra(donde, o) {
+    if (!donde) return null;
+    estilos(); o = o || {};
+    donde.classList.add('ppl-bar'); if (o.caja) donde.classList.add('caja'); donde.hidden = false;
+    var r = { w: donde, q: null, f: null, mas: null };
+    if (o.buscar) {
+      var lb = document.createElement('label'); lb.className = 'ppl-q'; lb.innerHTML = LUPA;
+      var inp = o.buscar.nodeType === 1 ? o.buscar : document.createElement('input');
+      if (inp !== o.buscar) {
+        inp.type = 'search'; inp.autocomplete = 'off'; if (o.buscar.id) inp.id = o.buscar.id;
+        inp.placeholder = o.buscar.placeholder || 'Buscar';
+        inp.setAttribute('aria-label', o.buscar.etiqueta || o.buscar.placeholder || 'Buscar');
+        if (o.buscar.alEscribir) { var t = 0; inp.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { o.buscar.alEscribir(inp.value.trim()); }, 200); }); }
+      }
+      inp.hidden = false; inp.classList.remove('ancho');
+      lb.appendChild(inp); donde.appendChild(lb); r.q = inp;
+    }
+    if (o.periodo && o.periodo.length) {   // lo que recarga los datos (año, mes o periodo): a la vista, no dentro de FILTROS
+      var pp = document.createElement('span'); pp.className = 'ppl-per';
+      o.periodo.forEach(function (n) { if (n) { n.hidden = false; pp.appendChild(n); } });
+      donde.appendChild(pp);
+    }
+    if (o.filtros && window.PROFASE_FILTROS) {
+      var sf = document.createElement('span'); sf.className = 'ppl-bf'; donde.appendChild(sf);
+      var cfg = {}; Object.keys(o.filtros).forEach(function (k) { cfg[k] = o.filtros[k]; }); cfg.donde = sf;
+      r.f = window.PROFASE_FILTROS.crea(cfg);
+    }
+    var bb = document.createElement('span'); bb.className = 'ppl-bb';
+    (o.botones || []).forEach(function (n) { if (n) bb.appendChild(n); });
+    donde.appendChild(bb);
+    if (o.mas && o.mas.length) {
+      r.mas = mas({ id: o.masId || (donde.id ? donde.id + '-mas' : null), etiqueta: o.masEtiqueta || 'Más' });
+      o.mas.forEach(function (g) { r.mas.pon(Array.isArray(g) ? g : [g]); });
+      donde.appendChild(r.mas.w);
+    }
+    return r;
+  }
+
+  function nav(o) {
+    o = o || {};
+    var ids = o.ids || [], ix = ids.indexOf(o.id), n = ids.length;
+    if (ix < 0 || n < 2 || !(o.antes || o.donde)) return null;
+    estilos();
+    var c = esc(o.clase || 'btn');
+    var w = document.createElement('span'); w.className = 'ppl-nav';
+    w.innerHTML = '<button type="button" class="' + c + '" data-nav="-1" aria-label="El anterior"' + (ix ? '' : ' disabled') + '>‹</button>'
+      + '<span class="ppl-navn">' + fmt.format(ix + 1) + ' de ' + fmt.format(n) + '</span>'
+      + '<button type="button" class="' + c + '" data-nav="1"' + (ix < n - 1 ? '' : ' disabled') + '>Siguiente ›</button>';
+    w.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-nav]');
+      if (!b || b.disabled) return;
+      e.preventDefault(); e.stopPropagation();
+      var x = ids[ix + Number(b.getAttribute('data-nav'))];
+      if (x != null && o.abre) o.abre(x);
+    });
+    if (o.antes && o.antes.parentNode) o.antes.parentNode.insertBefore(w, o.antes); else o.donde.appendChild(w);
+    return { w: w, sig: ix < n - 1 ? ids[ix + 1] : null, ant: ix ? ids[ix - 1] : null };
+  }
+
+  window.PROFASE_PILAS = { pinta: pinta, mas: mas, barra: barra, nav: nav };
 })();
