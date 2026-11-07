@@ -407,7 +407,7 @@ details.hist>summary{width:auto}
     <div hidden>
       <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option><option value="1" selected>Activo</option><option value="2">Incubado</option><option value="0">Inactivo</option></select>
       <select id="f-cia" aria-label="Compañía que la atiende"></select>
-      <select id="f-marca" aria-label="Marcas"><option value="">Marcas: todas</option><option value="alguna">Con alguna marca</option><option value="sincont">Sin contador</option><option value="sindocs">Nadie recibe documentos</option><option value="vence">e.firma o sellos por vencer</option></select>
+      <select id="f-marca" aria-label="Marcas"><option value="">Marcas: todas</option><option value="alguna">Con alguna marca</option><option value="sincont">Sin contador</option><option value="sindocs">Nadie recibe documentos</option><option value="vence">e.firma o sellos por vencer</option><option value="devcond" hidden>Devoluciones de IVA sin lo que se cobra</option></select>
     </div>
     <section id="kpis" aria-label="Resumen de esta pestaña" hidden></section>
 
@@ -526,6 +526,7 @@ details.hist>summary{width:auto}
       var R = await Promise.all(TABLAS.map(todo));
       TABLAS.forEach(function (t, i) { T[t] = R[i]; });
       indices();
+      await devFaltan();
       opciones(); pinta();
       $('cargando').hidden = true; $('principal').hidden = false;
       // desde un aviso (el contacto que se capturó al mandar, 206): abre la ficha de esa razón social
@@ -592,6 +593,8 @@ details.hist>summary{width:auto}
     if (e.estatus === 0) return M;
     if (!contadoresDe(e).length) M.push({ k: 'sincont', t: 'Sin contador', c: 'mal', ir: 'sec-quien' });
     if (!recibe(e, 'recibe_docs')) M.push({ k: 'sindocs', t: 'Nadie recibe documentos', c: 'mal', ir: 'sec-quien' });
+    // lo que se cobra en sus devoluciones de IVA, sin capturar (319): solo a quien ve lo que se cobra
+    if (DEVF && DEVF.has(e.id)) M.push({ k: 'devcond', t: 'Devoluciones de IVA sin lo que se cobra', c: 'mal', ir: 'sec-dev' });
     [['fiel', 'e.firma', 'vence', 'vencida'], ['sellos', 'Sellos', 'vencen', 'vencidos']].forEach(function (q) {
       var d = e['vence_' + q[0]];
       if (!e['cuenta_' + q[0]] || !d) return;
@@ -660,7 +663,8 @@ details.hist>summary{width:auto}
       var n = function (v) { return E.filter(function (e) { return e.estatus === v; }).length; };
       var sc = E.filter(function (e) { return marcasDe(e).some(function (x) { return x.k === 'sincont'; }); }).length;
       var pv = E.filter(function (e) { return marcasDe(e).some(function (x) { return x.k === 'vence'; }); }).length;
-      var cola = (m === 'sincont' || m === 'vence' || m === 'sindocs' || m === 'alguna') ? filtradas() : [];
+      var dv = DEVF ? E.filter(function (e) { return DEVF.has(e.id); }).length : 0;
+      var cola = (m === 'sincont' || m === 'vence' || m === 'sindocs' || m === 'alguna' || m === 'devcond') ? filtradas() : [];
       o.titulo = 'Tu trabajo · las empresas'; o.meta = E.length + (E.length === 1 ? ' empresa' : ' empresas') + ' en la base';
       o.pilas = [
         { k: 'e1', t: 'Activas', n: n(1), d: '', tono: 'verde', on: est === '1' },
@@ -668,6 +672,9 @@ details.hist>summary{width:auto}
         { k: 'e0', t: 'Inactivas', n: n(0), d: '', tono: 'gris', on: est === '0' },
         { k: 'sincont', t: 'Sin contador', n: sc, d: 'Falta asignarle contador', tono: 'rojo', on: m === 'sincont', tag: sc && edita() ? 'Te toca' : '' },
         { k: 'vence', t: 'Por vencer', n: pv, d: 'e.firma o sellos en 3 meses', tono: 'ambar', on: m === 'vence' }];
+      // Héctor Daniel Nava, 6-nov-2026, 20:10 («Obliga a chuy»): las que tienen devoluciones de IVA en el WorkFlow y todavía
+      // no tienen capturado lo que se cobra (319); se quita sola cuando ya no falta ninguna
+      if (DEVF && (dv || m === 'devcond')) o.pilas.push({ k: 'devcond', t: 'Devoluciones sin capturar', n: dv, d: 'Lo que se cobra en sus devoluciones de IVA', tono: 'rojo', on: m === 'devcond', tag: dv && DEVED && !CONSULTA ? 'Te toca' : '' });
       o.boton = cola.length ? { t: 'Revisar una por una', n: cola.length, alPicar: function () { ECOLA = cola.map(function (x) { return x.id; }); abreEmpresa(ECOLA[0]); } } : null;
       o.nota = cola.length ? 'Abre la primera; en su ficha, «Siguiente ›» pasa a la que sigue.' : '';
     } else if (VISTA === 'gru') {
@@ -719,7 +726,7 @@ details.hist>summary{width:auto}
   function tituloEmp() {
     var e = $('f-est').value, m = $('f-marca').value;
     var t = e === '1' ? 'Empresas activas' : e === '2' ? 'Empresas incubadas' : e === '0' ? 'Empresas inactivas' : 'Empresas';
-    var mm = { alguna: 'con alguna marca', sincont: 'sin contador', sindocs: 'donde nadie recibe documentos', vence: 'con e.firma o sellos por vencer' }[m];
+    var mm = { alguna: 'con alguna marca', sincont: 'sin contador', sindocs: 'donde nadie recibe documentos', vence: 'con e.firma o sellos por vencer', devcond: 'con devoluciones de IVA sin lo que se cobra' }[m];
     return t + (mm ? ' ' + mm : '');
   }
   function pintaEmpresas() {
@@ -1007,6 +1014,17 @@ details.hist>summary{width:auto}
      (cli_dev_cond; desde 168, Elisa Mata, Fernando Gutiérrez, Fernando Cadengo y Héctor Daniel Nava, y Héctor Nava Ramos lo ve);
      a los demás no les sale (ni su renglón en el índice). ---------- */
   var DEVC = null;
+  /* Las razones sociales con devoluciones de IVA en el WorkFlow que todavía no tienen capturado lo que se cobra (319,
+     cli_dev_faltan: solo a quien ve lo que se cobra; Héctor Daniel Nava, 6-nov-2026, 20:10: «Obliga a chuy»). A los demás
+     no les sale nada (ni la marca, ni la pila, ni el filtro). */
+  var DEVF = null, DEVED = false;
+  async function devFaltan() {
+    var r = null;
+    try { r = await rpc('cli_dev_faltan'); } catch (e) { r = null; }
+    DEVF = r && Array.isArray(r.ids) ? new Set(r.ids.map(Number)) : null; DEVED = !!(r && r.edita);
+    var op = document.querySelector('#f-marca option[value="devcond"]'); if (op) op.hidden = !DEVF;
+    if (!DEVF && $('f-marca').value === 'devcond') $('f-marca').value = '';
+  }
   async function devCond(id) {
     var z = $('dev-cond'); if (!z) return;
     var r = null;
@@ -1039,7 +1057,7 @@ details.hist>summary{width:auto}
     if (!quitar && !(p.valor > 0)) { devMsg('mal', 'Escribe un número mayor que cero.'); return; }
     if (quitar && !window.confirm('¿Quitar lo que se le cobra a este cliente en devoluciones?')) return;
     devMsg('ojo', 'Guardando…');
-    try { await rpc('cli_dev_cond_guarda', { p_empresa_id: r.id, p: p }); avisa('Guardado.'); devCond(r.id); historia(r.id); }
+    try { await rpc('cli_dev_cond_guarda', { p_empresa_id: r.id, p: p }); avisa('Guardado.'); devCond(r.id); historia(r.id); await devFaltan(); pintaKpis(); pintaEmpresas(); }
     catch (e) { devMsg('mal', falla(e)); }
   }
   async function historia(id) {
@@ -1347,16 +1365,31 @@ details.hist>summary{width:auto}
     // la Base de clientes rediseñada (Fernando Cadengo, 3-nov-2026): la ficha a pantalla completa con su resumen y su índice
     'ficha-cliente': { sec: 'f-resumen', nota: 'Nuevo: la ficha a pantalla completa. Arriba, el resumen (contador, quién la atiende, servicios y vencimientos) y la franja «Atención» con lo que le falta o le vence; a la izquierda, el índice para ir a cada sección y a las otras razones sociales del grupo. «Dar de baja» y «Borrar» están en «Más».' },
     // «Usuarios QUO» en la ficha, como la pestaña del Access (Héctor Daniel Nava, 3-nov-2026, 17:23)
-    'usuarios-quo': { sec: 'sec-quo', nota: 'Nuevo: «Usuarios QUO», como en el Access: el QUO ID y los usuarios y contraseñas de Contabilita y Facturita, con «Ver» y «Copiar». Son los mismos de Claves SAT y renovaciones: lo que cambies aquí sale allá al momento.' }
+    'usuarios-quo': { sec: 'sec-quo', nota: 'Nuevo: «Usuarios QUO», como en el Access: el QUO ID y los usuarios y contraseñas de Contabilita y Facturita, con «Ver» y «Copiar». Son los mismos de Claves SAT y renovaciones: lo que cambies aquí sale allá al momento.' },
+    // el pendiente de lo que se cobra en las devoluciones de IVA (319; Héctor Daniel Nava, 6-nov-2026, 20:10: «Obliga a chuy»):
+    // abre la pila «Devoluciones sin capturar» y la ficha de la primera, en su sección; «Siguiente ›» pasa a la que sigue
+    'dev-cond': { sec: 'sec-dev', marca: 'devcond', nota: 'Captura lo que se cobra de DECOMSA en cada devolución de IVA de esta razón social: «Capturar», cantidad fija o porcentaje de lo que devolvió el SAT, y «Guardar». Luego «Siguiente ›» para la que sigue.' }
   };
-  function verNuevo() {
+  async function verNuevo() {
     var t = VER, n = NUEVOS[t]; if (!n || !T.empresas) return;
     VER = '';
     if (VISTA !== 'emp') { VISTA = 'emp'; pinta(); }
-    var L = filtradas(), e = L.filter(function (x) { return x.estatus === 1 && x.id_quo != null; })[0] || L[0] || T.empresas[0];
+    var L, e;
+    if (n.marca) {   // una pila de «Tu trabajo»: se filtra y se abre la primera, con «Siguiente ›»
+      if (n.marca === 'devcond') await devFaltan();
+      var op = document.querySelector('#f-marca option[value="' + n.marca + '"]');
+      if (!op || op.hidden) return;
+      $('f-marca').value = n.marca; PAG.emp.inicio(); pinta();
+      L = filtradas(); if (!L.length) { avisa('Ya no falta ninguna.'); return; }
+      ECOLA = L.map(function (x) { return x.id; }); e = L[0];
+    } else {
+      L = filtradas(); e = L.filter(function (x) { return x.estatus === 1 && x.id_quo != null; })[0] || L[0] || T.empresas[0];
+    }
     if (!e) return;
     abreEmpresa(e.id);
-    var s = $(n.sec); if (!s) return;
+    var s = $(n.sec);
+    for (var k = 0; !s && k < 40; k++) { await new Promise(function (ok) { setTimeout(ok, 150); }); s = $(n.sec); }   // la sección que llega después (sec-dev)
+    if (!s) return;
     var h3 = s.querySelector('h3'), nota = '<div class="nuevo-nota" role="status">' + esc(n.nota) + '</div>';
     if (h3) h3.insertAdjacentHTML('afterend', nota); else s.insertAdjacentHTML('beforebegin', nota);
     s.classList.add('nuevo');
