@@ -1932,6 +1932,80 @@
     }
   }
 
+  /* Cada colección se baja una sola vez y luego solo lo que cambió (6-nov-2026, Fernando Cadengo a Héctor Daniel Nava,
+     16:50: «la parte de reportes… ya se está haciendo lento»). Antes, al abrir Variaciones se bajaban dos veces completos
+     los comentarios y los estatus (la página los pedía y luego la vigilancia los volvía a pedir: ~5.7 MB), y cada vez que
+     alguien guardaba un comentario, a todos los que la tenían abierta se les volvía a bajar la colección entera (1.8 MB).
+     Ahora la página guarda en su memoria una copia de lo que la base ya le dio (en texto, tal cual llegó: cada entrega se
+     lee de nuevo, así que cada pantalla recibe sus propios objetos, como antes); para ponerse al día pide la lista de
+     versiones (id, versión y hora, unos KB) y baja solo los documentos nuevos o cambiados; lo que ya no viene en la lista
+     (lo borraron o ya no le toca ver) se quita. Las reglas de la base siguen decidiendo qué ve cada quien: la copia es
+     solo de lo que la base ya le entregó y vive mientras la página está abierta. Dos pedidos a la vez de la misma
+     colección comparten la misma bajada. */
+  var ESPEJO = {}, LOTE_IDS = 80, CAMPOS_TXT = 'id,version,updated_at,txt:data::text', CAMPOS_OBJ = 'id,version,updated_at,data';
+  var CON_TEXTO = true;   // si la base no aceptara «::text», se pide el JSON y se guarda como texto aquí (mismo resultado)
+  function aTexto(filas) {
+    (filas || []).forEach(function (x) { if (x.txt === undefined) { x.txt = x.data === undefined ? null : JSON.stringify(x.data); delete x.data; } });
+    return filas || [];
+  }
+  async function conCampos(pide) {
+    if (CON_TEXTO) {
+      try { return aTexto(await pide(CAMPOS_TXT)); }
+      catch (e) { if (e && e.code === 'unavailable') throw e; CON_TEXTO = false; }
+    }
+    return aTexto(await pide(CAMPOS_OBJ));
+  }
+  function mismaFila(a, b) { return !!a && !!b && a.version === b.version && a.updated_at === b.updated_at; }
+  async function porIds(col, ids) {
+    var out = [], lotes = [];
+    for (var i = 0; i < ids.length; i += LOTE_IDS) lotes.push(ids.slice(i, i + LOTE_IDS));
+    for (var j = 0; j < lotes.length; j += 4) {   // hasta 4 pedidos a la vez
+      var rs = await Promise.all(lotes.slice(j, j + 4).map(function (l) {
+        return conCampos(async function (c) { var r = await sb.from('docs').select(c).eq('col', col).in('id', l); if (r.error) throw error(r.error); return r.data; });
+      }));
+      rs.forEach(function (r) { out = out.concat(r); });
+    }
+    return out;
+  }
+  function colAlDia(col) {
+    var e = ESPEJO[col] || (ESPEJO[col] = { filas: null, vuelo: null });
+    if (e.vuelo) return e.vuelo;
+    e.vuelo = (async function () {
+      if (!e.filas) {
+        var todo = await conCampos(function (c) { return todaLaCol(col, c); });
+        e.filas = {};
+        todo.forEach(function (x) { e.filas[x.id] = x; });
+        return todo;
+      }
+      var lista = await todaLaCol(col, 'id,version,updated_at');
+      var faltan = lista.filter(function (x) { return !mismaFila(e.filas[x.id], x); }).map(function (x) { return x.id; });
+      if (faltan.length > 200 && faltan.length > lista.length / 2) {
+        e.filas = null;   // cambió casi todo (una carga nueva): de una vez completa
+        e.vuelo = null;
+        return colAlDia(col);
+      }
+      var nuevas = faltan.length ? await porIds(col, faltan) : [];
+      var filas = {};
+      lista.forEach(function (x) { if (e.filas[x.id] && mismaFila(e.filas[x.id], x)) filas[x.id] = e.filas[x.id]; });
+      nuevas.forEach(function (x) { filas[x.id] = x; });
+      e.filas = filas;
+      return lista.map(function (x) { return filas[x.id]; }).filter(Boolean);
+    })();
+    e.vuelo.then(function () { e.vuelo = null; }, function () { e.vuelo = null; e.filas = null; });
+    return e.vuelo;
+  }
+  function fotoTxt(fila) {
+    var leido = false, obj;
+    return { id: fila.id, exists: true, data: function () {
+      if (!leido) { obj = fila.txt == null ? null : JSON.parse(fila.txt); leido = true; }
+      return obj;
+    } };
+  }
+  function fotosCol(filas) {
+    var docs = filas.map(fotoTxt);
+    return { docs: docs, size: docs.length, empty: !docs.length };
+  }
+
   /* Vigilancia: la página pide «avísame si cambia»; se revisa la versión y solo se baja lo que cambió */
   var VIG = new Set(), revisando = false, reloj = null;
   async function revisa(w) {
@@ -1944,10 +2018,10 @@
         var fila = r.data ? await leer(w.col, w.id) : null;
         w.firma = f; w.cb(foto(w.id, fila));
       } else {
-        var f2 = (await todaLaCol(w.col, 'id,version')).map(function (x) { return x.id + ':' + x.version; }).join(',');
+        var filas = await colAlDia(w.col);   // solo baja lo que cambió (ver «Cada colección se baja una sola vez»)
+        var f2 = filas.map(function (x) { return x.id + ':' + x.version; }).join(',');
         if (f2 === w.firma) return;
-        var docs = (await todaLaCol(w.col, 'id,data,version')).map(function (x) { return foto(x.id, x); });
-        w.firma = f2; w.cb({ docs: docs, size: docs.length, empty: !docs.length });
+        w.firma = f2; w.cb(fotosCol(filas));
       }
     } catch (e) { if (w.err) { try { w.err(error(e)); } catch (_) {} } }
   }
@@ -2028,10 +2102,7 @@
         pronto();
         return docRef(col + '/' + id);
       },
-      get: async function () {
-        var docs = (await todaLaCol(col, 'id,data')).map(function (x) { return foto(x.id, x); });
-        return { docs: docs, size: docs.length, empty: !docs.length };
-      },
+      get: async function () { return fotosCol(await colAlDia(col)); },
       onSnapshot: function (cb, err) { return vigila({ doc: false, col: col, cb: cb, err: err, firma: null }); }
     };
   }
