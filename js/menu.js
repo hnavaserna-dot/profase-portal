@@ -130,6 +130,8 @@
       { k: 'centauro-semaforo', v: 'cenx', t: 'Semáforo', d: 'Cada cliente mes por mes: lo que hay que corregir (rojo) y revisar (amarillo).' },
       { k: 'centauro-riesgos', v: 'cenf', t: 'Riesgos fiscales', d: 'Lo que encontró la revisión fiscal de las declaraciones, de todos los clientes en una sola lista.' },
       { k: 'centauro-declaraciones', v: 'cend', t: 'Declaraciones', d: 'Las declaraciones de cada cliente que el robot baja del portal del SAT, con su acuse.' },
+      // 317 (6-nov-2026; Héctor Daniel: «dale luz verde»): cómo van en el SAT los trámites de devolución y si cuadran con el WorkFlow
+      { k: 'centauro-devoluciones', v: 'cenv', t: 'Devoluciones', d: 'Cómo van en el SAT las devoluciones de cada cliente y si cuadran con el WorkFlow.' },
       { k: 'centauro-boveda', v: 'cenb', t: 'Bóveda XML', d: 'Los XML de cada cliente: búscalos, velos y bájalos tal cual.' },
       { k: 'centauro-canceladas', v: 'cenc', t: 'Canceladas SAT vs QUO', d: 'Lo cancelado en el SAT que sigue activo en QUO, por cliente.' },
       { k: 'centauro-69b', v: 'cen9', t: 'Lista 69-B', d: 'Los proveedores de cada cliente en la lista 69-B del SAT.' },

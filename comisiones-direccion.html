@@ -1777,7 +1777,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var n = ++DEV.pide;
     if (DEV.d) pintaDev();
     estado('dev-estado', DEV.d ? '' : 'Cargando…');
-    try { var d = await rpc('cdir_dev', { p: {} }); if (n !== DEV.pide) return; DEV.d = d; estado('dev-estado', ''); pintaDev(); }
+    // 318: lo que dice el SAT de cada devolución (Centauro), a la par; si no contesta, la lista sale igual sin esa columna
+    var sat = rpc('cdir_dev_sat').catch(function () { return null; });
+    try { var d = await rpc('cdir_dev', { p: {} }); if (n !== DEV.pide) return; DEV.d = d; DEV.sat = await sat; estado('dev-estado', ''); pintaDev(); }
     catch (e) { if (n === DEV.pide) { estado('dev-estado', ''); error(falla(e)); } }
   }
   var AYUDA_DEV = {
@@ -1905,6 +1907,18 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     });
   }
   function sumaDev(L, k) { return L.reduce(function (a, x) { return a + (Number(x[k]) || 0); }, 0); }
+  /* 318 (Héctor Daniel Nava, 6-nov-2026: «dale luz verde» a Centauro › Devoluciones): lo que dice el SAT de cada devolución,
+     del trámite que lee Centauro de «Consulta de trámites» (el del WorkFlow por su caso; el de antes, por su razón social y mes) */
+  var SAT_K = { proceso: 'ojo', requerimiento: 'ojo', autorizada: 'ok', pagada: 'ok', negada: 'mal', desistida: 'mal', concluida: '', otro: '' };
+  function satDe(x) {
+    var s = DEV.sat || {};
+    return (x.caso != null ? (s.casos || {})[String(x.caso)] : x.id != null ? (s.hist || {})[String(x.id)] : null) || null;
+  }
+  function satCelda(x) {
+    var y = satDe(x);
+    if (!y) return '<span class="mut">' + (DEV.sat ? 'Sin trámite' : '—') + '</span>';
+    return '<span class="chip ' + (SAT_K[y.k] || '') + '">' + esc(y.estado) + '</span><div class="mut">Desde el ' + esc(fecha(String(y.desde || '').slice(0, 10))) + '</div>';
+  }
   function pintaListaDev() {
     var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, TL = d.lista || [];
     var clientes = TL.map(function (x) { return x.cliente; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
@@ -1915,7 +1929,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var L = listaDev();
     $('d-lis-n').textContent = L.length === 1 ? '1 devolución' : L.length + ' devoluciones';
     var tFac = 'Factura ' + (T.b_facturas || '');
-    $('t-dlis').tHead.innerHTML = '<tr><th>Cliente</th><th>Mes</th><th class="monto">Devolvió el SAT</th><th class="monto">SV</th><th class="monto">PROFASE</th>'
+    $('t-dlis').tHead.innerHTML = '<tr><th>Cliente</th><th>Mes</th><th>El SAT dice</th><th class="monto">Devolvió el SAT</th><th class="monto">SV</th><th class="monto">PROFASE</th>'
       + '<th class="monto">Total sin IVA</th><th class="monto">Factura con IVA</th><th>' + esc(tFac) + '</th><th>Pagó el cliente</th><th>Pago a SV</th></tr>';
     $('t-dlis').tBodies[0].innerHTML = L.map(function (x) {
       var ed = cap && x.origen !== 'workflow', ck = cap && x.elegible, si = ck && !!SVSEL[x.clave];
@@ -1927,6 +1941,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
         + (x.origen === 'workflow' ? '<div class="mut">del WorkFlow</div>' : '')
         + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</span></div></td>'
         + '<td data-l="Mes" style="white-space:nowrap">' + esc(x.mes_txt) + '</td>'
+        + '<td data-l="El SAT dice">' + satCelda(x) + '</td>'
         + '<td class="monto" data-l="Devolvió el SAT">' + (x.devuelto != null ? esc(dinero(x.devuelto)) : '<span class="mut">Falta</span>') + '</td>'
         + '<td class="monto" data-l="SV">' + esc(dinero(x.sv)) + '<div class="mut">' + esc(pctTxt(x.sv_pct)) + '</div></td>'
         + '<td class="monto" data-l="PROFASE">' + esc(dinero(x.pf)) + '<div class="mut">' + esc(pctTxt(x.pf_pct)) + '</div></td>'
@@ -1936,7 +1951,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
         + '<td data-l="Pagó el cliente">' + cobroDev(x) + '</td>'
         + '<td data-l="Pago a SV">' + pagoSv(x) + '</td></tr>';
     }).join('');
-    $('t-dlis').tFoot.innerHTML = L.length > 1 ? '<tr><td data-l="">Total</td><td data-l=""></td>'
+    $('t-dlis').tFoot.innerHTML = L.length > 1 ? '<tr><td data-l="">Total</td><td data-l=""></td><td data-l=""></td>'
       + '<td class="monto" data-l="Devolvió el SAT">' + esc(dinero(sumaDev(L, 'devuelto'))) + '</td><td class="monto" data-l="SV">' + esc(dinero(sumaDev(L, 'sv'))) + '</td>'
       + '<td class="monto" data-l="PROFASE">' + esc(dinero(sumaDev(L, 'pf'))) + '</td><td class="monto" data-l="Total sin IVA">' + esc(dinero(sumaDev(L, 'total'))) + '</td>'
       + '<td class="monto" data-l="Factura con IVA">' + esc(dinero(sumaDev(L, 'factura_iva'))) + '</td><td data-l=""></td><td data-l=""></td><td data-l=""></td></tr>' : '';
@@ -1950,14 +1965,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var L = listaDev(), est = $('d-lis-est'), filtro = (DLIS.cli || 'Todos los clientes') + ' · ' + est.options[est.selectedIndex].text;
     var E = function (x) { return { pagado: 'Pagado a SV', por_entregar: 'Por entregar', cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago'; };
     excel(b, 'Devoluciones de IVA y pago a SV PROFASE', 'Devoluciones de IVA', ['Comisiones de dirección', filtro, L.length + ' devoluciones'],
-      ['Cliente', 'Mes', 'Devolvió el SAT', '% SV', 'SV', '% PROFASE', 'PROFASE', 'Total sin IVA', 'Factura con IVA', 'Factura ' + (T.b_facturas || ''), 'Fecha de la factura', 'Pagó el cliente', 'Pago a SV', 'Fecha', 'Se le pagó', 'Nota'],
+      ['Cliente', 'Mes', 'El SAT dice', 'Devolvió el SAT', '% SV', 'SV', '% PROFASE', 'PROFASE', 'Total sin IVA', 'Factura con IVA', 'Factura ' + (T.b_facturas || ''), 'Fecha de la factura', 'Pagó el cliente', 'Pago a SV', 'Fecha', 'Se le pagó', 'Nota'],
       L.map(function (x) {
-        return [x.cliente || '', x.mes_txt || '', x.devuelto, pctTxt(x.sv_pct), Number(x.sv), pctTxt(x.pf_pct), Number(x.pf), Number(x.total), Number(x.factura_iva),
+        var sy = satDe(x);
+        return [x.cliente || '', x.mes_txt || '', sy ? sy.estado : '', x.devuelto, pctTxt(x.sv_pct), Number(x.sv), pctTxt(x.pf_pct), Number(x.pf), Number(x.total), Number(x.factura_iva),
                 x.folio || '', x.fac_fecha ? fecha(x.fac_fecha) : '', cobroTxt(x), E(x),
                 x.estado === 'pagado' ? (x.entregado_el ? fecha(x.entregado_el) : 'Sin fecha') : fecha(x.paga_el), x.estado === 'pagado' ? Number(x.sv_pagado) : '', x.nota || ''];
       }),
-      [3, 5, 7, 8, 9, 15], [30, 12, 16, 9, 14, 11, 14, 15, 15, 14, 14, 16, 18, 13, 14, 30],
-      L.length > 1 ? [['Total', '', sumaDev(L, 'devuelto'), '', sumaDev(L, 'sv'), '', sumaDev(L, 'pf'), sumaDev(L, 'total'), sumaDev(L, 'factura_iva')]] : null);
+      [4, 6, 8, 9, 10, 16], [30, 12, 16, 16, 9, 14, 11, 14, 15, 15, 14, 14, 16, 18, 13, 14, 30],
+      L.length > 1 ? [['Total', '', '', sumaDev(L, 'devuelto'), '', sumaDev(L, 'sv'), '', sumaDev(L, 'pf'), sumaDev(L, 'total'), sumaDev(L, 'factura_iva')]] : null);
   }
   /* «Para SV»: solo lo que le toca ver a SV (Héctor Daniel, 5-nov-2026, 12:22): cliente, mes devuelto, lo que devolvió el
      SAT, lo de SV y la fecha en que se le pagó o «Por pagar». Con los filtros de la lista; sin las que no llevan SV.
