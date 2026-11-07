@@ -193,7 +193,7 @@ a.btn{display:inline-block;text-decoration:none;text-align:center;cursor:pointer
 .side{display:grid;gap:12px;align-content:start;min-width:0}
 .side .panel{padding:14px}
 .side h3{font-size:15px;font-weight:600}
-.side .date{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+.side .date,.diav .date,.modal .dhead .date{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
 .item{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
 .item:first-child{border-top:0}
 .item .dot{margin-top:7px}
@@ -1107,14 +1107,14 @@ button.kpi:focus-visible{outline-offset:-3px}
   function lineasDia(it){
     var l=[], por={};
     it.slice().sort(function(a,b){ return String(a.hora||(a.e&&a.e.hora)||'99').localeCompare(String(b.hora||(b.e&&b.e.hora)||'99')); }).forEach(function(x){
-      if(x.tipo==='cita'||x.tipo==='evento'||x.tipo==='rcd'||x.tipo==='fam') l.push({x:x, cls:'t-'+x.tipo, txt:corto(x), ico:icoDe(x), tit:x.titulo+(x.sub?' · '+x.sub:'')});
+      if(x.tipo==='cita'||x.tipo==='evento'||x.tipo==='rcd'||x.tipo==='fam') l.push({x:x, items:[x], cls:'t-'+x.tipo, txt:corto(x), ico:icoDe(x), tit:x.titulo+(x.sub?' · '+x.sub:'')});
       else if(JUNTA[x.tipo]) (por[JUNTA[x.tipo]]=por[JUNTA[x.tipo]]||[]).push(x);
     });
     JORDEN.forEach(function(g){
       var a=por[g]; if(!a) return;
       var venc=a.some(function(x){ return (x.w&&x.w.ven)||(x.t&&x.t.fin<hoyK()); });
-      l.push(a.length===1?{x:a[0], cls:'t-'+a[0].tipo+(venc?' venc':''), txt:corto(a[0]), ico:icoDe(a[0]), tit:a[0].titulo+(a[0].sub?' · '+a[0].sub:'')}
-        :{cls:'t-'+a[0].tipo+' agg'+(venc?' venc':''), txt:a.length+' '+JTXT[g][1], ico:icoDe(a[0]), tit:a.map(function(x){ return x.titulo+(x.sub?' · '+x.sub:''); }).slice(0,12).join('\n')});
+      l.push(a.length===1?{x:a[0], items:a, cls:'t-'+a[0].tipo+(venc?' venc':''), txt:corto(a[0]), ico:icoDe(a[0]), tit:a[0].titulo+(a[0].sub?' · '+a[0].sub:'')}
+        :{items:a, cls:'t-'+a[0].tipo+' agg'+(venc?' venc':''), txt:a.length+' '+JTXT[g][1], ico:icoDe(a[0]), tit:a.map(function(x){ return x.titulo+(x.sub?' · '+x.sub:''); }).slice(0,12).join('\n')});
     });
     return l;
   }
@@ -1149,18 +1149,57 @@ button.kpi:focus-visible{outline-offset:-3px}
       return a.getDate()+(a.getMonth()!==b.getMonth()?' '+MES3[a.getMonth()]:'')+' – '+b.getDate()+' '+MES3[b.getMonth()]+' '+b.getFullYear(); }
     var d=parse(sel); return mayus(DIAS[d.getDay()])+' '+d.getDate()+' de '+MESES[d.getMonth()];
   }
+  // la semana (6-nov-2026, Héctor Daniel Nava: «le pico para ver evento o recordatorio y no hace nada»): cada renglón abre lo suyo
+  // (la cita, su ficha; lo demás, una ventana con su detalle y a dónde ir) y el día de arriba abre todo ese día
+  var SEM_L={};
   function renderSemana(){
-    var s=lunes(sel), h='';
+    var s=lunes(sel), h=''; SEM_L={};
     for(var i=0;i<7;i++){
       var k=sumaD(s,i), d=parse(k), it=delDia(d.getFullYear(),d.getMonth(),d.getDate()).filter(function(x){ return filtros[x.tipo]; }), inh=inhabil(it);
-      var l=lineasDia(it);
+      var l=lineasDia(it); SEM_L[k]=l;
       h+='<div class="wcol'+(k===hoyK()?' today':'')+(k===sel?' sel':'')+(inh?' inh-'+inh.tipo:'')+'" data-k="'+k+'">'
-        +'<button type="button" class="wh" data-k="'+k+'"><span>'+DIAS[d.getDay()].slice(0,3)+'</span><b class="num">'+d.getDate()+'</b>'+(inh?'<small>'+esc(inh.tipo==='lft'?'Descanso':'Inhábil SAT')+'</small>':'')+'</button>'
-        +(l.length?l.map(function(z){ return '<button type="button" class="wl '+z.cls+'" data-k="'+k+'" title="'+esc(z.tit)+'">'+ico(z.ico,'ico')+'<span>'+esc(z.txt)+'</span></button>'; }).join(''):'<span class="wv">—</span>')
+        +'<button type="button" class="wh" data-k="'+k+'" aria-label="Ver todo el '+esc(fLarga(d))+'"><span>'+DIAS[d.getDay()].slice(0,3)+'</span><b class="num">'+d.getDate()+'</b>'+(inh?'<small>'+esc(inh.tipo==='lft'?'Descanso':'Inhábil SAT')+'</small>':'')+'</button>'
+        +(l.length?l.map(function(z,j){ return '<button type="button" class="wl '+z.cls+'" data-k="'+k+'" data-i="'+j+'" title="'+esc(z.tit)+'">'+ico(z.ico,'ico')+'<span>'+esc(z.txt)+'</span></button>'; }).join(''):'<span class="wv">—</span>')
         +'</div>';
     }
     $('cal').className='semana'; $('cal').innerHTML=h;
-    $('cal').querySelectorAll('[data-k]').forEach(function(b){ if(b.tagName!=='BUTTON') return; b.onclick=function(){ sel=b.dataset.k; renderCal(); }; });
+    $('cal').querySelectorAll('button.wh').forEach(function(b){ b.onclick=function(){ marcaSel(b.dataset.k); abreDiaV(b.dataset.k); }; });
+    $('cal').querySelectorAll('button.wl').forEach(function(b){ b.onclick=function(){ marcaSel(b.dataset.k); abreLinea(b.dataset.k, +b.dataset.i); }; });
+  }
+  function marcaSel(k){
+    sel=k;
+    $('cal').querySelectorAll('.wcol').forEach(function(c){ c.classList.toggle('sel', c.dataset.k===k); });
+  }
+  var ETQ={evento:'Evento', rcd:'Recordatorio', fam:'Calendario Familia', ent:'Fecha de entrega', lsat:'Fecha límite del SAT', tar:'Pendiente', ren:'e.firma y sellos',
+           cumple:'Cumpleaños', cli:'Cumpleaños de cliente', aniv:'Aniversario', aus:'Fuera de la oficina', fue:'Fuera de la ciudad'};
+  var DEST={rcd:['mis-recordatorios','Ir a Recordatorios'], ent:['workflow-trabajo','Abrir el Panel de trabajo'], lsat:['workflow-trabajo','Abrir el Panel de trabajo'],
+            tar:['pendientes','Ir a Pendientes'], ren:['access-clientes','Ir a Claves SAT y renovaciones']};
+  function abreLinea(k, i){
+    var z=(SEM_L[k]||[])[i], a=(z&&z.items)||[]; if(!a.length) return;
+    if(a.length===1&&a[0].tipo==='cita'){ abrirCita(a[0].ci.id); return; }
+    var d=parse(k), ya={}, bt='';
+    a.forEach(function(x){
+      var de=DEST[x.tipo]; if(!de||ya[de[0]]||!puedoIr(de[0])) return; ya[de[0]]=1;
+      bt+=x.tipo==='tar'&&a.length===1?'<button type="button" class="btn" data-pend="'+esc(String(x.t.id))+'">Abrir el pendiente</button>'
+        :'<button type="button" class="btn" data-ir="'+de[0]+'">'+esc(de[1])+'</button>';
+    });
+    var h='<div class="dhead"><div><div class="date">'+(k===hoyK()?'Hoy · ':'')+esc(fLarga(d))+'</div><h3>'+esc(a.length===1?(ETQ[a[0].tipo]||mayus(z.txt)):mayus(z.txt))+'</h3></div></div>'
+      +'<div class="dsec">'+a.map(itemHtml).join('')+'</div>'
+      +'<div class="mact">'+bt+'<button type="button" class="btn" data-dia>Ver todo el día</button><button type="button" class="btn primary" data-x>Cerrar</button></div>';
+    ventana(h, function(ov,cerrar){
+      ov.querySelector('[data-x]').onclick=cerrar;
+      ov.querySelector('[data-dia]').onclick=function(){ cerrar(); abreDiaV(k); };
+      enlaza(ov, cerrar);
+    });
+  }
+  function abreDiaV(k){
+    var h=detalleDia(k,true)
+      +'<div class="mact">'+(captura()?'<button type="button" class="btn" data-evdia>Agregar evento este día</button>':'')+'<button type="button" class="btn primary" data-x>Cerrar</button></div>';
+    ventana(h, function(ov,cerrar){
+      ov.querySelector('[data-x]').onclick=cerrar;
+      var e=ov.querySelector('[data-evdia]'); if(e) e.onclick=function(){ cerrar(); abrirEvento(null,k); };
+      enlaza(ov, cerrar);
+    });
   }
   function renderBarra(){
     $('mesTit').textContent=tituloVista();
@@ -1220,8 +1259,8 @@ button.kpi:focus-visible{outline-offset:-3px}
   /* --- botones de la agenda (dentro de la lista, el detalle y las ventanas) --- */
   function enlazaAg(root, cerrar){
     root.querySelectorAll('[data-cita]').forEach(function(b){
-      var abre=function(e){ if(e.target.closest('button')) return; abrirCita(b.dataset.cita); };
-      b.onclick=abre; b.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); abrirCita(b.dataset.cita); } };
+      var abre=function(e){ if(e.target.closest('button')) return; if(cerrar) cerrar(); abrirCita(b.dataset.cita); };
+      b.onclick=abre; b.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); if(cerrar) cerrar(); abrirCita(b.dataset.cita); } };
     });
     root.querySelectorAll('[data-pend]').forEach(function(b){   // un pendiente: se abre en Agenda › Pendientes (exp_tab.js)
       if(!puedoIr('pendientes')) return;
@@ -1236,8 +1275,8 @@ button.kpi:focus-visible{outline-offset:-3px}
     });
     root.querySelectorAll('[data-entra]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); entraVideo(b.dataset.entra); }; });
     root.querySelectorAll('[data-copia]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); var c=citaPor(b.dataset.copia); if(c) copiaInv(c); }; });
-    root.querySelectorAll('[data-nueva]').forEach(function(b){ b.onclick=function(){ editaCita(null,{dia:b.dataset.nueva}); }; });
-    root.querySelectorAll('[data-vencido]').forEach(function(b){ b.onclick=abreVencidas; });
+    root.querySelectorAll('[data-nueva]').forEach(function(b){ b.onclick=function(){ if(cerrar) cerrar(); editaCita(null,{dia:b.dataset.nueva}); }; });
+    root.querySelectorAll('[data-vencido]').forEach(function(b){ b.onclick=function(){ if(cerrar) cerrar(); abreVencidas(); }; });
   }
   function citaPor(id){ return AG.citas.filter(function(c){ return c.id===id; })[0]; }
   function entraVideo(sid){
@@ -2819,20 +2858,22 @@ button.kpi:focus-visible{outline-offset:-3px}
     enlaza($('evList'));
   }
 
-  function enlaza(root){
-    root.querySelectorAll('[data-edit-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirEvento(eventos.filter(function(x){ return x.id===b.dataset.editEv; })[0]); }; });
+  // cerrar: si lo de root vive en una ventana (la de un renglón o un día de la Semana), se cierra antes de abrir otra cosa
+  function enlaza(root, cerrar){
+    var c0=cerrar||function(){};
+    root.querySelectorAll('[data-edit-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); c0(); abrirEvento(eventos.filter(function(x){ return x.id===b.dataset.editEv; })[0]); }; });
     root.querySelectorAll('[data-del-ev]').forEach(function(b){ b.onclick=function(e){
-      e.stopPropagation(); var ev=eventos.filter(function(x){ return x.id===b.dataset.delEv; })[0]; if(!ev) return;
+      e.stopPropagation(); var ev=eventos.filter(function(x){ return x.id===b.dataset.delEv; })[0]; if(!ev) return; c0();
       confirmar('¿Quitar el evento «'+ev.titulo+'»?', async function(){
         try{ await db.doc('cal_eventos/'+ev.id).delete(); eventos=eventos.filter(function(x){ return x.id!==ev.id; }); render(); toast('Evento quitado'); }
         catch(err){ toast('No se pudo quitar: '+falla(err)); }
       });
     }; });
-    root.querySelectorAll('[data-resp-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirResponder(b.dataset.respEv); }; });
-    root.querySelectorAll('[data-rep-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); evAlReporte(b.dataset.repEv); }; });
-    root.querySelectorAll('[data-ver-resp]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); abrirRespuestas(b.dataset.verResp); }; });
-    root.querySelectorAll('[data-edit-col]').forEach(function(b){ b.onclick=function(){ abrirColab(colab.filter(function(x){ return x.id===b.dataset.editCol; })[0]); }; });
-    enlazaAg(root);
+    root.querySelectorAll('[data-resp-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); c0(); abrirResponder(b.dataset.respEv); }; });
+    root.querySelectorAll('[data-rep-ev]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); c0(); evAlReporte(b.dataset.repEv); }; });
+    root.querySelectorAll('[data-ver-resp]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); c0(); abrirRespuestas(b.dataset.verResp); }; });
+    root.querySelectorAll('[data-edit-col]').forEach(function(b){ b.onclick=function(){ c0(); abrirColab(colab.filter(function(x){ return x.id===b.dataset.editCol; })[0]); }; });
+    enlazaAg(root, cerrar);
     root.querySelectorAll('[data-del-col]').forEach(function(b){ b.onclick=function(){
       var c=colab.filter(function(x){ return x.id===b.dataset.delCol; })[0]; if(!c) return;
       confirmar('¿Quitar a '+c.nombre+' por un error de captura? Si dejó el despacho, regístralo mejor en RH › Altas y bajas.', async function(){
