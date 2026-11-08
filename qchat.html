@@ -48,7 +48,11 @@
    Excel con su PDF y «Más ▾»), las pilas de «Tu trabajo», la lista por páginas y, al picar un renglón, la conversación con
    sus acciones a la vista. «Eficiencia»: lo que resolvió la asistente sola, lo que atendió cada persona, la espera, la
    primera respuesta y si les sirvió. Las llamadas: la sala de videollamada del CRM (la misma de las reuniones con gente de
-   fuera), que abre quien atiende (qchat_sala_abre, 326_qchat.sql). Quién ve y con qué papel lo decide la base (qchat_yo). */
+   fuera), que abre quien atiende (qchat_sala_abre, 326_qchat.sql). Quién ve y con qué papel lo decide la base (qchat_yo).
+   Llamadas y tickets (Héctor Daniel Nava, 8-nov-2026, 13:04, «Así es»): la llamada que pide el cliente se abre sola en la
+   pantalla de quien lo atiende y le sale «Te toca una llamada · Entrar» (tiene 2 minutos; si no, Quo se la pasa al
+   siguiente disponible); «Pasar a desarrollo» abre un ticket y cierra la conversación; la pestaña «Tickets» los enseña
+   (quien atiende, los suyos) y quien supervisa los trabaja (En proceso, Ya quedó, No procede) con «Copiar para mi Claude». */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -155,8 +159,24 @@ button,select,input,textarea{font:inherit;color:inherit}
 .pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
 .acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .pregunta .acciones{justify-content:flex-end;margin-top:12px}
-#conv{position:fixed;inset:0;z-index:40;background:rgba(10,18,32,.45);display:flex;justify-content:flex-end}
-#conv>div{background:var(--surface);width:min(780px,100%);height:100%;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,.25)}
+/* los botones de una ventana larga se quedan a la vista abajo mientras lo de arriba se desliza */
+.pregunta .acciones.pegadas{position:sticky;bottom:-18px;background:var(--surface);margin:12px -18px -18px;padding:10px 18px 14px;border-top:1px solid var(--line)}
+.pregunta textarea.corta{min-height:84px}
+#conv,#tk{position:fixed;inset:0;z-index:40;background:rgba(10,18,32,.45);display:flex;justify-content:flex-end}
+#conv>div,#tk>div{background:var(--surface);width:min(780px,100%);height:100%;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,.25)}
+.tk-cuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:grid;gap:14px;align-content:start;overscroll-behavior:contain}
+.tk-cuerpo h4{margin:0 0 6px;font-family:var(--f-display);font-stretch:85%;font-size:15px}
+.tk-det{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;font-size:14px}
+.tabs .cnt{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;line-height:20px;text-align:center}
+.campo{display:grid;gap:4px;margin:0 0 12px}
+.campo>span{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo input,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;width:100%}
+.campo textarea{min-height:110px;resize:vertical}
+.opciones{display:flex;flex-wrap:wrap;gap:8px}
+.opciones label{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line-strong);border-radius:10px;padding:8px 12px;cursor:pointer;flex:1 1 140px;min-width:0}
+.campo .opciones input{width:auto;flex:0 0 auto;margin:3px 0 0;padding:0}
+.opciones label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.opciones small{display:block;color:var(--muted);font-size:12px}
 .cv-cab{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:grid;gap:8px}
 .cv-cab .t{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
 .cv-cab h3{font-size:19px;overflow-wrap:anywhere}
@@ -185,7 +205,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
 @media (max-width:700px){
   input,select,textarea,.cv-pie textarea{font-size:16px}
   .band h1{font-size:22px}
-  #conv>div{width:100%}
+  #conv>div,#tk>div{width:100%}
   .ms{max-width:92%}
   .dl{grid-template-columns:minmax(0,1fr)}
 }
@@ -215,6 +235,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     </section>
     <div class="tabs" role="tablist" aria-label="Q Chat">
       <button type="button" role="tab" id="tab-conv" aria-selected="true" aria-controls="p-conv">Conversaciones</button>
+      <button type="button" role="tab" id="tab-tk" aria-selected="false" aria-controls="p-tk">Tickets<span class="cnt" id="tk-cnt" hidden></span></button>
       <button type="button" role="tab" id="tab-efi" aria-selected="false" aria-controls="p-efi">Eficiencia</button>
     </div>
 
@@ -247,6 +268,34 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       </section>
     </div>
 
+    <div id="p-tk" role="tabpanel" aria-labelledby="tab-tk" hidden>
+      <div id="tk-bar" hidden>
+        <input type="search" id="t-q" placeholder="Busca folio, cliente, cuenta o lo que pasa" aria-label="Buscar ticket">
+        <select id="t-dias" aria-label="Periodo">
+          <option value="30">Abiertos y los de 30 días</option>
+          <option value="90">Abiertos y los de 90 días</option>
+          <option value="365" selected>Abiertos y los de un año</option>
+        </select>
+        <button class="btn" type="button" data-excel id="x-tk">Excel</button>
+      </div>
+      <div hidden>
+        <select id="t-sis" aria-label="Sistema"><option value="">Todos los sistemas</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option><option value="casa">Sistemas Quo</option></select>
+        <select id="t-tipo" aria-label="Tipo"><option value="">Fallas y mejoras</option><option value="falla">Fallas</option><option value="mejora">Mejoras</option></select>
+        <select id="t-quien" aria-label="Lo pasó"><option value="">Cualquiera</option></select>
+      </div>
+      <section id="tk-kpis" aria-label="Tickets" hidden></section>
+      <section class="caja" id="caja-tk">
+        <header><h2 id="t-tk">Tickets a desarrollo</h2><span class="mut" id="t-tkc"></span></header>
+        <div class="desliza"><table class="tabla" id="tabla-tk">
+          <thead><tr><th>Folio</th><th>Sistema</th><th>Qué pasa</th><th>Lo pasó</th><th>Desde</th><th>Cómo va</th></tr></thead>
+          <tbody id="tk-lista"></tbody>
+        </table></div>
+        <div class="vacio" id="tk-vacia" hidden></div>
+        <nav class="pgn" id="tk-pag" aria-label="Páginas"></nav>
+      </section>
+      <p class="pie">Lo que no se resuelve en el chat y hay que cambiar en el sistema. Lo pasa a desarrollo quien atiende («Pasar a desarrollo», en la conversación) y lo trabaja Fernando Cadengo; Héctor Daniel Nava también los cierra. Al quedar, al cliente le llega el aviso en su sistema y por correo.</p>
+    </div>
+
     <div id="p-efi" role="tabpanel" aria-labelledby="tab-efi" hidden>
       <div id="efi-bar" hidden>
         <select id="e-per" aria-label="Periodo">
@@ -261,7 +310,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       </div>
       <section id="e-pilas" aria-label="Eficiencia" hidden></section>
       <div class="dos">
-        <section class="caja"><header><h2>Por persona</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Quién</th><th class="der">Atendió</th><th class="der">Espera</th><th class="der">1.ª respuesta</th><th class="der">Duración</th><th class="der">Les sirvió</th><th class="der">Llamadas</th></tr></thead><tbody id="e-ag"></tbody></table></div></section>
+        <section class="caja"><header><h2>Por persona</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Quién</th><th class="der">Atendió</th><th class="der">Espera</th><th class="der">1.ª respuesta</th><th class="der">Duración</th><th class="der">Les sirvió</th><th class="der">Llamadas</th><th class="der">A desarrollo</th></tr></thead><tbody id="e-ag"></tbody></table></div></section>
         <section class="caja"><header><h2>Por sistema</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Sistema</th><th class="der">Conversaciones</th><th>Resolvió la asistente</th><th class="der">Con persona</th></tr></thead><tbody id="e-sisl"></tbody></table></div></section>
         <section class="caja"><header><h2>De qué preguntan</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Tema</th><th class="der">Veces</th></tr></thead><tbody id="e-temas"></tbody></table></div></section>
         <section class="caja"><header><h2>Día por día</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Día</th><th class="der">Total</th><th class="der">Sola la asistente</th><th class="der">Con persona</th></tr></thead><tbody id="e-dias"></tbody></table></div></section>
@@ -285,6 +334,15 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   </div>
 </div></div>
 
+<div id="tk" hidden role="dialog" aria-modal="true" aria-labelledby="tk-t"><div>
+  <div class="cv-cab">
+    <div class="t"><h3 id="tk-t"></h3><div class="acciones" id="tk-nav"><button class="btn" type="button" id="tk-cierra">Cerrar</button></div></div>
+    <div id="tk-sub" class="mut"></div>
+    <div class="acciones" id="tk-acc"></div>
+  </div>
+  <div class="tk-cuerpo" id="tk-cuerpo"></div>
+</div></div>
+
 <div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
 <script>
 (function () {
@@ -292,6 +350,10 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var YO = null, CONSULTA = false, DATOS = null, MET = null, Q = '', SIS = '', EST = '', AG = '', VISTA = '', PAG = null, BAR = null, EBAR = null;
   var LISTA = [], COLA = [], ABIERTO = null, CV = null, SALAS = [], TAB = 'conv', VISTO = {}, ULT_CLI = {}, PRIMERA = true;
+  var TK = null, TKL = [], TKV = '', TQ = '', TPAG = null, TKBAR = null, TKA = null, TKCOLA = [], AUTO = {}, AVLL = {};
+  var TK_TXT = { revisar: 'Por revisar', proceso: 'En proceso', listo: 'Ya quedó', no_procede: 'No procede' };
+  var REPO = { contabilita: 'hnavaserna-dot/quocontabilita-crm (contabilita.quosistemas.com)', facturita: 'hnavaserna-dot/quofacturita-crm (facturita.quosistemas.com)',
+               nominita: 'hnavaserna-dot/quonominita-crm (nominita.quosistemas.com)', casa: 'hnavaserna-dot/sistemasquo-crm (www.quosistemas.com)' };
   var SIS_TXT = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita', casa: 'Sistemas Quo' };
   var EST_TXT = { ia: 'Con la asistente', fila: 'En la fila', atencion: 'En atención', cerrada: 'Terminada' };
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -335,7 +397,9 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   function comoVa(c) {
     if (c.estado === 'ia') return chip('Con la asistente', 'az');
     if (c.estado === 'fila') return chip('En la fila', 'mal') + (c.fuera_horario ? ' ' + chip('Fuera de horario', '') : '');
-    if (c.estado === 'atencion') return chip(c.sin_contestar ? 'Espera tu respuesta' : 'En atención', c.sin_contestar ? 'na' : 'ojo') + (c.llamada === 'pedida' ? ' ' + chip('Pide llamada', 'na') : c.llamada === 'abierta' ? ' ' + chip('En llamada', 'ok') : '');
+    if (c.estado === 'atencion') return chip(c.sin_contestar ? 'Espera tu respuesta' : 'En atención', c.sin_contestar ? 'na' : 'ojo')
+      + (c.llamada === 'pedida' ? ' ' + chip('Llamada por abrir', 'na') : c.llamada === 'abierta' ? ' ' + chip(c.llamada_entro ? 'En llamada' : 'Llamada: falta entrar', c.llamada_entro ? 'ok' : 'na') : '');
+    if (c.resuelto_por === 'ticket') return chip('Pasó a desarrollo' + (c.ticket ? ' · ' + c.ticket : ''), 'na');
     var t = c.resuelto_por === 'ia' ? 'Resolvió la asistente' : c.resuelto_por === 'llamada' ? 'Con llamada' : 'Atendió una persona';
     return chip(t, c.resuelto_por === 'ia' ? 'ok' : '') + (c.resuelta === false ? ' ' + chip('Sin resolver', 'mal') : '') + (c.calificacion === 1 ? ' ' + chip('Le sirvió', 'ok') : c.calificacion === 0 ? ' ' + chip('No le sirvió', 'mal') : '');
   }
@@ -352,8 +416,9 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     ['atencion', 'En atención', function (c) { return c.estado === 'atencion'; }, 'azul'],
     ['ia', 'Con la asistente ahora', function (c) { return c.estado === 'ia'; }, 'violeta'],
     ['sola', 'Resolvió la asistente', function (c) { return c.estado === 'cerrada' && c.resuelto_por === 'ia'; }, 'verde'],
-    ['persona', 'Atendió una persona', function (c) { return c.estado === 'cerrada' && c.resuelto_por !== 'ia'; }, 'azul'],
+    ['persona', 'Atendió una persona', function (c) { return c.estado === 'cerrada' && c.resuelto_por !== 'ia' && c.resuelto_por !== 'ticket'; }, 'azul'],
     ['llamadas', 'Con llamada', function (c) { return !!c.llamada; }, 'violeta'],
+    ['ticket', 'Pasó a desarrollo', function (c) { return c.resuelto_por === 'ticket'; }, 'naranja'],
     ['sin', 'Sin resolver', function (c) { return c.estado === 'cerrada' && (c.resuelta === false || c.calificacion === 0); }, 'ambar']
   ];
   function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0]; }
@@ -444,7 +509,9 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     var d = await qc('lista', { f: { dias: Number($('f-dias').value) || 30 } });
     DATOS = d; YO = d.agente || YO;
     try { SALAS = await rpc('qchat_salas_mias') || []; } catch (e) { SALAS = []; }
+    if (d.tk) cuentaTk(d.tk);
     avisaNuevo();
+    await llamadasAuto();
     $('todo').hidden = false;
     barra(); pintaAgentes(); pinta();
     if (CV && ABIERTO) { var c = conversaciones().filter(function (x) { return x.id === ABIERTO; })[0]; if (c && c.firma !== CV.conv.firma) abre(ABIERTO, true); }
@@ -465,17 +532,42 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     try { P.avisoChico({ id: 'qch-' + id, texto: t, boton: 'Ver', ms: 12000, accion: function () { try { var A = window.top.PROFASE_ABRE; if (A && A.qchat) A.qchat(String(id)); else abre(id); } catch (e) { abre(id); } } }); } catch (e) {}
     try { var a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.value = .06; o.connect(g); g.connect(a.destination); o.start(); setTimeout(function () { o.stop(); a.close(); }, 180); } catch (e) {}
   }
+  // Las llamadas las lleva el sistema: la que pidió el cliente (o la que le pasó Quo a quien sigue) se abre sola aquí y sale
+  // «Te toca una llamada · Entrar» (2 minutos para entrar; si no, Quo se la pasa al siguiente disponible)
+  async function llamadasAuto() {
+    if (!puede() || !YO) return;
+    var mias = conversaciones().filter(function (c) {
+      return c.estado === 'atencion' && c.agente === YO.usuario && !c.llamada_entro && (c.llamada === 'pedida' || c.llamada === 'abierta');
+    });
+    for (var i = 0; i < mias.length; i++) {
+      var c = mias[i], k = c.id + '|' + (c.llamada_asignada || ''), s = salaDe(c.id);
+      if (!s && !AUTO[k]) {
+        AUTO[k] = true;
+        try { await qc('llamada', { id: c.id }); SALAS = await rpc('qchat_salas_mias') || []; s = salaDe(c.id); }
+        catch (e) { error(falla(e)); }
+      }
+      if (s && !AVLL[k] && c.llamada_por !== 'agente') { AVLL[k] = true; tocaLlamada(c, s); }
+    }
+  }
+  function tocaLlamada(c, s) {
+    try { P.avisoChico({ id: 'qch-ll-' + c.id, texto: 'Te toca una llamada de ' + (SIS_TXT[c.sistema] || 'Quo') + ': ' + (c.cliente || 'un cliente'),
+      detalle: 'Tienes 2 minutos para entrar; si no, pasa al siguiente disponible.', boton: 'Entrar', ms: 120000,
+      accion: function () { entra(s.sala, c.id); } }); } catch (e) {}
+    try { var a = new (window.AudioContext || window.webkitAudioContext)(); [0, 260].forEach(function (t) { var o = a.createOscillator(), g = a.createGain(); o.frequency.value = 988; g.gain.value = .07; o.connect(g); g.connect(a.destination); setTimeout(function () { o.start(); setTimeout(function () { o.stop(); }, 170); }, t); }); setTimeout(function () { a.close(); }, 900); } catch (e) {}
+    if (CV && ABIERTO === c.id) pintaConv();
+  }
   function aLaVista() { try { return !document.hidden && window.frameElement ? window.frameElement.getBoundingClientRect().width > 0 : !document.hidden; } catch (e) { return !document.hidden; } }
   // cada 5 s a la vista (cada 3 s con una conversación abierta); escondida, solo si estás disponible o atiendes alguna:
-  // cada 30 s (así sigues «disponible» para la fila y te llega el aviso). Si no, no pregunta.
+  // cada 30 s (así sigues «disponible» para la fila y te llega el aviso), y cada 5 s si te toca una llamada. Si no, no
+  // pregunta. Los tickets, cada 30 s mientras se ven.
   var VUELTA = 0;
   setInterval(function () {
     if (!YO || !DATOS) return;
     VUELTA++;
     var vis = aLaVista(), activo = DATOS.yo && (DATOS.yo.disponible || DATOS.yo.activas > 0);
-    if ((vis && (CV ? true : VUELTA % 5 === 0 || VUELTA % 5 === 2)) || (!vis && activo && VUELTA % 30 === 0)) {
-      if (TAB === 'conv' || !vis) carga().catch(function () {});
-    }
+    var llamando = puede() && conversaciones().some(function (c) { return c.estado === 'atencion' && c.agente === YO.usuario && !c.llamada_entro && (c.llamada === 'pedida' || c.llamada === 'abierta'); });
+    if ((vis && (CV ? true : VUELTA % 5 === 0 || VUELTA % 5 === 2)) || (!vis && activo && VUELTA % (llamando ? 5 : 30) === 0)) carga().catch(function () {});
+    if (vis && TAB === 'tk' && VUELTA % 30 === 15 && !TKA) cargaTk().catch(function () {});
   }, 1000);
 
   /* ---------- tomar, contestar, terminar ---------- */
@@ -515,16 +607,20 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     if (mia) {
       var s = salaDe(c.id);
       if (s) a.push('<button class="btn ok" type="button" data-a="entrar">Entrar a la llamada' + (s.esperando ? ' (espera ' + s.esperando + ')' : '') + '</button>', '<button class="btn" type="button" data-a="fin-llamada">Terminar la llamada</button>');
-      else a.push('<button class="btn' + (c.llamada === 'pedida' ? ' acento' : '') + '" type="button" data-a="llamada">Abrir llamada</button>');
+      else a.push('<button class="btn' + (c.llamada === 'pedida' ? ' acento' : '') + '" type="button" data-a="llamada">' + (c.llamada === 'pedida' ? 'Abrir la llamada' : 'Mejor por llamada') + '</button>');
       a.push(CV.permiso_hasta && new Date(CV.permiso_hasta) > new Date() ? '<button class="btn" type="button" data-a="cuenta">Ver su cuenta</button>' : '<button class="btn" type="button" data-a="permiso"' + (CV.permiso_pedido && !CV.permiso_hasta ? ' disabled' : '') + '>' + (CV.permiso_pedido && !CV.permiso_hasta ? 'Esperando su permiso' : 'Pedir permiso para ver su cuenta') + '</button>');
-      a.push('<button class="btn" type="button" data-a="regresar">Regresar a la fila</button>', '<button class="btn" type="button" data-a="terminar">Terminar</button>');
+      a.push('<button class="btn" type="button" data-a="ticket">Pasar a desarrollo</button>', '<button class="btn" type="button" data-a="regresar">Regresar a la fila</button>', '<button class="btn" type="button" data-a="terminar">Terminar</button>');
     }
     $('cv-acc').innerHTML = a.join('');
     // los avisos de arriba: lo que pide el cliente y cómo va
     var av = [];
     if (c.estado === 'fila') av.push('<div class="nota">Espera en la fila desde hace ' + esc(dur(c.espera_seg)) + '. ' + (puede() ? 'Tómala para contestarle.' : '') + '</div>');
-    if (c.llamada === 'pedida' && mia) av.push('<div class="nota">El cliente pide hablar por llamada (ya lo intentó tres veces por chat). Pica «Abrir llamada»: entras tú y, cuando él pida entrar, lo admites.</div>');
-    var sl = salaDe(c.id); if (sl && sl.esperando && mia) av.push('<div class="nota bien">El cliente espera para entrar a la llamada: pica «Entrar a la llamada» y luego «Admitir».</div>');
+    var sl = salaDe(c.id);
+    if ((c.llamada === 'pedida' || (c.llamada === 'abierta' && !c.llamada_entro)) && mia)
+      av.push('<div class="nota">' + (c.llamada_por === 'agente' ? 'Abriste la llamada. ' : 'El cliente pidió hablar por llamada (ya lo intentó tres veces por chat) y la llamada se abre sola. ')
+        + 'Pica «Entrar a la llamada»: tienes 2 minutos; si no, pasa al siguiente disponible. Cuando el cliente pida entrar, lo admites.</div>');
+    if (sl && sl.esperando && mia) av.push('<div class="nota bien">El cliente espera para entrar a la llamada: pica «Entrar a la llamada» y luego «Admitir».</div>');
+    if (c.resuelto_por === 'ticket' && CV.ticket) av.push('<div class="nota info">Pasó a desarrollo: <b>' + esc(CV.ticket.folio) + '</b> · ' + esc(TK_TXT[CV.ticket.estado] || '') + ' <button class="btn" type="button" data-a="ver-ticket">Ver el ticket</button></div>');
     if (c.estado === 'atencion' && !mia) av.push('<div class="nota info">La atiende ' + esc(c.agente_nombre || 'alguien del equipo') + '.</div>');
     if (CV.permiso_hasta && new Date(CV.permiso_hasta) > new Date()) av.push('<div class="nota info">El cliente dio permiso de ver su cuenta (solo ver) hasta el ' + esc(fechaHora(CV.permiso_hasta)) + '. Cada vez que la ves queda anotado.</div>');
     $('cv-av').innerHTML = av.join('');
@@ -552,7 +648,10 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   function cierraConv() { $('conv').hidden = true; CV = null; ABIERTO = null; pinta(); }
   $('cv-cierra').onclick = cierraConv;
   $('conv').addEventListener('click', function (e) { if (e.target === $('conv')) cierraConv(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('conv').hidden && $('dlg').hidden) cierraConv(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !$('dlg').hidden) return;
+    if (!$('tk').hidden) cierraTk(); else if (!$('conv').hidden) cierraConv();
+  });
   async function manda() {
     var t = $('cv-txt').value.trim(); if (!t || !CV) return;
     $('cv-manda').disabled = true;
@@ -567,6 +666,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   });
   $('cv-txt').addEventListener('focus', function () { try { P.escribiendo('qchat', true); } catch (e) {} });
   $('cv-txt').addEventListener('blur', function () { try { P.escribiendo('qchat', false); } catch (e) {} });
+  $('cv-av').addEventListener('click', function (e) { var b = e.target.closest('button[data-a="ver-ticket"]'); if (b && CV && CV.ticket) { var t = CV.ticket.id; cierraConv(); pestana('tk'); abreTk(t); } });
   $('cv-acc').addEventListener('click', async function (e) {
     var b = e.target.closest('button[data-a]'); if (!b || !CV) return;
     var a = b.getAttribute('data-a'), id = CV.conv.id;
@@ -578,25 +678,64 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
            ['No se resolvió', 'peligro', async function () { CV = await qc('cerrar', { id: id, resuelta: false }); fin(); }]]); b.disabled = false; return; }
       if (a === 'regresar') { pregunta('¿La regresas a la fila?', 'La toma la siguiente persona disponible; al cliente le decimos que lo pasamos con alguien más.',
           [['Sí, regresarla', 'acento', async function () { await qc('regresar', { id: id }); cierraConv(); await carga(); }]]); b.disabled = false; return; }
+      if (a === 'ticket') { b.disabled = false; pasaDesarrollo(CV.conv); return; }
       if (a === 'permiso') { CV = await qc('permiso', { id: id }); avisa('Le pedimos su permiso. Cuando diga que sí, aquí sale «Ver su cuenta».'); }
       else if (a === 'cuenta') { var c = await qc('cuenta', { id: id }); cuenta(c); }
       else if (a === 'llamada') {
         var d = await qc('llamada', { id: id });
         CV = d; try { SALAS = await rpc('qchat_salas_mias') || []; } catch (x) {}
-        if (d.sala) entra(d.sala);
+        if (d.sala) entra(d.sala, id);
         avisa('Abriste la llamada: ya estás adentro. Cuando el cliente pida entrar, pica «Admitir».');
       }
-      else if (a === 'entrar') { var s = salaDe(id); if (s) entra(s.sala); }
+      else if (a === 'entrar') { var s = salaDe(id); if (s) entra(s.sala, id); }
       else if (a === 'fin-llamada') { CV = await qc('llamada', { id: id, fin: true }); try { SALAS = await rpc('qchat_salas_mias') || []; } catch (x) {} avisa('Terminaste la llamada. La conversación sigue por chat.'); }
       pintaConv(); carga().catch(function () {});
     } catch (x) { error(falla(x)); }
     b.disabled = false;
   });
   function fin() { cierraConv(); carga().catch(function () {}); avisa('Listo. Si estás disponible, te toca el siguiente de la fila.'); }
-  // la llamada es la del portal (la misma de las reuniones con gente de fuera): se abre en la vista de arriba
-  function entra(sala) {
-    try { var L = window.top.__llamada; if (L && L.sala) { L.sala(sala); return; } } catch (e) {}
+  // la llamada es la del portal (la misma de las reuniones con gente de fuera): se abre en la vista de arriba. Al entrar se
+  // le avisa a Quo (ya no corre el tiempo de 2 minutos).
+  function entra(sala, id) {
+    try {
+      var L = window.top.__llamada;
+      if (L && L.sala) {
+        if (id) qc('llamada', { id: Number(id), entro: true }).then(function () { carga().catch(function () {}); }).catch(function () {});
+        L.sala(sala); return;
+      }
+    } catch (e) {}
     error('Abre Q Chat desde el menú del portal para entrar a la llamada.');
+  }
+  // «Pasar a desarrollo»: el ticket (tipo, título, qué pasa y la pantalla); cierra la conversación como «Ticket»
+  function pasaDesarrollo(c) {
+    var d = $('dlg-c');
+    d.innerHTML = '<h3 id="dlg-t">Pasar a desarrollo</h3>'
+      + '<p>Si solo se arregla cambiando el sistema. La conversación se cierra como «Ticket», el cliente ve su folio y le llega a Fernando Cadengo.</p>'
+      + '<div class="campo"><span>Qué es</span><div class="opciones">'
+      + '<label><input type="radio" name="tk-tipo" value="falla" checked><span><b>Una falla</b><small>No funciona como debe</small></span></label>'
+      + '<label><input type="radio" name="tk-tipo" value="mejora"><span><b>Una mejora</b><small>Algo que todavía no hace</small></span></label></div></div>'
+      + '<label class="campo"><span>Título corto</span><input id="tk-tit" maxlength="120" placeholder="Por ejemplo: No baja el XML desde el Tablero QUO"></label>'
+      + '<label class="campo"><span>Qué pasa</span><textarea id="tk-txt" class="corta" maxlength="4000" placeholder="Qué hizo el cliente, qué esperaba y qué pasó. En palabras: sin RFC, montos, nombres ni contraseñas (de aquí sale lo que Cadengo le pasa a su Claude)."></textarea></label>'
+      + '<label class="campo"><span>Pantalla</span><input id="tk-pan" maxlength="80" value="' + esc(c.pantalla || '') + '" placeholder="Dónde estaba el cliente"></label>'
+      + '<div class="acciones pegadas"><button class="btn" type="button" data-i="-1">Cancelar</button><button class="btn acento" type="button" data-i="1">Pasar a desarrollo</button></div>';
+    $('dlg').hidden = false;
+    try { P.escribiendo('qchat-ticket', true); } catch (e) {}
+    setTimeout(function () { try { $('tk-tit').focus(); } catch (e) {} }, 40);
+    d.onclick = async function (e) {
+      var b = e.target.closest('button[data-i]'); if (!b) return;
+      if (b.getAttribute('data-i') === '-1') { $('dlg').hidden = true; try { P.escribiendo('qchat-ticket', false); } catch (x) {} return; }
+      var tipo = (d.querySelector('input[name="tk-tipo"]:checked') || {}).value, tit = $('tk-tit').value.trim(), txt = $('tk-txt').value.trim();
+      if (tit.length < 3) { error('Ponle un título corto.'); return; }
+      if (txt.length < 10) { error('Escribe qué pasa (al menos una frase).'); return; }
+      b.disabled = true;
+      try {
+        var r = await qc('ticket_crea', { id: c.id, tipo: tipo, titulo: tit, texto: txt, pantalla: $('tk-pan').value.trim() });
+        $('dlg').hidden = true; try { P.escribiendo('qchat-ticket', false); } catch (x) {}
+        cierraConv(); carga().catch(function () {});
+        avisa('Listo: ' + ((r.ticket && r.ticket.folio) || 'el ticket') + ' pasó a desarrollo. Al cliente ya le dijimos y le llega a Fernando Cadengo.');
+        if (TK) cargaTk().catch(function () {});
+      } catch (x) { error(falla(x)); b.disabled = false; }
+    };
   }
   function pregunta(t, txt, botones) {
     var c = $('dlg-c');
@@ -610,7 +749,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       try { await botones[i][2](); $('dlg').hidden = true; } catch (x) { error(falla(x)); b.disabled = false; }
     };
   }
-  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) $('dlg').hidden = true; });
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) { $('dlg').hidden = true; try { P.escribiendo('qchat-ticket', false); } catch (x) {} } });
   function cuenta(d) {
     var q = d.cuenta || {}, u = d.usuario || {}, l = function (a, t) { return (a || []).length ? '<h4>' + t + '</h4><ul>' + a.map(function (r) { return '<li>' + esc(r.razon || '') + ' · ' + esc(r.rfc || '') + '</li>'; }).join('') + '</ul>' : ''; };
     $('dlg-c').innerHTML = '<h3 id="dlg-t">Su cuenta (solo ver)</h3><dl class="dl"><dt>Cuenta</dt><dd>' + esc(q.nombre || '') + (q.activa === false ? ' ' + chip('Suspendida', 'mal') : '') + '</dd>'
@@ -650,14 +789,18 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
         { k: 'du', t: 'Duración con persona', n: 0, txt: dur(m.duracion_prom), tono: 'gris' },
         { k: 's', t: 'Les sirvió', n: 0, txt: pct(m.bien || 0, m.calificadas || 0), d: F0.format(m.calificadas || 0) + ' calificaron · la asistente ' + pct(m.bien_ia || 0, m.calificadas_ia || 0), tono: 'verde' },
         { k: 'sr', t: 'Sin resolver', n: m.sin_resolver || 0, tono: 'rojo' },
+        { k: 'tk', t: 'Pasó a desarrollo', n: m.tickets || 0, d: pct(m.tickets || 0, tot) + ' del total', tono: 'naranja' },
+        { k: 'tkq', t: 'Tickets que ya quedaron', n: (m.tickets_estado || {}).listo || 0,
+          d: (m.tickets_estado || {}).dias_prom != null ? 'en ' + String((m.tickets_estado || {}).dias_prom).replace('.', ',') + ' días en promedio' : 'de los que se abrieron en el periodo', tono: 'verde' },
+        { k: 'tkp', t: 'Tickets por trabajar', n: ((m.tickets_estado || {}).revisar || 0) + ((m.tickets_estado || {}).proceso || 0), d: 'por revisar o en proceso', tono: 'ambar' },
         { k: 'fh', t: 'Llegaron fuera de horario', n: m.fuera_horario || 0, tono: 'gris' }
       ],
       alPicar: function () {}
     });
     $('e-ag').innerHTML = (m.por_agente || []).map(function (a) {
       return '<tr><td data-e="Quién"><b>' + esc(a.nombre || a.agente) + '</b></td><td data-e="Atendió" class="der num">' + F0.format(a.n) + '</td><td data-e="Espera" class="der num">' + dur(a.esp) + '</td>'
-        + '<td data-e="1.ª respuesta" class="der num">' + dur(a.pri) + '</td><td data-e="Duración" class="der num">' + dur(a.dur) + '</td><td data-e="Les sirvió" class="der num">' + pct(a.bien, a.calif) + '</td><td data-e="Llamadas" class="der num">' + F0.format(a.llamadas || 0) + '</td></tr>';
-    }).join('') || '<tr><td colspan="7" class="mut">Nadie ha atendido en este periodo.</td></tr>';
+        + '<td data-e="1.ª respuesta" class="der num">' + dur(a.pri) + '</td><td data-e="Duración" class="der num">' + dur(a.dur) + '</td><td data-e="Les sirvió" class="der num">' + pct(a.bien, a.calif) + '</td><td data-e="Llamadas" class="der num">' + F0.format(a.llamadas || 0) + '</td><td data-e="A desarrollo" class="der num">' + F0.format(a.tickets || 0) + '</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="mut">Nadie ha atendido en este periodo.</td></tr>';
     $('e-sisl').innerHTML = (m.por_sistema || []).map(function (s) {
       return '<tr><td data-e="Sistema">' + chipSis(s.sistema) + '</td><td data-e="Conversaciones" class="der num">' + F0.format(s.n) + '</td><td data-e="Resolvió la asistente"><span class="num">' + F0.format(s.solo_ia) + '</span> <span class="mut">(' + pct(s.solo_ia, s.n) + ')</span><span class="barrita"><i style="width:' + (s.n ? s.solo_ia / s.n * 100 : 0).toFixed(1) + '%"></i></span></td><td data-e="Con persona" class="der num">' + F0.format(s.con_persona) + '</td></tr>';
     }).join('') || '<tr><td colspan="4" class="mut">Sin conversaciones en este periodo.</td></tr>';
@@ -667,14 +810,205 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1].slice(0, 3) + ' ' + p[0]; }
   function pestana(t) {
     TAB = t;
-    $('tab-conv').setAttribute('aria-selected', t === 'conv' ? 'true' : 'false'); $('tab-efi').setAttribute('aria-selected', t === 'efi' ? 'true' : 'false');
-    $('p-conv').hidden = t !== 'conv'; $('p-efi').hidden = t !== 'efi';
+    ['conv', 'tk', 'efi'].forEach(function (k) { $('tab-' + k).setAttribute('aria-selected', t === k ? 'true' : 'false'); $('p-' + k).hidden = t !== k; });
     if (t === 'efi') cargaEfi().catch(function (e) { error(falla(e)); });
+    if (t === 'tk') cargaTk().catch(function (e) { error(falla(e)); });
   }
   $('tab-conv').onclick = function () { pestana('conv'); };
+  $('tab-tk').onclick = function () { pestana('tk'); };
   $('tab-efi').onclick = function () { pestana('efi'); };
   $('e-per').onchange = function () { cargaEfi().catch(function (e) { error(falla(e)); }); };
   $('e-sis').onchange = function () { cargaEfi().catch(function (e) { error(falla(e)); }); };
+
+  /* ---------- Tickets a desarrollo ---------- */
+  function sup() { return YO && YO.papel === 'supervisa' && !CONSULTA; }
+  function tkEst(t) { return chip(TK_TXT[t.estado] || t.estado, { revisar: 'mal', proceso: 'ojo', listo: 'ok', no_procede: '' }[t.estado] || ''); }
+  function tkTipo(t) { return chip(t.tipo === 'mejora' ? 'Mejora' : 'Falla', t.tipo === 'mejora' ? 'az' : 'na'); }
+  function cuentaTk(c) {
+    var n = (c && ((c.revisar || 0) + (c.proceso || 0))) || 0;
+    $('tk-cnt').textContent = n > 99 ? '99+' : String(n); $('tk-cnt').hidden = !n;
+  }
+  function tickets() { return (TK && TK.tickets) || []; }
+  var TKVISTAS = [
+    ['revisar', 'Por revisar', function (t) { return t.estado === 'revisar'; }, 'rojo'],
+    ['proceso', 'En proceso', function (t) { return t.estado === 'proceso'; }, 'ambar'],
+    ['listo', 'Ya quedó', function (t) { return t.estado === 'listo'; }, 'verde'],
+    ['no_procede', 'No procede', function (t) { return t.estado === 'no_procede'; }, 'gris'],
+    ['mios', 'Los que pasé yo', function (t) { return YO && t.creo === YO.usuario; }, 'azul']
+  ];
+  function tkVista(k) { return TKVISTAS.filter(function (v) { return v[0] === k; })[0]; }
+  function baseTk() {
+    var q = norm(TQ).split(/\s+/).filter(Boolean), sis = $('t-sis').value, tipo = $('t-tipo').value, quien = $('t-quien').value;
+    return tickets().filter(function (t) {
+      if (sis && t.sistema !== sis) return false;
+      if (tipo && t.tipo !== tipo) return false;
+      if (quien && t.creo !== quien) return false;
+      if (!q.length) return true;
+      var x = norm([t.folio, t.titulo, t.detalle, t.cliente, t.usuario, t.cuenta, t.pantalla, t.creo_nombre, t.trabaja_nombre, SIS_TXT[t.sistema]].join(' '));
+      return q.every(function (w) { return x.indexOf(w) >= 0; });
+    });
+  }
+  async function cargaTk() {
+    TK = await qc('tickets', { f: { dias: Number($('t-dias').value) || 365 } });
+    if (TK.cuenta) cuentaTk(TK.cuenta);
+    barraTk();
+    var s = $('t-quien'), v = s.value, vistos = {};
+    s.innerHTML = '<option value="">Cualquiera</option>' + tickets().filter(function (t) { if (vistos[t.creo]) return false; vistos[t.creo] = 1; return true; })
+      .map(function (t) { return '<option value="' + esc(t.creo) + '">' + esc(t.creo_nombre || t.creo) + '</option>'; }).join('');
+    s.value = v;
+    pintaTk();
+    if (TKA && !$('tk').hidden) { var y = tickets().filter(function (t) { return t.id === TKA.id; })[0]; if (y && y.firma !== TKA.firma) abreTk(TKA.id, true); }
+  }
+  function barraTk() {
+    if (TKBAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    TKBAR = PROFASE_PILAS.barra($('tk-bar'), { caja: true, buscar: $('t-q'), periodo: [$('t-dias')],
+      filtros: d ? { grupos: [{ t: 'TICKETS', campos: [d($('t-sis'), { t: 'SISTEMA' }), d($('t-tipo'), { t: 'QUÉ ES' }), d($('t-quien'), { t: 'LO PASÓ' })] }],
+        limpiar: function () { ['t-sis', 't-tipo', 't-quien'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + F0.format(TKL.length) + (TKL.length === 1 ? ' ticket' : ' tickets'); } } : null,
+      botones: [$('x-tk')] });
+  }
+  function pintaTk() {
+    var b = baseTk(), v = tkVista(TKV);
+    TKL = v ? b.filter(v[2]) : b;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('tk-kpis'), {
+      titulo: sup() ? 'Tu trabajo · tickets a desarrollo' : 'Tickets a desarrollo',
+      meta: YO && YO.papel === 'atiende' ? 'Los que pasaste tú' : 'Todos',
+      pilas: TKVISTAS.filter(function (x) { return x[0] !== 'mios' || (YO && YO.papel !== 'consulta'); }).map(function (x) {
+        var n = b.filter(x[2]).length;
+        return { k: x[0], t: x[1], n: n, tono: x[3], on: TKV === x[0], tag: sup() && x[0] === 'revisar' && n ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { TKV = TKV === k ? '' : k; if (TPAG) TPAG.inicio(); pintaTk(); },
+      boton: { t: 'Empezar a revisar', n: TKL.length, alPicar: function () { if (!TKL.length) return; TKCOLA = TKL.map(function (t) { return t.id; }); abreTk(TKCOLA[0]); } },
+      nota: sup() ? 'Los más viejos sin cerrar van primero. En cada uno: «Copiar para mi Claude».' : 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
+    $('t-tk').textContent = v ? v[1] : 'Tickets a desarrollo';
+    $('t-tkc').textContent = F0.format(TKL.length) + (TKL.length === 1 ? ' ticket' : ' tickets');
+    var pag = TPAG ? TPAG.corta(TKL) : TKL;
+    $('tk-lista').innerHTML = pag.map(function (t) {
+      return '<tr class="fila' + (TKA && TKA.id === t.id && !$('tk').hidden ? ' sel' : '') + '" tabindex="0" data-id="' + t.id + '">'
+        + '<td data-e="Folio"><div class="cli">' + esc(t.folio) + '</div>' + tkTipo(t) + '</td>'
+        + '<td data-e="Sistema">' + chipSis(t.sistema) + '</td>'
+        + '<td data-e="Qué pasa" class="ult"><div class="cli">' + esc(t.titulo) + '</div><div class="mut">' + esc(t.detalle || '') + (t.pantalla ? ' · en «' + esc(t.pantalla) + '»' : '') + '</div></td>'
+        + '<td data-e="Lo pasó"><div>' + esc(t.creo_nombre || t.creo) + '</div><div class="mut">' + esc(t.cliente || '') + (t.cuenta ? ' · ' + esc(t.cuenta) : '') + '</div></td>'
+        + '<td data-e="Desde" class="num">' + esc(cuando(t.creado)) + '<div class="mut">' + (t.dias ? t.dias + (t.dias === 1 ? ' día' : ' días') : 'hoy') + '</div></td>'
+        + '<td data-e="Cómo va">' + tkEst(t) + (t.trabaja_nombre && t.estado === 'proceso' ? '<div class="mut">' + esc(t.trabaja_nombre) + '</div>' : '') + '</td></tr>';
+    }).join('');
+    $('tk-vacia').hidden = !!TKL.length;
+    $('tk-vacia').textContent = tickets().length ? 'Nada con esos filtros.' : 'Todavía no hay tickets a desarrollo en este periodo.';
+  }
+  async function abreTk(id, callado) {
+    id = Number(id);
+    try {
+      var d = await qc('ticket', { ticket: id });
+      if (!d.id) { if (!callado) error('Ese ticket ya no está.'); return; }
+      TKA = d;
+      if (TKCOLA.indexOf(id) < 0) TKCOLA = TKL.map(function (t) { return t.id; });
+      $('tk').hidden = false; pintaTkFicha(); pintaTk();
+    } catch (e) { if (!callado) error(falla(e)); }
+  }
+  function cierraTk() { $('tk').hidden = true; TKA = null; pintaTk(); }
+  function pintaTkFicha() {
+    var t = TKA;
+    $('tk-t').textContent = t.folio + ' · ' + t.titulo;
+    $('tk-sub').innerHTML = chipSis(t.sistema) + ' ' + tkEst(t) + ' ' + tkTipo(t) + ' · lo pasó ' + esc(t.creo_nombre || t.creo) + ' el ' + esc(fechaHora(t.creado));
+    var a = [];
+    if (sup()) {
+      if (t.estado === 'revisar') a.push('<button class="btn acento" type="button" data-t="proceso">Tomarlo (en proceso)</button>');
+      if (t.estado === 'revisar' || t.estado === 'proceso') a.push('<button class="btn ok" type="button" data-t="listo">Ya quedó</button>', '<button class="btn" type="button" data-t="no_procede">No procede</button>');
+      if (t.estado === 'proceso') a.push('<button class="btn" type="button" data-t="revisar">Regresar a «Por revisar»</button>');
+      if (t.estado === 'listo' || t.estado === 'no_procede') a.push('<button class="btn" type="button" data-t="revisar">Volver a abrirlo</button>');
+    }
+    a.push('<button class="btn" type="button" data-t="claude">Copiar para mi Claude</button>');
+    if (t.conv) a.push('<button class="btn" type="button" data-t="conv">Ver la conversación</button>');
+    $('tk-acc').innerHTML = a.join('');
+    var dd = function (k, v) { return v ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : ''; };
+    $('tk-cuerpo').innerHTML = '<section><h4>Qué pasa</h4><p class="tk-det">' + esc(t.detalle) + '</p></section>'
+      + '<dl class="dl">' + dd('Cliente', esc(t.cliente || '') + (t.cuenta ? ' · ' + esc(t.cuenta) : '') + (t.usuario ? ' · ' + esc(t.usuario) : ''))
+      + dd('Pantalla', esc(t.pantalla || '')) + dd('Lo trabaja', t.trabaja_nombre ? esc(t.trabaja_nombre) + (t.tomado ? ' · desde el ' + esc(fechaHora(t.tomado)) : '') : '')
+      + dd(t.estado === 'listo' ? 'Quedó' : 'Se cerró', t.cerrado ? esc(t.cerro_nombre || t.cerro || '') + ' · ' + esc(fechaHora(t.cerrado)) : '')
+      + dd('Al cliente le dijimos', t.nota ? esc(t.nota) : '')
+      + dd('Correo al cliente', t.correo ? esc(t.correo) : '')
+      + dd('El cliente ya lo vio', t.cerrado ? (t.visto_cliente ? esc(fechaHora(t.visto_cliente)) : 'Todavía no') : '') + '</dl>'
+      + ((t.bitacora || []).length ? '<details class="bit"><summary>Bitácora (' + t.bitacora.length + ')</summary><ul>' + t.bitacora.map(function (b) { return '<li>' + esc(cuando(b.cuando)) + ' · ' + esc(b.quien) + ' ' + esc(b.que) + '</li>'; }).join('') + '</ul></details>' : '');
+    var nv = $('tk-nav').querySelector('.ppl-nav'); if (nv) nv.parentNode.removeChild(nv);
+    if (window.PROFASE_PILAS && TKCOLA.indexOf(t.id) >= 0) PROFASE_PILAS.nav({ ids: TKCOLA, id: t.id, abre: function (x) { abreTk(x); }, antes: $('tk-cierra'), clase: 'btn' });
+  }
+  // Lo que Cadengo le pasa a su Claude: el caso en palabras y dónde trabajarlo, sin lo que parezca dato de un cliente
+  function limpioClaude(x) {
+    var n = 0;
+    var y = String(x || '')
+      .replace(/[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, function () { n++; return '[correo]'; })
+      .replace(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/gi, function () { n++; return '[RFC]'; })
+      .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, function () { n++; return '[UUID]'; })
+      .replace(/\$\s?\d[\d,]*(\.\d+)?/g, function () { n++; return '[monto]'; })
+      .replace(/\b\d{10,}\b/g, function () { n++; return '[número]'; });
+    return { t: y, n: n };
+  }
+  function textoClaude(t) {
+    var a = limpioClaude(t.titulo), b = limpioClaude(t.detalle), c = limpioClaude(t.pantalla || '');
+    return 'Ticket ' + t.folio + ' de ' + (SIS_TXT[t.sistema] || 'Quo') + ' (' + (t.tipo === 'mejora' ? 'una mejora' : 'una falla') + '), de Q Chat, el soporte de los sistemas Quo.\n'
+      + 'Repositorio: ' + (REPO[t.sistema] || '') + '.\n'
+      + 'Título: ' + a.t + '\n'
+      + (c.t ? 'Pantalla: ' + c.t + '\n' : '')
+      + 'Qué pasa (lo escribió ' + (t.creo_nombre || t.creo) + ' el ' + fechaHora(t.creado) + '):\n' + b.t + '\n\n'
+      + 'Trabájalo con las reglas del CLAUDE.md de ese repositorio: primero dime qué entendiste y el antes y el después en pantalla, '
+      + 'y espera mi «sí, así es». Sin datos de clientes. Cuando quede, lo marco «Ya quedó» en Chat › Q Chat › Tickets del CRM y al cliente le llega el aviso.'
+      + (a.n + b.n + c.n ? '\n(Se quitaron ' + (a.n + b.n + c.n) + ' datos que parecían del cliente.)' : '');
+  }
+  async function copiaClaude(t) {
+    var x = textoClaude(t);
+    try { await navigator.clipboard.writeText(x); avisa('Copiado: pégalo en tu Claude.'); return; } catch (e) {}
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">Copiar para mi Claude</h3><p>Cópialo de aquí y pégalo en tu Claude.</p><label class="campo"><span>El caso</span><textarea id="tk-cl" readonly style="min-height:220px">' + esc(x) + '</textarea></label>'
+      + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cerrar</button></div>';
+    $('dlg').hidden = false;
+    $('dlg-c').onclick = function (e) { if (e.target.closest('button[data-i]')) $('dlg').hidden = true; };
+    setTimeout(function () { try { $('tk-cl').focus(); $('tk-cl').select(); } catch (e) {} }, 40);
+  }
+  // «Ya quedó» (con lo que le decimos al cliente, si se quiere) y «No procede» (con el porqué, obligatorio)
+  function cambiaTk(estado) {
+    var t = TKA; if (!t) return;
+    if (estado === 'proceso' || estado === 'revisar') { guardaTk(estado, ''); return; }
+    var no = estado === 'no_procede';
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">' + (no ? 'No procede: ' : 'Ya quedó: ') + esc(t.folio) + '</h3>'
+      + '<p>' + (no ? 'Al cliente le llega el aviso en su sistema con lo que escribas aquí.' : 'Al cliente le llega el aviso en su sistema y por correo.') + '</p>'
+      + '<label class="campo"><span>' + (no ? 'Por qué no procede (lo lee el cliente)' : 'Lo que le decimos al cliente (opcional)') + '</span>'
+      + '<textarea id="tk-nota" maxlength="1000" placeholder="' + (no ? 'Por ejemplo: así lo pide el SAT; se hace desde…' : 'Por ejemplo: ya baja el XML; vuelve a intentarlo.') + '"></textarea></label>'
+      + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cancelar</button><button class="btn ' + (no ? 'peligro' : 'ok') + '" type="button" data-i="1">' + (no ? 'No procede' : 'Ya quedó') + '</button></div>';
+    $('dlg').hidden = false;
+    setTimeout(function () { try { $('tk-nota').focus(); } catch (e) {} }, 40);
+    $('dlg-c').onclick = async function (e) {
+      var b = e.target.closest('button[data-i]'); if (!b) return;
+      if (b.getAttribute('data-i') === '-1') { $('dlg').hidden = true; return; }
+      var n = $('tk-nota').value.trim();
+      if (no && n.length < 5) { error('Escribe por qué no procede: lo lee el cliente.'); return; }
+      b.disabled = true;
+      if (await guardaTk(estado, n)) $('dlg').hidden = true; else b.disabled = false;
+    };
+  }
+  async function guardaTk(estado, nota) {
+    try {
+      TKA = await qc('ticket_estado', { ticket: TKA.id, estado: estado, nota: nota });
+      pintaTkFicha(); cargaTk().catch(function () {});
+      avisa(estado === 'listo' ? 'Listo: ' + TKA.folio + ' ya quedó. Al cliente le llega el aviso.' : estado === 'no_procede' ? 'Listo: al cliente le llega que no procede y por qué.'
+        : estado === 'proceso' ? 'Lo tomaste: queda «En proceso».' : 'Regresó a «Por revisar».');
+      return true;
+    } catch (e) { error(falla(e)); return false; }
+  }
+  $('tk-cierra').onclick = cierraTk;
+  $('tk').addEventListener('click', function (e) { if (e.target === $('tk')) cierraTk(); });
+  $('tk-acc').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-t]'); if (!b || !TKA) return;
+    var a = b.getAttribute('data-t');
+    if (a === 'claude') copiaClaude(TKA);
+    else if (a === 'conv') { var c = TKA.conv; cierraTk(); pestana('conv'); abre(c); }
+    else cambiaTk(a);
+  });
+  $('tk-lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { TKCOLA = TKL.map(function (t) { return t.id; }); abreTk(tr.getAttribute('data-id')); } });
+  $('tk-lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); TKCOLA = TKL.map(function (t) { return t.id; }); abreTk(tr.getAttribute('data-id')); } });
+  $('t-q').addEventListener('input', function () { TQ = this.value; if (TPAG) TPAG.inicio(); pintaTk(); });
+  $('t-dias').onchange = function () { if (TPAG) TPAG.inicio(); cargaTk().catch(function (e) { error(falla(e)); }); };
+  ['t-sis', 't-tipo', 't-quien'].forEach(function (i) { $(i).onchange = function () { if (TPAG) TPAG.inicio(); pintaTk(); }; });
 
   /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
   $('x-lista').onclick = async function () {
@@ -699,6 +1033,26 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
     b.disabled = false;
   };
+  $('x-tk').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = TKL, titulo = 'Q Chat · tickets a desarrollo';
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Tickets');
+      var head = ['Folio', 'Sistema', 'Qué es', 'Título', 'Qué pasa', 'Pantalla', 'Cliente', 'Cuenta', 'Lo pasó', 'Desde', 'Cómo va', 'Lo trabaja', 'Se cerró', 'Al cliente le dijimos', 'Días'];
+      ws.columns = [10, 16, 10, 34, 50, 18, 24, 24, 20, 18, 14, 20, 18, 34, 8].map(function (x) { return { width: x }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' ticket' : ' tickets') + (TQ ? ' · búsqueda: ' + TQ : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (t, i) {
+        ws.getRow(f0 + 1 + i).values = [t.folio, SIS_TXT[t.sistema] || t.sistema, t.tipo === 'mejora' ? 'Mejora' : 'Falla', t.titulo, t.detalle || '', t.pantalla || '', t.cliente || '', t.cuenta || '',
+          t.creo_nombre || t.creo, fechaHora(t.creado), TK_TXT[t.estado] || t.estado, t.trabaja_nombre || '', t.cerrado ? fechaHora(t.cerrado) : '', t.nota || '', t.dias || 0];
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Q Chat tickets ' + hoyMty() + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
   $('x-efi').onclick = async function () {
     var b = this; b.disabled = true;
     try {
@@ -716,9 +1070,11 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       hoja('Resumen', ['Qué', 'Cuánto'], [['Conversaciones', m.total || 0], ['Resolvió la asistente sola', m.solo_ia || 0], ['Atendió una persona', m.con_persona || 0], ['Con llamada', m.llamadas || 0],
         ['Espera promedio en la fila (min)', min(m.espera_prom)], ['Espera más larga (min)', min(m.espera_max)], ['Atendidos en menos de 2 min', m.menos_2min || 0], ['Atendidos', m.atendidas || 0],
         ['Primera respuesta promedio (min)', min(m.primera_prom)], ['Duración promedio con persona (min)', min(m.duracion_prom)], ['Calificaron', m.calificadas || 0], ['Les sirvió', m.bien || 0],
-        ['Sin resolver', m.sin_resolver || 0], ['Llegaron fuera de horario', m.fuera_horario || 0]], [40, 14]);
-      hoja('Por persona', ['Quién', 'Atendió', 'Terminó', 'Espera (min)', '1.ª respuesta (min)', 'Duración (min)', 'Calificaron', 'Les sirvió', 'Llamadas'],
-        (m.por_agente || []).map(function (a) { return [a.nombre || a.agente, a.n, a.cerradas, min(a.esp), min(a.pri), min(a.dur), a.calif, a.bien, a.llamadas || 0]; }), [26, 10, 10, 12, 16, 14, 12, 12, 10]);
+        ['Sin resolver', m.sin_resolver || 0], ['Llegaron fuera de horario', m.fuera_horario || 0], ['Pasaron a desarrollo', m.tickets || 0],
+        ['Tickets que ya quedaron', (m.tickets_estado || {}).listo || 0], ['Días en promedio para que quede', (m.tickets_estado || {}).dias_prom != null ? Number(m.tickets_estado.dias_prom) : ''],
+        ['Tickets por trabajar', ((m.tickets_estado || {}).revisar || 0) + ((m.tickets_estado || {}).proceso || 0)]], [40, 14]);
+      hoja('Por persona', ['Quién', 'Atendió', 'Terminó', 'Espera (min)', '1.ª respuesta (min)', 'Duración (min)', 'Calificaron', 'Les sirvió', 'Llamadas', 'A desarrollo'],
+        (m.por_agente || []).map(function (a) { return [a.nombre || a.agente, a.n, a.cerradas, min(a.esp), min(a.pri), min(a.dur), a.calif, a.bien, a.llamadas || 0, a.tickets || 0]; }), [26, 10, 10, 12, 16, 14, 12, 12, 10, 12]);
       hoja('Por sistema', ['Sistema', 'Conversaciones', 'Resolvió la asistente', 'Con persona'], (m.por_sistema || []).map(function (s) { return [SIS_TXT[s.sistema] || s.sistema, s.n, s.solo_ia, s.con_persona]; }), [20, 16, 20, 14]);
       hoja('Temas', ['Tema', 'Veces'], (m.temas || []).map(function (t) { return [t.tema, t.n]; }), [40, 10]);
       hoja('Día por día', ['Día', 'Total', 'Sola la asistente', 'Con persona'], (m.por_dia || []).map(function (x) { return [x.dia, x.n, x.ia, x.persona]; }), [14, 10, 18, 14]);
@@ -731,9 +1087,10 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     $('dlg-c').innerHTML = '<h3 id="dlg-t">Cómo funciona Q Chat</h3>'
       + '<p><b>1. La asistente.</b> El cliente escribe desde su sistema (la burbuja de abajo a la derecha) y primero le contesta la asistente de Quo: dudas contables y fiscales, cómo se usa el sistema y lo que su usuario ya ve. Se le dice desde el principio que es una asistente.</p>'
       + '<p><b>2. La fila.</b> Si después de tres intentos no le resolvió (o él lo pide), pasa a la fila por orden de llegada y ve cuántas personas tiene adelante. A quien está «Disponible» le toca el siguiente, uno a la vez: al terminar uno, le llega el que sigue. Fuera del horario se queda en la fila y se le avisa.</p>'
-      + '<p><b>3. La llamada.</b> Si tampoco por chat se resolvió en tres intentos, el cliente puede pedir llamada: quien atiende pica «Abrir llamada», entra y lo admite. Es la misma videollamada del portal, con la marca de Quo para el cliente. Ya no hay teléfono de atención.</p>'
+      + '<p><b>3. La llamada.</b> Si tampoco por chat se resolvió en tres intentos, el cliente puede pedir llamada y se abre sola en la pantalla de quien lo atiende: «Te toca una llamada · Entrar». Tiene 2 minutos para entrar; si no, pasa al siguiente disponible y el cliente no pierde su lugar. Quien atiende también puede proponerla («Mejor por llamada»). Es la misma videollamada del portal, con la marca de Quo para el cliente. Ya no hay teléfono de atención.</p>'
+      + '<p><b>4. Pasar a desarrollo.</b> Si la única forma de resolverlo es cambiar algo del sistema, quien atiende pica «Pasar a desarrollo»: la conversación se cierra como «Ticket» y al cliente le decimos su folio. Le llega a Fernando Cadengo, que lo trabaja en «Tickets» (con «Copiar para mi Claude»). Al quedar, al cliente le llega el aviso en su sistema y por correo.</p>'
       + '<p><b>Su cuenta.</b> Solo con su permiso (por 24 horas y solo para ver); cada vez que se ve queda en la bitácora.</p>'
-      + '<p><b>Quién.</b> Gabriel Cavazos atiende; Héctor Daniel Nava y Fernando Cadengo supervisan (ven todo y pueden tomar cualquiera); Héctor Nava Ramos solo ve.</p>'
+      + '<p><b>Quién.</b> Gabriel Cavazos atiende; Héctor Daniel Nava y Fernando Cadengo supervisan (ven todo, pueden tomar cualquiera y trabajan los tickets); Héctor Nava Ramos solo ve.</p>'
       + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cerrar</button></div>';
     $('dlg').hidden = false;
     $('dlg-c').onclick = function (e) { if (e.target.closest('button[data-i]')) $('dlg').hidden = true; };
@@ -753,6 +1110,9 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     var s = String(que || '').replace(/^ver:/, '');
     if (!DATOS) return false;
     if (s === 'fila') { pestana('conv'); VISTA = 'fila'; pinta(); return true; }
+    if (s === 'tickets') { pestana('tk'); return true; }
+    var mt = /^tk:(\d{1,12})$/.exec(s);
+    if (mt) { pestana('tk'); TKCOLA = []; abreTk(mt[1]); return true; }
     if (/^\d{1,12}$/.test(s)) { pestana('conv'); abre(s); return true; }
     return false;
   };
@@ -766,6 +1126,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       CONSULTA = !!P.consulta || est.papel === 'consulta'; $('consulta').hidden = !CONSULTA;
       YO = { papel: est.papel };
       PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'qchat.conversaciones', nombre: 'Conversaciones', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      TPAG = window.PROFASE_PAGINAS.crea({ donde: $('tk-pag'), clave: 'qchat.tickets', nombre: 'Tickets', arriba: $('caja-tk'), cambio: function () { pintaTk(); } });
       await carga();
       // quien se dejó «Disponible» en este equipo y no lo está en Quo (la página se recargó): se vuelve a poner
       try { if (puede() && localStorage.getItem('profase-qch-disp') === '1' && DATOS.yo && !DATOS.yo.disponible) await disponible(true); } catch (e) {}
