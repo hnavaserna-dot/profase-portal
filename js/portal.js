@@ -851,11 +851,19 @@
         if (!fe) return null;
         var sec = fe.closest('[id^="v-"]'), pm = window.parent.PORTAL_MENU;
         if (!sec || !pm || typeof pm.modulos !== 'function') return null;
-        var v = sec.id.slice(2), mods = pm.modulos() || [];
+        // una pantalla con varias opciones en el menú (Q Chat: Conversaciones, Tickets a desarrollo y Eficiencia del soporte)
+        // dice la que está abierta; si no, la primera
+        var v = sec.id.slice(2), mods = pm.modulos() || [], a = typeof pm.actual === 'function' ? pm.actual() : null, pri = null;
         for (var i = 0; i < mods.length; i++) {
           var subs = mods[i].subs || [];
-          for (var j = 0; j < subs.length; j++) if (subs[j].v === v) return { m: mods[i].t, t: subs[j].t, d: subs[j].d || '' };
+          for (var j = 0; j < subs.length; j++) {
+            if (subs[j].v !== v) continue;
+            var o = { m: mods[i].t, t: subs[j].t, d: subs[j].d || '' };
+            if (a && a.k === subs[j].k) return o;
+            if (!pri) pri = o;
+          }
         }
+        if (pri) return pri;
       } catch (e) { /* otro origen o sin menú */ }
       return null;
     }
@@ -956,6 +964,8 @@
       var n = 0;
       (function otra() { if (OP || ++n > 24) return; setTimeout(function () { OP = miOpcion(); if (OP) pinta(); else otra(); }, 500); })();
     }
+    // la pantalla cambió de opción (Q Chat, al picar su pestaña): la franja dice la nueva
+    P.franjaAlDia = function () { if (!tit) return; OP = miOpcion() || OP; pinta(); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
   })();
 

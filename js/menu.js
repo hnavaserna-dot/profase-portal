@@ -55,7 +55,9 @@
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
   };
-  // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO
+  // k: lo que va en la dirección; v: el botón de la pestaña (data-view); q: la sub pestaña de QUO; p: la pestaña de una
+  // pantalla en su marco (Q Chat: el botón de la vista dice la que está abierta con data-sub y la vista la abre con
+  // window.PROFASE_SUB[v](p))
   var MODS = [
     /* Menú reacomodado el 31-oct-2026 (Héctor Daniel: «re acomoda el menú, pestañas y demás, para que esté todo donde debe
        de estar; cuida siempre los permisos»). Desde el lunes 2 ya no se usa el Access, así que el módulo «Access» se
@@ -101,10 +103,7 @@
       { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' },
       // Héctor Daniel, 1-nov-2026, 13:45 («Si»): un acceso a las videollamadas con clientes (las citas con videollamada de la
       // Agenda; una sola versión). Solo a la dirección y los gerentes (chat_sala_puedo(); el botón lo pone llamada_tab.js)
-      { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' },
-      // Héctor Daniel Nava, 8-nov-2026 («una tercera opción llamada Q Chat»): el soporte de los sistemas Quo. Solo a quien la
-      // base deja (qchat_estado(), 326_qchat.sql; el botón lo pone qch_tab.js)
-      { k: 'qchat', v: 'qch', t: 'Q Chat', d: 'El soporte de los sistemas Quo: la fila, lo que contesta la asistente y la eficiencia.' }] },
+      { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' }] },
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
     // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/79_tesoreria.sql)
@@ -178,9 +177,17 @@
       { k: 'usuarios', v: 'usr', t: 'Usuarios del portal', d: 'Altas, bajas, códigos para la contraseña, regresos y el permiso de cerrar avisos del Buzón.' },
       { k: 'usuarios-wf', v: 'uwf', t: 'Personas del WorkFlow', d: 'Las personas del WorkFlow: cómo salen, si salen como contador, sus teléfonos y su carga.' },   // la pantalla «Usuarios» del Access (31-oct-2026): Daniel, Cadengo y Gabo
       { k: 'accesos', v: 'acc', t: 'Accesos', d: 'Quién entró al portal y cuándo.' }] },
-    { k: 'quo', t: 'QUO', d: 'Quo Contabilita: cotizaciones y membresías.', subs: [
+    /* QUO: lo de los sistemas Quo junto, lo que se vende y su soporte (Héctor Daniel Nava, 8-nov-2026, 15:46: «Así es»; antes
+       Q Chat iba en Chat). Q Chat es una sola pantalla (qchat.html, vista qch) con tres opciones: cada una abre su pestaña
+       (p; el botón de la vista dice cuál está abierta con data-sub, lo pone qch_tab.js). Solo a quien la base deja
+       (qchat_estado(), 326_qchat.sql); el cotizador y las membresías, a quien ya los tiene (es_quo()). La clave «qchat» no
+       cambió (las ligas de la campanita y los recorridos siguen igual). */
+    { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: cotizaciones, membresías y su soporte (Q Chat).', subs: [
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
-      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' }] },
+      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' },
+      { k: 'qchat', v: 'qch', p: 'conv', t: 'Conversaciones', d: 'Q Chat: la fila, lo que contesta la asistente y lo que atiende el equipo, por chat o llamada.' },
+      { k: 'qchat-tickets', v: 'qch', p: 'tk', t: 'Tickets a desarrollo', d: 'Q Chat: lo que solo se arregla cambiando el sistema, con su folio para el cliente.' },
+      { k: 'qchat-eficiencia', v: 'qch', p: 'efi', t: 'Eficiencia del soporte', d: 'Q Chat: lo que resolvió la asistente, lo que atendió cada persona y la espera.' }] },
     // Multinacional (2-nov-2026, Héctor Daniel, 12:01 a 12:20): la comercializadora de la dirección; no tiene que ver con
     // las compañías que facturan el despacho. Solo la ven Mónica Pedraza (sube las facturas), Eva Rangel (marca las
     // cobradas) y la dirección (mul_estado(), portal/sql/136_multinacional.sql; bloque mul_tab.js)
@@ -386,6 +393,8 @@
       var q = document.querySelector('#v-quo .qsw button[aria-pressed="true"]');
       return ENT[q && q.dataset.q === 'mem' ? 'quo-membresias' : 'quo-cotizador'];
     }
+    var p = b.dataset.sub;   // una pantalla con varias opciones (Q Chat): la que está abierta
+    if (p) for (var kp in ENT) if (ENT[kp].v === v && ENT[kp].p === p) return ENT[kp];
     for (var k in ENT) if (ENT[k].v === v && !ENT[k].q) return ENT[k];
     return null;
   }
@@ -405,7 +414,9 @@
       if (!x) return false;
       x.click();      // primero la sub pestaña (para que no cargue la otra), luego QUO
     }
+    if (s.p) b.dataset.sub = s.p;   // el menú ya dice cuál; la pantalla abre esa pestaña (abajo)
     b.click();
+    if (s.p) { try { var fp = (window.PROFASE_SUB || {})[s.v]; if (typeof fp === 'function') fp(s.p); } catch (e) { /* se queda en la que tenga */ } }
     listo = true; quitaCarga();
     if (movil()) abre(false);
     cierraFly(); cerrarAlPintar = true;   // escogida la opción, su tarjeta se cierra
@@ -708,7 +719,7 @@
     });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
-    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso'] });
+    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso', 'data-sub'] });
     function vigilaQuo() {
       var q = document.querySelector('#v-quo .qsw');
       if (q && !quoObs) { quoObs = new MutationObserver(luego); quoObs.observe(q, { subtree: true, attributes: true, attributeFilter: ['aria-pressed'] }); luego(); }
