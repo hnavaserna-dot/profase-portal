@@ -101,7 +101,10 @@
       { k: 'chat', v: 'chat', t: 'Chat interno', d: 'Tus conversaciones; solo las ven quienes están en ellas.' },
       // Héctor Daniel, 1-nov-2026, 13:45 («Si»): un acceso a las videollamadas con clientes (las citas con videollamada de la
       // Agenda; una sola versión). Solo a la dirección y los gerentes (chat_sala_puedo(); el botón lo pone llamada_tab.js)
-      { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' }] },
+      { k: 'videollamada-cliente', v: 'vcl', t: 'Videollamada con cliente', d: 'Entra a las de hoy, copia la invitación o empieza una ahora.' },
+      // Héctor Daniel Nava, 8-nov-2026 («una tercera opción llamada Q Chat»): el soporte de los sistemas Quo. Solo a quien la
+      // base deja (qchat_estado(), 326_qchat.sql; el botón lo pone qch_tab.js)
+      { k: 'qchat', v: 'qch', t: 'Q Chat', d: 'El soporte de los sistemas Quo: la fila, lo que contesta la asistente y la eficiencia.' }] },
     // Tesorería (30-oct-2026, decisiones de Daniel, 21:05 a 21:25: «una pestaña… que se llame Tesorería»; «todo a tesorería;
     // pero trata de usar los mismos submenús para todos»). Cada quien ve solo lo suyo (lo decide la base: fac_permiso(),
     // rec_permisos, veo_comisiones(), comisiones_direccion, tes_estado(); portal/sql/79_tesoreria.sql)

@@ -1,0 +1,778 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Q Chat</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4c7ae30ca4"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script>
+<style>
+/* Portal PROFASE · Chat › Q Chat (Héctor Daniel Nava, 8-nov-2026: «el soporte o los chats nos deben de llegar a CRM… desde
+   ahí Gabo en el ejemplo los atienda y Cadengo y yo»; «una tercera opción llamada Q Chat y ahí tú me filtres qué fue lo que
+   contestaste todo automático, qué fue lo que tuvo que contestar Gabo, eficiencia y demás de ese servicio al cliente»;
+   «un tipo call center… acaba un chat y ya le pones otro… en horario de oficina»).
+   Las conversaciones viven en la base de Quo (quocontabilita-crm, base/sql/95_qs_qchat.sql): esta página solo le pregunta a
+   la función «qchat» (supabase/functions/qchat/), que revisa la sesión y el papel de quien pregunta y le habla a Quo con la
+   llave del canal; el CRM no guarda nada de lo que escriben los clientes. UX PROFASE: la barra (buscar, el periodo, FILTROS,
+   Excel con su PDF y «Más ▾»), las pilas de «Tu trabajo», la lista por páginas y, al picar un renglón, la conversación con
+   sus acciones a la vista. «Eficiencia»: lo que resolvió la asistente sola, lo que atendió cada persona, la espera, la
+   primera respuesta y si les sirvió. Las llamadas: la sala de videollamada del CRM (la misma de las reuniones con gente de
+   fuera), que abre quien atiende (qchat_sala_abre, 326_qchat.sql). Quién ve y con qué papel lo decide la base (qchat_yo). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --cli:#EEF2F7; --ia:#EEE9FB; --per:#E2F1E8;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F;
+  --cli:#1A2436; --ia:#251F3A; --per:#173022; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F;
+  --cli:#1A2436; --ia:#251F3A; --per:#173022; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:36px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabla tr.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted);margin:1px 2px 1px 0}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+/* el sistema de cada conversación, siempre con su color y su nombre */
+.chip[data-s]::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--cs)}
+.chip[data-s="contabilita"]{--cs:#2B6CB0}.chip[data-s="facturita"]{--cs:#2F855A}.chip[data-s="nominita"]{--cs:#7B4FBF}.chip[data-s="casa"]{--cs:#C05621}
+/* Mi estado (disponible) */
+.yo{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:12px;padding:12px 16px;margin:16px 0 12px}
+.yo.on{border-left-color:var(--ok)}
+.yo b{font-size:15px}
+.yo .est{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted)}
+.yo .est span{white-space:nowrap}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 12px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px;font-weight:700;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+#qch-bar,#efi-bar{margin:0 0 12px}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla th.der,.tabla td.der{text-align:right}
+.tabla td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .cli{font-weight:700}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.tabla .ult{max-width:46ch}
+.vacio{padding:20px 16px;color:var(--muted)}
+@media (max-width:760px){
+  .tabla thead{display:none}
+  .tabla,.tabla tbody,.tabla tr,.tabla td{display:block;width:100%}
+  .tabla tr.fila{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla td{border:0;padding:2px 0}
+  .tabla td.der{text-align:left}
+  .tabla td[data-e]::before{content:attr(data-e) " · ";color:var(--muted);font-size:12px;font-weight:600}
+  .tabla .ult{max-width:none}
+}
+/* Eficiencia */
+.dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:0 16px}
+.dos>.caja:first-child{grid-column:1/-1}   /* «Por persona» trae 7 columnas: todo el ancho */
+.barrita{display:block;height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-top:4px;max-width:180px}
+.barrita i{display:block;height:100%;background:var(--navy)}
+:root[data-theme="dark"] .barrita i{background:#8FB3F0}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+/* La conversación */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:760px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:19px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+#conv{position:fixed;inset:0;z-index:40;background:rgba(10,18,32,.45);display:flex;justify-content:flex-end}
+#conv>div{background:var(--surface);width:min(780px,100%);height:100%;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,.25)}
+.cv-cab{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.cv-cab .t{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.cv-cab h3{font-size:19px;overflow-wrap:anywhere}
+.cv-cab .acciones{gap:6px}
+.cv-av{padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px;display:grid;gap:6px}
+.cv-av:empty{display:none}
+.cv-av .nota{margin:0;padding:8px 12px}
+.cv-msgs{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;background:var(--bg)}
+.ms{max-width:82%;border-radius:12px;padding:8px 12px;overflow-wrap:anywhere;white-space:pre-wrap;font-size:14px}
+.ms .de{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:2px;white-space:normal}
+.ms .hr{display:block;font-size:11px;color:var(--muted);margin-top:4px;white-space:normal}
+.ms.cliente{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}
+.ms.ia{align-self:flex-end;background:var(--ia)}
+.ms.persona{align-self:flex-end;background:var(--per)}
+.ms.sistema{align-self:center;background:none;color:var(--muted);font-size:12.5px;text-align:center;padding:2px 8px;white-space:normal}
+.ms .fu{display:block;margin-top:6px;font-size:12px;white-space:normal}
+.ms .fu a{color:inherit}
+.cv-pie{border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:grid;gap:8px;background:var(--surface)}
+.cv-pie textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:10px;padding:9px 11px;min-height:64px;max-height:180px;resize:vertical;width:100%}
+.cv-pie .acciones{justify-content:space-between}
+details.bit{font-size:12.5px;color:var(--muted)}
+details.bit ul{margin:6px 0 0;padding-left:18px}
+.dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 14px;margin:0 0 12px}
+.dl dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.dl dd{margin:0;overflow-wrap:anywhere}
+@media (max-width:700px){
+  input,select,textarea,.cv-pie textarea{font-size:16px}
+  .band h1{font-size:22px}
+  #conv>div{width:100%}
+  .ms{max-width:92%}
+  .dl{grid-template-columns:minmax(0,1fr)}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Chat</div>
+      <h1>Q Chat</h1>
+      <p>El soporte de Quo Contabilita, Quo Facturita, Quo Nominita y Sistemas Quo: primero contesta la asistente; si no resuelve, pasa a la fila y lo atiende alguien del equipo, por chat o por llamada.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no contestar ni tomar conversaciones.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <!-- Mi estado: disponible para que me toque el siguiente de la fila -->
+    <section class="yo" id="yo" aria-label="Tu estado">
+      <div style="min-width:0"><b id="yo-t">No estás disponible</b><div class="est" id="yo-est"></div></div>
+      <button class="btn" type="button" id="b-disp" aria-pressed="false">Ponerme disponible</button>
+    </section>
+    <div class="tabs" role="tablist" aria-label="Q Chat">
+      <button type="button" role="tab" id="tab-conv" aria-selected="true" aria-controls="p-conv">Conversaciones</button>
+      <button type="button" role="tab" id="tab-efi" aria-selected="false" aria-controls="p-efi">Eficiencia</button>
+    </div>
+
+    <div id="p-conv" role="tabpanel" aria-labelledby="tab-conv">
+      <div id="qch-bar" hidden>
+        <input type="search" id="f-q" placeholder="Busca cliente, cuenta, tema o lo que escribió" aria-label="Buscar">
+        <select id="f-dias" aria-label="Periodo">
+          <option value="7">Abiertas y las de 7 días</option>
+          <option value="30" selected>Abiertas y las de 30 días</option>
+          <option value="90">Abiertas y las de 90 días</option>
+          <option value="365">Abiertas y las de un año</option>
+        </select>
+        <button class="btn" type="button" data-excel id="x-lista">Excel</button>
+        <button class="btn" type="button" id="b-como">Cómo funciona</button>
+      </div>
+      <div hidden>
+        <select id="f-sis" aria-label="Sistema"><option value="">Todos los sistemas</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option><option value="casa">Sistemas Quo</option></select>
+        <select id="f-est" aria-label="Estado"><option value="">Todos los estados</option><option value="ia">Con la asistente</option><option value="fila">En la fila</option><option value="atencion">En atención</option><option value="cerrada">Terminadas</option></select>
+        <select id="f-ag" aria-label="Atendió"><option value="">Cualquiera</option></select>
+      </div>
+      <section id="kpis" aria-label="Tu trabajo" hidden></section>
+      <section class="caja" id="caja-lista">
+        <header><h2 id="t-lista">Conversaciones</h2><span class="mut" id="t-cuenta"></span></header>
+        <div class="desliza"><table class="tabla" id="tabla">
+          <thead><tr><th>Cliente</th><th>Sistema</th><th>Cómo va</th><th>Lo último</th><th class="der">Espera</th><th>Atiende</th></tr></thead>
+          <tbody id="lista"></tbody>
+        </table></div>
+        <div class="vacio" id="lista-vacia" hidden></div>
+        <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+      </section>
+    </div>
+
+    <div id="p-efi" role="tabpanel" aria-labelledby="tab-efi" hidden>
+      <div id="efi-bar" hidden>
+        <select id="e-per" aria-label="Periodo">
+          <option value="7">Últimos 7 días</option>
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+          <option value="mes">Este mes</option>
+          <option value="ant">El mes pasado</option>
+        </select>
+        <select id="e-sis" aria-label="Sistema"><option value="">Todos los sistemas</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option><option value="casa">Sistemas Quo</option></select>
+        <button class="btn" type="button" data-excel id="x-efi">Excel</button>
+      </div>
+      <section id="e-pilas" aria-label="Eficiencia" hidden></section>
+      <div class="dos">
+        <section class="caja"><header><h2>Por persona</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Quién</th><th class="der">Atendió</th><th class="der">Espera</th><th class="der">1.ª respuesta</th><th class="der">Duración</th><th class="der">Les sirvió</th><th class="der">Llamadas</th></tr></thead><tbody id="e-ag"></tbody></table></div></section>
+        <section class="caja"><header><h2>Por sistema</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Sistema</th><th class="der">Conversaciones</th><th>Resolvió la asistente</th><th class="der">Con persona</th></tr></thead><tbody id="e-sisl"></tbody></table></div></section>
+        <section class="caja"><header><h2>De qué preguntan</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Tema</th><th class="der">Veces</th></tr></thead><tbody id="e-temas"></tbody></table></div></section>
+        <section class="caja"><header><h2>Día por día</h2></header><div class="desliza"><table class="tabla"><thead><tr><th>Día</th><th class="der">Total</th><th class="der">Sola la asistente</th><th class="der">Con persona</th></tr></thead><tbody id="e-dias"></tbody></table></div></section>
+      </div>
+      <p class="pie">La espera es desde que el cliente pasa a la fila hasta que lo toma alguien; la primera respuesta, desde que lo toma hasta que le escribe. «Les sirvió» sale de lo que contesta el cliente al terminar («¿Te sirvió?»).</p>
+    </div>
+  </div>
+</div>
+
+<div id="conv" hidden role="dialog" aria-modal="true" aria-labelledby="cv-t"><div>
+  <div class="cv-cab">
+    <div class="t"><h3 id="cv-t"></h3><div class="acciones" id="cv-nav"><button class="btn" type="button" id="cv-cierra">Cerrar</button></div></div>
+    <div id="cv-sub" class="mut"></div>
+    <div class="acciones" id="cv-acc"></div>
+  </div>
+  <div class="cv-av" id="cv-av"></div>
+  <div class="cv-msgs" id="cv-msgs" aria-live="polite"></div>
+  <div class="cv-pie" id="cv-pie" hidden>
+    <textarea id="cv-txt" maxlength="4000" placeholder="Escribe tu respuesta…" aria-label="Tu respuesta"></textarea>
+    <div class="acciones"><span class="mut" id="cv-ayuda">Enter manda; Shift+Enter, otro renglón.</span><button class="btn acento" type="button" id="cv-manda">Mandar</button></div>
+  </div>
+</div></div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var YO = null, CONSULTA = false, DATOS = null, MET = null, Q = '', SIS = '', EST = '', AG = '', VISTA = '', PAG = null, BAR = null, EBAR = null;
+  var LISTA = [], COLA = [], ABIERTO = null, CV = null, SALAS = [], TAB = 'conv', VISTO = {}, ULT_CLI = {}, PRIMERA = true;
+  var SIS_TXT = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita', casa: 'Sistemas Quo' };
+  var EST_TXT = { ia: 'Con la asistente', fila: 'En la fila', atencion: 'En atención', cerrada: 'Terminada' };
+  var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function falla(e) { var m = (e && (e.message || e.error)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  // todo lo de Quo pasa por la función «qchat» (con la sesión de quien entró; la base decide su papel)
+  async function qc(accion, extra) {
+    var b = { accion: accion }; Object.keys(extra || {}).forEach(function (k) { b[k] = extra[k]; });
+    var r = await P.sb.functions.invoke('qchat', { body: b });
+    var d = r.data;
+    if (r.error && !d) { try { d = await r.error.context.json(); } catch (e) { d = null; } }
+    if (!d || d.ok !== true) throw new Error((d && d.error) || 'No se pudo hablar con Quo. Vuelve a intentar en un momento.');
+    return d;
+  }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c, s) { return '<span class="chip ' + (c || '') + '"' + (s ? ' data-s="' + esc(s) + '"' : '') + '>' + esc(t) + '</span>'; }
+  function chipSis(s) { return chip(SIS_TXT[s] || s, '', s); }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function hora(s) { if (!s) return ''; try { return window.PROFASE_HORA.hora(s); } catch (e) { return ''; } }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA.fechaHora(s); } catch (e) { return String(s); } }
+  function hoyMty() { try { return window.PROFASE_HORA.dia(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+  function cuando(s) {   // «10:42» si es de hoy; si no, el día y la hora
+    if (!s) return '';
+    try { var d = window.PROFASE_HORA.dia(s); return d === hoyMty() ? hora(s) : fechaHora(s); } catch (e) { return fechaHora(s); }
+  }
+  function dur(seg) {
+    if (seg == null || isNaN(seg)) return '—';
+    seg = Math.max(0, Math.round(seg));
+    if (seg < 60) return seg + ' s';
+    var m = Math.round(seg / 60); if (m < 60) return m + ' min';
+    var h = Math.floor(m / 60), r = m % 60; return h + ' h' + (r ? ' ' + r + ' min' : '');
+  }
+  function pct(a, b) { return b ? Math.round(a / b * 100) + ' %' : '—'; }
+  var F0 = new Intl.NumberFormat('es-MX');
+  function puede() { return YO && (YO.papel === 'atiende' || YO.papel === 'supervisa') && !CONSULTA; }
+
+  /* ---------- lo que se ve de cada conversación ---------- */
+  function comoVa(c) {
+    if (c.estado === 'ia') return chip('Con la asistente', 'az');
+    if (c.estado === 'fila') return chip('En la fila', 'mal') + (c.fuera_horario ? ' ' + chip('Fuera de horario', '') : '');
+    if (c.estado === 'atencion') return chip(c.sin_contestar ? 'Espera tu respuesta' : 'En atención', c.sin_contestar ? 'na' : 'ojo') + (c.llamada === 'pedida' ? ' ' + chip('Pide llamada', 'na') : c.llamada === 'abierta' ? ' ' + chip('En llamada', 'ok') : '');
+    var t = c.resuelto_por === 'ia' ? 'Resolvió la asistente' : c.resuelto_por === 'llamada' ? 'Con llamada' : 'Atendió una persona';
+    return chip(t, c.resuelto_por === 'ia' ? 'ok' : '') + (c.resuelta === false ? ' ' + chip('Sin resolver', 'mal') : '') + (c.calificacion === 1 ? ' ' + chip('Le sirvió', 'ok') : c.calificacion === 0 ? ' ' + chip('No le sirvió', 'mal') : '');
+  }
+  function quien(c) {
+    if (c.agente_nombre) return esc(c.agente_nombre) + (YO && c.agente === YO.usuario ? ' ' + chip('Tú', 'na') : '');
+    if (c.estado === 'ia' || (c.estado === 'cerrada' && c.resuelto_por === 'ia')) return '<span class="mut">La asistente</span>';
+    return '<span class="mut">—</span>';
+  }
+  function conversaciones() { return (DATOS && DATOS.conversaciones) || []; }
+  var VISTAS = [
+    ['fila', 'En la fila', function (c) { return c.estado === 'fila'; }, 'rojo'],
+    ['mias', 'Mías', function (c) { return c.estado === 'atencion' && YO && c.agente === YO.usuario; }, 'naranja'],
+    ['contestar', 'Esperan respuesta', function (c) { return c.estado === 'atencion' && c.sin_contestar; }, 'ambar'],
+    ['atencion', 'En atención', function (c) { return c.estado === 'atencion'; }, 'azul'],
+    ['ia', 'Con la asistente ahora', function (c) { return c.estado === 'ia'; }, 'violeta'],
+    ['sola', 'Resolvió la asistente', function (c) { return c.estado === 'cerrada' && c.resuelto_por === 'ia'; }, 'verde'],
+    ['persona', 'Atendió una persona', function (c) { return c.estado === 'cerrada' && c.resuelto_por !== 'ia'; }, 'azul'],
+    ['llamadas', 'Con llamada', function (c) { return !!c.llamada; }, 'violeta'],
+    ['sin', 'Sin resolver', function (c) { return c.estado === 'cerrada' && (c.resuelta === false || c.calificacion === 0); }, 'ambar']
+  ];
+  function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0]; }
+  function baseLista() {
+    var q = norm(Q).split(/\s+/).filter(Boolean);
+    return conversaciones().filter(function (c) {
+      if (SIS && c.sistema !== SIS) return false;
+      if (EST && c.estado !== EST) return false;
+      if (AG && (AG === '-ia' ? c.agente : c.agente !== AG)) return false;
+      if (!q.length) return true;
+      var t = norm([c.cliente, c.usuario, c.cuenta, c.tema, c.ultimo, SIS_TXT[c.sistema], c.agente_nombre, c.pantalla].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function filtradas() { var b = baseLista(), v = vista(VISTA); return v ? b.filter(v[2]) : b; }
+
+  /* ---------- la barra y las pilas ---------- */
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('qch-bar'), { caja: true, buscar: $('f-q'), periodo: [$('f-dias')],
+      filtros: d ? { grupos: [{ t: 'Q CHAT', campos: [d($('f-sis'), { t: 'SISTEMA' }), d($('f-est'), { t: 'CÓMO VA' }), d($('f-ag'), { t: 'ATENDIÓ' })] }],
+        limpiar: function () { ['f-sis', 'f-est', 'f-ag'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + F0.format(LISTA.length) + (LISTA.length === 1 ? ' conversación' : ' conversaciones'); } } : null,
+      botones: [$('x-lista')], mas: [[$('b-como')]] });
+    EBAR = PROFASE_PILAS.barra($('efi-bar'), { caja: true, periodo: [$('e-per'), $('e-sis')], botones: [$('x-efi')] });
+  }
+  function pintaAgentes() {
+    var s = $('f-ag'), v = s.value, ag = (DATOS && DATOS.agentes) || [];
+    s.innerHTML = '<option value="">Cualquiera</option><option value="-ia">Solo la asistente</option>' + ag.map(function (a) { return '<option value="' + esc(a.usuario) + '">' + esc(a.nombre) + '</option>'; }).join('');
+    s.value = v;
+  }
+  function pintaKpis() {
+    if (!window.PROFASE_PILAS) return;
+    var b = baseLista(), fila = b.filter(vista('fila')[2]).length;
+    var libre = puede() && DATOS && DATOS.yo && DATOS.yo.disponible;
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · Q Chat',
+      meta: 'Se pone al día solo cada pocos segundos',
+      pilas: VISTAS.map(function (v) {
+        var n = b.filter(v[2]).length;
+        return { k: v[0], t: v[1], n: n, tono: v[3], on: VISTA === v[0],
+          tag: (v[0] === 'mias' && n) || (v[0] === 'fila' && n && libre) ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { VISTA = VISTA === k ? '' : k; if (PAG) PAG.inicio(); pinta(); },
+      boton: puede() ? { t: 'Tomar el siguiente de la fila', n: fila, alPicar: tomaSiguiente } :
+        { t: 'Empezar a revisar', n: LISTA.length, alPicar: function () { if (!LISTA.length) return; COLA = LISTA.map(function (c) { return c.id; }); abre(COLA[0]); } },
+      nota: puede() ? 'La fila va por orden de llegada: el primero que llegó es el siguiente.' : 'Abre la primera de la lista; en ella, «Siguiente ›» pasa a la que sigue.'
+    });
+  }
+  function pintaYo() {
+    var y = (DATOS && DATOS.yo) || {}, on = !!y.disponible, h = DATOS && DATOS.horario || {}, ag = (DATOS && DATOS.agentes) || [];
+    var disp = ag.filter(function (a) { return a.disponible && a.contesta; }).length;
+    var fila = conversaciones().filter(function (c) { return c.estado === 'fila'; }).length;
+    $('yo').classList.toggle('on', on && puede());
+    $('yo-t').textContent = !puede() ? 'Q Chat del equipo' : on ? 'Estás disponible: te toca el siguiente de la fila' : 'No estás disponible';
+    $('yo-est').innerHTML = '<span>En la fila: <b>' + F0.format(fila) + '</b></span><span>Disponibles: <b>' + F0.format(disp) + '</b></span>'
+      + (puede() ? '<span>Tienes: <b>' + F0.format(y.activas || 0) + '</b> en atención</span>' : '')
+      + '<span>' + (h.abierto ? 'En horario de atención' + (h.cierra ? ' (cierra a las ' + esc(hora(h.cierra)) + ')' : '') : 'Fuera del horario de atención' + (h.abre ? ' (abre ' + esc(cuando(h.abre)) + ')' : '')) + '</span>'
+      + (DATOS && DATOS.config && DATOS.config.ia === false ? '<span>' + chip('La asistente está apagada', 'mal') + '</span>' : '');
+    $('b-disp').hidden = !puede();
+    $('b-disp').setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('b-disp').textContent = on ? 'Disponible ✓' : 'Ponerme disponible';
+  }
+  function pinta() {
+    LISTA = filtradas();
+    var v = vista(VISTA);
+    $('t-lista').textContent = v ? v[1] : 'Conversaciones';
+    $('t-cuenta').textContent = F0.format(LISTA.length) + (LISTA.length === 1 ? ' conversación' : ' conversaciones');
+    var pag = PAG ? PAG.corta(LISTA) : LISTA;
+    $('lista').innerHTML = pag.map(function (c) {
+      var esp = c.estado === 'fila' ? dur(c.espera_seg) : c.espera_seg != null ? dur(c.espera_seg) : '—';
+      return '<tr class="fila' + (ABIERTO === c.id ? ' sel' : '') + '" tabindex="0" data-id="' + c.id + '">'
+        + '<td data-e="Cliente"><div class="cli">' + esc(c.cliente || c.usuario || 'Cliente') + '</div><div class="mut">' + esc(c.cuenta || '') + (c.tema ? ' · ' + esc(c.tema) : '') + '</div></td>'
+        + '<td data-e="Sistema">' + chipSis(c.sistema) + '</td>'
+        + '<td data-e="Cómo va">' + comoVa(c) + '</td>'
+        + '<td data-e="Lo último" class="ult"><div>' + esc(c.ultimo || '') + '</div><div class="mut">' + esc(cuando(c.actividad)) + '</div></td>'
+        + '<td data-e="Espera" class="der num">' + esp + '</td>'
+        + '<td data-e="Atiende">' + quien(c) + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = !!LISTA.length;
+    $('lista-vacia').textContent = conversaciones().length ? 'Nada con esos filtros.' : 'Todavía no hay conversaciones en este periodo.';
+    pintaKpis(); pintaYo();
+  }
+
+  /* ---------- traer (cada pocos segundos a la vista) ---------- */
+  async function carga() {
+    var d = await qc('lista', { f: { dias: Number($('f-dias').value) || 30 } });
+    DATOS = d; YO = d.agente || YO;
+    try { SALAS = await rpc('qchat_salas_mias') || []; } catch (e) { SALAS = []; }
+    avisaNuevo();
+    $('todo').hidden = false;
+    barra(); pintaAgentes(); pinta();
+    if (CV && ABIERTO) { var c = conversaciones().filter(function (x) { return x.id === ABIERTO; })[0]; if (c && c.firma !== CV.conv.firma) abre(ABIERTO, true); }
+  }
+  // Si a quien atiende le toca una conversación o le escribe su cliente mientras ve otra cosa: el aviso chico de abajo
+  function avisaNuevo() {
+    if (!YO) return;
+    conversaciones().forEach(function (c) {
+      if (c.estado !== 'atencion' || c.agente !== YO.usuario) return;
+      var ya = VISTO[c.id], ult = c.ultimo_de === 'cliente' ? c.ultimo_en : null;
+      if (!PRIMERA && !ya && !(CV && ABIERTO === c.id)) llama('Te tocó un chat de ' + (SIS_TXT[c.sistema] || 'Quo') + ': ' + (c.cliente || 'un cliente'), c.id);
+      else if (!PRIMERA && ult && ULT_CLI[c.id] && ult !== ULT_CLI[c.id] && !(CV && ABIERTO === c.id && !document.hidden)) llama('Te escribió ' + (c.cliente || 'tu cliente') + ' en Q Chat', c.id);
+      VISTO[c.id] = true; if (ult) ULT_CLI[c.id] = ult;
+    });
+    PRIMERA = false;
+  }
+  function llama(t, id) {
+    try { P.avisoChico({ id: 'qch-' + id, texto: t, boton: 'Ver', ms: 12000, accion: function () { try { var A = window.top.PROFASE_ABRE; if (A && A.qchat) A.qchat(String(id)); else abre(id); } catch (e) { abre(id); } } }); } catch (e) {}
+    try { var a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.value = .06; o.connect(g); g.connect(a.destination); o.start(); setTimeout(function () { o.stop(); a.close(); }, 180); } catch (e) {}
+  }
+  function aLaVista() { try { return !document.hidden && window.frameElement ? window.frameElement.getBoundingClientRect().width > 0 : !document.hidden; } catch (e) { return !document.hidden; } }
+  // cada 5 s a la vista (cada 3 s con una conversación abierta); escondida, solo si estás disponible o atiendes alguna:
+  // cada 30 s (así sigues «disponible» para la fila y te llega el aviso). Si no, no pregunta.
+  var VUELTA = 0;
+  setInterval(function () {
+    if (!YO || !DATOS) return;
+    VUELTA++;
+    var vis = aLaVista(), activo = DATOS.yo && (DATOS.yo.disponible || DATOS.yo.activas > 0);
+    if ((vis && (CV ? true : VUELTA % 5 === 0 || VUELTA % 5 === 2)) || (!vis && activo && VUELTA % 30 === 0)) {
+      if (TAB === 'conv' || !vis) carga().catch(function () {});
+    }
+  }, 1000);
+
+  /* ---------- tomar, contestar, terminar ---------- */
+  async function tomaSiguiente() {
+    var f = conversaciones().filter(function (c) { return c.estado === 'fila'; }).sort(function (a, b) { return String(a.en_fila).localeCompare(String(b.en_fila)); })[0];
+    if (!f) { avisa('No hay nadie en la fila.'); return; }
+    await toma(f.id);
+  }
+  async function toma(id) {
+    try { var d = await qc('tomar', { id: id }); VISTO[id] = true; await carga(); abre(id); avisa('La tomaste: el cliente ya ve que lo atiendes tú.'); return d; }
+    catch (e) { error(falla(e)); }
+  }
+  async function disponible(si) {
+    try { DATOS = await qc('disponible', { si: si, f: { dias: Number($('f-dias').value) || 30 } }); YO = DATOS.agente || YO; try { localStorage.setItem('profase-qch-disp', si ? '1' : '0'); } catch (e) {} pinta(); avisa(si ? 'Listo: cuando llegue alguien a la fila (o ya hay), te toca a ti.' : 'Ya no te tocan conversaciones nuevas. Las que tienes siguen contigo.'); }
+    catch (e) { error(falla(e)); }
+  }
+
+  /* ---------- la conversación ---------- */
+  function mensaje(m) {
+    var de = m.de === 'cliente' ? (CV.conv.cliente || 'Cliente') : m.de === 'ia' ? 'Asistente de Quo' : m.de === 'persona' ? (m.autor || 'Soporte') : '';
+    if (m.de === 'sistema') return '<div class="ms sistema">' + esc(m.texto) + ' · ' + esc(cuando(m.creado)) + '</div>';
+    var fu = (m.fuentes || []).filter(function (f) { return f && /^https:\/\//.test(f.url || ''); }).slice(0, 4);
+    return '<div class="ms ' + esc(m.de) + '"><span class="de">' + esc(de) + (m.util === 1 ? ' · ' + chip('Le sirvió', 'ok') : m.util === 0 ? ' · ' + chip('No le resolvió', 'mal') : '') + '</span>'
+      + esc(m.texto)
+      + (fu.length ? '<span class="fu">Fuentes: ' + fu.map(function (f) { return '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.titulo || f.url) + '</a>'; }).join(' · ') + '</span>' : '')
+      + '<span class="hr">' + esc(cuando(m.creado)) + '</span></div>';
+  }
+  function salaDe(id) { return SALAS.filter(function (s) { return s.conv === id; })[0]; }
+  function pintaConv() {
+    var c = CV.conv, mia = puede() && c.estado === 'atencion' && c.agente === YO.usuario, sup = YO && YO.papel === 'supervisa' && !CONSULTA;
+    $('cv-t').textContent = (c.cliente || c.usuario || 'Cliente');
+    $('cv-sub').innerHTML = chipSis(c.sistema) + ' ' + comoVa(c) + (c.cuenta ? ' · ' + esc(c.cuenta) : '') + (c.usuario ? ' · ' + esc(c.usuario) : '')
+      + (c.pantalla ? ' · desde «' + esc(c.pantalla) + '»' : '') + ' · empezó ' + esc(cuando(c.creada));
+    var a = [];
+    if (puede() && (c.estado === 'fila' || (sup && c.estado !== 'cerrada' && c.agente !== YO.usuario)))
+      a.push('<button class="btn acento" type="button" data-a="tomar">' + (c.estado === 'fila' ? 'Tomarla' : 'Tomarla yo') + '</button>');
+    if (mia) {
+      var s = salaDe(c.id);
+      if (s) a.push('<button class="btn ok" type="button" data-a="entrar">Entrar a la llamada' + (s.esperando ? ' (espera ' + s.esperando + ')' : '') + '</button>', '<button class="btn" type="button" data-a="fin-llamada">Terminar la llamada</button>');
+      else a.push('<button class="btn' + (c.llamada === 'pedida' ? ' acento' : '') + '" type="button" data-a="llamada">Abrir llamada</button>');
+      a.push(CV.permiso_hasta && new Date(CV.permiso_hasta) > new Date() ? '<button class="btn" type="button" data-a="cuenta">Ver su cuenta</button>' : '<button class="btn" type="button" data-a="permiso"' + (CV.permiso_pedido && !CV.permiso_hasta ? ' disabled' : '') + '>' + (CV.permiso_pedido && !CV.permiso_hasta ? 'Esperando su permiso' : 'Pedir permiso para ver su cuenta') + '</button>');
+      a.push('<button class="btn" type="button" data-a="regresar">Regresar a la fila</button>', '<button class="btn" type="button" data-a="terminar">Terminar</button>');
+    }
+    $('cv-acc').innerHTML = a.join('');
+    // los avisos de arriba: lo que pide el cliente y cómo va
+    var av = [];
+    if (c.estado === 'fila') av.push('<div class="nota">Espera en la fila desde hace ' + esc(dur(c.espera_seg)) + '. ' + (puede() ? 'Tómala para contestarle.' : '') + '</div>');
+    if (c.llamada === 'pedida' && mia) av.push('<div class="nota">El cliente pide hablar por llamada (ya lo intentó tres veces por chat). Pica «Abrir llamada»: entras tú y, cuando él pida entrar, lo admites.</div>');
+    var sl = salaDe(c.id); if (sl && sl.esperando && mia) av.push('<div class="nota bien">El cliente espera para entrar a la llamada: pica «Entrar a la llamada» y luego «Admitir».</div>');
+    if (c.estado === 'atencion' && !mia) av.push('<div class="nota info">La atiende ' + esc(c.agente_nombre || 'alguien del equipo') + '.</div>');
+    if (CV.permiso_hasta && new Date(CV.permiso_hasta) > new Date()) av.push('<div class="nota info">El cliente dio permiso de ver su cuenta (solo ver) hasta el ' + esc(fechaHora(CV.permiso_hasta)) + '. Cada vez que la ves queda anotado.</div>');
+    $('cv-av').innerHTML = av.join('');
+    var cajaM = $('cv-msgs'), abajo = cajaM.scrollHeight - cajaM.scrollTop - cajaM.clientHeight < 80;
+    cajaM.innerHTML = (CV.mensajes || []).map(mensaje).join('')
+      + ((CV.bitacora || []).length ? '<details class="bit"><summary>Bitácora (' + CV.bitacora.length + ')</summary><ul>' + CV.bitacora.map(function (b) { return '<li>' + esc(cuando(b.cuando)) + ' · ' + esc(b.quien) + ' ' + esc(b.que) + '</li>'; }).join('') + '</ul></details>' : '');
+    if (abajo || cajaM.dataset.id !== String(c.id)) cajaM.scrollTop = cajaM.scrollHeight;
+    cajaM.dataset.id = String(c.id);
+    $('cv-pie').hidden = !mia;
+    // ‹ N de M ›
+    var nv = $('cv-nav').querySelector('.ppl-nav'); if (nv) nv.parentNode.removeChild(nv);
+    if (window.PROFASE_PILAS && COLA.indexOf(c.id) >= 0) PROFASE_PILAS.nav({ ids: COLA, id: c.id, abre: function (x) { abre(x); }, antes: $('cv-cierra'), clase: 'btn' });
+  }
+  async function abre(id, callado) {
+    id = Number(id);
+    try {
+      var d = await qc('conv', { id: id });
+      if (!d.conv) { if (!callado) error('Esa conversación ya no está.'); return; }
+      CV = d; ABIERTO = id;
+      if (COLA.indexOf(id) < 0) COLA = LISTA.map(function (c) { return c.id; });
+      $('conv').hidden = false; pintaConv(); pinta();
+      if (!callado && !$('cv-pie').hidden) { try { $('cv-txt').focus({ preventScroll: true }); } catch (e) {} }
+    } catch (e) { if (!callado) error(falla(e)); }
+  }
+  function cierraConv() { $('conv').hidden = true; CV = null; ABIERTO = null; pinta(); }
+  $('cv-cierra').onclick = cierraConv;
+  $('conv').addEventListener('click', function (e) { if (e.target === $('conv')) cierraConv(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('conv').hidden && $('dlg').hidden) cierraConv(); });
+  async function manda() {
+    var t = $('cv-txt').value.trim(); if (!t || !CV) return;
+    $('cv-manda').disabled = true;
+    try { CV = await qc('contesta', { id: CV.conv.id, texto: t }); $('cv-txt').value = ''; pintaConv(); carga().catch(function () {}); }
+    catch (e) { error(falla(e)); }
+    $('cv-manda').disabled = false;
+  }
+  $('cv-manda').onclick = manda;
+  $('cv-txt').addEventListener('keydown', function (e) {
+    var tec = P && P.conTeclado ? P.conTeclado() : true;
+    if (e.key === 'Enter' && !e.shiftKey && tec) { e.preventDefault(); manda(); }
+  });
+  $('cv-txt').addEventListener('focus', function () { try { P.escribiendo('qchat', true); } catch (e) {} });
+  $('cv-txt').addEventListener('blur', function () { try { P.escribiendo('qchat', false); } catch (e) {} });
+  $('cv-acc').addEventListener('click', async function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b || !CV) return;
+    var a = b.getAttribute('data-a'), id = CV.conv.id;
+    try {
+      if (a === 'tomar') { await toma(id); return; }
+      b.disabled = true;
+      if (a === 'terminar') { pregunta('¿Se resolvió lo que pedía?', 'Al terminar, al cliente le sale «¿Te sirvió?» y te toca el siguiente de la fila.',
+          [['Sí, se resolvió', 'ok', async function () { CV = await qc('cerrar', { id: id, resuelta: true }); fin(); }],
+           ['No se resolvió', 'peligro', async function () { CV = await qc('cerrar', { id: id, resuelta: false }); fin(); }]]); b.disabled = false; return; }
+      if (a === 'regresar') { pregunta('¿La regresas a la fila?', 'La toma la siguiente persona disponible; al cliente le decimos que lo pasamos con alguien más.',
+          [['Sí, regresarla', 'acento', async function () { await qc('regresar', { id: id }); cierraConv(); await carga(); }]]); b.disabled = false; return; }
+      if (a === 'permiso') { CV = await qc('permiso', { id: id }); avisa('Le pedimos su permiso. Cuando diga que sí, aquí sale «Ver su cuenta».'); }
+      else if (a === 'cuenta') { var c = await qc('cuenta', { id: id }); cuenta(c); }
+      else if (a === 'llamada') {
+        var d = await qc('llamada', { id: id });
+        CV = d; try { SALAS = await rpc('qchat_salas_mias') || []; } catch (x) {}
+        if (d.sala) entra(d.sala);
+        avisa('Abriste la llamada: ya estás adentro. Cuando el cliente pida entrar, pica «Admitir».');
+      }
+      else if (a === 'entrar') { var s = salaDe(id); if (s) entra(s.sala); }
+      else if (a === 'fin-llamada') { CV = await qc('llamada', { id: id, fin: true }); try { SALAS = await rpc('qchat_salas_mias') || []; } catch (x) {} avisa('Terminaste la llamada. La conversación sigue por chat.'); }
+      pintaConv(); carga().catch(function () {});
+    } catch (x) { error(falla(x)); }
+    b.disabled = false;
+  });
+  function fin() { cierraConv(); carga().catch(function () {}); avisa('Listo. Si estás disponible, te toca el siguiente de la fila.'); }
+  // la llamada es la del portal (la misma de las reuniones con gente de fuera): se abre en la vista de arriba
+  function entra(sala) {
+    try { var L = window.top.__llamada; if (L && L.sala) { L.sala(sala); return; } } catch (e) {}
+    error('Abre Q Chat desde el menú del portal para entrar a la llamada.');
+  }
+  function pregunta(t, txt, botones) {
+    var c = $('dlg-c');
+    c.innerHTML = '<h3 id="dlg-t">' + esc(t) + '</h3><p>' + esc(txt) + '</p><div class="acciones"><button class="btn" type="button" data-i="-1">Cancelar</button>'
+      + botones.map(function (b, i) { return '<button class="btn ' + b[1] + '" type="button" data-i="' + i + '">' + esc(b[0]) + '</button>'; }).join('') + '</div>';
+    $('dlg').hidden = false;
+    c.onclick = async function (e) {
+      var b = e.target.closest('button[data-i]'); if (!b) return;
+      var i = +b.getAttribute('data-i'); if (i < 0) { $('dlg').hidden = true; return; }
+      b.disabled = true;
+      try { await botones[i][2](); $('dlg').hidden = true; } catch (x) { error(falla(x)); b.disabled = false; }
+    };
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) $('dlg').hidden = true; });
+  function cuenta(d) {
+    var q = d.cuenta || {}, u = d.usuario || {}, l = function (a, t) { return (a || []).length ? '<h4>' + t + '</h4><ul>' + a.map(function (r) { return '<li>' + esc(r.razon || '') + ' · ' + esc(r.rfc || '') + '</li>'; }).join('') + '</ul>' : ''; };
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">Su cuenta (solo ver)</h3><dl class="dl"><dt>Cuenta</dt><dd>' + esc(q.nombre || '') + (q.activa === false ? ' ' + chip('Suspendida', 'mal') : '') + '</dd>'
+      + '<dt>Sistemas</dt><dd>' + ['contabilita', 'facturita', 'nominita'].filter(function (k) { return q[k]; }).map(chipSis).join(' ') + '</dd>'
+      + '<dt>Usuario</dt><dd>' + esc(u.nombre || '') + ' · ' + esc(u.usuario || '') + '</dd><dt>Permiso hasta</dt><dd>' + esc(fechaHora(d.permiso_hasta)) + '</dd></dl>'
+      + l(d.rfc_contabilita, 'RFC en Contabilita') + l(d.rfc_facturita, 'RFC en Facturita') + l(d.empresas_nominita, 'Empresas en Nominita')
+      + '<p class="mut">Cada vez que la ves queda en la bitácora de la conversación.</p><div class="acciones"><button class="btn" type="button" data-i="-1">Cerrar</button></div>';
+    $('dlg').hidden = false;
+    $('dlg-c').onclick = function (e) { if (e.target.closest('button[data-i]')) $('dlg').hidden = true; };
+  }
+
+  /* ---------- Eficiencia ---------- */
+  function periodo() {
+    var v = $('e-per').value, h = hoyMty(), d = new Date(h + 'T12:00:00');
+    if (v === 'mes') return { desde: h.slice(0, 8) + '01', hasta: h };
+    if (v === 'ant') { var a = new Date(d.getFullYear(), d.getMonth() - 1, 1), b = new Date(d.getFullYear(), d.getMonth(), 0); var f = function (x) { return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }; return { desde: f(a), hasta: f(b) }; }
+    var n = Number(v) || 30, x = new Date(d.getTime() - (n - 1) * 86400000);
+    return { desde: x.toISOString().slice(0, 10), hasta: h };
+  }
+  async function cargaEfi() {
+    var p = periodo(); if ($('e-sis').value) p.sistema = $('e-sis').value;
+    MET = await qc('metricas', { f: p });
+    pintaEfi();
+  }
+  function pintaEfi() {
+    var m = MET || {}, tot = m.total || 0;
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('e-pilas'), {
+      titulo: 'Eficiencia · del ' + fecha(m.desde) + ' al ' + fecha(m.hasta),
+      pilas: [
+        { k: 't', t: 'Conversaciones', n: tot, tono: 'azul' },
+        { k: 'ia', t: 'Resolvió la asistente sola', n: m.solo_ia || 0, d: pct(m.solo_ia || 0, tot) + ' del total', tono: 'verde' },
+        { k: 'p', t: 'Atendió una persona', n: m.con_persona || 0, d: pct(m.con_persona || 0, tot) + ' del total', tono: 'violeta' },
+        { k: 'l', t: 'Con llamada', n: m.llamadas || 0, tono: 'azul' },
+        { k: 'e', t: 'Espera promedio en la fila', n: 0, txt: dur(m.espera_prom), d: 'la más larga: ' + dur(m.espera_max), tono: 'ambar' },
+        { k: 'r', t: 'Atendidos en menos de 2 min', n: 0, txt: pct(m.menos_2min || 0, m.atendidas || 0), d: F0.format(m.menos_2min || 0) + ' de ' + F0.format(m.atendidas || 0), tono: 'verde' },
+        { k: 'pr', t: 'Primera respuesta', n: 0, txt: dur(m.primera_prom), d: 'desde que lo toman', tono: 'azul' },
+        { k: 'du', t: 'Duración con persona', n: 0, txt: dur(m.duracion_prom), tono: 'gris' },
+        { k: 's', t: 'Les sirvió', n: 0, txt: pct(m.bien || 0, m.calificadas || 0), d: F0.format(m.calificadas || 0) + ' calificaron · la asistente ' + pct(m.bien_ia || 0, m.calificadas_ia || 0), tono: 'verde' },
+        { k: 'sr', t: 'Sin resolver', n: m.sin_resolver || 0, tono: 'rojo' },
+        { k: 'fh', t: 'Llegaron fuera de horario', n: m.fuera_horario || 0, tono: 'gris' }
+      ],
+      alPicar: function () {}
+    });
+    $('e-ag').innerHTML = (m.por_agente || []).map(function (a) {
+      return '<tr><td data-e="Quién"><b>' + esc(a.nombre || a.agente) + '</b></td><td data-e="Atendió" class="der num">' + F0.format(a.n) + '</td><td data-e="Espera" class="der num">' + dur(a.esp) + '</td>'
+        + '<td data-e="1.ª respuesta" class="der num">' + dur(a.pri) + '</td><td data-e="Duración" class="der num">' + dur(a.dur) + '</td><td data-e="Les sirvió" class="der num">' + pct(a.bien, a.calif) + '</td><td data-e="Llamadas" class="der num">' + F0.format(a.llamadas || 0) + '</td></tr>';
+    }).join('') || '<tr><td colspan="7" class="mut">Nadie ha atendido en este periodo.</td></tr>';
+    $('e-sisl').innerHTML = (m.por_sistema || []).map(function (s) {
+      return '<tr><td data-e="Sistema">' + chipSis(s.sistema) + '</td><td data-e="Conversaciones" class="der num">' + F0.format(s.n) + '</td><td data-e="Resolvió la asistente"><span class="num">' + F0.format(s.solo_ia) + '</span> <span class="mut">(' + pct(s.solo_ia, s.n) + ')</span><span class="barrita"><i style="width:' + (s.n ? s.solo_ia / s.n * 100 : 0).toFixed(1) + '%"></i></span></td><td data-e="Con persona" class="der num">' + F0.format(s.con_persona) + '</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="mut">Sin conversaciones en este periodo.</td></tr>';
+    $('e-temas').innerHTML = (m.temas || []).map(function (t) { return '<tr><td data-e="Tema">' + esc(t.tema) + '</td><td data-e="Veces" class="der num">' + F0.format(t.n) + '</td></tr>'; }).join('') || '<tr><td colspan="2" class="mut">Sin temas todavía.</td></tr>';
+    $('e-dias').innerHTML = (m.por_dia || []).slice().reverse().map(function (x) { return '<tr><td data-e="Día">' + esc(fecha(x.dia)) + '</td><td data-e="Total" class="der num">' + F0.format(x.n) + '</td><td data-e="Sola la asistente" class="der num">' + F0.format(x.ia) + '</td><td data-e="Con persona" class="der num">' + F0.format(x.persona) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="mut">Sin conversaciones en este periodo.</td></tr>';
+  }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1].slice(0, 3) + ' ' + p[0]; }
+  function pestana(t) {
+    TAB = t;
+    $('tab-conv').setAttribute('aria-selected', t === 'conv' ? 'true' : 'false'); $('tab-efi').setAttribute('aria-selected', t === 'efi' ? 'true' : 'false');
+    $('p-conv').hidden = t !== 'conv'; $('p-efi').hidden = t !== 'efi';
+    if (t === 'efi') cargaEfi().catch(function (e) { error(falla(e)); });
+  }
+  $('tab-conv').onclick = function () { pestana('conv'); };
+  $('tab-efi').onclick = function () { pestana('efi'); };
+  $('e-per').onchange = function () { cargaEfi().catch(function (e) { error(falla(e)); }); };
+  $('e-sis').onchange = function () { cargaEfi().catch(function (e) { error(falla(e)); }); };
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = LISTA, titulo = 'Q Chat · conversaciones';
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Conversaciones');
+      var head = ['Cliente', 'Cuenta', 'Sistema', 'Cómo va', 'Tema', 'Empezó', 'Espera en la fila (min)', 'Atendió', 'Resolvió', 'Se resolvió', 'Le sirvió', 'Llamada'];
+      ws.columns = [28, 26, 16, 18, 26, 18, 14, 22, 16, 12, 12, 12].map(function (x) { return { width: x }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' conversación' : ' conversaciones') + (Q ? ' · búsqueda: ' + Q : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (c, i) {
+        ws.getRow(f0 + 1 + i).values = [c.cliente || c.usuario || '', c.cuenta || '', SIS_TXT[c.sistema] || c.sistema, EST_TXT[c.estado] || c.estado, c.tema || '', fechaHora(c.creada),
+          c.espera_seg != null ? Math.round(c.espera_seg / 60) : '', c.agente_nombre || (c.resuelto_por === 'ia' ? 'La asistente' : ''),
+          c.resuelto_por === 'ia' ? 'La asistente' : c.resuelto_por === 'llamada' ? 'Con llamada' : c.resuelto_por ? 'Una persona' : '',
+          c.resuelta === true ? 'Sí' : c.resuelta === false ? 'No' : '', c.calificacion === 1 ? 'Sí' : c.calificacion === 0 ? 'No' : '', c.llamada ? 'Sí' : ''];
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Q Chat conversaciones ' + hoyMty() + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+  $('x-efi').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var m = MET || {}, titulo = 'Q Chat · eficiencia del ' + fecha(m.desde) + ' al ' + fecha(m.hasta);
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo);
+      function hoja(nombre, head, filas, anchos) {
+        var ws = wb.addWorksheet(nombre); ws.columns = anchos.map(function (x) { return { width: x }; });
+        var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: ['Exportado el ' + fechaHora(new Date().toISOString())] });
+        ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+        filas.forEach(function (r, i) { ws.getRow(f0 + 1 + i).values = r; });
+        if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+        MK.impresion(ws, { repetir: f0 });
+      }
+      var min = function (s) { return s == null ? '' : Math.round(s / 6) / 10; };
+      hoja('Resumen', ['Qué', 'Cuánto'], [['Conversaciones', m.total || 0], ['Resolvió la asistente sola', m.solo_ia || 0], ['Atendió una persona', m.con_persona || 0], ['Con llamada', m.llamadas || 0],
+        ['Espera promedio en la fila (min)', min(m.espera_prom)], ['Espera más larga (min)', min(m.espera_max)], ['Atendidos en menos de 2 min', m.menos_2min || 0], ['Atendidos', m.atendidas || 0],
+        ['Primera respuesta promedio (min)', min(m.primera_prom)], ['Duración promedio con persona (min)', min(m.duracion_prom)], ['Calificaron', m.calificadas || 0], ['Les sirvió', m.bien || 0],
+        ['Sin resolver', m.sin_resolver || 0], ['Llegaron fuera de horario', m.fuera_horario || 0]], [40, 14]);
+      hoja('Por persona', ['Quién', 'Atendió', 'Terminó', 'Espera (min)', '1.ª respuesta (min)', 'Duración (min)', 'Calificaron', 'Les sirvió', 'Llamadas'],
+        (m.por_agente || []).map(function (a) { return [a.nombre || a.agente, a.n, a.cerradas, min(a.esp), min(a.pri), min(a.dur), a.calif, a.bien, a.llamadas || 0]; }), [26, 10, 10, 12, 16, 14, 12, 12, 10]);
+      hoja('Por sistema', ['Sistema', 'Conversaciones', 'Resolvió la asistente', 'Con persona'], (m.por_sistema || []).map(function (s) { return [SIS_TXT[s.sistema] || s.sistema, s.n, s.solo_ia, s.con_persona]; }), [20, 16, 20, 14]);
+      hoja('Temas', ['Tema', 'Veces'], (m.temas || []).map(function (t) { return [t.tema, t.n]; }), [40, 10]);
+      hoja('Día por día', ['Día', 'Total', 'Sola la asistente', 'Con persona'], (m.por_dia || []).map(function (x) { return [x.dia, x.n, x.ia, x.persona]; }), [14, 10, 18, 14]);
+      await MK.guardar(wb, 'Q Chat eficiencia ' + (m.desde || '') + ' a ' + (m.hasta || '') + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  function como() {
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">Cómo funciona Q Chat</h3>'
+      + '<p><b>1. La asistente.</b> El cliente escribe desde su sistema (la burbuja de abajo a la derecha) y primero le contesta la asistente de Quo: dudas contables y fiscales, cómo se usa el sistema y lo que su usuario ya ve. Se le dice desde el principio que es una asistente.</p>'
+      + '<p><b>2. La fila.</b> Si después de tres intentos no le resolvió (o él lo pide), pasa a la fila por orden de llegada y ve cuántas personas tiene adelante. A quien está «Disponible» le toca el siguiente, uno a la vez: al terminar uno, le llega el que sigue. Fuera del horario se queda en la fila y se le avisa.</p>'
+      + '<p><b>3. La llamada.</b> Si tampoco por chat se resolvió en tres intentos, el cliente puede pedir llamada: quien atiende pica «Abrir llamada», entra y lo admite. Es la misma videollamada del portal, con la marca de Quo para el cliente. Ya no hay teléfono de atención.</p>'
+      + '<p><b>Su cuenta.</b> Solo con su permiso (por 24 horas y solo para ver); cada vez que se ve queda en la bitácora.</p>'
+      + '<p><b>Quién.</b> Gabriel Cavazos atiende; Héctor Daniel Nava y Fernando Cadengo supervisan (ven todo y pueden tomar cualquiera); Héctor Nava Ramos solo ve.</p>'
+      + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cerrar</button></div>';
+    $('dlg').hidden = false;
+    $('dlg-c').onclick = function (e) { if (e.target.closest('button[data-i]')) $('dlg').hidden = true; };
+  }
+
+  $('b-disp').onclick = function () { disponible(!(DATOS && DATOS.yo && DATOS.yo.disponible)); };
+  $('b-como').onclick = como;
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
+  $('f-dias').onchange = function () { if (PAG) PAG.inicio(); carga().catch(function (e) { error(falla(e)); }); };
+  $('f-sis').onchange = function () { SIS = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-est').onchange = function () { EST = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-ag').onchange = function () { AG = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { COLA = LISTA.map(function (c) { return c.id; }); abre(tr.getAttribute('data-id')); } });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); COLA = LISTA.map(function (c) { return c.id; }); abre(tr.getAttribute('data-id')); } });
+  // la campanita o el aviso chico: abre esa conversación; «fila», la pila de la fila
+  window.__qchAbre = function (que) {
+    var s = String(que || '').replace(/^ver:/, '');
+    if (!DATOS) return false;
+    if (s === 'fila') { pestana('conv'); VISTA = 'fila'; pinta(); return true; }
+    if (/^\d{1,12}$/.test(s)) { pestana('conv'); abre(s); return true; }
+    return false;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      var est = await rpc('qchat_estado');
+      if (!est || !est.ve) throw new Error('Q Chat es para quien atiende el soporte de Quo.');
+      CONSULTA = !!P.consulta || est.papel === 'consulta'; $('consulta').hidden = !CONSULTA;
+      YO = { papel: est.papel };
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'qchat.conversaciones', nombre: 'Conversaciones', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      await carga();
+      // quien se dejó «Disponible» en este equipo y no lo está en Quo (la página se recargó): se vuelve a poner
+      try { if (puede() && localStorage.getItem('profase-qch-disp') === '1' && DATOS.yo && !DATOS.yo.disponible) await disponible(true); } catch (e) {}
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  arranca();
+})();
+</script>
+</body></html>

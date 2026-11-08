@@ -13,6 +13,9 @@
   'use strict';
   if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
   if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
   var j = null;
   try {
     var x = new XMLHttpRequest();
@@ -36,6 +39,14 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
 <title>PROFASE · Videollamada</title>
+<script>
+/* Q Chat (Héctor Daniel Nava, 8-nov-2026: «que las llamadas se hagan mediante el Chat para ya usar también lo que ya tenemos
+   hecho»): con ?marca=quo es la llamada del soporte de los sistemas Quo. La abre quien atiende la conversación en el CRM
+   (qchat_sala_abre, 326_qchat.sql) y el cliente la ve dentro de la burbuja de Q Chat de su sistema. Es esta misma sala (las
+   mismas cuatro funciones del invitado y la misma llamada), con la marca de Quo y sin PROFASE en ninguna parte: el logo
+   oficial del sistema (?s=contabilita|facturita|nominita; si no, el de Sistemas Quo), siempre sobre fondo claro (opción B). */
+(function(){ if(/[?&]marca=quo(?:&|$)/.test(location.search)){ document.documentElement.setAttribute('data-marca','quo'); document.title='Quo · Llamada de soporte'; } })();
+</script>
 <link rel="icon" type="image/png" href="/img/icono-48.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <!-- Sala de PROFASE para gente de fuera (31-oct-2026, pedido de Héctor Daniel: «tener una videollamada con clientes o
@@ -109,12 +120,19 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .centro{text-align:center}
 .bt{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px}
 .pie{color:#8E9BB3;font-size:12px;text-align:center}
+/* La marca de Quo (Q Chat): sin PROFASE; fondo claro siempre, como la entrada de los sistemas Quo (opción B) */
+.marca-quo{display:none}
+html[data-marca="quo"] .marca-profase,html[data-marca="quo"] .pie{display:none!important}
+html[data-marca="quo"] .marca-quo{display:flex;flex-direction:column;align-items:center}
+html[data-marca="quo"] .marca-quo img{display:block;width:auto;height:auto;max-width:min(240px,70vw);max-height:72px}
+html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
 @media (max-width:400px){.caja{padding:18px 16px 16px}h1{font-size:19px}}
 @media (prefers-reduced-motion: reduce){.anillo{animation:none}}
 </style>
 </head>
 <body>
-<div class="marca">
+<div class="marca-quo"><img id="q-logo" alt="Quo"></div>
+<div class="marca marca-profase">
   <img class="signo" src="img/signo.png" alt="PROFASE">
   <div><div class="wm">PROFASE</div><div class="tag">Asesoría Contable, Legal y Fiscal</div></div>
 </div>
@@ -1210,12 +1228,28 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     camNo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 13.5v2A2.5 2.5 0 0 1 13 18H5a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 5 6h1M10 6h3a2.5 2.5 0 0 1 2.5 2.5v1l6-3.5v10M3 3l18 18"/></svg>'
   };
   var LIGA=String(location.hash||'').replace(/^#/,'');
+  // Q Chat: la marca de Quo (sin PROFASE). El logo sale de una lista fija (nunca de lo que traiga la liga)
+  var QUO=document.documentElement.getAttribute('data-marca')==='quo', QS=new URLSearchParams(location.search);
+  var Q_SIS=({contabilita:1,facturita:1,nominita:1})[QS.get('s')]?QS.get('s'):'';
+  var Q_LOGO={contabilita:'https://contabilita.quosistemas.com/img/quo-logo.png',facturita:'https://facturita.quosistemas.com/img/facturita-color.png',
+              nominita:'https://nominita.quosistemas.com/img/nominita-color.png','':'https://www.quosistemas.com/img/sistemasquo-color.png'};
+  var Q_NOM=String(QS.get('n')||'').replace(/[<>]/g,'').trim().slice(0,60);
+  var DE=QUO?'soporte de Quo':'PROFASE';
+  function T(p,q){ return QUO?q:p; }
+  if(QUO){
+    $('q-logo').src=Q_LOGO[Q_SIS];
+    Array.prototype.forEach.call(document.querySelectorAll('.eti'),function(x){ if(/PROFASE/.test(x.textContent)) x.textContent='Llamada de soporte de Quo'; });
+    document.querySelector('#s-espera h1').textContent='Ya avisamos a soporte de Quo';
+    document.querySelector('#s-carga p').textContent='Abriendo tu llamada…';
+    try{ document.querySelector('link[rel="icon"]').href='https://www.quosistemas.com/img/icono-48.png'; }catch(e){}
+  }
   var PL=window.PROFASE_LLAMADA, P=window.PORTAL;
   var SB=null, INFO=null, YO=null, DATA=null, micOn=true, camOn=true, prev=null, tic=null, saliendo=false;
   var CLAVE='profase-sala:'+LIGA;
 
   function seccion(id){ ['s-carga','s-msg','s-pide','s-espera'].forEach(function(s){ $(s).hidden=s!==id; }); document.querySelector('.caja').hidden=false; }
   function mensaje(t, p, botones){
+    if(QUO){ t=String(t).replace(/reunión/g,'llamada'); p=String(p||'').replace(/reunión/g,'llamada'); }   // en Q Chat es una llamada
     $('m-t').textContent=t; $('m-p').textContent=p||'';
     var bt=$('m-bt'); bt.innerHTML='';
     (botones||[]).forEach(function(b){ var x=document.createElement('button'); x.type='button'; x.className=b.pri?'pri':'sec'; x.textContent=b.t; x.onclick=b.f; if(b.pri) x.style.width='auto'; bt.appendChild(x); });
@@ -1269,7 +1303,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   };
   function espera(){
     seccion('s-espera');
-    $('e-p').textContent='En cuanto te admitan, entras a la reunión. No cierres esta página.';
+    $('e-p').textContent=T('En cuanto te admitan, entras a la reunión. No cierres esta página.','En cuanto te admitan, entras a la llamada. No cierres esta ventana.');
     clearInterval(tic); revisa(); tic=setInterval(function(){ if(!document.hidden||Date.now()%5===0) revisa(); },2000);
   }
   $('e-sale').onclick=async function(){
@@ -1292,16 +1326,16 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     var otra=[{t:'Volver a pedir entrar',pri:true,f:function(){ YO=null; muestraPide(); }}];
     if(estado==='rechazado') mensaje('No te admitieron en esta reunión','Si crees que es un error, avísale a quien te invitó.',otra);
     else if(estado==='fuera') mensaje('Te sacaron de la reunión','Ya no puedes volver a entrar con esta liga.');
-    else if(estado==='terminada') mensaje('La reunión terminó','Gracias por reunirte con PROFASE.');
-    else if(estado==='salio') mensaje('Saliste de la reunión','Gracias por reunirte con PROFASE.',otra);
-    else mensaje('La reunión terminó','Gracias por reunirte con PROFASE.');
+    else if(estado==='terminada') mensaje(T('La reunión terminó','La llamada terminó'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'));
+    else if(estado==='salio') mensaje(T('Saliste de la reunión','Saliste de la llamada'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'),otra);
+    else mensaje(T('La reunión terminó','La llamada terminó'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'));
   }
 
   /* --- ya admitido: la llamada (el mismo motor de las llamadas del portal) --- */
   var NOMBRES=function(){ return DATA||{equipo:[],admitidos:[]}; };
   function nombreDe(m){
     var d=NOMBRES();
-    if(m.e){ var x=(d.equipo||[]).filter(function(y){ return y.e===m.e; })[0]; return x?x.nombre:'PROFASE'; }
+    if(m.e){ var x=(d.equipo||[]).filter(function(y){ return y.e===m.e; })[0]; return x?x.nombre:T('PROFASE','Soporte de Quo'); }
     var z=(d.admitidos||[]).filter(function(y){ return y.g===m.g; })[0]; return z?z.nombre:'Invitado';
   }
   function fotoDe(m){ return m.e&&typeof m.f==='string'&&m.f.indexOf(SB.supabaseUrl+'/storage/v1/object/sign/fotos/')===0?m.f:''; }
@@ -1314,7 +1348,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   }
   function entra(r){
     document.querySelector('.caja').hidden=true;
-    PL.entra({id:YO.invitado,tipo:YO.cam===false?'voz':'video',titulo:r.titulo||'Reunión con PROFASE',topic:'chat:sala:'+r.canal,sb:SB,
+    PL.entra({id:YO.invitado,tipo:YO.cam===false?'voz':'video',titulo:r.titulo||T('Reunión con PROFASE','Soporte de Quo'),topic:'chat:sala:'+r.canal,sb:SB,
       pillTxt:'En reunión',colgarTxt:'Saliste de la reunión',salida:20000,sinAviso:true,
       yo:function(){ return {u:'inv',g:YO.invitado}; },
       yoG:function(){ return YO&&YO.invitado; },
@@ -1335,7 +1369,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
       cualAvatar:function(m){ return (m.e||m.g||'')+'|'+(fotoDe(m)?'f':''); },
       avatar:async function(m){ return PL.avatarDe(nombreDe(m), fotoDe(m)); },
       avatarYo:async function(){ return PL.avatarDe(YO.nombre,''); },
-      esperaTxt:function(){ return 'Conectando con PROFASE…'; },
+      esperaTxt:function(){ return 'Conectando con '+DE+'…'; },
       alEntrar:function(L){ if(YO.mic===false){ var b=L.ui.capa.querySelector('[data-mic]'); if(b) b.click(); } },
       alTerminar:function(motivo){
         if(motivo==='fuera'||motivo==='terminada'||motivo==='rechazado') return fin(motivo);
@@ -1347,17 +1381,17 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   /* --- arranque --- */
   function muestraPide(){
     $('p-tema').textContent=INFO.titulo;
-    $('p-de').innerHTML='Te invita <b>'+esc(INFO.anfitrion)+'</b> de PROFASE';
+    $('p-de').innerHTML=QUO?'Te atiende <b>'+esc(INFO.anfitrion)+'</b>, de soporte de Quo':'Te invita <b>'+esc(INFO.anfitrion)+'</b> de PROFASE';
     var h=(INFO.dia===hoy()?'Hoy':INFO.dia?dia(INFO.dia):'')+(INFO.hora?', '+INFO.hora:'');
     $('p-cuando').querySelector('span').textContent=h; $('p-cuando').hidden=!h;
-    try{ var n=localStorage.getItem('profase-sala-nombre'); if(n&&!$('p-nom').value) $('p-nom').value=n; }catch(e){}
+    try{ var n=Q_NOM||localStorage.getItem('profase-sala-nombre'); if(n&&!$('p-nom').value) $('p-nom').value=n; }catch(e){}
     $('p-nom').dispatchEvent(new Event('input'));
     $('p-entra').disabled=false; $('p-err').textContent='';
     pintaToggles(); seccion('s-pide');
   }
   async function arranca(){
     if(!/^[A-Za-z0-9_-]{32,64}$/.test(LIGA)){ mensaje('Esta liga no está completa','Revisa que la copiaste completa o pide una nueva a quien te invitó.'); return; }
-    try{ history.replaceState(null,'',location.pathname+location.hash); }catch(e){}
+    try{ history.replaceState(null,'',location.pathname+(QUO?'?marca=quo'+(Q_SIS?'&s='+Q_SIS:''):'')+location.hash); }catch(e){}
     if(!window.supabase||!P||!P.sb){ mensaje('No pudimos abrir la reunión','Revisa tu internet y vuelve a abrir la liga.',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
     // su propio cliente, siempre sin sesión (aunque en este navegador alguien tenga el portal abierto)
     SB=window.supabase.createClient(P.sb.supabaseUrl, P.sb.supabaseKey, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'profase-sala-invitado'}});
