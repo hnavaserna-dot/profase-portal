@@ -196,9 +196,10 @@
     { k: 'mul', t: 'Multinacional', d: 'La comercializadora: cotizaciones, facturas, su banco y las comisiones.', subs: [
       { k: 'mul-cotizador', v: 'mulq', t: 'Cotizador', d: 'Captura un pedido con el costo del proveedor; el CRM pone el precio.' },   // 143_multinacional_cotizador.sql
       { k: 'mul-cotizaciones', v: 'mulc', t: 'Cotizaciones', d: 'Cada pedido con su costo, su precio, su estatus y su factura.' },
-      { k: 'mul-facturas', v: 'mulf', t: 'Facturas', d: 'Sube el XML y el PDF de cada factura; por cobrar y cobradas.' },
+      { k: 'mul-facturas', v: 'mulf', t: 'Facturas', d: 'Las facturas de Multinacional (llegan del SAT o se suben): por cobrar y cobradas.' },
       { k: 'mul-estado', v: 'mule', t: 'Estado de cuenta', d: 'El banco de Multinacional y cada depósito de Juárez contra su factura.' },
-      { k: 'mul-comisiones', v: 'mulk', t: 'Comisiones', d: 'La comisión de lo que paga Juárez, por mes: entregado y por entregar.' }] },
+      { k: 'mul-comisiones', v: 'mulk', t: 'Comisiones', d: 'La comisión de lo que paga Juárez, por mes: entregado y por entregar.' },
+      { k: 'mul-pagos', v: 'mulp', t: 'Pagos', d: 'Lo que pagó cada cliente y a qué facturas se aplicó, como en Tesorería › Pagos.' }] },   // 332_multinacional_pagos.sql
     // SuperConta (29-oct-2026, pedido de Fernando Cadengo; quién lo usa lo decide Daniel): preguntas en palabras sobre la
     // empresa. El 31-oct-2026 Héctor Daniel pidió que el menú se llame «SuperConta (IA)» (antes «Ayuda»).
     { k: 'ayuda', t: 'SuperConta (IA)', d: 'La inteligencia artificial del portal: pregúntale lo que quieras saber de la empresa.', subs: [
