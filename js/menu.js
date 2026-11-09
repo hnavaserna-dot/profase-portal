@@ -138,6 +138,8 @@
       { k: 'centauro-canceladas', v: 'cenc', t: 'Canceladas SAT vs QUO', d: 'Lo cancelado en el SAT que sigue activo en QUO, por cliente.' },
       { k: 'centauro-69b', v: 'cen9', t: 'Lista 69-B', d: 'Los proveedores de cada cliente en la lista 69-B del SAT.' },
       { k: 'centauro-ficha', v: 'cens', t: 'Ficha contra el SAT', d: 'La constancia de situación fiscal de cada cliente contra su ficha: qué se corrigió y qué revisar.' },
+      // 331 (9-nov-2026; petición de Frank, Héctor Daniel: «Sí, así es.»): la e.firma y los sellos de cada cliente contra el SAT
+      { k: 'centauro-certificados', v: 'cent', t: 'Certificados', d: 'La e.firma y los sellos de cada cliente contra el SAT: estatus, vencimiento y si coinciden con la ficha.' },
       { k: 'centauro-reportes', v: 'cenr', t: 'Reportes', d: 'Lo que sale de los XML: resumen por mes, XML Datos 4.0, Nómina 1.2, método de pago, tablero anual y pagos.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)

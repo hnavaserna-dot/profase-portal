@@ -36,7 +36,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4b9fc8cba5"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4b9fc8cba5"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/buscador.js?v=514b1d6650"></script>
 <style>
 /* Portal PROFASE · menú Multinacional (2-nov-2026, decisiones de Daniel, 12:01 a 12:20). Multinacional es una
    comercializadora de la dirección (Héctor Nava Ramos y Héctor Daniel Nava), con su propio banco; no tiene que ver con las
@@ -55,7 +55,13 @@
    proveedor; la base pone el envío (vueltas × su costo, repartido por costo), el precio ((costo + envío) × el sobrecosto
    que pone solo Héctor Daniel Nava) y los totales; la utilidad solo la ve la dirección; Eva no ve cotizaciones. La
    cotización del cliente y la nota de recibido salen en PDF con la marca de Multinacional (js/marca.js solo carga la
-   librería del PDF: PROFASE_MARCA.pdfJS). */
+   librería del PDF: PROFASE_MARCA.pdfJS).
+   ?s=pagos  Pagos (9-nov-2026, Héctor Daniel Nava, con la captura de Tesorería › Pagos: «Queremos ver esto en el menú
+   multinacional»; portal/sql/332_multinacional_pagos.sql): como Tesorería › Pagos. «Facturas disponibles» (total, abonado
+   y saldo; «Liquidar» con la fecha de arriba) y «Registro de pagos» (cada pago con su reparto; cambiar, aplicar lo que
+   falta, quitar un abono o borrar, siempre con motivo; nada se borra de verdad). Registran Eva Rangel y Héctor Daniel
+   Nava; Héctor Nava Ramos solo ve; Mónica Pedraza no ve los pagos. Las facturas que emite Multinacional entran solas del
+   SAT (Centauro) desde el 9-nov-2026 (auto_desde); las que ya estaban (las que subió Eva) no se tocaron. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -256,6 +262,16 @@ td.sel input{width:18px;height:18px}
   .card>header .acciones{width:100%}
   .k-anio{flex:1 1 auto;font-size:16px}
 }
+/* Pagos (332_multinacional_pagos.sql, 9-nov-2026): como Tesorería › Pagos */
+.liq{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.liq label{font-size:12.5px;font-weight:600;color:var(--muted)}
+.liq input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px}
+.rep input[type="number"]{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 8px;width:140px;max-width:100%;text-align:right;font-variant-numeric:tabular-nums}
+.suma{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--line);font-weight:600;overflow-wrap:anywhere}
+.suma .mal{color:var(--red)}
+.card.nuevo{box-shadow:0 0 0 3px var(--accent-soft),0 0 0 6px var(--accent);transition:box-shadow 1.2s}
+#g-lista td[data-l="Cliente"],#p-lista td[data-l="Cliente"]{min-width:200px}
+@media (max-width:700px){.liq input{font-size:16px;flex:1 1 150px}.rep input[type="number"]{width:100%;font-size:16px}#g-lista td[data-l="Cliente"],#p-lista td[data-l="Cliente"]{min-width:0}}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -266,7 +282,7 @@ td.sel input{width:18px;height:18px}
       <p id="subt">Las facturas que emite Multinacional: lo que está por cobrar y lo que ya se cobró.</p>
     </div>
   </div>
-  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-subir" hidden>Subir facturas</button><button class="btn acento" type="button" id="b-nueva" hidden>Nueva cotización</button></div>
+  <div class="acts" id="acts"><button class="btn acento" type="button" id="b-subir" hidden>Subir facturas</button><button class="btn acento" type="button" id="b-nueva" hidden>Nueva cotización</button><button class="btn acento" type="button" id="b-pago" hidden>Registrar pago</button></div>
 </div></div>
 
 <div class="wrap">
@@ -368,6 +384,30 @@ td.sel input{width:18px;height:18px}
     <p class="pie">Es el espejo del Excel del banco que lleva Eva Rangel: el CRM lo lee solo cuando cambia y nunca le escribe. La conciliación compara cada depósito de Juárez con la factura del mismo total; nada se marca solo.</p>
   </section>
 
+  <!-- ===== Pagos (Eva Rangel y la dirección; 332_multinacional_pagos.sql, 9-nov-2026): como Tesorería › Pagos ===== -->
+  <section id="s-pag" hidden>
+    <div class="tabs" role="tablist" aria-label="Pagos">
+      <button type="button" role="tab" data-pt="fac" aria-selected="true">Facturas disponibles <span class="cta" id="n-pfac">0</span></button>
+      <button type="button" role="tab" data-pt="reg" aria-selected="false">Registro de pagos <span class="cta" id="n-preg">0</span></button>
+    </div>
+    <div class="mul-bar" id="pag-bar"><input type="search" id="p-q" placeholder="Buscar folio, cliente, RFC o referencia" aria-label="Buscar folio, cliente, RFC o referencia"><span id="p-rango" class="mul-fe"><label class="mut" for="p-desde">Del</label> <input type="date" id="p-desde"> <label class="mut" for="p-hasta">al</label> <input type="date" id="p-hasta"></span></div>
+    <div id="p-pilas"></div>
+    <div class="card" id="p-fac">
+      <header><div><h2 id="p-h">Con saldo</h2><div class="sub" id="p-sub"></div></div></header>
+      <div class="liq" id="p-liq" hidden><label for="p-liqf">Fecha del pago para «Liquidar»</label><input type="date" id="p-liqf"></div>
+      <div class="tabla"><table class="resp"><thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th class="monto">Total</th><th class="monto">Abonado</th><th class="monto">Saldo</th><th><span class="sr">Liquidar</span></th></tr></thead>
+        <tbody id="p-lista"></tbody></table></div>
+      <nav class="pgn" id="p-pag" aria-label="Páginas de facturas"></nav>
+    </div>
+    <div class="card" id="p-reg" hidden>
+      <header><div><h2 id="g-h">Registro de pagos</h2><div class="sub" id="g-sub"></div></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Pago</th><th>Cliente</th><th>Fecha</th><th class="monto">Monto</th><th class="monto">Aplicado</th><th class="monto">Por aplicar</th></tr></thead>
+        <tbody id="g-lista"></tbody></table></div>
+      <nav class="pgn" id="g-pag" aria-label="Páginas de pagos"></nav>
+    </div>
+    <p class="pie" id="p-pie">Saldo = el total de la factura menos lo aplicado de pagos y notas de crédito. Si ya tiene abono y le quedan menos de $10, cuenta como pagada. Un pago solo se reparte entre facturas del mismo cliente; lo que no se aplica queda «por aplicar». Nada se borra: un pago borrado o un abono quitado se quedan con quién lo hizo y por qué.</p>
+  </section>
+
   <!-- ===== Comisiones (Eva, Héctor Nava Ramos y Héctor Daniel Nava; nunca Mónica). Reorganizada el 5-nov-2026 (Héctor
        Daniel Nava: «re organiza esto; con pilas y demás… para que sea más entendible»): arriba las pilas (js/pilas.js, la
        pieza común), y abajo tres vistas: Por mes (un renglón por mes con su avance), Entregas de efectivo (una por fecha
@@ -406,6 +446,7 @@ td.sel input{width:18px;height:18px}
 <div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div>
   <p id="pq-t"></p>
   <div class="campo" id="pq-f-c" hidden><label for="pq-f">¿Qué día entró el dinero al banco?</label><input type="date" id="pq-f"></div>
+  <div class="campo" id="pq-s-c" hidden><label for="pq-s">¿Cómo se pagó?</label><select id="pq-s"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="cheque">Cheque</option><option value="tarjeta">Tarjeta</option><option value="otro">Otro</option></select></div>
   <div class="campo" id="pq-x-c" hidden><label for="pq-x" id="pq-x-l">Nota</label><textarea id="pq-x" maxlength="300"></textarea></div>
   <div class="msg mal" id="pq-m" hidden></div>
   <div class="acciones"><button class="btn" type="button" id="pq-no">Cancelar</button><button class="btn acento" type="button" id="pq-si">Sí</button></div>
@@ -419,6 +460,7 @@ td.sel input{width:18px;height:18px}
   var EST = null, CONSULTA = false, DATOS = null, FT = 'por', FAC = [], V = null;
   var ESTATUS = { por_cobrar: ['Por cobrar', 'ojo'], cobrada: ['Cobrada', 'ok'], cancelada: ['Cancelada', 'mal'] };
   var METODO = { PUE: 'Pago en una sola exhibición (PUE)', PPD: 'Pago en parcialidades o diferido (PPD)' };
+  var FORMAS = { transferencia: 'Transferencia', efectivo: 'Efectivo', cheque: 'Cheque', tarjeta: 'Tarjeta', nota_credito: 'Nota de crédito', otro: 'Otro' };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
@@ -441,6 +483,7 @@ td.sel input{width:18px;height:18px}
       $('pq-f-c').hidden = !op.fecha; $('pq-f').value = op.fecha || ''; $('pq-f').max = HOY;
       $('pq-f-c').querySelector('label').textContent = op.fechaL || '¿Qué día entró el dinero al banco?';
       $('pq-x-c').hidden = !op.nota; $('pq-x').value = ''; $('pq-x-l').textContent = op.nota || 'Nota';
+      $('pq-s-c').hidden = !op.forma; $('pq-s').value = op.forma || 'transferencia';
       $('pq-m').hidden = true; $('pregunta').hidden = false;
       try { (op.fecha ? $('pq-f') : op.nota ? $('pq-x') : $('pq-no')).focus(); } catch (e) {}
       function fin(v) { $('pregunta').hidden = true; $('pq-si').onclick = $('pq-no').onclick = null; res(v); }
@@ -448,7 +491,7 @@ td.sel input{width:18px;height:18px}
         var f = $('pq-f').value, x = $('pq-x').value.trim();
         if (op.fecha && (!f || f > HOY)) { $('pq-m').textContent = 'Escribe la fecha (hoy o antes).'; $('pq-m').hidden = false; return; }
         if (op.notaObligada && x.length < 5) { $('pq-m').textContent = 'Escribe el motivo.'; $('pq-m').hidden = false; return; }
-        fin({ fecha: f, nota: x });
+        fin({ fecha: f, nota: x, forma: $('pq-s').value });
       };
       $('pq-no').onclick = function () { fin(null); };
       pregunta.cierra = function () { fin(null); };
@@ -461,7 +504,7 @@ td.sel input{width:18px;height:18px}
     // uno por uno: ‹ › junto a «Cerrar» (la factura o la cotización de la lista que se tenía a la vista)
     if (CUR && NAV && NAV.length > 1 && NAV.indexOf(CUR) >= 0 && window.PROFASE_PILAS)
       PROFASE_PILAS.nav({ ids: NAV, id: CUR, antes: $('v-cierra'), clase: 'btn chico', abre: function (k) {
-        var id = +String(k).slice(1); if (k.charAt(0) === 'f') ficha(id); else fichaCot(id);
+        var id = +String(k).slice(1); if (k.charAt(0) === 'f') ficha(id); else if (k.charAt(0) === 'p') fichaPago(id); else fichaCot(id);
       } });
     try { $('v-cierra').focus(); } catch (e) {}
   }
@@ -534,7 +577,12 @@ td.sel input{width:18px;height:18px}
   function estatusDe(f) {
     if (f.tipo === 'E') return chip('Nota de crédito', 'az');
     var e = ESTATUS[f.estatus] || [f.estatus, ''];
-    if (f.estatus === 'por_cobrar') return chip(e[0], f.dias > 30 ? 'mal' : 'ojo') + (f.dias != null ? '<div class="mut">' + (f.dias <= 0 ? 'de hoy' : 'hace ' + f.dias + (f.dias === 1 ? ' día' : ' días')) + '</div>' : '');
+    if (f.estatus === 'por_cobrar') {
+      var ab = !!(EST && EST.pagos) && Number(f.abonado || 0) > 0.005;   // Abonada: solo a quien ve los pagos (Mónica no)
+      return chip(ab ? 'Abonada' : e[0], ab ? 'na' : f.dias > 30 ? 'mal' : 'ojo')
+        + '<div class="mut">' + (ab ? 'le quedan ' + esc(dinero(f.saldo, f.moneda)) + (f.dias != null ? ' · ' : '') : '')
+        + (f.dias != null ? (f.dias <= 0 ? 'de hoy' : 'hace ' + f.dias + (f.dias === 1 ? ' día' : ' días')) : '') + '</div>';
+    }
     if (f.estatus === 'cobrada') return chip(e[0], e[1]) + (f.cobrada_el ? '<div class="mut">el ' + esc(fecha(f.cobrada_el)) + '</div>' : '');
     return chip(e[0], e[1]);
   }
@@ -553,7 +601,7 @@ td.sel input{width:18px;height:18px}
         + '<td data-l="Cliente" class="w"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.rfc) + '</div></td>'
         + '<td data-l="Total" class="monto">' + esc(dinero(f.tipo === 'E' ? -f.total : f.total, f.moneda)) + '</td>'
         + '<td data-l="Estatus">' + estatusDe(f) + '</td>'
-        + '<td data-l="">' + (cobra && f.estatus === 'por_cobrar' && f.tipo === 'I' ? '<button class="btn chico bien" type="button" data-cobrada="' + f.id + '">Cobrada</button>' : '') + '</td></tr>';
+        + '<td data-l="">' + (cobra && f.estatus === 'por_cobrar' && f.tipo === 'I' ? '<button class="btn chico bien" type="button" data-cobrada="' + f.id + '" title="Registra un pago por lo que le queda">Liquidar</button>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="6" class="vacio">' + (FT === 'por' ? 'No hay facturas por cobrar.' : 'No hay facturas con lo que escogiste.') + '</td></tr>';
   }
   async function carga() {
@@ -576,29 +624,40 @@ td.sel input{width:18px;height:18px}
   });
 
   /* ---------- Eva: cobrada / de regreso; la dirección: cancelada ---------- */
-  async function cobrada(id) {
-    var f = FAC.filter(function (x) { return x.id === id; })[0]; if (!f) return;
-    var r = await pregunta({ texto: '¿Ya se cobró la factura ' + folio(f) + ' de ' + f.cliente + ' por ' + dinero(f.total, f.moneda) + '?', si: 'Sí, cobrada', fecha: HOY, nota: 'Nota (opcional: banco, referencia…)' });
+  // «Liquidar» (antes «Cobrada»; 332): un pago por lo que le queda a la factura, con el día en que entró el dinero y cómo
+  // se pagó. Queda en el registro de pagos. La fecha de arriba de «Facturas disponibles» es la que viene puesta.
+  function deFac(id) { return FAC.concat(PFAC).filter(function (x) { return x.id === id; })[0]; }
+  async function cobrada(id, f0) {
+    var f = f0 || deFac(id); if (!f) return;
+    var s = Number(f.saldo != null ? f.saldo : f.total);
+    var fe = (!$('s-pag').hidden && $('p-liqf').value) || HOY;
+    var r = await pregunta({ texto: '¿Ya se pagó completa la factura ' + folio(f) + ' de ' + f.cliente + '? Se registra un pago por lo que le queda: ' + dinero(s, f.moneda) + '.',
+      si: 'Sí, liquidar', fecha: fe > HOY ? HOY : fe, forma: 'transferencia', nota: 'Referencia o nota (opcional: banco, referencia…)' });
     if (!r) return;
-    try { await rpc('mul_cobrada', { p_id: id, p_fecha: r.fecha, p_nota: r.nota }); avisa('Listo: la factura ' + folio(f) + ' quedó cobrada.'); cierra(); await carga(); }
+    try { await rpc('mul_liquidar', { p_id: id, p_fecha: r.fecha, p_forma: r.forma, p_nota: r.nota }); avisa('Listo: la factura ' + folio(f) + ' quedó pagada.'); cierra(); await recarga(); }
     catch (e) { error(falla(e)); }
   }
   async function porCobrar(id) {
-    var r = await pregunta({ texto: '¿Regresar esta factura a «Por cobrar»?', si: 'Sí, regresarla', nota: '¿Por qué?', notaObligada: true });
+    var r = await pregunta({ texto: '¿Regresar esta factura a «Por cobrar»? Se le quitan sus abonos; nada se borra: quedan en el registro de pagos con el motivo.', si: 'Sí, regresarla', nota: '¿Por qué?', notaObligada: true });
     if (!r) return;
-    try { await rpc('mul_por_cobrar', { p_id: id, p_motivo: r.nota }); avisa('Listo: regresó a «Por cobrar».'); cierra(); await carga(); }
+    try { await rpc('mul_por_cobrar', { p_id: id, p_motivo: r.nota }); avisa('Listo: regresó a «Por cobrar».'); cierra(); await recarga(); }
     catch (e) { error(falla(e)); }
   }
   async function cancela(id) {
     var r = await pregunta({ texto: '¿Marcar esta factura como cancelada en el SAT? Ya no cuenta para lo por cobrar ni lo facturado.', si: 'Sí, cancelada', nota: 'Motivo', notaObligada: true });
     if (!r) return;
-    try { await rpc('mul_cancela', { p_id: id, p_motivo: r.nota }); avisa('Listo: quedó cancelada.'); cierra(); await carga(); }
+    try { await rpc('mul_cancela', { p_id: id, p_motivo: r.nota }); avisa('Listo: quedó cancelada.'); cierra(); await recarga(); }
     catch (e) { error(falla(e)); }
+  }
+  async function recarga() {
+    if (!$('s-fac').hidden) await carga();
+    else if (!$('s-pag').hidden) await cargaPagos();
   }
 
   /* ---------- la ficha de una factura ---------- */
   function hora(t) { try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t)); } catch (e) { return String(t || ''); } }
-  var QUE = { subida: 'Se subió', cobrada: 'Cobrada', por_cobrar: 'Regresó a «Por cobrar»', cancelada: 'Cancelada' };
+  var QUE = { subida: 'Se subió', cobrada: 'Cobrada', por_cobrar: 'Regresó a «Por cobrar»', cancelada: 'Cancelada',
+              pago: 'Pago', quita: 'Abono quitado', pago_borrado: 'Pago borrado', pdf: 'PDF' };
   async function ficha(id) {
     CUR = 'f' + id;
     var f;
@@ -607,22 +666,36 @@ td.sel input{width:18px;height:18px}
     var dl = [['Folio fiscal', f.uuid], ['Fecha', fecha(f.fecha)], ['Cliente', f.cliente], ['RFC', f.rfc], ['Uso del CFDI', f.uso],
       ['Método de pago', METODO[f.metodo] || f.metodo], ['Forma de pago', f.forma], ['Moneda', f.moneda],
       ['Subtotal', dinero(f.subtotal, f.moneda)], ['Impuestos', dinero(f.impuestos, f.moneda)], ['Total', dinero(f.total, f.moneda)],
-      ['Subió', (f.subida_por || '') + ' · ' + hora(f.subida)]];
-    if (f.estatus === 'cobrada' && f.tipo === 'I') dl.push(['Cobrada', fecha(f.cobrada_el) + (f.cobrada_por ? ' · ' + f.cobrada_por : '') + (f.cobrada_nota ? ' · ' + f.cobrada_nota : '')]);
+      [f.origen === 'sat' ? 'Llegó' : 'Subió', (f.subida_por || '') + ' · ' + hora(f.subida)]];
+    var vePagos = Array.isArray(f.pagos);   // la base solo los manda a quien ve los pagos (la dirección y Eva)
+    if (vePagos && f.tipo === 'I' && f.estatus !== 'cancelada') dl.push(['Abonado', dinero(f.abonado, f.moneda)], ['Saldo', dinero(f.saldo, f.moneda)]);
+    if (vePagos && f.tipo === 'E' && f.estatus !== 'cancelada') dl.push(['Por aplicar', dinero(f.disponible, f.moneda)]);
+    if (f.relacionados && f.relacionados.length) dl.push(['Relacionada con', f.relacionados.map(function (u) { var x = FAC.concat(PFAC).filter(function (y) { return y.uuid === u; })[0]; return x ? folio(x) : u; }).join(', ')]);
+    if (f.estatus === 'cobrada' && f.tipo === 'I') dl.push(['Pagada', fecha(f.cobrada_el) + (f.cobrada_por ? ' · ' + f.cobrada_por : '') + (f.cobrada_nota ? ' · ' + f.cobrada_nota : '')]);
     if (f.estatus === 'cancelada') dl.push(['Cancelada', (f.cancelada_motivo || '') + (f.cancelada_en ? ' · ' + hora(f.cancelada_en) : '')]);
     var acc = '';
-    if (cobra && f.tipo === 'I' && f.estatus === 'por_cobrar') acc += '<button class="btn bien" type="button" id="f-cob">Cobrada</button>';
-    if (cobra && f.tipo === 'I' && f.estatus === 'cobrada') acc += '<button class="btn" type="button" id="f-reg">Regresar a «Por cobrar»</button>';
+    if (cobra && f.tipo === 'I' && f.estatus === 'por_cobrar') acc += '<button class="btn bien" type="button" id="f-cob">Liquidar</button>';
+    if (cobra && vePagos && f.tipo === 'I' && f.estatus === 'por_cobrar') acc += '<button class="btn" type="button" id="f-rp">Registrar un abono</button>';
+    if (cobra && vePagos && f.tipo === 'E' && Number(f.disponible || 0) > 0.005) acc += '<button class="btn" type="button" id="f-rp">Aplicar la nota de crédito</button>';
+    if (cobra && f.tipo === 'I' && Number(f.abonado || 0) > 0.005) acc += '<button class="btn" type="button" id="f-reg">Regresar a «Por cobrar»</button>';
+    var pags = vePagos ? f.pagos.map(function (p) {
+      return '<li><b>' + esc(dinero(p.monto, f.moneda)) + '</b> · ' + esc(fecha(p.fecha)) + ' · ' + esc(p.nc && f.tipo === 'I' ? 'Nota de crédito ' + p.nc : FORMAS[p.forma] || p.forma)
+        + (p.referencia ? ' · ' + esc(p.referencia) : '') + '<div class="mut">Pago #' + esc(p.pago) + ' · ' + esc(p.quien || '') + ' · <button class="lnk" type="button" data-vpago="' + p.pago + '">Ver el pago</button></div></li>';
+    }).join('') : '';
     if (canc && f.estatus !== 'cancelada') acc += '<button class="btn peligro" type="button" id="f-can">Marcar cancelada</button>';
     var bit = (f.bitacora || []).map(function (b) { return '<li><b>' + esc(QUE[b.que] || b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(hora(b.hora)) + (b.texto ? '<div class="mut">' + esc(b.texto) + '</div>' : '') + '</li>'; }).join('');
     abre(folio(f) + (f.tipo === 'E' ? ' · Nota de crédito' : ''), f.cliente + ' · ' + dinero(f.total, f.moneda),
       '<div class="sec"><h3>Estatus</h3><div class="in">' + estatusDe(f) + (acc ? '<div class="acciones" style="margin-top:10px">' + acc + '</div>' : '') + '</div></div>'
       + '<div class="sec"><h3>Archivos</h3><div class="in acciones">'
-      + (f.pdf ? '<button class="btn" type="button" id="f-ver">Ver PDF</button><button class="btn" type="button" id="f-pdf">Bajar PDF</button>' : '<span class="mut">Se subió sin PDF.</span>')
+      + (f.pdf ? '<button class="btn" type="button" id="f-ver">Ver PDF</button><button class="btn" type="button" id="f-pdf">Bajar PDF</button>'
+         : '<span class="mut">' + (f.origen === 'sat' ? 'Llegó del SAT sin PDF.' + (EST && EST.sube && !CONSULTA ? ' Para agregárselo, súbelo con «Subir facturas» junto con su XML.' : '') : 'Se subió sin PDF.') + '</span>')
       + '<button class="btn" type="button" id="f-xml">Bajar XML</button></div><div class="in mut" style="padding-top:0">Salen tal cual se subieron.</div></div>'
       + '<div class="sec"><h3>Datos de la factura</h3><div class="in"><div class="dl">' + dl.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1] || '—') + '</span>'; }).join('') + '</div></div></div>'
+      + (vePagos ? '<div class="sec"><h3>' + (f.tipo === 'E' ? 'Dónde se aplicó' : 'Sus pagos') + '</h3><div class="in"><ul class="bit">' + (pags || '<li class="mut">' + (f.tipo === 'E' ? 'Todavía no se aplica.' : 'Todavía no tiene pagos.') + '</li>') + '</ul></div></div>' : '')
       + '<div class="sec"><h3>Bitácora</h3><div class="in"><ul class="bit">' + (bit || '<li class="mut">Sin movimientos.</li>') + '</ul></div></div>');
-    if ($('f-cob')) $('f-cob').onclick = function () { cobrada(f.id); };
+    if ($('f-cob')) $('f-cob').onclick = function () { cobrada(f.id, f); };
+    if ($('f-rp')) $('f-rp').onclick = function () { abrePago(f.tipo === 'E' ? { rfc: f.rfc, nc: f.id } : { rfc: f.rfc, factura: f.id }); };
+    $('v-cuerpo').querySelectorAll('[data-vpago]').forEach(function (b) { b.onclick = function () { NAV = null; fichaPago(+b.getAttribute('data-vpago')); }; });
     if ($('f-reg')) $('f-reg').onclick = function () { porCobrar(f.id); };
     if ($('f-can')) $('f-can').onclick = function () { cancela(f.id); };
     if ($('f-xml')) $('f-xml').onclick = function () { bajaXml(f, this); };
@@ -709,7 +782,7 @@ td.sel input{width:18px;height:18px}
             if (up.error) throw new Error('La factura quedó, pero su PDF no se subió: vuelve a intentar con el PDF');
             await rpc('mul_factura_pdf_listo', { p_id: f.id });
           }
-          s.est = 'ok'; s.msg = 'Lista: ' + folio(f) + ' · ' + f.cliente + ' · ' + dinero(f.total, f.moneda); bien++;
+          s.est = 'ok'; s.msg = (f.ya_estaba ? 'Ya estaba (llegó del SAT); se le agregó su PDF: ' : 'Lista: ') + folio(f) + ' · ' + f.cliente + ' · ' + dinero(f.total, f.moneda); bien++;
         } catch (e) { s.est = 'mal'; s.msg = falla(e); }
         pintaSubir();
       }
@@ -1475,17 +1548,378 @@ td.sel input{width:18px;height:18px}
     setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
   }
 
+  /* ============ Pagos (332_multinacional_pagos.sql, 9-nov-2026): como Tesorería › Pagos ============
+     «Facturas disponibles»: lo que tiene saldo (con lo abonado), lo pagado y las notas de crédito por aplicar, con
+     «Liquidar» y la fecha de arriba. «Registro de pagos»: cada pago con su reparto; en su ficha, «Aplicar lo que falta»,
+     «Quitar» un abono, «Cambiar» y «Borrar» (siempre con motivo). «Registrar pago»: el cliente, la fecha, cómo se pagó, el
+     monto y a qué facturas se aplica («Repartir solo», de la más vieja). Registran Eva Rangel y Héctor Daniel Nava
+     (mul_puede('cobra')); Héctor Nava Ramos solo ve. Todo por las funciones mul_pago*. */
+  var PT = 'fac', PFAC = [], PAGOS = [], PRES = {}, PFT = 'saldo', GFT = '', PGP = null, PGG = null, FIRP = '', FIRG = '', CLIS = null, RP = null, RPB = null;
+  function barrasPag() {
+    if (barrasPag.ya || !window.PROFASE_PILAS) return; barrasPag.ya = true;
+    PROFASE_PILAS.barra($('pag-bar'), { caja: true, buscar: $('p-q'), periodo: [$('p-rango')] });
+    if (window.PROFASE_PAGINAS) {
+      PGP = PROFASE_PAGINAS.crea({ donde: $('p-pag'), clave: 'mul-pagos-facturas', nombre: 'Facturas', arriba: $('p-fac'), cambio: function () { pintaPag(); } });
+      PGG = PROFASE_PAGINAS.crea({ donde: $('g-pag'), clave: 'mul-pagos', nombre: 'Pagos', arriba: $('p-reg'), cambio: function () { pintaPag(); } });
+    }
+  }
+  function ponPT(t) {
+    PT = t;
+    document.querySelectorAll('[data-pt]').forEach(function (x) { x.setAttribute('aria-selected', x.getAttribute('data-pt') === t ? 'true' : 'false'); });
+    $('p-fac').hidden = t !== 'fac'; $('p-reg').hidden = t !== 'reg';
+  }
+  async function cargaPagos() {
+    var d = $('p-desde').value || null, h = $('p-hasta').value || null;
+    var r = await Promise.all([rpc('mul_facturas_lista', { p: { desde: d, hasta: h } }), rpc('mul_pagos_lista', { p: { desde: d, hasta: h, borrados: true } })]);
+    PFAC = (r[0] && r[0].facturas) || []; PAGOS = (r[1] && r[1].pagos) || []; PRES = (r[1] && r[1].resumen) || {};
+    pintaPag();
+  }
+  function facDe(f) {   // qué pila le toca a cada factura
+    if (f.estatus === 'cancelada') return '';
+    if (f.tipo === 'E') return Number(f.disponible || 0) > 0.005 ? 'nc' : '';
+    if (f.estatus === 'por_cobrar') return Number(f.abonado || 0) > 0.005 ? 'abono' : 'saldo';
+    return 'pag';
+  }
+  function pagFiltro() {
+    var q = norm($('p-q').value);
+    return PFAC.filter(function (f) {
+      var k = facDe(f); if (!k) return false;
+      if (PFT === 'saldo' && k !== 'saldo' && k !== 'abono') return false;
+      if (PFT === 'abono' && k !== 'abono') return false;
+      if (PFT === 'pag' && k !== 'pag') return false;
+      if (PFT === 'nc' && k !== 'nc') return false;
+      return !q || norm(folio(f) + ' ' + f.cliente + ' ' + f.rfc + ' ' + f.uuid).indexOf(q) >= 0;
+    });
+  }
+  function regFiltro() {
+    var q = norm($('p-q').value), ini = HOY.slice(0, 8) + '01';
+    return PAGOS.filter(function (p) {
+      if (GFT === 'borr') { if (!p.borrado) return false; }
+      else if (p.borrado) return false;
+      if (GFT === 'apl' && !(Number(p.por_aplicar || 0) > 0.005)) return false;
+      if (GFT === 'mes' && (p.fecha < ini || p.forma === 'nota_credito')) return false;
+      return !q || norm('#' + p.id + ' ' + p.cliente + ' ' + p.rfc + ' ' + (p.referencia || '') + ' ' + (p.nc_folio || '') + ' '
+        + (p.aplicaciones || []).map(function (a) { return a.folio; }).join(' ')).indexOf(q) >= 0;
+    });
+  }
+  function pintaPilas() {
+    if (!window.PROFASE_PILAS) return;
+    var cobra = !!(EST && EST.cobra) && !CONSULTA, cu = { saldo: 0, abono: 0, pag: 0, nc: 0 }, su = { saldo: 0, abono: 0, nc: 0 };
+    PFAC.forEach(function (f) {
+      var k = facDe(f); if (!k) return; cu[k]++;
+      if (f.moneda !== 'MXN') return;
+      if (k === 'saldo' || k === 'abono') su.saldo += Number(f.saldo || 0);
+      if (k === 'abono') su.abono += Number(f.saldo || 0);
+      if (k === 'nc') su.nc += Number(f.disponible || 0);
+    });
+    var conSaldo = cu.saldo + cu.abono, nReg = PAGOS.filter(function (p) { return !p.borrado; }).length;
+    $('n-pfac').textContent = String(conSaldo); $('n-preg').textContent = String(nReg);
+    if (PT === 'fac') PROFASE_PILAS.pinta($('p-pilas'), {
+      titulo: 'Tu trabajo · lo que se cobra',
+      meta: 'Pagos de este mes ' + dinero(PRES.pagos_mes_total) + ' (' + (PRES.pagos_mes || 0) + ')',
+      pilas: [
+        { k: 'saldo', t: 'Con saldo', n: conSaldo, d: dinero(su.saldo), tono: 'naranja', on: PFT === 'saldo', tag: cobra && conSaldo ? 'Te toca' : '' },
+        { k: 'abono', t: 'Con abono', n: cu.abono, d: cu.abono ? 'les quedan ' + dinero(su.abono) : 'ninguna a medias', tono: 'ambar', on: PFT === 'abono' },
+        { k: 'pag', t: 'Pagadas', n: cu.pag, d: 'con las fechas que escojas', tono: 'verde', on: PFT === 'pag' },
+        { k: 'nc', t: 'Notas de crédito', n: cu.nc, d: cu.nc ? dinero(su.nc) + ' por aplicar' : 'nada por aplicar', tono: 'gris', on: PFT === 'nc' }],
+      alPicar: function (k) { PFT = PFT === k && k !== 'saldo' ? 'saldo' : k; pintaPag(); },
+      boton: cobra && conSaldo ? { t: 'Revisar las que tienen saldo', n: conSaldo, alPicar: function () {
+        PFT = 'saldo'; pintaPag();
+        var L = pintaPag.L || []; if (!L.length) return;
+        NAV = L.map(function (f) { return 'f' + f.id; }); ficha(L[0].id); } } : null
+    });
+    else PROFASE_PILAS.pinta($('p-pilas'), {
+      titulo: 'Tu trabajo · los pagos',
+      meta: nReg + (nReg === 1 ? ' pago' : ' pagos') + ' con las fechas que escogiste',
+      pilas: [
+        { k: 'mes', t: 'Pagos de este mes', n: PRES.pagos_mes || 0, d: dinero(PRES.pagos_mes_total), tono: 'verde', on: GFT === 'mes' },
+        { k: 'apl', t: 'Por aplicar', n: PRES.por_aplicar || 0, d: PRES.por_aplicar ? dinero(PRES.por_aplicar_total) + ' sin factura' : 'todo aplicado', tono: 'naranja', on: GFT === 'apl', tag: cobra && PRES.por_aplicar ? 'Te toca' : '' },
+        { k: 'borr', t: 'Borrados', n: PRES.borrados || 0, d: 'se quedan con su motivo', tono: 'gris', on: GFT === 'borr' }],
+      alPicar: function (k) { GFT = GFT === k ? '' : k; pintaPag(); },
+      boton: cobra && PRES.por_aplicar ? { t: 'Revisar los por aplicar', n: PRES.por_aplicar, alPicar: function () {
+        GFT = 'apl'; pintaPag();
+        var L = pintaPag.L || []; if (!L.length) return;
+        NAV = L.map(function (p) { return 'p' + p.id; }); fichaPago(L[0].id); } } : null
+    });
+  }
+  function pintaPag() {
+    barrasPag(); pintaPilas();
+    var cobra = !!(EST && EST.cobra) && !CONSULTA;
+    if (PT === 'fac') {
+      var L = pagFiltro(), T = { saldo: 'Con saldo', abono: 'Con abono', pag: 'Pagadas', nc: 'Notas de crédito por aplicar' };
+      var viejo = PFT === 'saldo' || PFT === 'abono';
+      L = L.slice().sort(function (a, b) { var x = a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.id - b.id; return viejo ? x : -x; });
+      var suma = 0; L.forEach(function (f) { if (f.moneda === 'MXN') suma += f.tipo === 'E' ? Number(f.disponible || 0) : Number(PFT === 'pag' ? f.total : f.saldo || 0); });
+      $('p-h').textContent = T[PFT];
+      $('p-sub').textContent = L.length + (L.length === 1 ? ' factura' : ' facturas') + ' · ' + dinero(suma) + (viejo ? ' por cobrar · la más vieja arriba' : '');
+      $('p-liq').hidden = !(cobra && viejo);
+      pintaPag.L = L;
+      var firma = [PT, PFT, $('p-q').value, $('p-desde').value, $('p-hasta').value].join('|'), V2 = pag(PGP, firma, FIRP, L); FIRP = firma;
+      $('p-lista').innerHTML = L.length ? V2.map(function (f) {
+        var nc = f.tipo === 'E';
+        return '<tr class="click" data-id="' + f.id + '"><td data-l="Folio" class="nw">' + esc(folio(f)) + (nc ? '<div class="mut">Nota de crédito</div>' : '') + '</td>'
+          + '<td data-l="Cliente" class="w"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.rfc) + '</div></td>'
+          + '<td data-l="Fecha" class="nw">' + esc(fecha(f.fecha)) + '</td>'
+          + '<td data-l="Total" class="monto">' + esc(dinero(f.total, f.moneda)) + '</td>'
+          + '<td data-l="' + (nc ? 'Aplicado' : 'Abonado') + '" class="monto">' + esc(dinero(nc ? Number(f.total) - Number(f.disponible || 0) : f.abonado, f.moneda)) + '</td>'
+          + '<td data-l="' + (nc ? 'Por aplicar' : 'Saldo') + '" class="monto"><b>' + esc(dinero(nc ? f.disponible : f.saldo, f.moneda)) + '</b>' + (!nc && f.estatus === 'cobrada' && f.cobrada_el ? '<div class="mut">pagada el ' + esc(fecha(f.cobrada_el)) + '</div>' : '') + '</td>'
+          + '<td data-l="">' + (cobra && !nc && f.estatus === 'por_cobrar' ? '<button class="btn chico bien" type="button" data-liq="' + f.id + '">Liquidar</button>' : '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="vacio">' + (viejo ? 'No hay facturas con saldo.' : 'No hay facturas con lo que escogiste.') + '</td></tr>';
+    } else {
+      var G = regFiltro(), TG = { '': 'Registro de pagos', mes: 'Pagos de este mes', apl: 'Pagos por aplicar', borr: 'Pagos borrados' };
+      $('g-h').textContent = TG[GFT];
+      var tot = 0; G.forEach(function (p) { tot += Number(p.monto || 0); });
+      $('g-sub').textContent = G.length + (G.length === 1 ? ' pago' : ' pagos') + ' · ' + dinero(tot) + ' · el más nuevo arriba';
+      pintaPag.L = G;
+      var firmaG = [PT, GFT, $('p-q').value, $('p-desde').value, $('p-hasta').value].join('|'), V3 = pag(PGG, firmaG, FIRG, G); FIRG = firmaG;
+      $('g-lista').innerHTML = G.length ? V3.map(function (p) {
+        var ap = (p.aplicaciones || []).map(function (a) { return a.folio; }).join(', ');
+        return '<tr class="click" data-pago="' + p.id + '"><td data-l="Pago" class="nw"><span><b>#' + esc(p.id) + '</b> · ' + esc(p.forma === 'nota_credito' ? 'Nota ' + (p.nc_folio || '') : FORMAS[p.forma] || p.forma)
+          + (p.borrado ? ' ' + chip('Borrado', 'mal') : '') + '</span>' + (ap ? '<div class="mut">' + esc(ap) + '</div>' : '') + '</td>'
+          + '<td data-l="Cliente" class="w"><span class="rs">' + esc(p.cliente) + '</span><div class="mut">' + esc(p.rfc) + (p.referencia ? ' · ' + esc(p.referencia) : '') + '</div></td>'
+          + '<td data-l="Fecha" class="nw">' + esc(fecha(p.fecha)) + '</td>'
+          + '<td data-l="Monto" class="monto">' + esc(dinero(p.monto)) + '</td>'
+          + '<td data-l="Aplicado" class="monto">' + esc(dinero(p.aplicado)) + '</td>'
+          + '<td data-l="Por aplicar" class="monto">' + (Number(p.por_aplicar || 0) > 0.005 ? '<span class="falta">' + esc(dinero(p.por_aplicar)) + '</span>' : esc(dinero(0))) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="vacio">No hay pagos con lo que escogiste.</td></tr>';
+    }
+  }
+  document.querySelectorAll('[data-pt]').forEach(function (b) {
+    b.onclick = function () { ponPT(b.getAttribute('data-pt')); pintaPag(); };
+  });
+  $('p-q').addEventListener('input', function () { if (!$('s-pag').hidden) pintaPag(); });
+  ['p-desde', 'p-hasta'].forEach(function (id) { $(id).addEventListener('change', function () { cargaPagos().catch(function (e) { error(falla(e)); }); }); });
+  $('p-lista').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-liq]');
+    if (b) { e.stopPropagation(); cobrada(+b.getAttribute('data-liq')); return; }
+    var tr = e.target.closest('tr[data-id]'); if (tr) { NAV = (pintaPag.L || []).map(function (f) { return 'f' + f.id; }); ficha(+tr.getAttribute('data-id')); }
+  });
+  $('g-lista').addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-pago]'); if (tr) { NAV = (pintaPag.L || []).map(function (p) { return 'p' + p.id; }); fichaPago(+tr.getAttribute('data-pago')); }
+  });
+
+  /* ---------- la ficha de un pago ---------- */
+  var QUEP = { alta: 'Se registró', aplica: 'Aplicó', quita: 'Quitó un abono', cambio: 'Cambio', borra: 'Se borró' };
+  var ORIGEN = { captura: 'Registrar pago', liquidar: 'Liquidar', antes: 'Marcada «Cobrada» antes del registro de pagos' };
+  async function fichaPago(id) {
+    CUR = 'p' + id;
+    var p;
+    try { p = await rpc('mul_pago', { p_id: id }); } catch (e) { error(falla(e)); return; }
+    var cobra = !!(EST && EST.cobra) && !CONSULTA && !p.borrado;
+    var dl = [['Fecha', fecha(p.fecha)], ['Cliente', p.cliente], ['RFC', p.rfc], ['Monto', dinero(p.monto)],
+      ['Cómo se pagó', p.forma === 'nota_credito' ? 'Nota de crédito ' + (p.nc_folio || '') : FORMAS[p.forma] || p.forma],
+      ['Referencia', p.referencia], ['Se registró con', ORIGEN[p.origen] || p.origen], ['Registró', (p.creado_por || '') + ' · ' + hora(p.creado)],
+      ['Aplicado', dinero(p.aplicado)], ['Por aplicar', dinero(p.por_aplicar)]];
+    if (p.borrado) dl.push(['Borrado', (p.borrado_por || '') + ' · ' + hora(p.borrado_en) + (p.borrado_motivo ? ' · ' + p.borrado_motivo : '')]);
+    var aps = (p.aplicaciones || []).map(function (a) {
+      return '<tr><td data-l="Factura"><button class="lnk" type="button" data-vfac="' + a.factura + '">' + esc(a.folio || 'Sin folio') + '</button><div class="mut">' + esc(fecha(a.fecha)) + '</div></td>'
+        + '<td data-l="Total" class="monto">' + esc(dinero(a.total)) + '</td><td data-l="Aplicado" class="monto"><b>' + esc(dinero(a.monto)) + '</b></td>'
+        + '<td data-l="">' + (cobra ? '<button class="btn chico peligro" type="button" data-quita="' + a.apl + '">Quitar</button>' : '') + '</td></tr>';
+    }).join('');
+    var qts = (p.quitadas || []).map(function (q) { return '<li><b>' + esc(q.folio) + '</b> · ' + esc(dinero(q.monto)) + ' · ' + esc(q.quien || '') + ' · ' + esc(hora(q.cuando)) + (q.motivo ? '<div class="mut">' + esc(q.motivo) + '</div>' : '') + '</li>'; }).join('');
+    var bit = (p.bitacora || []).map(function (b) { return '<li><b>' + esc(QUEP[b.que] || b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(hora(b.hora)) + (b.texto ? '<div class="mut">' + esc(b.texto) + '</div>' : '') + '</li>'; }).join('');
+    var acc = '';
+    if (cobra && Number(p.por_aplicar || 0) > 0.005) acc += '<button class="btn acento" type="button" id="pp-apl">Aplicar lo que falta</button>';
+    if (cobra) acc += '<button class="btn" type="button" id="pp-cam">Cambiar</button><button class="btn peligro" type="button" id="pp-bor">Borrar el pago</button>';
+    abre('Pago #' + p.id + (p.borrado ? ' · Borrado' : ''), p.cliente + ' · ' + dinero(p.monto) + ' · ' + fecha(p.fecha),
+      (acc ? '<div class="acciones">' + acc + '</div>' : '')
+      + '<div class="sec"><h3>El pago</h3><div class="in"><div class="dl">' + dl.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1] || '—') + '</span>'; }).join('') + '</div></div></div>'
+      + '<div class="sec"><h3>A qué facturas se aplicó</h3>' + (aps ? '<div class="tabla"><table class="resp"><thead><tr><th>Factura</th><th class="monto">Total</th><th class="monto">Aplicado</th><th><span class="sr">Quitar</span></th></tr></thead><tbody>' + aps + '</tbody></table></div>' : '<div class="in mut">Todavía no se aplica a ninguna factura.</div>') + '</div>'
+      + (qts ? '<div class="sec"><h3>Abonos quitados</h3><div class="in"><ul class="bit">' + qts + '</ul></div></div>' : '')
+      + '<div class="sec"><h3>Bitácora</h3><div class="in"><ul class="bit">' + (bit || '<li class="mut">Sin movimientos.</li>') + '</ul></div></div>');
+    $('v-cuerpo').querySelectorAll('[data-vfac]').forEach(function (b) { b.onclick = function () { NAV = null; ficha(+b.getAttribute('data-vfac')); }; });
+    $('v-cuerpo').querySelectorAll('[data-quita]').forEach(function (b) {
+      b.onclick = async function () {
+        var r = await pregunta({ texto: '¿Quitar este abono? La factura vuelve a tener ese saldo y el dinero queda «por aplicar» en este pago. Nada se borra.', si: 'Sí, quitarlo', nota: '¿Por qué?', notaObligada: true });
+        if (!r) return;
+        try { await rpc('mul_pago_quita', { p_apl: +b.getAttribute('data-quita'), p_motivo: r.nota }); avisa('Listo: se quitó el abono.'); await recarga(); fichaPago(p.id); }
+        catch (e) { error(falla(e)); }
+      };
+    });
+    if ($('pp-apl')) $('pp-apl').onclick = function () { abrePago({ pago: p }); };
+    if ($('pp-cam')) $('pp-cam').onclick = function () { cambiaPago(p); };
+    if ($('pp-bor')) $('pp-bor').onclick = async function () {
+      var r = await pregunta({ texto: '¿Borrar el pago #' + p.id + ' de ' + p.cliente + ' por ' + dinero(p.monto) + '? Sus facturas vuelven a tener ese saldo. Se queda en el registro como «Borrado», con el motivo.', si: 'Sí, borrarlo', nota: '¿Por qué?', notaObligada: true });
+      if (!r) return;
+      try { await rpc('mul_pago_borra', { p_pago: p.id, p_motivo: r.nota }); avisa('Listo: se borró el pago #' + p.id + '.'); cierra(); await recarga(); }
+      catch (e) { error(falla(e)); }
+    };
+  }
+  function cambiaPago(p) {
+    var nc = p.forma === 'nota_credito';
+    var formas = Object.keys(FORMAS).filter(function (k) { return nc ? k === 'nota_credito' : k !== 'nota_credito'; });
+    abre('Cambiar el pago #' + p.id, p.cliente,
+      '<div class="sec"><h3>Lo que cambia</h3><div class="in"><div class="campos">'
+      + '<div class="campo"><label for="cp-f">Fecha</label><input type="date" id="cp-f" value="' + esc(p.fecha) + '" max="' + HOY + '"></div>'
+      + '<div class="campo"><label for="cp-m">Monto</label><input type="number" id="cp-m" step="0.01" min="0.01" inputmode="decimal" value="' + esc(p.monto) + '"></div>'
+      + '<div class="campo"><label for="cp-s">Cómo se pagó</label><select id="cp-s"' + (nc ? ' disabled' : '') + '>' + formas.map(function (k) { return '<option value="' + k + '"' + (k === p.forma ? ' selected' : '') + '>' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="cp-r">Referencia</label><input type="text" id="cp-r" maxlength="300" value="' + esc(p.referencia || '') + '"></div>'
+      + '<div class="campo ancho"><label for="cp-x">¿Por qué se cambia?</label><textarea id="cp-x" maxlength="300"></textarea></div>'
+      + '</div><p class="mut" style="margin:10px 0 0">El monto no puede quedar abajo de lo ya aplicado (' + esc(dinero(p.aplicado)) + '): primero quita un abono.</p>'
+      + '<div class="msg mal" id="cp-msg" hidden role="alert" style="margin-top:10px"></div>'
+      + '<div class="acciones" style="margin-top:12px;justify-content:flex-end"><button class="btn" type="button" id="cp-no">Cancelar</button><button class="btn acento" type="button" id="cp-si">Guardar el cambio</button></div></div></div>');
+    $('cp-no').onclick = function () { fichaPago(p.id); };
+    $('cp-si').onclick = async function () {
+      var x = $('cp-x').value.trim(), m = $('cp-msg');
+      if (x.length < 5) { m.textContent = 'Escribe por qué se cambia.'; m.hidden = false; return; }
+      this.disabled = true;
+      try {
+        await rpc('mul_pago_edita', { p_pago: p.id, p: { fecha: $('cp-f').value, monto: $('cp-m').value, forma: $('cp-s').value, referencia: $('cp-r').value, motivo: x } });
+        avisa('Listo: se cambió el pago #' + p.id + '.'); await recarga(); fichaPago(p.id);
+      } catch (e) { m.textContent = falla(e); m.hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- Registrar pago (o aplicar lo que le falta a uno) ---------- */
+  function uuidDe(id) { var x = FAC.concat(PFAC).filter(function (y) { return y.id === id; })[0]; return x ? x.uuid : ''; }
+  function idDeUuid(u) { var x = FAC.concat(PFAC).filter(function (y) { return y.uuid === u; })[0]; return x ? x.id : null; }
+  function cent(n) { return Math.round(Number(n || 0) * 100) / 100; }
+  async function abrePago(pre) {
+    pre = pre || {};
+    var ap = pre.pago || null;   // con un pago: «Aplicar lo que falta» (no se captura otro pago)
+    if (!ap && !CLIS) { try { CLIS = await rpc('mul_clientes'); } catch (e) { error(falla(e)); return; } }
+    CUR = null; NAV = null; RP = null;
+    abre(ap ? 'Aplicar el pago #' + ap.id : 'Registrar pago', ap ? ap.cliente + ' · le quedan ' + dinero(ap.por_aplicar) + ' por aplicar' : 'Lo que pagó un cliente y a qué facturas se aplica',
+      (ap ? '' : '<div class="sec"><h3>El pago</h3><div class="in"><div class="campos">'
+        + '<div class="campo ancho"><label for="rp-cli-in">Cliente</label><div id="rp-cli"></div></div>'
+        + '<div class="campo"><label for="rp-f">¿Qué día entró el dinero?</label><input type="date" id="rp-f" value="' + HOY + '" max="' + HOY + '"></div>'
+        + '<div class="campo"><label for="rp-s">¿Cómo se pagó?</label><select id="rp-s">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '">' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
+        + '<div class="campo ancho" id="rp-nc-c" hidden><label for="rp-nc">¿Qué nota de crédito?</label><select id="rp-nc"></select></div>'
+        + '<div class="campo"><label for="rp-m">Monto</label><input type="number" id="rp-m" step="0.01" min="0.01" inputmode="decimal" placeholder="0.00"></div>'
+        + '<div class="campo"><label for="rp-r">Referencia (opcional)</label><input type="text" id="rp-r" maxlength="300" placeholder="Banco, folio del depósito…"></div>'
+        + '</div></div></div>')
+      + '<div class="sec"><h3>A qué facturas se aplica</h3><div class="in" style="padding-bottom:0"><div class="acciones"><button class="btn" type="button" id="rp-rep">Repartir solo (de la más vieja)</button><button class="btn" type="button" id="rp-lim">Limpiar</button></div></div>'
+      + '<div id="rp-fac"><div class="in mut">' + (ap ? 'Cargando…' : 'Primero escoge el cliente.') + '</div></div><div class="suma" id="rp-suma"></div></div>'
+      + '<div class="msg mal" id="rp-msg" hidden role="alert"></div>'
+      + '<div class="acciones" style="justify-content:flex-end"><button class="btn" type="button" id="rp-no">Cancelar</button><button class="btn acento" type="button" id="rp-si">' + (ap ? 'Aplicar' : 'Guardar el pago') + '</button></div>');
+    $('rp-no').onclick = function () { if (ap) fichaPago(ap.id); else cierra(); };
+    $('rp-rep').onclick = function () { reparte(); };
+    $('rp-lim').onclick = function () { $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) { x.value = ''; }); suma(); };
+    $('rp-si').onclick = function () { guardaPago(ap); };
+    if (ap) { try { await cargaCli(ap.rfc, {}); RP.pago = ap; suma(); } catch (e) { error(falla(e)); } return; }
+    RPB = window.PROFASE_BUSCA ? PROFASE_BUSCA.crea({
+      donde: $('rp-cli'), id: 'rp-cli-in', varios: false, lista: 'al-buscar',
+      opciones: (CLIS || []).map(function (c) { return { v: c.rfc, t: c.cliente, nota: c.rfc + (c.con_saldo ? ' · ' + c.con_saldo + ' por cobrar' : ''), buscar: c.rfc }; }),
+      valor: pre.rfc ? [pre.rfc] : [], marcador: 'Escribe parte del nombre o el RFC', vacio: 'No hay clientes con eso',
+      cambio: function (v) { cargaCli(v[0] || '', {}).catch(function (e) { error(falla(e)); }); }
+    }) : null;
+    $('rp-s').onchange = function () { ponNc(); };
+    $('rp-nc').onchange = function () { ponNc(true); };
+    $('rp-m').addEventListener('input', suma);
+    try { await cargaCli(pre.rfc || '', pre); } catch (e) { error(falla(e)); }
+  }
+  async function cargaCli(rfc, pre) {
+    RP = rfc ? await rpc('mul_pago_facturas', { p_rfc: rfc }) : null;
+    var L = (RP && RP.facturas) || [];
+    $('rp-fac').innerHTML = !rfc ? '<div class="in mut">Primero escoge el cliente.</div>'
+      : L.length ? '<div class="tabla"><table class="resp rep"><thead><tr><th>Factura</th><th class="monto">Total</th><th class="monto">Le queda</th><th class="monto">Aplicar</th></tr></thead><tbody>'
+        + L.map(function (f) {
+          return '<tr><td data-l="Factura"><b>' + esc(f.folio || 'Sin folio') + '</b><div class="mut">' + esc(fecha(f.fecha)) + (Number(f.abonado || 0) > 0.005 ? ' · abonado ' + esc(dinero(f.abonado)) : '') + '</div></td>'
+            + '<td data-l="Total" class="monto">' + esc(dinero(f.total)) + '</td><td data-l="Le queda" class="monto">' + esc(dinero(f.saldo)) + '</td>'
+            + '<td data-l="Aplicar" class="monto"><input type="number" step="0.01" min="0" inputmode="decimal" data-f="' + f.id + '" data-max="' + cent(f.saldo) + '" aria-label="Aplicar a ' + esc(f.folio || 'la factura') + '" placeholder="0.00"></td></tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="in mut">Este cliente no tiene facturas con saldo: el pago queda «por aplicar».</div>';
+    $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) { x.addEventListener('input', suma); });
+    if ($('rp-nc')) {
+      var N = (RP && RP.notas) || [];
+      $('rp-nc').innerHTML = N.map(function (n) { return '<option value="' + n.id + '">' + esc((n.folio || 'Sin folio') + ' · ' + fecha(n.fecha) + ' · le quedan ' + dinero(n.disponible)) + '</option>'; }).join('');
+      var op = $('rp-s').querySelector('option[value="nota_credito"]'); op.disabled = !N.length;
+      if (!N.length && $('rp-s').value === 'nota_credito') $('rp-s').value = 'transferencia';
+      if (pre && pre.nc && N.some(function (n) { return n.id === pre.nc; })) { $('rp-s').value = 'nota_credito'; $('rp-nc').value = String(pre.nc); }
+      ponNc(!!(pre && pre.nc));
+    }
+    if (pre && pre.factura) {
+      var x = $('rp-fac').querySelector('input[data-f="' + pre.factura + '"]');
+      if (x) { x.value = x.getAttribute('data-max'); if ($('rp-m') && !$('rp-m').value) $('rp-m').value = x.value; }
+    }
+    suma();
+  }
+  function notaSel() { var N = (RP && RP.notas) || [], v = +($('rp-nc') && $('rp-nc').value); return N.filter(function (n) { return n.id === v; })[0] || null; }
+  function ponNc(cambio) {
+    if (!$('rp-nc-c')) return;
+    var nc = $('rp-s').value === 'nota_credito'; $('rp-nc-c').hidden = !nc;
+    var n = nc ? notaSel() : null;
+    if (n && cambio) {
+      $('rp-m').value = cent(n.disponible).toFixed(2);
+      // si la nota trae su factura relacionada (en su XML), se le aplica a esa
+      var rel = (n.relacionados || []).map(idDeUuid).filter(function (x) { return x; });
+      $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) { x.value = ''; });
+      var queda = cent(n.disponible);
+      rel.forEach(function (fid) {
+        var x = $('rp-fac').querySelector('input[data-f="' + fid + '"]'); if (!x || queda <= 0) return;
+        var m = Math.min(queda, Number(x.getAttribute('data-max'))); x.value = m.toFixed(2); queda = cent(queda - m);
+      });
+    }
+    suma();
+  }
+  function tope() { return $('rp-m') ? cent($('rp-m').value) : RP && RP.pago ? cent(RP.pago.por_aplicar) : 0; }
+  function reparte() {
+    var queda = tope();
+    if (!(queda > 0)) { var m = $('rp-msg'); m.textContent = $('rp-m') ? 'Primero escribe el monto del pago.' : 'A este pago no le queda nada por aplicar.'; m.hidden = false; return; }
+    $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) {
+      var v = Math.min(queda, Number(x.getAttribute('data-max'))); v = v > 0 ? cent(v) : 0;
+      x.value = v > 0 ? v.toFixed(2) : ''; queda = cent(queda - v);
+    });
+    suma();
+  }
+  function aplicaciones() {
+    var L = [];
+    $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) { var m = cent(x.value); if (m > 0) L.push({ factura: +x.getAttribute('data-f'), monto: m }); });
+    return L;
+  }
+  function suma() {
+    var s = 0, mal = false;
+    $('rp-fac').querySelectorAll('input[data-f]').forEach(function (x) { var m = cent(x.value); s += m; if (m > Number(x.getAttribute('data-max')) + 0.005 || m < 0) mal = true; });
+    s = cent(s);
+    var tp = tope(), resto = cent(tp - s);
+    $('rp-msg').hidden = true;
+    $('rp-suma').innerHTML = '<span>Aplicas ' + esc(dinero(s)) + ' de ' + esc(dinero(tp)) + '</span>'
+      + (mal ? '<span class="mal">Una factura lleva más de lo que le queda</span>' : resto < -0.005 ? '<span class="mal">Repartes más que el pago</span>'
+        : resto > 0.005 ? '<span class="falta">Quedan ' + esc(dinero(resto)) + ' por aplicar</span>' : '<span>Todo aplicado</span>');
+  }
+  async function guardaPago(ap) {
+    var m = $('rp-msg'), b = $('rp-si'), L = aplicaciones();
+    function no(t) { m.textContent = t; m.hidden = false; }
+    var s = cent(L.reduce(function (a, x) { return a + x.monto; }, 0));
+    if (ap) {
+      if (!L.length) return no('Escribe cuánto le toca a cada factura (o pica «Repartir solo»).');
+      if (s > cent(ap.por_aplicar) + 0.005) return no('A este pago solo le quedan ' + dinero(ap.por_aplicar) + ' por aplicar.');
+    } else {
+      var rfc = RPB ? (RPB.valor()[0] || '') : '';
+      if (!rfc) return no('Escoge el cliente que pagó.');
+      var f = $('rp-f').value, mo = cent($('rp-m').value), fo = $('rp-s').value;
+      if (!f || f > HOY) return no('Escribe el día en que entró el dinero (hoy o antes).');
+      if (!(mo > 0)) return no('Escribe cuánto se pagó.');
+      if (s > mo + 0.005) return no('Repartes ' + dinero(s) + ' y el pago es de ' + dinero(mo) + '.');
+      if (fo === 'nota_credito' && !notaSel()) return no('Escoge la nota de crédito.');
+      if (!L.length && !(await pregunta({ texto: 'El pago no se aplica a ninguna factura: queda «por aplicar» para aplicarlo después. ¿Lo guardo así?', si: 'Sí, guardarlo así' }))) return;
+    }
+    b.disabled = true; cierra.ocupado = true;
+    try {
+      var r;
+      if (ap) r = await rpc('mul_pago_aplica', { p_pago: ap.id, p_aplicaciones: L });
+      else r = await rpc('mul_pago_guarda', { p: { fecha: $('rp-f').value, rfc: RPB.valor()[0], monto: cent($('rp-m').value), forma: $('rp-s').value,
+        nc: $('rp-s').value === 'nota_credito' ? (notaSel() || {}).id : null, referencia: $('rp-r').value, aplicaciones: L } });
+      cierra.ocupado = false;
+      avisa(ap ? 'Listo: se aplicó el pago #' + ap.id + '.' : 'Listo: quedó el pago #' + r.id + ' de ' + r.cliente + ' por ' + dinero(r.monto) + '.');
+      CLIS = null; await recarga(); fichaPago(r.id);
+    } catch (e) { cierra.ocupado = false; b.disabled = false; no(falla(e)); }
+  }
+  $('b-pago').onclick = function () { abrePago({}); };
+
   /* ---------- qué sección se ve ---------- */
   var TIT = { fac: ['Facturas', 'Las facturas que emite Multinacional: lo que está por cobrar y lo que ya se cobró.'],
               cot: ['Cotizaciones', 'Cada pedido con su costo, su precio y su factura.'],
               ed: ['Cotizador', 'Captura el pedido y el costo del proveedor; el CRM pone el envío, el precio y los totales.'],
               ban: ['Estado de cuenta', 'El banco de Multinacional, como en el Excel de Eva, y cada depósito de Juárez contra su factura.'],
-              com: ['Comisiones', 'La comisión de lo que paga Juárez, por mes: lo entregado y lo que falta entregar.'] };
+              com: ['Comisiones', 'La comisión de lo que paga Juárez, por mes: lo entregado y lo que falta entregar.'],
+              pag: ['Pagos', 'Lo que pagó cada cliente y a qué facturas se aplicó: lo que tiene saldo, lo pagado y el registro de pagos.'] };
   function muestra(s) {
-    ['fac', 'cot', 'ed', 'ban', 'com'].forEach(function (k) { $('s-' + k).hidden = k !== s; });
+    ['fac', 'cot', 'ed', 'ban', 'com', 'pag'].forEach(function (k) { $('s-' + k).hidden = k !== s; });
     $('titulo').textContent = TIT[s][0]; $('subt').textContent = TIT[s][1];
     $('b-subir').hidden = s !== 'fac' || !EST.sube || CONSULTA;
     $('b-nueva').hidden = s !== 'cot' || !EST.cotiza || CONSULTA;
+    $('b-pago').hidden = s !== 'pag' || !EST.cobra || CONSULTA;
     try { scrollTo(0, 0); } catch (e) {}
   }
   $('b-nueva').onclick = function () { editor(null); };
@@ -1494,11 +1928,13 @@ td.sel input{width:18px;height:18px}
      la abre con ?ver=<qué>). Se ilumina 12 s y lleva su nota corta; solo si esa parte se ve (a quien le toca).
      Hoy «subir»: Eva Rangel también sube las facturas (5-nov-2026). */
   var NUEVOS = {
-    'subir': { el: 'b-subir', nota: 'Nuevo: ya puedes subir tú también las facturas de Multinacional. Pica «Subir facturas» y escoge el XML y el PDF de cada una; el CRM lee el folio, el cliente y los montos.' }
+    'subir': { el: 'b-subir', nota: 'Nuevo: ya puedes subir tú también las facturas de Multinacional. Pica «Subir facturas» y escoge el XML y el PDF de cada una; el CRM lee el folio, el cliente y los montos.' },
+    // Pagos (332, 9-nov-2026): a quien registra se le ilumina «Registrar pago»; a quien solo ve, la lista
+    'pagos': { el: 'b-pago', alt: 'p-fac', sec: 's-pag', nota: 'Nuevo: los pagos de Multinacional, como en Tesorería › Pagos. Aquí ves lo que tiene saldo y lo abonado; «Liquidar» registra el pago de lo que le queda y «Registrar pago» captura un abono o un pago a varias facturas. Las facturas que emite Multinacional ya llegan solas del SAT desde hoy.' }
   };
   function verNuevo(t) {
-    var n = NUEVOS[t], b = n && $(n.el); if (!b || b.hidden) return;
-    var w = $('s-fac'); if (w && !w.querySelector('.nuevo-nota')) w.insertAdjacentHTML('afterbegin', '<div class="nuevo-nota" role="status">' + esc(n.nota) + '</div>');
+    var n = NUEVOS[t], b = n && $(n.el); if (b && b.hidden && n.alt) b = $(n.alt); if (!b || b.hidden) return;
+    var w = $(n.sec || 's-fac'); if (w && !w.querySelector('.nuevo-nota')) w.insertAdjacentHTML('afterbegin', '<div class="nuevo-nota" role="status">' + esc(n.nota) + '</div>');
     b.classList.add('nuevo');
     try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {}
     setTimeout(function () { b.classList.toggle('nuevo', false); }, 12000);   // con toggle: arma_multinacional() de construir.py no deja quitar con el otro
@@ -1519,6 +1955,17 @@ td.sel input{width:18px;height:18px}
         if (!EST.banco) throw new Error('El estado de cuenta de Multinacional solo lo ven la dirección y Eva Rangel.');
         await cargaBanco(null); $('cargando').hidden = true; muestra('ban');
         if (new URLSearchParams(location.search).get('t') === 'con') { var bc = document.querySelector('[data-bt="con"]'); if (bc) bc.click(); }
+        return;
+      }
+      if (SEC === 'pagos') {
+        if (!EST.pagos) throw new Error('Los pagos de Multinacional solo los ven la dirección y Eva Rangel.');
+        $('p-desde').value = masDias(HOY.slice(0, 8) + '01', -62).slice(0, 8) + '01'; $('p-hasta').value = HOY; $('p-liqf').value = HOY; $('p-liqf').max = HOY;
+        ponPT(new URLSearchParams(location.search).get('t') === 'reg' ? 'reg' : 'fac');
+        await cargaPagos(); $('cargando').hidden = true; muestra('pag');
+        var pid = +(new URLSearchParams(location.search).get('pago') || 0);
+        if (pid > 0) fichaPago(pid);
+        else if (id > 0) ficha(id);
+        else { var vp = new URLSearchParams(location.search).get('ver'); if (vp && NUEVOS[vp]) verNuevo(vp); }
         return;
       }
       if (SEC === 'com') {
@@ -1551,6 +1998,7 @@ td.sel input{width:18px;height:18px}
     else if (!$('s-cot').hidden) cargaCot().catch(function () {});   // en el Cotizador no se toca lo que se está capturando
     else if (!$('s-ban').hidden) cargaBanco(BAN && BAN.mes).catch(function () {});
     else if (!$('s-com').hidden) cargaCom(COM && COM.anio).catch(function () {});
+    else if (!$('s-pag').hidden) cargaPagos().catch(function () {});
   });
   arranca();
 })();

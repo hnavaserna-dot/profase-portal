@@ -1,0 +1,1198 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Estrategias fiscales</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4b9fc8cba5"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/buscador.js?v=514b1d6650"></script>
+<style>
+/* Portal PROFASE · Estrategias fiscales (petición de Fernando Barbosa, gerente contable; decisiones de Héctor Daniel Nava del
+   9-nov-2026: «1; ok / 2; a) / 3) sí 15% / 4) sí / 5) sí / 6) no; no se pierde / 7) sí»; «que Él lo capture todo»; «sí así
+   es»; «y ahora sí, con centauro»; «velo ya creando»). Marcas registradas, indemnizaciones y premios de cada cliente, año por
+   año: lo que vale, lo usado, lo que se perdió y lo que queda. Una sola pantalla con una opción del menú por tipo de
+   estrategia (est_tab.js le dice cuál con __estAbre). UX PROFASE: la franja, sus pestañas (Tablero, Lista y, en las marcas,
+   Utilidad o pérdida), la barra (buscar, FILTROS, Excel con su PDF y «Más ▾»), las pilas de «Tu trabajo», la lista por
+   páginas y, al picar un renglón, su ficha. Lo ven solo la Gerencia Contable y la Dirección (Héctor Nava Ramos, solo
+   consulta): lo decide la base (est_estado(), portal/sql/329_estrategias_fiscales.sql). La página solo llama sus funciones
+   est_* y solo usa la cubeta privada «estrategias» para los documentos. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.azul{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn.chico{padding:5px 10px;font-size:12.5px}
+.btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabla tr.fila:focus-visible,.tab:focus-visible,.cel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted);margin:1px 2px 1px 0}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+/* las pestañas de cada opción: Tablero, Lista y Utilidad o pérdida */
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin:14px 0 0;scrollbar-width:thin}
+.tab{border:0;background:none;padding:10px 14px 8px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;min-height:44px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:750}
+#est-bar{margin:14px 0 12px}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.caja .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 16px;border-bottom:1px solid var(--line)}
+.fch{border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;background:var(--surface);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;color:var(--ink)}
+.fch[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla th.der,.tabla td.der{text-align:right}
+.tabla td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.tabla td.rs{min-width:200px;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla tr.tot td{font-weight:750;background:var(--surface-2)}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.tabla .pc{white-space:nowrap;color:var(--accent-ink);font-weight:600;font-size:12px}
+.tabla .nom{font-weight:700}
+.vacio{padding:20px 16px;color:var(--muted)}
+/* tablero */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi span{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
+.kpi b{display:block;font-family:var(--f-display);font-stretch:85%;font-weight:800;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* un monto nunca se parte en dos renglones: en el celular la letra se ajusta al ancho */
+@media (max-width:600px){.kpi b{font-size:clamp(15px,4.5vw,22px)}}
+.avance{height:12px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin:4px 0 6px}
+.avance i{display:block;height:100%;background:var(--navy)}
+:root[data-theme="dark"] .avance i{background:#8FB3F0}
+/* utilidad o pérdida */
+.cel{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;border-radius:9px;padding:5px 9px;font-size:12px;font-weight:650;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:default;text-align:left;min-width:96px}
+button.cel{cursor:pointer}
+.cel.ut{background:var(--navy-soft);border-color:var(--line-strong)}
+.cel.pe{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.cel.sin{border:1.5px dashed var(--line-strong);color:var(--muted)}
+.cel .num{font-weight:600}
+@media (max-width:760px){
+  #lista-tabla thead,#ut-tabla thead{display:none}
+  #lista-tabla,#lista-tabla tbody,#lista-tabla tr,#lista-tabla td,#ut-tabla,#ut-tabla tbody,#ut-tabla tr,#ut-tabla td{display:block;width:100%}
+  #lista-tabla tr.fila,#ut-tabla tr{border-bottom:1px solid var(--line);padding:10px 14px}
+  #lista-tabla td,#ut-tabla td{border:0;padding:2px 0;min-width:0}
+  #lista-tabla td.der{text-align:left}
+  #lista-tabla td[data-e]::before,#ut-tabla td[data-e]::before{content:attr(data-e) " · ";color:var(--muted);font-size:12px;font-weight:600}
+  #lista-tabla tr.tot{padding:10px 14px}
+  #lista-tabla td.anio{display:inline-block;width:auto;margin:0 12px 0 0}
+  #ut-tabla td.anio{display:inline-block;width:auto;margin:2px 6px 2px 0}
+  #ut-tabla td.anio::before{content:none}
+}
+/* Ventanas */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:900px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta.chica>div{max-width:620px}
+.pregunta h3{font-size:20px;margin:0 0 4px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+.pregunta>div>.acciones:last-child{position:sticky;bottom:-18px;z-index:2;background:var(--surface);margin:16px -18px -18px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.campo{display:grid;gap:4px;margin:0 0 10px;min-width:0}
+.campo label,.campo .et{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0;width:100%}
+.campo textarea{min-height:70px;resize:vertical;line-height:1.45}
+.dos{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 12px}
+.radios{display:flex;flex-wrap:wrap;gap:8px 16px}
+.radios label{display:flex;gap:6px;align-items:center;font-weight:600;color:var(--ink);font-size:13.5px}
+.campo input[type="radio"],.campo input[type="checkbox"],.casilla input{width:auto;padding:0;margin:0}
+.casilla{display:flex;gap:8px;align-items:flex-start;font-weight:600;font-size:13.5px;margin:0 0 10px}
+.casilla input{margin-top:3px}
+.msg{padding:9px 11px;border-radius:8px;font-size:13px;overflow-wrap:anywhere;margin:0 0 10px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.msg.az{background:var(--navy-soft);color:var(--ink)}
+.msg.ojo{background:var(--amber-soft);color:var(--amber)}
+.msg.na{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent)}
+.msg b{display:block;margin:0 0 2px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 16px;margin:0 0 6px}
+.kv div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.kv span{font-size:12px;color:var(--muted);font-weight:600}
+.kv b{font-weight:650;overflow-wrap:anywhere}
+.kv b.falta{color:var(--accent-ink)}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 4px}
+.res div{border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:0}
+.res span{display:block;font-size:12px;color:var(--muted);font-weight:650}
+.res b{font-family:var(--f-display);font-stretch:85%;font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:600px){.res b{font-size:clamp(14px,4.2vw,19px)}}
+.pasos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}
+.paso{border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.paso.on{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.paso.can{border-color:var(--red);color:var(--red)}
+.sec{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+.sec>.cab{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:0 0 8px}
+.sec h4{font-family:var(--f-display);font-stretch:85%;font-size:16px;margin:0}
+.hacer{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
+.hacer.bien{background:var(--ok-soft);border-color:var(--line);color:var(--ok)}
+.hacer ul{margin:4px 0 0;padding-left:18px}
+.docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.doc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.doc .cab{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:0 0 4px}
+.doc ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
+.doc li{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;justify-content:space-between;border-top:1px dashed var(--line);padding-top:6px}
+.doc li span{min-width:0;overflow-wrap:anywhere;font-size:13px}
+.bit{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.bit li{border-top:1px solid var(--line);padding-top:8px;overflow-wrap:anywhere}
+.bit .mut{display:block}
+.declarados td{padding:5px 6px}
+.declarados input{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 8px;width:100%;min-width:0}
+.declarados td.c{text-align:center}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:700px){
+  input,select,textarea,.campo input,.campo select,.campo textarea,.declarados input{font-size:16px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Estrategias fiscales</div>
+      <h1 id="titulo">Marcas registradas</h1>
+      <p id="expl">Cada estrategia fiscal de los clientes con lo que vale, lo usado cada año, lo que se perdió y lo que le queda. Desde 2026, con las reglas de la ley; antes, como se declaró.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Partes de la pantalla">
+      <button class="tab" type="button" role="tab" id="tab-tab" data-t="tab" aria-selected="true">Tablero</button>
+      <button class="tab" type="button" role="tab" id="tab-lis" data-t="lis" aria-selected="false">Lista</button>
+      <button class="tab" type="button" role="tab" id="tab-ut" data-t="ut" aria-selected="false">Utilidad o pérdida</button>
+    </nav>
+    <!-- UX PROFASE: la barra (buscar, FILTROS, Excel con su PDF y «Más ▾») -->
+    <div id="est-bar" hidden>
+      <input type="search" id="f-q" placeholder="Busca cliente, RFC, grupo o nombre" aria-label="Buscar">
+      <button class="btn" type="button" data-excel id="x-lista">Excel</button>
+      <button class="btn acento" type="button" id="b-nueva" hidden>+ Nueva</button>
+      <button class="btn" type="button" data-excel="Excel completo (como el de hoy)" id="x-todo">Excel completo (como el de hoy)</button>
+      <button class="btn" type="button" id="b-como">Cómo se lee</button>
+    </div>
+    <div hidden><select id="f-cli" aria-label="Cliente DECOMSA / PROFASE"></select><select id="f-anual" aria-label="Anual donde inicia"></select><select id="f-cen" aria-label="Contra la anual de Centauro"></select></div>
+    <section id="kpis" aria-label="Tu trabajo" hidden></section>
+
+    <section id="p-tab" role="tabpanel" aria-labelledby="tab-tab">
+      <div class="kpis" id="tot"></div>
+      <div class="caja"><header><h2>Lo usado</h2><span class="mut" id="tot-n"></span></header>
+        <div style="padding:12px 16px"><div class="avance" role="img" id="tot-bar"><i></i></div><div id="tot-txt"></div></div></div>
+      <div class="caja"><header><h2>Por estatus</h2></header><div class="chips" id="tab-est" style="border:0"></div></div>
+      <div class="caja"><header><h2>Año por año</h2><span class="mut" id="anios-n"></span></header>
+        <div class="desliza"><table class="tabla" id="anios-tabla"><thead id="anios-h"></thead><tbody id="anios-b"></tbody></table></div></div>
+    </section>
+
+    <section id="p-lis" role="tabpanel" aria-labelledby="tab-lis" hidden>
+      <section class="caja" id="caja-lista">
+        <header><h2 id="t-lista">Marcas registradas</h2><span class="mut" id="t-cuenta"></span></header>
+        <div class="chips" id="chips-est" role="group" aria-label="Estatus"></div>
+        <div class="desliza"><table class="tabla" id="lista-tabla"><thead id="lista-h"></thead><tbody id="lista"></tbody></table></div>
+        <div class="vacio" id="lista-vacia" hidden></div>
+        <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+      </section>
+    </section>
+
+    <section id="p-ut" role="tabpanel" aria-labelledby="tab-ut" hidden>
+      <section class="caja" id="caja-ut">
+        <header><h2>Utilidad o pérdida fiscal de cada cliente</h2><span class="mut" id="ut-n"></span></header>
+        <div class="desliza"><table class="tabla" id="ut-tabla"><thead id="ut-h"></thead><tbody id="ut-b"></tbody></table></div>
+        <div class="vacio" id="ut-vacio" hidden>Todavía no hay razones sociales con marcas.</div>
+        <nav class="pgn" id="pag-ut" aria-label="Páginas"></nav>
+      </section>
+    </section>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<input type="file" id="doc-arch" hidden aria-label="Escoger el documento" accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.webp,.xml,.doc,.docx,.xls,.xlsx">
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false, PUEDE = false, TIPO = 'marca', T = null, DATOS = null, TAB = 'tab', Q = '', FE = '', CLI = '', ANUAL = '', CEN = '', VISTA = '';
+  var SEL = null, PAG = null, PAGU = null, BAR = null, LISTA = [], COLA = [], ABIERTO = null, FICHA = null, RES = null, CLIENTES = null, DOCS = {};
+  var ESTATUS = [['propuesta', 'Propuesta'], ['implementacion', 'En implementación'], ['en_uso', 'En uso'], ['agotada', 'Agotada'], ['cancelada', 'Cancelada']];
+  var ENTREGA = [['espera', 'En espera de que se acabe el premio'], ['notario', 'Con notario'], ['hdn', 'Lo tiene Héctor Daniel Nava'], ['entregado', 'Entregado']];
+  var CLASES = { contrato: 'Contrato', impi: 'Registro ante el IMPI', cfdi: 'CFDI', papeles: 'Papeles de trabajo' };
+  var CENTXT = { cuadra: ['Cuadra con la anual', 'ok'], menos: ['No cuadra con la anual', 'mal'], mas: ['La anual trae más', 'ojo'], sin: ['Sin anual en Centauro', ''] };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var F2 = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var FP = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 4 });
+  function dinero(v) { if (v == null || v === '' || isNaN(v)) return '—'; v = Number(v); return (v < 0 ? '−$' : '$') + F2.format(Math.abs(v)); }
+  function pct(v) { return v == null || v === '' || isNaN(v) ? '' : FP.format(Number(v)) + ' %'; }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function filas() { return (DATOS && DATOS.filas) || []; }
+  function esMarca() { return T && T.modelo === 'marca'; }
+  function esPremio() { return T && T.modelo === 'premio'; }
+  function art(t, may) { var a = (t && t.genero === 'm') ? 'el' : 'la'; return may ? a[0].toUpperCase() + a.slice(1) : a; }
+  function quien(f) { return f.modelo === 'marca' ? f.nombre : f.persona; }
+  function anio() { return (DATOS && DATOS.anio) || (EST && EST.anio) || new Date().getFullYear(); }
+  function ejercicio() { return anio() - 1; }
+  function reglasDesde() { return (EST && EST.reglas_desde) || 2026; }
+
+  /* ---------- Centauro: la anual de cada cliente contra lo capturado de sus marcas (solo marcas) ---------- */
+  function cenDe(f) { return (DATOS && DATOS.centauro && DATOS.centauro[String(f.rfc || '').toUpperCase()]) || {}; }
+  function cenAnios(f, estado) {
+    var c = cenDe(f);
+    return (f.anios || []).filter(function (a) { return c[a.e] && c[a.e].estado === estado; }).map(function (a) { return a.e; });
+  }
+  function noCuadra(f) { return f.modelo === 'marca' && f.estatus !== 'cancelada' && cenAnios(f, 'menos').length > 0; }
+  function cenResumen(f) {
+    if (f.modelo !== 'marca' || !(f.anios || []).length) return '';
+    var m = cenAnios(f, 'menos'), x = cenAnios(f, 'mas'), c = cenAnios(f, 'cuadra'), s = cenAnios(f, 'sin');
+    if (m.length) return chip('No cuadra con la anual ' + m.join(', '), 'mal');
+    if (x.length) return chip('La anual ' + x.join(', ') + ' trae más', 'ojo');
+    if (c.length && !s.length) return chip('Cuadra con la anual', 'ok');
+    if (c.length) return chip('Cuadra ' + c.join(', '), 'ok') + chip('Sin anual ' + s.join(', '));
+    return chip('Sin anual en Centauro');
+  }
+
+  /* ---------- las pilas de «Tu trabajo» (con lo mismo que trae la lista: así cuadran) ---------- */
+  function pilasDef() {
+    var l = [
+      ['agotarse', 'Por agotarse', function (f) { return f.pilas.agotarse; }, 'rojo', 'Lo que le queda alcanza para el año que sigue o menos'],
+      ['falta', 'Falta capturar lo usado de ' + ejercicio(), function (f) { return f.pilas.falta_anio; }, 'naranja', 'En uso y sin lo usado del ejercicio ' + ejercicio()],
+      ['datos', 'Faltan datos', function (f) { return f.estatus !== 'cancelada' && f.pilas.faltan_datos; }, 'ambar', '']
+    ];
+    if (esPremio()) l.push(['entregar', 'Premios sin entregar', function (f) { return f.pilas.sin_entregar; }, 'violeta', 'No están en «Entregado»']);
+    if (esMarca()) l.push(['cen', 'No cuadra con la anual', noCuadra, 'azul', 'Lo capturado no cuadra con la anual que bajó Centauro']);
+    return l;
+  }
+  function pilaDe(k) { return pilasDef().filter(function (v) { return v[0] === k; })[0]; }
+  function pintaKpis() {
+    if (!window.PROFASE_PILAS) return;
+    if (TAB === 'ut') {   // Utilidad o pérdida: las razones sociales a las que les falta algún año
+      var lu = utLista(false), nf = lu.filter(function (r) { return r.faltan > 0; }).length;
+      PROFASE_PILAS.pinta($('kpis'), {
+        titulo: 'Tu trabajo · utilidad o pérdida', meta: lu.length + (lu.length === 1 ? ' razón social con marcas' : ' razones sociales con marcas'),
+        pilas: [{ k: 'falta-ut', t: 'Falta la utilidad o pérdida de algún año', n: nf, tono: 'naranja', on: VISTAU, tag: PUEDE && nf ? 'Te toca' : '',
+          title: 'Se necesita el año del cambio de porcentaje y los tres anteriores' }],
+        alPicar: function () { VISTAU = !VISTAU; if (PAGU) PAGU.inicio(); pinta(); }
+      });
+      return;
+    }
+    var base = baseLista(true);
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · ' + (T ? T.nombre.toLowerCase() : ''),
+      meta: base.length + (base.length === 1 ? ' estrategia' : ' estrategias') + ' sin las canceladas',
+      pilas: pilasDef().map(function (v) {
+        var n = base.filter(v[2]).length;
+        return { k: v[0], t: v[1], n: n, tono: v[3], on: VISTA === v[0], title: v[4], tag: PUEDE && n && (v[0] === 'falta' || v[0] === 'agotarse') ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { VISTA = VISTA === k ? '' : k; if (TAB !== 'lis') setTab('lis'); if (PAG) PAG.inicio(); pinta(); },
+      boton: { t: 'Empezar a revisar', n: LISTA.length, alPicar: function () { if (!LISTA.length) return; COLA = LISTA.map(function (f) { return f.id; }); ficha(COLA[0]); } },
+      nota: 'Abre la primera de la lista; en su ficha, «Siguiente ›» pasa a la que sigue.'
+    });
+  }
+
+  /* ---------- la barra ---------- */
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('est-bar'), { caja: true, buscar: $('f-q'),
+      filtros: d ? { grupos: [{ t: 'ESTRATEGIAS', campos: [d($('f-cli'), { t: 'CLIENTE DECOMSA / PROFASE' }), d($('f-anual'), { t: 'ANUAL DONDE INICIA' }), d($('f-cen'), { t: 'CONTRA LA ANUAL (CENTAURO)' })] }],
+        limpiar: function () { ['f-cli', 'f-anual', 'f-cen'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' estrategia' : ' estrategias'); } } : null,
+      botones: [$('x-lista'), $('b-nueva')], mas: [[$('x-todo')], [$('b-como')]] });
+  }
+  function pintaSelects() {
+    var hay = {}; filas().forEach(function (f) { hay[f.cliente] = (hay[f.cliente] || 0) + 1; });
+    $('f-cli').innerHTML = '<option value="">Todos</option>' + [['si', 'Sí'], ['anual', 'Sí (Anual)'], ['no', 'No']].filter(function (x) { return hay[x[0]]; })
+      .map(function (x) { return '<option value="' + x[0] + '"' + (CLI === x[0] ? ' selected' : '') + '>' + esc(x[1]) + ' (' + hay[x[0]] + ')</option>'; }).join('');
+    var an = {}; filas().forEach(function (f) { var k = f.anual_pendiente ? 'p' : String(f.anual); an[k] = (an[k] || 0) + 1; });
+    $('f-anual').innerHTML = '<option value="">Todos los años</option>' + Object.keys(an).sort().map(function (k) {
+      return '<option value="' + k + '"' + (ANUAL === k ? ' selected' : '') + '>' + (k === 'p' ? 'Pendiente de inyectar' : esc(k)) + ' (' + an[k] + ')</option>'; }).join('');
+    $('f-cen').hidden = !esMarca();
+    $('f-cen').innerHTML = '<option value="">Todas</option><option value="menos">No cuadra</option><option value="mas">La anual trae más</option><option value="cuadra">Cuadra</option><option value="sin">Sin anual en Centauro</option>';
+    $('f-cen').value = esMarca() ? CEN : '';
+    if (BAR && BAR.f) BAR.f.pinta();
+  }
+
+  /* ---------- la lista ---------- */
+  function baseLista(sinCanceladas) {
+    var q = norm(Q).split(/\s+/).filter(Boolean);
+    return filas().filter(function (f) {
+      if (sinCanceladas && f.estatus === 'cancelada') return false;
+      if (CLI && f.cliente !== CLI) return false;
+      if (ANUAL && (ANUAL === 'p' ? !f.anual_pendiente : (f.anual_pendiente || String(f.anual) !== ANUAL))) return false;
+      if (CEN && cenAnios(f, CEN).length === 0) return false;
+      if (!q.length) return true;
+      var t = norm([f.razon, f.rfc, f.grupo, f.nombre, f.persona, f.impi, '#' + f.numero].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function filtradas() {
+    var l = baseLista(false), v = VISTA && pilaDe(VISTA);
+    if (v) l = l.filter(function (f) { return f.estatus !== 'cancelada' && v[2](f); });
+    if (FE) l = l.filter(function (f) { return f.estatus === FE; });
+    return l.sort(function (a, b) { return a.numero - b.numero; });
+  }
+  function anios() {   // las columnas de los años: del primero que hay al año en curso
+    var y = anio(), mn = y - 1;
+    filas().forEach(function (f) { if (!f.anual_pendiente && f.anual < mn) mn = f.anual; (f.anios || []).forEach(function (a) { if (a.e < mn) mn = a.e; }); });
+    var l = []; for (var e = Math.max(mn, y - 12); e <= y; e++) l.push(e);
+    return l;
+  }
+  function anioDe(f, e) { return (f.anios || []).filter(function (a) { return a.e === e; })[0]; }
+  function anualTxt(f) { return f.anual_pendiente ? 'Pendiente (' + f.anual + ')' : String(f.anual); }
+  function cliTxt(c) { return c === 'si' ? 'Sí' : c === 'anual' ? 'Sí (Anual)' : 'No'; }
+  function chipEst(f) {
+    var c = f.estatus === 'en_uso' ? 'az' : f.estatus === 'cancelada' ? 'mal' : f.estatus === 'agotada' ? '' : 'na';
+    return chip(f.estatus_txt, c);
+  }
+  function pintaLista() {
+    var l = LISTA;
+    var v = VISTA && pilaDe(VISTA), ys = anios();
+    $('t-lista').textContent = v ? v[1] : T.nombre;
+    $('t-cuenta').textContent = l.length + ' ' + (l.length === 1 ? T.singular : T.nombre.toLowerCase());
+    var cuenta = {}; baseLista(false).forEach(function (f) { cuenta[f.estatus] = (cuenta[f.estatus] || 0) + 1; });
+    $('chips-est').innerHTML = '<button type="button" class="fch" data-fe="" aria-pressed="' + (!FE) + '">Todas (' + baseLista(false).length + ')</button>'
+      + ESTATUS.map(function (x) { return '<button type="button" class="fch" data-fe="' + x[0] + '" aria-pressed="' + (FE === x[0]) + '">' + esc(x[1]) + ' (' + (cuenta[x[0]] || 0) + ')</button>'; }).join('');
+    var mar = esMarca(), pre = esPremio();
+    $('lista-h').innerHTML = '<tr><th>#</th><th>Razón social</th><th>Cliente DECOMSA / PROFASE</th><th>' + (mar ? 'Marca' : pre ? 'Persona ganadora' : 'Persona') + '</th>'
+      + (mar ? '' : '<th>RFC</th><th>CURP</th>') + '<th>Anual donde inicia</th><th class="der">Valor</th>' + (mar ? '<th class="der">% actual</th>' : '') + '<th class="der">Total usado</th>'
+      + (mar ? '<th class="der">Amortización perdida</th>' : '') + '<th class="der">Restante</th><th>Estatus</th>' + (pre ? '<th>Entrega al cliente</th>' : '') + (mar ? '<th>Contra la anual</th>' : '')
+      + ys.map(function (e) { return '<th class="der">' + e + '</th>'; }).join('') + '</tr>';
+    var tv = 0, tu = 0, tp = 0, tr = 0, ty = {};
+    l.forEach(function (f) { if (f.estatus === 'cancelada') return; tv += +f.valor; tu += +f.usado; tp += +f.perdida; tr += +f.restante; ys.forEach(function (e) { var a = anioDe(f, e); if (a) ty[e] = (ty[e] || 0) + Number(a.monto); }); });
+    var tot = l.length ? '<tr class="tot"><td></td><td data-e="">Totales de la lista (sin canceladas)</td><td></td><td></td>' + (mar ? '' : '<td></td><td></td>') + '<td></td><td class="der" data-e="Valor"><span class="num">' + dinero(tv) + '</span></td>'
+      + (mar ? '<td></td>' : '') + '<td class="der" data-e="Usado"><span class="num">' + dinero(tu) + '</span></td>' + (mar ? '<td class="der" data-e="Perdida"><span class="num">' + dinero(tp) + '</span></td>' : '')
+      + '<td class="der" data-e="Restante"><span class="num">' + dinero(tr) + '</span></td><td></td>' + (pre ? '<td></td>' : '') + (mar ? '<td></td>' : '')
+      + ys.map(function (e) { return '<td class="der anio" data-e="' + e + '"><span class="num">' + (ty[e] ? dinero(ty[e]) : '—') + '</span></td>'; }).join('') + '</tr>' : '';
+    var pag = PAG ? PAG.corta(l) : l;
+    $('lista').innerHTML = tot + pag.map(function (f) {
+      var marcas = [chipEst(f)];
+      if (f.pilas.agotarse) marcas.push(chip('Se agota en ' + f.agota_en, 'mal'));
+      if (f.pilas.falta_anio) marcas.push(chip('Falta ' + ejercicio(), 'na'));
+      if (f.estatus !== 'cancelada' && f.pilas.faltan_datos) marcas.push(chip('Faltan datos', 'ojo'));
+      return '<tr class="fila' + (SEL === f.id ? ' sel' : '') + '" tabindex="0" data-id="' + f.id + '">'
+        + '<td data-e="#">' + f.numero + '</td>'
+        + '<td class="rs"><div class="nom">' + esc(f.razon) + '</div><div class="mut">' + esc([f.rfc, f.grupo].filter(Boolean).join(' · ')) + '</div></td>'
+        + '<td data-e="Cliente">' + esc(cliTxt(f.cliente)) + '</td>'
+        + '<td data-e="' + (mar ? 'Marca' : 'Persona') + '"><b>' + esc(quien(f) || '—') + '</b>' + (mar && f.impi ? '<div class="mut">IMPI ' + esc(f.impi) + '</div>' : '') + '</td>'
+        + (mar ? '' : '<td data-e="RFC">' + (f.persona_rfc ? esc(f.persona_rfc) : chip('Falta', 'na')) + '</td><td data-e="CURP">' + (f.persona_curp ? esc(f.persona_curp) : chip('Falta', 'na')) + '</td>')
+        + '<td data-e="Anual">' + esc(anualTxt(f)) + '</td>'
+        + '<td class="der" data-e="Valor"><span class="num">' + dinero(f.valor) + '</span></td>'
+        + (mar ? '<td class="der" data-e="% actual"><span class="pc">' + (f.pct_actual != null ? esc(pct(f.pct_actual)) : '—') + '</span></td>' : '')
+        + '<td class="der" data-e="Usado"><span class="num">' + dinero(f.usado) + '</span></td>'
+        + (mar ? '<td class="der" data-e="Perdida"><span class="num">' + dinero(f.perdida) + '</span></td>' : '')
+        + '<td class="der" data-e="Restante"><span class="num">' + dinero(f.restante) + '</span></td>'
+        + '<td data-e="Estatus">' + marcas.join('') + '</td>'
+        + (pre ? '<td data-e="Entrega">' + (f.entrega ? esc(f.entrega_txt) + (f.entrega === 'entregado' && f.entrega_monto != null ? '<div class="mut">' + dinero(f.entrega_monto) + (f.entrega_fecha ? ' · ' + esc(fecha(f.entrega_fecha)) : '') + '</div>' : '') : '<span class="mut">Sin estatus</span>') + '</td>' : '')
+        + (mar ? '<td data-e="Contra la anual">' + (cenResumen(f) || '<span class="mut">—</span>') + '</td>' : '')
+        + ys.map(function (e) {
+          var a = anioDe(f, e);
+          if (!a) return '<td class="der anio" data-e="' + e + '"><span class="mut">—</span></td>';
+          var t = a.no_uso ? '<span class="mut">No se usó</span>' + (a.perdida > 0 ? '<div class="pc">−' + dinero(a.perdida) + '</div>' : '') : '<span class="num">' + dinero(a.monto) + '</span>' + (mar && a.pct != null ? '<div class="pc">' + esc(pct(a.pct)) + '</div>' : '');
+          return '<td class="der anio" data-e="' + e + '">' + t + '</td>';
+        }).join('') + '</tr>';
+    }).join('');
+    $('lista-vacia').hidden = l.length > 0;
+    $('lista-vacia').textContent = Q || CLI || ANUAL || CEN || VISTA || FE ? 'Nada coincide con lo que escogiste.' : 'Todavía no hay ' + T.nombre.toLowerCase() + '. ' + (PUEDE ? 'Da de alta la primera con «+ Nueva».' : '');
+  }
+
+  /* ---------- el tablero ---------- */
+  function pintaTablero() {
+    var l = baseLista(true), mar = esMarca(), v = 0, u = 0, p = 0, r = 0;
+    l.forEach(function (f) { v += +f.valor; u += +f.usado; p += +f.perdida; r += +f.restante; });
+    $('tot').innerHTML = '<div class="kpi"><span>Valor</span><b>' + dinero(v) + '</b></div><div class="kpi"><span>Usado</span><b>' + dinero(u) + '</b></div>'
+      + (mar ? '<div class="kpi"><span>Amortización perdida</span><b>' + dinero(p) + '</b></div>' : '') + '<div class="kpi"><span>Restante</span><b>' + dinero(r) + '</b></div>';
+    var por = v > 0 ? Math.min(100, (u + p) / v * 100) : 0;
+    $('tot-n').textContent = l.length + (l.length === 1 ? ' estrategia' : ' estrategias') + '; todos los años, sin canceladas';
+    $('tot-bar').setAttribute('aria-label', 'Usado: ' + Math.round(por) + ' por ciento');
+    $('tot-bar').firstChild.style.width = por.toFixed(1) + '%';
+    $('tot-txt').textContent = v > 0 ? 'Se ha usado el ' + Math.round(por) + ' % del valor total' + (mar && p > 0 ? ' (con lo que se perdió por los años sin uso)' : '') + '.' : 'Todavía no hay ' + T.nombre.toLowerCase() + '.';
+    var c = {}; baseLista(false).forEach(function (f) { c[f.estatus] = (c[f.estatus] || 0) + 1; });
+    $('tab-est').innerHTML = ESTATUS.map(function (x) { return '<button type="button" class="fch" data-tfe="' + x[0] + '">' + esc(x[1]) + ' (' + (c[x[0]] || 0) + ')</button>'; }).join('');
+    var ys = anios(), h = '<tr><th>Año</th><th class="der">' + (mar ? 'Amortización' : 'Usado') + '</th>' + (mar ? '<th class="der">Perdida</th><th>Contra la anual (Centauro)</th>' : '') + '<th class="der">Estrategias</th></tr>';
+    $('anios-h').innerHTML = h;
+    $('anios-b').innerHTML = ys.slice().reverse().map(function (e) {
+      var m = 0, pp = 0, n = 0, cu = { cuadra: 0, menos: 0, mas: 0, sin: 0 }, vistos = {};
+      l.forEach(function (f) {
+        var a = anioDe(f, e); if (!a) return;
+        n++; m += Number(a.monto); pp += Number(a.perdida || 0);
+        if (mar && f.rfc && !vistos[f.rfc]) { vistos[f.rfc] = 1; var x = cenDe(f)[e]; if (x) cu[x.estado] = (cu[x.estado] || 0) + 1; }
+      });
+      var ce = mar ? [cu.cuadra ? chip(cu.cuadra + ' cuadran', 'ok') : '', cu.menos ? chip(cu.menos + ' no cuadran', 'mal') : '', cu.mas ? chip(cu.mas + ' la anual trae más', 'ojo') : '', cu.sin ? chip(cu.sin + ' sin anual') : ''].join('') : '';
+      return '<tr><td><b>' + e + '</b>' + (e < reglasDesde() ? '<div class="mut">Como se declaró</div>' : '') + '</td><td class="der"><span class="num">' + (n ? dinero(m) : '—') + '</span></td>'
+        + (mar ? '<td class="der"><span class="num">' + (pp ? dinero(pp) : '—') + '</span></td><td>' + (ce || '<span class="mut">—</span>') + '</td>' : '') + '<td class="der">' + (n || '—') + '</td></tr>';
+    }).join('');
+    $('anios-n').textContent = mar ? 'Cada cliente, contra la anual que bajó Centauro' : '';
+  }
+
+  /* ---------- Utilidad o pérdida (solo marcas) ---------- */
+  async function cargaUt() { RES = await rpc('est_resultados_lista'); }
+  var VISTAU = false;
+  function utLista(conPila) {
+    var q = norm(Q).split(/\s+/).filter(Boolean);
+    return ((RES && RES.filas) || []).filter(function (r) {
+      if (conPila && VISTAU && !(r.faltan > 0)) return false;
+      if (!q.length) return true; var t = norm([r.razon, r.rfc, r.grupo].concat(r.marcas || []).join(' ')); return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function pintaUt() {
+    if (!RES) { $('ut-b').innerHTML = '<tr><td class="vacio">Cargando…</td></tr>'; return; }
+    var ys = [];
+    for (var e = RES.desde; e <= RES.ejercicio; e++) ys.push(e);
+    var l = utLista(true);
+    $('ut-n').textContent = l.length + (l.length === 1 ? ' razón social' : ' razones sociales');
+    $('ut-h').innerHTML = '<tr><th>Razón social</th><th>Le falta</th>' + ys.map(function (e) { return '<th>' + e + '</th>'; }).join('') + '</tr>';
+    var pag = PAGU ? PAGU.corta(l) : l;
+    $('ut-b').innerHTML = pag.map(function (r) {
+      return '<tr><td class="rs"><div class="nom">' + esc(r.razon) + '</div><div class="mut">' + esc([r.rfc, r.grupo].filter(Boolean).join(' · ')) + '</div><div class="mut">Marcas: ' + esc((r.marcas || []).join(', ')) + '</div></td>'
+        + '<td data-e="Le falta">' + (r.faltan ? chip(r.faltan + (r.faltan === 1 ? ' año' : ' años'), 'na') : chip('Nada', 'ok')) + '</td>'
+        + ys.map(function (e) {
+          var c = (r.celdas || {})[e], req = e >= r.desde_req, tag = PUEDE ? 'button type="button"' : 'span', fin = PUEDE ? 'button' : 'span';
+          var d = ' data-k="' + esc(r.clave) + '" data-e="' + e + '"';
+          if (c) return '<td class="anio"><' + tag + ' class="cel ' + (c.resultado === 'utilidad' ? 'ut' : 'pe') + '"' + d + ' title="' + esc((c.comentario || '') + (c.capturo ? ' · ' + c.capturo : '')) + '"><span>' + e + ' ' + (c.resultado === 'utilidad' ? 'Utilidad' : 'Pérdida') + '</span><span class="num">' + dinero(c.monto) + '</span></' + fin + '></td>';
+          if (!req) return '<td class="anio"><span class="mut">' + e + ' —</span></td>';
+          return '<td class="anio"><' + tag + ' class="cel sin"' + d + '><span>' + e + '</span><span>Sin capturar</span></' + fin + '></td>';
+        }).join('') + '</tr>';
+    }).join('');
+    $('ut-vacio').hidden = l.length > 0;
+  }
+  function capturaUt(k, e) {
+    var r = (RES.filas || []).filter(function (x) { return x.clave === k; })[0]; if (!r) return;
+    var c = (r.celdas || {})[e] || {};
+    abre('<h3 id="dlg-t">Utilidad o pérdida fiscal ' + e + '</h3><p class="mut">' + esc(r.razon) + (r.rfc ? ' · ' + esc(r.rfc) : '') + '</p>'
+      + '<div class="campo"><span class="et">Resultado fiscal del ejercicio</span><div class="radios"><label><input type="radio" name="u-r" value="utilidad"' + (c.resultado !== 'perdida' ? ' checked' : '') + '> Utilidad</label><label><input type="radio" name="u-r" value="perdida"' + (c.resultado === 'perdida' ? ' checked' : '') + '> Pérdida</label></div></div>'
+      + '<div class="campo"><label for="u-m">Monto</label><input id="u-m" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(c.monto != null ? c.monto : '') + '"></div>'
+      + '<div class="campo"><label for="u-c">Comentario (opcional)</label><textarea id="u-c" maxlength="600">' + esc(c.comentario || '') + '</textarea></div>'
+      + '<div class="msg mal" id="u-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="u-no">Cancelar</button><button class="btn acento" type="button" id="u-si">Guardar</button></div>', 'u-m', true);
+    $('u-no').onclick = cierra;
+    $('u-si').onclick = async function () {
+      var b = this; b.disabled = true;
+      try {
+        RES = await rpc('est_resultado_guarda', { p: { clave: k, ejercicio: e, resultado: val('u-r'), monto: $('u-m').value, comentario: $('u-c').value } });
+        cierra(); pintaUt(); avisa('Listo: quedó la ' + (val('u-r') === 'perdida' ? 'pérdida' : 'utilidad') + ' de ' + e + '.');
+      } catch (er) { $('u-e').textContent = falla(er); $('u-e').hidden = false; b.disabled = false; }
+    };
+  }
+
+  function pinta() {
+    if (!DATOS) return;
+    LISTA = filtradas();
+    pintaKpis();
+    if (TAB === 'tab') pintaTablero();
+    if (TAB === 'lis') pintaLista();
+    if (TAB === 'ut') pintaUt();
+    if (BAR && BAR.f) BAR.f.pinta();
+  }
+  function setTab(t) {
+    if (t === 'ut' && !esMarca()) t = 'tab';
+    TAB = t;
+    ['tab', 'lis', 'ut'].forEach(function (x) { $('tab-' + x).setAttribute('aria-selected', x === t ? 'true' : 'false'); $('p-' + x).hidden = x !== t; });
+    if (t === 'ut' && !RES) cargaUt().then(pinta).catch(function (e) { error(falla(e)); });
+    pinta();
+  }
+  $('tabs').addEventListener('click', function (e) { var b = e.target.closest('.tab'); if (b) setTab(b.getAttribute('data-t')); });
+
+  /* ---------- ventanas ---------- */
+  var antes = null;
+  function abre(html, foco, chica) {
+    if ($('dlg').hidden) antes = document.activeElement;
+    FORMA = false; SUCIO = false;
+    $('dlg').classList.toggle('chica', !!chica);
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    var tecl = true; try { tecl = P.conTeclado ? !!P.conTeclado() : true; } catch (e) {}
+    try { (foco && tecl && $(foco) ? $(foco) : $('dlg-c').querySelector('button')).focus({ preventScroll: true }); } catch (e) {}
+    try { $('dlg-c').scrollTop = 0; } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('estrategias', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = ''; ABIERTO = null; FICHA = null;
+    sub(TIPO);   // si se abrió «+ Agregar tipo de estrategia», el menú regresa al tipo que se ve
+    try { if (P.escribiendo) P.escribiendo('estrategias', false); } catch (e) {}
+    try { if (antes) antes.focus(); } catch (e) {}
+  }
+  function val(n) { var x = $('dlg-c').querySelector('input[name="' + n + '"]:checked'); return x ? x.value : ''; }
+  /* A13: en una forma (alta, edición o captura) con algo escrito, salir pregunta antes; nunca se pierde sin avisar */
+  var SUCIO = false, FORMA = false;
+  $('dlg-c').addEventListener('input', function () { if (FORMA) SUCIO = true; });
+  function sale(fn) {
+    if (!FORMA || !SUCIO) { fn(); return; }
+    if ($('a13')) { try { $('a13-no').focus(); } catch (e) {} return; }
+    var d = document.createElement('div'); d.className = 'msg ojo'; d.id = 'a13'; d.setAttribute('role', 'alert');
+    d.innerHTML = '<b>Tienes cambios sin guardar</b>¿Salir sin guardarlos?<div class="acciones" style="margin-top:8px;justify-content:flex-start"><button class="btn" type="button" id="a13-no">Seguir capturando</button><button class="btn peligro" type="button" id="a13-si">Salir sin guardar</button></div>';
+    var ac = $('dlg-c').querySelector(':scope > .acciones:last-child'); $('dlg-c').insertBefore(d, ac);
+    $('a13-no').onclick = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+    $('a13-si').onclick = function () { SUCIO = false; fn(); };
+    try { d.scrollIntoView({ block: 'nearest' }); $('a13-no').focus(); } catch (e) {}
+  }
+  function forma0() { FORMA = true; SUCIO = false; }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) sale(cierra); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) sale(cierra); });
+
+  /* ---------- la ficha ---------- */
+  async function ficha(id) {
+    try { var a = await rpc('est_ficha', { p_id: id }); ABIERTO = id; SEL = id; FICHA = a; pintaFicha(a); }
+    catch (e) { error(falla(e)); }
+  }
+  function queHacer(a) {
+    var l = [], b = '';
+    if (a.estatus === 'cancelada') return { t: ['Cancelada: lo usado se queda como histórico y ya no se mueve.'], b: '' };
+    if (a.pilas.agotarse) l.push('Se agota en el anual ' + a.agota_en + ': le quedan ' + dinero(a.restante) + '.');
+    if (a.pilas.falta_anio) { l.push('Falta capturar lo usado de ' + ejercicio() + '.'); if (PUEDE) b = '<button class="btn azul" type="button" data-cap="' + ejercicio() + '">Capturar ' + ejercicio() + '</button>'; }
+    if (a.pilas.faltan_datos && (a.faltan || []).length) { l.push('Faltan datos: ' + a.faltan.join(', ') + '.'); if (PUEDE && !b) b = '<button class="btn azul" type="button" id="h-datos">Completar datos</button>'; }
+    if (a.pilas.sin_entregar) l.push('Falta la entrega al cliente.');
+    if (a.modelo === 'marca') {
+      var c = a.centauro || {};
+      (a.anios || []).forEach(function (x) { var k = c[x.e]; if (k && k.estado === 'menos') l.push('La anual ' + x.e + ' de Centauro no cuadra: trae ' + dinero(k.anual) + ' de activos intangibles; las marcas capturadas del cliente suman ' + dinero(k.marcas) + '.'); });
+    }
+    if (a.anual_pendiente) l.push('Pendiente de inyectar en el anual ' + a.anual + '.');
+    if (a.estatus === 'propuesta' || a.estatus === 'implementacion') l.push('Para capturar lo usado desde ' + reglasDesde() + ', pásala a «En uso».');
+    return { t: l, b: b };
+  }
+  function pintaFicha(a) {
+    var t = (EST.tipos || []).filter(function (x) { return x.clave === a.tipo; })[0] || T, mar = a.modelo === 'marca', pre = a.modelo === 'premio';
+    var h = '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 12px;align-items:flex-start">'
+      + '<div style="min-width:0"><div class="mut" style="font-weight:650">' + esc(t.nombre) + ' · #' + a.numero + '</div><h3 id="dlg-t">' + esc(quien(a) || '—') + '</h3><div class="mut">' + esc(a.razon) + (a.rfc ? ' · ' + esc(a.rfc) : '') + (a.grupo ? ' · ' + esc(a.grupo) : '') + '</div></div>'
+      + '<div class="acciones"><button class="btn" type="button" data-excel id="x-ficha">Excel de la ficha</button></div></div>';
+    // estatus
+    h += '<div class="sec"><div class="cab"><h4>Estatus</h4>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" id="f-est">Cambiar estatus</button>' : '') + '</div><div class="pasos">'
+      + ESTATUS.slice(0, 4).map(function (x, i) { return '<span class="paso' + (x[0] === a.estatus ? ' on' : '') + '">' + esc(x[1]) + '</span>' + (i < 3 ? '<span class="mut" aria-hidden="true">›</span>' : ''); }).join('')
+      + (a.estatus === 'cancelada' ? '<span class="paso can">Cancelada</span>' : '') + '</div>'
+      + '<div class="mut">«Agotada» se pone a mano; «Cancelada», desde «Cambiar estatus» y con su porqué.</div></div>';
+    // qué hacer
+    var qh = queHacer(a);
+    h += '<div class="sec"><div class="hacer' + (qh.t.length ? '' : ' bien') + '"><div><b>Qué hacer</b>' + (qh.t.length ? '<ul>' + qh.t.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<div>Todo en orden.</div>') + '</div>' + qh.b + '</div></div>';
+    // datos
+    function d(et, v, falta) { return '<div><span>' + esc(et) + '</span>' + (v ? '<b>' + esc(v) + '</b>' : '<b class="falta">' + (falta ? 'Falta' : '—') + '</b>') + '</div>'; }
+    h += '<div class="sec"><div class="cab"><h4>Datos</h4>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" id="f-edita">Editar datos</button>' : '') + '</div><div class="kv">'
+      + d('Razón social', a.razon) + d('Cliente DECOMSA / PROFASE', cliTxt(a.cliente))
+      + (mar ? d('Marca', a.nombre) + d('Número de registro IMPI', a.impi, 1) + d('Fecha de registro', fecha(a.fecha_registro), 1) + d('Vigencia', fecha(a.vigencia), 1) + d('Fecha de adquisición', fecha(a.adquisicion), 1)
+        : d(pre ? 'Persona ganadora' : 'Persona indemnizada', a.persona) + d('RFC', a.persona_rfc, 1) + d('CURP', a.persona_curp, 1))
+      + d(a.anual_pendiente ? 'Pendiente de inyectar en el anual' : 'Anual donde inicia', String(a.anual)) + d('Valor', dinero(a.valor)) + '</div></div>';
+    // resumen
+    h += '<div class="res"><div><span>Total usado</span><b>' + dinero(a.usado) + '</b></div>' + (mar ? '<div><span>Amortización perdida</span><b>' + dinero(a.perdida) + '</b></div>' : '')
+      + '<div><span>Restante</span><b>' + dinero(a.restante) + '</b></div>' + (!mar && a.ult_e != null ? '<div><span>Usado en ' + a.ult_e + '</span><b>' + dinero(a.ult_monto) + '</b></div>' : '') + (mar ? '<div><span>% actual' + (a.pct_desde ? ' (desde ' + a.pct_desde + ')' : '') + '</span><b>' + (a.pct_actual != null ? esc(pct(a.pct_actual)) : '—') + '</b></div>' : '') + '</div>';
+    // año por año
+    var ini = a.anual_pendiente ? null : a.anual;
+    (a.anios || []).forEach(function (x) { if (ini == null || x.e < ini) ini = x.e; });
+    var c = a.centauro || {}, filasA = [], resto = Number(a.valor);
+    if (ini != null) for (var e = ini; e <= anio(); e++) {
+      var x = anioDe(a, e);
+      if (x) resto -= Number(x.monto) + Number(x.perdida || 0);
+      var ce = mar && c[e] ? chip(CENTXT[c[e].estado][0], CENTXT[c[e].estado][1]) + (c[e].estado !== 'sin' ? '<div class="mut">La anual: ' + dinero(c[e].anual) + ' · las marcas del cliente: ' + dinero(c[e].marcas) + '</div>' : '') : '';
+      var cambio = x && x.cambio ? chip({ libre: 'Primer cambio de %', cinco: 'Cambio a los cinco años', anticipado: 'Cambio antes de tiempo (una vez)', autorizado: 'Cambio autorizado por ' + (x.capturo || '') }[x.cambio] || '', x.cambio === 'autorizado' ? 'na' : 'az') : '';
+      filasA.push('<tr><td><b>' + e + '</b></td>'
+        + (x ? (mar ? '<td><span class="pc">' + (x.no_uso ? '—' : esc(pct(x.pct))) + '</span></td>' : '')
+          + '<td class="der">' + (x.no_uso ? '<span class="mut">No se usó</span>' : '<span class="num">' + dinero(x.monto) + '</span>') + (x.solo_restante ? '<div class="mut">Solo el restante</div>' : '') + '</td>'
+          + (mar ? '<td class="der"><span class="num">' + dinero(x.perdida) + '</span></td>' : '') + '<td class="der"><span class="num">' + dinero(Math.max(resto, 0)) + '</span></td>'
+          + (mar ? '<td>' + (ce || '<span class="mut">—</span>') + '</td>' : '')
+          + '<td>' + (x.declarado ? '<span class="mut">Como se declaró</span>' : esc(x.capturo || '')) + (x.capturado ? '<div class="mut">' + esc(fechaHora(x.capturado)) + '</div>' : '') + cambio + (x.comentario ? '<div class="mut">' + esc(x.comentario) + '</div>' : '') + '</td>'
+          + '<td>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" data-cap="' + e + '">Corregir</button>' : '') + '</td>'
+          : '<td colspan="' + (mar ? 6 : 3) + '"><span class="mut">Sin capturar</span></td><td>' + (PUEDE && a.estatus !== 'cancelada' && !a.anual_pendiente ? '<span class="acciones"><button class="btn chico acento" type="button" data-cap="' + e + '">Capturar ' + e + '</button><button class="btn chico" type="button" data-cap="' + e + '" data-nouso="1">No se usó</button></span>' : '') + '</td>')
+        + '</tr>');
+    }
+    h += '<div class="sec"><div class="cab"><h4>Año por año</h4><span class="mut">Antes de ' + reglasDesde() + ', como se declaró; desde ' + reglasDesde() + ', con las reglas de la ley</span></div>'
+      + (filasA.length ? '<div class="desliza"><table class="tabla"><thead><tr><th>Año</th>' + (mar ? '<th>%</th>' : '') + '<th class="der">' + (mar ? 'Amortización' : 'Usado') + '</th>' + (mar ? '<th class="der">Perdida</th>' : '') + '<th class="der">Restante al cierre</th>' + (mar ? '<th>Contra la anual (Centauro)</th>' : '') + '<th>Capturó</th><th></th></tr></thead><tbody>' + filasA.reverse().join('') + '</tbody></table></div>'
+        : '<div class="mut">Pendiente de inyectar en el anual ' + a.anual + ': cuando ya tenga año, aquí se captura lo usado.</div>') + '</div>';
+    // utilidad o pérdida del cliente (marcas)
+    if (mar) {
+      var rs = a.resultados || [];
+      h += '<div class="sec"><div class="cab"><h4>Utilidad o pérdida fiscal del cliente</h4><button class="btn chico" type="button" id="f-ut">Ir a Utilidad o pérdida</button></div>'
+        + (rs.length ? '<div class="pasos">' + rs.map(function (r) { return '<span class="cel ' + (r.resultado === 'utilidad' ? 'ut' : 'pe') + '"><span>' + r.e + ' ' + (r.resultado === 'utilidad' ? 'Utilidad' : 'Pérdida') + '</span><span class="num">' + dinero(r.monto) + '</span></span>'; }).join('') + '</div>' : '<div class="mut">Todavía no se captura. Se necesita para revisar un cambio de porcentaje antes de cinco años.</div>') + '</div>';
+    }
+    // entrega del premio
+    if (pre) {
+      h += '<div class="sec"><div class="cab"><h4>Entrega al cliente</h4></div>'
+        + (PUEDE && a.estatus !== 'cancelada' ? '<div class="dos"><div class="campo"><label for="e-en">Cómo va</label><select id="e-en"><option value="">Sin estatus</option>' + ENTREGA.map(function (x) { return '<option value="' + x[0] + '"' + (a.entrega === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>'
+          + '<div class="campo e-ent"><label for="e-mo">Monto entregado</label><input id="e-mo" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(a.entrega_monto != null ? a.entrega_monto : '') + '"></div>'
+          + '<div class="campo e-ent"><label for="e-fe">Fecha de la entrega</label><input id="e-fe" type="date" value="' + esc(a.entrega_fecha || '') + '"></div></div>'
+          + '<div class="msg mal" id="e-e" hidden></div><div class="acciones" style="justify-content:flex-start"><button class="btn" type="button" id="e-si">Guardar la entrega</button></div>'
+          : '<div>' + (a.entrega ? esc(a.entrega_txt) + (a.entrega === 'entregado' ? ' · ' + dinero(a.entrega_monto) + (a.entrega_fecha ? ' · ' + esc(fecha(a.entrega_fecha)) : '') : '') : '<span class="mut">Sin estatus</span>') + '</div>') + '</div>';
+    }
+    // documentos
+    DOCS = {};
+    var cls = Object.keys(CLASES).filter(function (k) { return mar || k !== 'impi'; });
+    h += '<div class="sec"><div class="cab"><h4>Documentos</h4><span class="mut">Opcionales, en cualquier estatus</span></div><div class="docs">' + cls.map(function (k) {
+      var ds = (a.docs || []).filter(function (x) { return x.clase === k; });
+      ds.forEach(function (x) { DOCS[x.id] = x; });
+      return '<div class="doc"><div class="cab"><b>' + esc(CLASES[k]) + '</b>' + (PUEDE ? '<button class="btn chico" type="button" data-sube="' + k + '">Subir</button>' : '') + '</div>'
+        + (ds.length ? '<ul>' + ds.map(function (x) {
+          return '<li><span>' + esc(x.nombre) + '<span class="mut"> · ' + esc(x.por) + ' · ' + esc(fecha(x.subido)) + '</span></span><span class="acciones">'
+            + (esPdf(x) ? '<button class="btn chico" type="button" data-xver="' + x.id + '">Ver</button>' : '') + '<button class="btn chico" type="button" data-xbaja="' + x.id + '">Bajar</button>'
+            + (PUEDE ? '<button class="btn chico peligro" type="button" data-xquita="' + x.id + '">Quitar</button>' : '') + '</span></li>';
+        }).join('') + '</ul>' : '<div class="mut">Sin archivo</div>') + '</div>';
+    }).join('') + '</div><div class="mut" id="doc-msg" role="status"></div></div>';
+    // seguimiento
+    h += '<div class="sec"><div class="cab"><h4>Seguimiento</h4></div>'
+      + (PUEDE ? '<div class="campo"><label for="s-txt">Comentario</label><textarea id="s-txt" maxlength="2000" placeholder="Escribe un comentario…"></textarea></div><div class="acciones" style="justify-content:flex-start"><button class="btn" type="button" id="s-si">Agregar comentario</button></div>' : '')
+      + '<ul class="bit">' + (a.bitacora || []).map(function (b) {
+        return '<li><span class="mut">' + esc(fechaHora(b.hora)) + ' · ' + esc(b.quien) + (b.puesto ? ' (' + esc(b.puesto) + ')' : '') + ' · ' + esc(b.que) + '</span>' + esc(b.texto) + '</li>';
+      }).join('') + '</ul></div>';
+    h += '<div class="acciones"><button class="btn" type="button" id="f-cierra">Cerrar</button></div>';
+    abre(h, 'f-cierra');
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: ABIERTO, abre: ficha, antes: $('f-cierra'), clase: 'btn' });
+    $('f-cierra').onclick = function () { cierra(); pinta(); };
+    if ($('f-est')) $('f-est').onclick = function () { cambiaEstatus(a); };
+    if ($('f-edita')) $('f-edita').onclick = function () { forma(a); };
+    if ($('h-datos')) $('h-datos').onclick = function () { forma(a); };
+    if ($('f-ut')) $('f-ut').onclick = function () { cierra(); setTab('ut'); };
+    $('dlg-c').querySelectorAll('[data-cap]').forEach(function (b) { b.onclick = function () { captura(a, +b.getAttribute('data-cap'), b.hasAttribute('data-nouso')); }; });
+    if ($('e-en')) { var ver = function () { $('dlg-c').querySelectorAll('.e-ent').forEach(function (x) { x.hidden = $('e-en').value !== 'entregado'; }); }; $('e-en').onchange = ver; ver(); $('e-si').onclick = function () { entrega(a, this); }; }
+    if ($('s-si')) $('s-si').onclick = async function () {
+      var b = this, t = $('s-txt').value.trim(); if (!t) { $('s-txt').focus(); return; }
+      b.disabled = true;
+      try { await rpc('est_comenta', { p_id: a.id, p_texto: t }); await ficha(a.id); avisa('Listo: quedó el comentario.'); } catch (e) { error(falla(e)); b.disabled = false; }
+    };
+    $('dlg-c').querySelectorAll('[data-sube]').forEach(function (b) { b.onclick = function () { SUBE = { id: a.id, clase: b.getAttribute('data-sube') }; $('doc-arch').value = ''; $('doc-arch').click(); }; });
+    $('dlg-c').querySelectorAll('[data-xver]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.ver(DOCS[+b.getAttribute('data-xver')], b); }; });
+    $('dlg-c').querySelectorAll('[data-xbaja]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.baja(DOCS[+b.getAttribute('data-xbaja')], b); }; });
+    $('dlg-c').querySelectorAll('[data-xquita]').forEach(function (b) { b.onclick = function () { quitaDoc(a, DOCS[+b.getAttribute('data-xquita')]); }; });
+    $('x-ficha').onclick = function () { excelFicha(a, this); };
+  }
+
+  async function entrega(a, b) {
+    b.disabled = true; $('e-e').hidden = true;
+    try { await rpc('est_entrega', { p: { id: a.id, entrega: $('e-en').value, monto: $('e-mo').value, fecha: $('e-fe').value } }); await recarga(); await ficha(a.id); avisa('Listo: quedó la entrega al cliente.'); }
+    catch (e) { $('e-e').textContent = falla(e); $('e-e').hidden = false; b.disabled = false; }
+  }
+  function cambiaEstatus(a) {
+    abre('<h3 id="dlg-t">Cambiar estatus</h3><p class="mut">' + esc(quien(a)) + ' · ' + esc(a.razon) + '</p>'
+      + '<div class="campo"><label for="c-es">Estatus</label><select id="c-es">' + ESTATUS.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === a.estatus ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="msg ojo" id="c-can" hidden>Cancelada ya no se mueve: lo usado se queda como histórico y ya no se captura más.</div>'
+      + '<div class="campo"><label for="c-co" id="c-co-et">Comentario (opcional)</label><textarea id="c-co" maxlength="1000"></textarea></div>'
+      + '<div class="msg mal" id="c-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="c-no">Cancelar</button><button class="btn acento" type="button" id="c-si">Guardar</button></div>', 'c-es', true);
+    var ver = function () { var c = $('c-es').value === 'cancelada'; $('c-can').hidden = !c; $('c-co-et').textContent = c ? 'Por qué se cancela (obligatorio)' : 'Comentario (opcional)'; };
+    $('c-es').onchange = ver; ver();
+    $('c-no').onclick = function () { ficha(a.id); };
+    $('c-si').onclick = async function () {
+      var b = this; b.disabled = true;
+      try { await rpc('est_estatus', { p_id: a.id, p_estatus: $('c-es').value, p_comentario: $('c-co').value }); await recarga(); await ficha(a.id); avisa('Listo: cambió el estatus.'); }
+      catch (e) { $('c-e').textContent = falla(e); $('c-e').hidden = false; b.disabled = false; }
+    };
+  }
+
+  // la que sigue en «Empezar a revisar» (o en la lista): «Guardar y siguiente ›»
+  function sigDe(id) { var i = COLA.indexOf(id); return i >= 0 && i < COLA.length - 1 ? COLA[i + 1] : null; }
+  /* ---------- capturar lo usado de un año (las reglas las revisa la base antes de guardar: est_revisa_pide) ---------- */
+  function captura(a, e, nouso) {
+    var mar = a.modelo === 'marca', ya = anioDe(a, e), dec = e < reglasDesde();
+    var prev = null; (a.anios || []).forEach(function (x) { if (x.e < e && !x.no_uso && x.monto > 0 && x.pct != null) prev = x.pct; });
+    var h = '<h3 id="dlg-t">' + (ya ? 'Corregir ' : 'Capturar ') + e + '</h3><p class="mut">' + esc(quien(a)) + ' · ' + esc(a.razon) + ' · valor ' + dinero(a.valor) + '</p>'
+      + (dec ? '<div class="msg az">' + e + ' se captura como se declaró: sin reglas ni amortización perdida.</div>' : '')
+      + '<div class="res"><div><span>Valor</span><b>' + dinero(a.valor) + '</b></div><div><span>Restante</span><b>' + dinero(a.restante) + '</b></div>'
+      + (a.ult_e != null ? '<div><span>' + (mar ? '% de ' + a.ult_e : 'Usado en ' + a.ult_e) + '</span><b>' + (mar ? esc(pct(a.pct_actual)) : dinero(a.ult_monto)) + '</b></div>' : '') + '</div>'
+      + '<label class="casilla"><input type="checkbox" id="k-nu"' + ((ya && ya.no_uso) || nouso ? ' checked' : '') + '> No se usó este año' + (mar && !dec ? ' (se pierde lo de ese año)' : '') + '</label>'
+      + '<div class="dos" id="k-val">'
+      + (mar ? '<div class="campo"><label for="k-pc">Porcentaje del año' + (dec ? '' : ' (hasta ' + (EST.tope || 15) + ' %)') + '</label><input id="k-pc" type="number" min="0" max="' + (dec ? 100 : (EST.tope || 15)) + '" step="0.0001" inputmode="decimal" value="' + esc(ya && ya.pct != null ? ya.pct : (prev != null ? prev : '')) + '"></div>' : '')
+      + (!mar || dec ? '<div class="campo"><label for="k-mo">' + (mar ? 'O lo amortizado' : 'Lo usado') + '</label><input id="k-mo" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(ya && !ya.no_uso && (!mar || ya.pct == null) ? ya.monto : '') + '"></div>' : '')
+      + '</div>'
+      + '<div id="k-rev" aria-live="polite"></div>'
+      + '<div class="campo"><label for="k-co" id="k-co-et">' + (ya ? 'Por qué se corrige (obligatorio)' : 'Comentario (opcional)') + '</label><textarea id="k-co" maxlength="1000">' + '</textarea></div>'
+      + '<div class="msg mal" id="k-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="k-no">Cancelar</button><button class="btn acento" type="button" id="k-si">Guardar</button>'
+      + (sigDe(a.id) != null ? '<button class="btn" type="button" id="k-sig">Guardar y siguiente ›</button>' : '') + '</div>';
+    abre(h, mar ? 'k-pc' : 'k-mo', true); forma0();
+    var REV = null, t = null;
+    function datos() {
+      var nu = $('k-nu').checked;
+      return { id: a.id, ejercicio: e, no_uso: nu, pct: !nu && $('k-pc') && $('k-pc').value !== '' ? $('k-pc').value : null,
+        monto: !nu && $('k-mo') && $('k-mo').value !== '' && !($('k-pc') && $('k-pc').value !== '') ? $('k-mo').value : null,
+        comentario: $('k-co').value, confirma: !!($('k-cf') && $('k-cf').checked), autoriza: !!(REV && REV.requiere === 'autoriza') };
+    }
+    async function revisa() {
+      $('k-val').hidden = $('k-nu').checked;
+      try {
+        var r = await rpc('est_revisa_pide', { p: datos() }); REV = r;
+        var x = '';
+        if (r.aviso) x += '<div class="msg ' + (r.aviso.tipo === 'a1' ? 'na' : r.aviso.tipo === 'anticipado' ? 'az' : 'ojo') + '"><b>' + esc(r.aviso.titulo) + '</b>' + esc(r.aviso.texto)
+          + (r.aviso.confirma ? '<label class="casilla" style="margin:8px 0 0"><input type="checkbox" id="k-cf"> ' + esc(r.aviso.confirma) + '</label>' : '') + '</div>';
+        var bl = (r.bloquea || []).filter(function (m) { return !/comentario es obligatorio|Confirma que el cambio|Autorizar y guardar/.test(m); });
+        if (bl.length) x += '<div class="msg mal">' + bl.map(esc).join('<br>') + '</div>';
+        else if (!r.no_uso || r.perdida > 0) x += '<div class="msg az">' + (r.no_uso ? 'Se pierde ' + dinero(r.perdida) : (mar && r.pct != null ? esc(pct(r.pct)) + ' = ' : '') + dinero(r.monto)) + ' · le queda ' + dinero(r.restante_antes) + ' → ' + dinero(r.restante_despues) + '</div>';
+        var cf = $('k-cf') ? $('k-cf').checked : false;
+        $('k-rev').innerHTML = x;
+        if ($('k-cf')) $('k-cf').checked = cf;
+        $('k-si').textContent = r.requiere === 'autoriza' ? 'Autorizar y guardar' : r.no_uso && mar && !dec ? 'Sí, no se usó' : 'Guardar';
+        $('k-si').disabled = bl.length > 0;
+        if ($('k-sig')) { $('k-sig').textContent = (r.requiere === 'autoriza' ? 'Autorizar, guardar' : 'Guardar') + ' y siguiente ›'; $('k-sig').disabled = bl.length > 0; }
+      } catch (er) { $('k-rev').innerHTML = '<div class="msg mal">' + esc(falla(er)) + '</div>'; }
+    }
+    function luego() { clearTimeout(t); t = setTimeout(revisa, 350); }
+    ['k-pc', 'k-mo'].forEach(function (i) { if ($(i)) $(i).addEventListener('input', function () { if (i === 'k-pc' && $('k-mo') && this.value !== '') $('k-mo').value = ''; if (i === 'k-mo' && $('k-pc') && this.value !== '') $('k-pc').value = ''; luego(); }); });
+    $('k-nu').onchange = revisa;
+    revisa();
+    $('k-no').onclick = function () { sale(function () { ficha(a.id); }); };
+    async function guarda(sig) {
+      var b = $(sig ? 'k-sig' : 'k-si'), nx = sig ? sigDe(a.id) : null; b.disabled = true; $('k-e').hidden = true;
+      try {
+        var r = await rpc('est_captura', { p: datos() });
+        await recarga(); await ficha(nx != null ? nx : a.id);
+        avisa(r && r.aviso && r.aviso.tipo === 'a7' ? r.aviso.texto : 'Listo: quedó lo de ' + e + '.');
+      } catch (er) { $('k-e').textContent = falla(er); $('k-e').hidden = false; b.disabled = false; }
+    }
+    $('k-si').onclick = function () { guarda(false); };
+    if ($('k-sig')) $('k-sig').onclick = function () { guarda(true); };
+  }
+
+  /* ---------- alta y edición ---------- */
+  async function clientes() { if (!CLIENTES) CLIENTES = await rpc('est_clientes'); return CLIENTES; }
+  async function forma(a) {
+    var t = a ? ((EST.tipos || []).filter(function (x) { return x.clave === a.tipo; })[0] || T) : T, mar = t.modelo === 'marca';
+    var cl; try { cl = await clientes(); } catch (e) { error(falla(e)); return; }
+    var manual = a && a.empresa_id == null, rd = reglasDesde();
+    var h = '<h3 id="dlg-t">' + (a ? 'Editar · ' + esc(quien(a) || '') : (t.genero === 'm' ? 'Nuevo ' : 'Nueva ') + esc(t.singular)) + '</h3><p class="mut">' + esc(t.nombre) + '</p>'
+      + '<div class="campo"><span class="et">Razón social</span><div id="n-rs"></div></div>'
+      + '<label class="casilla"><input type="checkbox" id="n-man"' + (manual ? ' checked' : '') + '> No está en el catálogo de clientes: la escribo (Cliente DECOMSA / PROFASE «No»)</label>'
+      + '<div class="dos" id="n-man-w"><div class="campo"><label for="n-raz">Razón social</label><input id="n-raz" maxlength="200" value="' + esc(manual ? a.razon : '') + '"></div>'
+      + '<div class="campo"><label for="n-rfc">RFC (opcional)</label><input id="n-rfc" maxlength="13" value="' + esc(manual ? a.rfc : '') + '"></div></div>'
+      + '<div class="campo" id="n-cli-w"><span class="et">Cliente DECOMSA / PROFASE</span><div class="radios"><label><input type="radio" name="n-cli" value="si"' + (!a || a.cliente === 'si' ? ' checked' : '') + '> Sí</label><label><input type="radio" name="n-cli" value="anual"' + (a && a.cliente === 'anual' ? ' checked' : '') + '> Sí (Anual)</label></div></div>'
+      + (mar ? '<div class="dos"><div class="campo"><label for="n-nom">Marca</label><input id="n-nom" maxlength="120" value="' + esc(a ? a.nombre : '') + '"></div>'
+          + '<div class="campo"><label for="n-impi">Número de registro IMPI (puede esperar)</label><input id="n-impi" maxlength="40" value="' + esc(a ? a.impi : '') + '"></div></div>'
+          + '<div class="dos"><div class="campo"><label for="n-fr">Fecha de registro</label><input id="n-fr" type="date" value="' + esc(a && a.fecha_registro || '') + '"></div>'
+          + '<div class="campo"><label for="n-vi">Vigencia</label><input id="n-vi" type="date" value="' + esc(a && a.vigencia || '') + '"></div>'
+          + '<div class="campo"><label for="n-ad">Fecha de adquisición</label><input id="n-ad" type="date" value="' + esc(a && a.adquisicion || '') + '"></div></div>'
+        : '<div class="campo"><label for="n-per">' + (t.modelo === 'premio' ? 'Persona ganadora' : 'Persona indemnizada') + '</label><input id="n-per" maxlength="160" value="' + esc(a ? a.persona : '') + '"></div>'
+          + '<div class="dos"><div class="campo"><label for="n-prfc">RFC (completo; puede esperar)</label><input id="n-prfc" maxlength="13" value="' + esc(a ? a.persona_rfc : '') + '" autocapitalize="characters"></div>'
+          + '<div class="campo"><label for="n-curp">CURP (puede esperar)</label><input id="n-curp" maxlength="18" value="' + esc(a ? a.persona_curp : '') + '" autocapitalize="characters"></div></div>')
+      + '<div class="campo"><span class="et">' + (mar ? 'Anual donde se inserta' : 'Anual donde inicia a usarse') + '</span><div class="radios"><label><input type="radio" name="n-pen" value="no"' + (!a || !a.anual_pendiente ? ' checked' : '') + '> Ya tiene año</label><label><input type="radio" name="n-pen" value="si"' + (a && a.anual_pendiente ? ' checked' : '') + '> ' + (mar ? 'Pendiente de inyectar' : 'Pendiente') + '</label></div></div>'
+      + '<div class="dos"><div class="campo"><label for="n-an" id="n-an-et">Año</label><input id="n-an" type="number" min="2000" max="2100" step="1" inputmode="numeric" value="' + esc(a ? a.anual : '') + '"></div>'
+      + '<div class="campo"><label for="n-va">Valor</label><input id="n-va" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(a ? a.valor : '') + '"></div></div>'
+      + (a ? '' : '<div id="n-dec-w"><div class="sec" style="margin-top:4px"><h4>Años ya declarados</h4><p class="mut">Lo usado de cada año antes de ' + rd + ', como se declaró' + (mar ? ' (el porcentaje o el monto)' : '') + '. Si trae años, entra «En uso»; si no, «Propuesta».</p><div class="desliza"><table class="tabla declarados"><thead><tr><th>Año</th>' + (mar ? '<th>%</th>' : '') + '<th>' + (mar ? 'O lo amortizado' : 'Lo usado') + '</th><th>No se usó</th></tr></thead><tbody id="n-dec"></tbody></table></div></div></div>')
+      + '<div class="msg mal" id="n-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="n-no">Cancelar</button><button class="btn acento" type="button" id="n-si">Guardar</button></div>';
+    abre(h, null); forma0();
+    var B = window.PROFASE_BUSCA.crea({ donde: $('n-rs'), id: 'n-rs-in', varios: false, lista: 'al-buscar',
+      opciones: cl.map(function (c) { return { v: String(c.id), t: c.razon, nota: [c.rfc, c.grupo].filter(Boolean).join(' · ') }; }),
+      valor: a && a.empresa_id != null ? [String(a.empresa_id)] : [], marcador: 'Escribe parte del nombre, RFC o grupo', vacio: 'No hay coincidencias' });
+    function ver() {
+      var m = $('n-man').checked;
+      $('n-rs').parentNode.hidden = m; $('n-man-w').hidden = !m; $('n-cli-w').hidden = m;
+      var p = val('n-pen') === 'si';
+      $('n-an-et').textContent = p ? 'Año objetivo' : 'Año';
+      if ($('n-dec-w')) { $('n-dec-w').hidden = p; decl(); }
+    }
+    function decl() {
+      if (!$('n-dec')) return;
+      var y = parseInt($('n-an').value, 10), guard = {};
+      $('n-dec').querySelectorAll('tr[data-e]').forEach(function (tr) { guard[tr.getAttribute('data-e')] = { p: tr.querySelector('[data-p]') ? tr.querySelector('[data-p]').value : '', m: tr.querySelector('[data-m]').value, n: tr.querySelector('[data-n]').checked }; });
+      if (!(y >= 2000 && y < rd)) { $('n-dec').innerHTML = '<tr><td colspan="4" class="mut">' + (y >= rd ? 'Empieza en ' + y + ': lo usado se captura en su ficha con las reglas.' : 'Escribe el año para capturar los años ya declarados.') + '</td></tr>'; return; }
+      var hh = '';
+      for (var e = y; e < rd; e++) {
+        var g = guard[e] || {};
+        hh += '<tr data-e="' + e + '"><td><b>' + e + '</b></td>' + (mar ? '<td><input data-p type="number" min="0" max="100" step="0.0001" inputmode="decimal" aria-label="Porcentaje de ' + e + '" value="' + esc(g.p || '') + '"></td>' : '')
+          + '<td><input data-m type="number" min="0" step="0.01" inputmode="decimal" aria-label="' + (mar ? 'Amortizado' : 'Usado') + ' en ' + e + '" value="' + esc(g.m || '') + '"></td><td class="c"><input data-n type="checkbox" aria-label="No se usó en ' + e + '"' + (g.n ? ' checked' : '') + '></td></tr>';
+      }
+      $('n-dec').innerHTML = hh;
+    }
+    $('dlg-c').addEventListener('change', function (ev) { if (ev.target.name === 'n-pen' || ev.target.id === 'n-man') ver(); });
+    $('n-an').addEventListener('input', decl);
+    ver();
+    $('n-no').onclick = function () { sale(function () { if (a) ficha(a.id); else cierra(); }); };
+    $('n-si').onclick = async function () {
+      var b = this, m = $('n-man').checked, dec = [];
+      if ($('n-dec') && val('n-pen') !== 'si') $('n-dec').querySelectorAll('tr[data-e]').forEach(function (tr) {
+        var p = tr.querySelector('[data-p]'), mo = tr.querySelector('[data-m]').value, n = tr.querySelector('[data-n]').checked;
+        if (n || (p && p.value !== '') || mo !== '') dec.push({ e: +tr.getAttribute('data-e'), pct: p && p.value !== '' ? p.value : null, monto: mo !== '' ? mo : null, no_uso: n });
+      });
+      var p = { id: a ? a.id : null, tipo: t.clave, empresa_id: m ? null : (B.valor()[0] || null), razon: m ? $('n-raz').value : '', rfc: m ? $('n-rfc').value : '',
+        cliente: m ? 'no' : val('n-cli'), anual_pendiente: val('n-pen') === 'si', anual: $('n-an').value, valor: $('n-va').value, declarados: dec };
+      if (mar) { p.nombre = $('n-nom').value; p.impi = $('n-impi').value; p.fecha_registro = $('n-fr').value; p.vigencia = $('n-vi').value; p.adquisicion = $('n-ad').value; }
+      else { p.persona = $('n-per').value; p.persona_rfc = $('n-prfc').value; p.persona_curp = $('n-curp').value; }
+      if (!m && !p.empresa_id) { $('n-e').textContent = 'Escoge la razón social del catálogo o marca que no está en el catálogo.'; $('n-e').hidden = false; return; }
+      b.disabled = true; $('n-e').hidden = true;
+      try { var id = await rpc('est_guarda', { p: p }); CLIENTES = null; await recarga(); COLA = [id]; await ficha(id); avisa(a ? 'Listo: quedaron los datos.' : 'Listo: quedó dada de alta.'); }
+      catch (er) { $('n-e').textContent = falla(er); $('n-e').hidden = false; b.disabled = false; }
+    };
+  }
+
+  /* ---------- agregar un tipo de estrategia (solo la Dirección) ---------- */
+  function agregaTipo() {
+    if (!EST || !EST.agrega) return false;
+    abre('<h3 id="dlg-t">Agregar tipo de estrategia</h3><p>Sale como una opción más en el menú «Estrategias fiscales». Escoge a cuál se parece: sus reglas son las de ese modelo.</p>'
+      + '<div class="dos"><div class="campo"><label for="t-n">Nombre (en plural)</label><input id="t-n" maxlength="60" placeholder="Por ejemplo: Donativos"></div>'
+      + '<div class="campo"><label for="t-s">Una sola (en singular)</label><input id="t-s" maxlength="40" placeholder="donativo"></div></div>'
+      + '<div class="campo"><span class="et">Se dice</span><div class="radios"><label><input type="radio" name="t-g" value="f" checked> la (una nueva)</label><label><input type="radio" name="t-g" value="m"> el (un nuevo)</label></div></div>'
+      + '<div class="campo"><span class="et">Modelo de reglas</span><div class="radios" style="flex-direction:column;align-items:flex-start">'
+      + '<label><input type="radio" name="t-m" value="marca"> Como las marcas: un porcentaje al año hasta 15 %, con la regla del cambio de porcentaje y lo que se pierde en un año sin uso</label>'
+      + '<label><input type="radio" name="t-m" value="indemnizacion" checked> Como las indemnizaciones: lo que se quiera cada año hasta agotarla; un año sin uso no pierde nada</label>'
+      + '<label><input type="radio" name="t-m" value="premio"> Como los premios: igual que las indemnizaciones, con la entrega al cliente</label></div></div>'
+      + '<div class="msg mal" id="t-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="t-no">Cancelar</button><button class="btn acento" type="button" id="t-si">Agregar</button></div>', 't-n', true);
+    sub('agregar');   // el menú dice «+ Agregar tipo de estrategia» mientras está abierta; al cerrarla regresa al tipo que se ve
+    $('t-no').onclick = cierra;
+    $('t-si').onclick = async function () {
+      var b = this; b.disabled = true;
+      try {
+        var e = await rpc('est_tipo_guarda', { p: { nombre: $('t-n').value, singular: $('t-s').value, genero: val('t-g'), modelo: val('t-m') } });
+        var nuevo = (e.tipos || []).filter(function (x) { return x.nombre.toLowerCase() === $('t-n').value.trim().toLowerCase(); })[0];
+        EST = Object.assign(EST, e); cierra();
+        try { if (window.parent && window.parent.__estEstado) window.parent.__estEstado(e); } catch (er) {}
+        if (nuevo) await ponTipo(nuevo.clave);
+        avisa('Listo: «' + $('titulo').textContent + '» ya está en el menú.');
+      } catch (er) { $('t-e').textContent = falla(er); $('t-e').hidden = false; b.disabled = false; }
+    };
+    return true;
+  }
+
+  /* ---------- documentos (cubeta privada «estrategias»: su número es su nombre) ---------- */
+  var SUBE = null;
+  function esPdf(d) { return /\.pdf$/i.test(d && d.nombre || ''); }
+  async function bytesDoc(d, intento) {
+    var b;
+    if (intento === 2) {
+      var s = await P.sb.storage.from('estrategias').createSignedUrl(String(d.id), 60);
+      if (s.error || !s.data || !s.data.signedUrl) throw new Error('No se pudo traer el archivo');
+      var res = await fetch(s.data.signedUrl, { cache: 'no-store', credentials: 'omit' });
+      if (!res.ok) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await res.arrayBuffer());
+    } else {
+      var r = await P.sb.storage.from('estrategias').download(String(d.id));
+      if (r.error || !r.data) throw new Error('No se pudo traer el archivo');
+      b = new Uint8Array(await r.data.arrayBuffer());
+    }
+    if (esPdf(d)) { var m = await window.PROFASE_MARCA.sellaPDF(b, { titulo: d.nombre }); if (m) b = m; }
+    return b;
+  }
+  var VISOR = window.PROFASE_VISOR ? window.PROFASE_VISOR.nuevo({
+    trae: bytesDoc, esPdf: esPdf,
+    nombre: function (d) { return String(d.nombre || 'documento').replace(/[\\/:*?"<>|]/g, '_'); },
+    doc: function (el) { return DOCS[+(el.getAttribute('data-xver') || el.getAttribute('data-xbaja'))]; },
+    alVer: function (d) { try { P.registrar('descarga', 'Estrategias fiscales · ' + d.nombre); } catch (e) {} },
+    alBajar: function (d) { try { P.registrar('descarga', 'Estrategias fiscales · ' + d.nombre); } catch (e) {} }
+  }) : null;
+  $('doc-arch').addEventListener('change', async function () {
+    var f = this.files && this.files[0], s = SUBE; if (!f || !s) return;
+    var m = $('doc-msg'); if (m) m.textContent = 'Subiendo «' + f.name + '»…';
+    try {
+      if (f.size > 25 * 1024 * 1024) throw new Error('«' + f.name + '» pesa más de 25 MB');
+      var id = await rpc('est_doc_nuevo', { p: { id: s.id, clase: s.clase, nombre: f.name, bytes: f.size } });
+      var u = await P.sb.storage.from('estrategias').upload(String(id), f, { contentType: f.type || 'application/octet-stream', upsert: false });
+      if (u.error) throw u.error;
+      var a = await rpc('est_doc_listo', { p_doc: id });
+      FICHA = a; pintaFicha(a); avisa('Listo: subió «' + f.name + '».');
+    } catch (e) { if ($('doc-msg')) $('doc-msg').textContent = falla(e); else error(falla(e)); }
+  });
+  function quitaDoc(a, d) {
+    abre('<h3 id="dlg-t">Quitar «' + esc(d.nombre) + '»</h3><p>Se esconde de la ficha; nada se borra.</p>'
+      + '<div class="campo"><label for="q-m">Por qué lo quitas</label><textarea id="q-m" maxlength="600"></textarea></div><div class="msg mal" id="q-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="q-no">Cancelar</button><button class="btn peligro" type="button" id="q-si">Quitar</button></div>', 'q-m', true);
+    $('q-no').onclick = function () { ficha(a.id); };
+    $('q-si').onclick = async function () {
+      var b = this; b.disabled = true;
+      try { var x = await rpc('est_doc_quita', { p_doc: d.id, p_motivo: $('q-m').value }); FICHA = x; ABIERTO = a.id; pintaFicha(x); avisa('Listo: se quitó.'); }
+      catch (e) { $('q-e').textContent = falla(e); $('q-e').hidden = false; b.disabled = false; }
+    };
+  }
+
+  function como() {
+    abre('<h3 id="dlg-t">Cómo se lee</h3>'
+      + '<p><b>Cada renglón</b> es una estrategia de un cliente: lo que vale, lo usado cada año, lo que se perdió (marcas) y lo que le queda. Lo de ' + (reglasDesde() - 1) + ' y antes se captura como se declaró; desde ' + reglasDesde() + ', con las reglas de la ley.</p>'
+      + '<p><b>Marcas:</b> hasta 15 % del valor al año (art. 33, fr. III, LISR), desde su anual y solo «En uso»; si lo que toca pasa de lo que le queda, solo lo que le queda. Un año sin uso pierde su 15 % (art. 31). El porcentaje se puede cambiar: el primero es libre; los siguientes, a los cinco años del último; antes, una sola vez y solo sin pérdida fiscal en el año del cambio ni en los tres anteriores, y si el cambio no genera pérdida (art. 73 del Reglamento). Si no se cumple, se guarda como autorizado por quien lo captura.</p>'
+      + '<p><b>Indemnizaciones y premios:</b> lo que se quiera cada año hasta agotarla; un año sin uso no pierde nada. Los premios llevan su entrega al cliente.</p>'
+      + '<p><b>Contra la anual (Centauro):</b> cada año de las marcas se compara con la anual de ese cliente que bajó Centauro, en el renglón de activos intangibles de la deducción de inversiones: «Cuadra», «No cuadra», «La anual trae más» (puede traer otros intangibles) o «Sin anual». No detiene nada.</p>'
+      + '<p><b>Utilidad o pérdida:</b> para revisar si una marca puede cambiar su porcentaje antes de cinco años se necesita la utilidad o pérdida fiscal de su razón social del año del cambio y de los tres anteriores. En esa pestaña se pica un año para capturarlo.</p>'
+      + '<p><b>La anual del WorkFlow:</b> la «Declaración anual» de un cliente con una estrategia «En uso» sin lo usado de ese ejercicio no se puede cerrar hasta capturarlo.</p>'
+      + '<p class="mut">Nada de esto sale de esta pantalla: no va en SuperConta, el chat de la empresa ni resúmenes.</p>'
+      + '<div class="acciones"><button class="btn" type="button" id="c-ok">Cerrar</button></div>', 'c-ok', true);
+    $('c-ok').onclick = cierra;
+  }
+
+  /* ---------- Excel y PDF (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  function hojaLista(MK, wb, t, d, nombreHoja, lineas) {
+    var mar = t.modelo === 'marca', pre = t.modelo === 'premio', L = d.filas, ys = [];
+    var y = d.anio, mn = y - 1; L.forEach(function (f) { if (!f.anual_pendiente && f.anual < mn) mn = f.anual; (f.anios || []).forEach(function (a) { if (a.e < mn) mn = a.e; }); });
+    for (var e = Math.max(mn, y - 12); e <= y; e++) ys.push(e);
+    var ws = wb.addWorksheet(nombreHoja);
+    var head = ['Índice', 'Razón social', 'RFC', 'Grupo', 'Cliente DECOMSA / PROFASE', mar ? 'Marca' : pre ? 'Persona ganadora' : 'Persona indemnizada']
+      .concat(mar ? ['Registro IMPI', 'Fecha de registro', 'Vigencia', 'Fecha de adquisición'] : ['RFC de la persona', 'CURP'])
+      .concat(['Anual donde inicia', 'Valor', 'Total usado']).concat(mar ? ['Amortización perdida', '% actual'] : []).concat(['Restante', 'Estatus'])
+      .concat(pre ? ['Entrega al cliente', 'Monto entregado', 'Fecha de la entrega'] : []).concat(mar ? ['Contra la anual (Centauro)'] : [])
+      .concat(ys.reduce(function (acc, e) { return acc.concat(mar ? [String(e), '% ' + e] : [String(e)]); }, []));
+    ws.columns = head.map(function (h, i) { return { width: i === 1 ? 42 : i === 5 ? 30 : /^% /.test(h) ? 8 : 16 }; });
+    var f0 = MK.encabezado(wb, ws, head.length, { titulo: t.nombre, lineas: lineas });
+    ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+    L.forEach(function (f, i) {
+      var cen = '';
+      if (mar) { var c = (d.centauro || {})[String(f.rfc || '').toUpperCase()] || {}; cen = (f.anios || []).filter(function (a) { return c[a.e]; }).map(function (a) { return a.e + ': ' + CENTXT[c[a.e].estado][0]; }).join('; '); }
+      ws.getRow(f0 + 1 + i).values = [f.numero, f.razon, f.rfc || '', f.grupo || '', cliTxt(f.cliente), quien(f) || '']
+        .concat(mar ? [f.impi || '', f.fecha_registro || '', f.vigencia || '', f.adquisicion || ''] : [f.persona_rfc || '', f.persona_curp || ''])
+        .concat([anualTxt(f), +f.valor, +f.usado]).concat(mar ? [+f.perdida, f.pct_actual != null ? +f.pct_actual / 100 : ''] : []).concat([+f.restante, f.estatus_txt])
+        .concat(pre ? [f.entrega_txt || '', f.entrega === 'entregado' && f.entrega_monto != null ? +f.entrega_monto : '', f.entrega === 'entregado' ? (f.entrega_fecha || '') : ''] : []).concat(mar ? [cen] : [])
+        .concat(ys.reduce(function (acc, e) { var a = anioDe(f, e); return acc.concat(mar ? [a ? (a.no_uso ? 'No se usó' : +a.monto) : '', a && a.pct != null ? +a.pct / 100 : ''] : [a ? (a.no_uso ? 'No se usó' : +a.monto) : '']); }, []));
+    });
+    if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+    head.forEach(function (h, i) {
+      if (/^(Valor|Total usado|Amortización perdida|Restante|Monto entregado)$/.test(h) || /^\d{4}$/.test(h)) ws.getColumn(i + 1).numFmt = '#,##0.00';
+      if (/^% /.test(h)) ws.getColumn(i + 1).numFmt = '0.00%';
+    });
+    ws.views = [{ state: 'frozen', ySplit: f0, xSplit: 2 }];
+    MK.impresion(ws, { repetir: f0 });
+  }
+  function hojaUt(MK, wb, R, lineas) {
+    var ys = []; for (var e = R.desde; e <= R.ejercicio; e++) ys.push(e);
+    var ws = wb.addWorksheet('Utilidad o pérdida'), head = ['Razón social', 'RFC', 'Grupo', 'Marcas'].concat(ys.map(String)), L = R.filas || [];
+    ws.columns = [42, 15, 18, 34].concat(ys.map(function () { return 20; })).map(function (x) { return { width: x }; });
+    var f0 = MK.encabezado(wb, ws, head.length, { titulo: 'Utilidad o pérdida fiscal de cada cliente', lineas: lineas });
+    ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+    L.forEach(function (r, i) {
+      ws.getRow(f0 + 1 + i).values = [r.razon, r.rfc || '', r.grupo || '', (r.marcas || []).join(', ')].concat(ys.map(function (e) {
+        var c = (r.celdas || {})[e]; return c ? (c.resultado === 'utilidad' ? 'Utilidad ' : 'Pérdida ') + dinero(c.monto) : (e >= r.desde_req ? 'Sin capturar' : '');
+      }));
+    });
+    if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+    MK.impresion(ws, { repetir: f0 });
+  }
+  function hoy() { return 'Exportado el ' + fechaHora(new Date().toISOString()); }
+  // el tablero del tipo que se ve: Tu trabajo, los totales, por estatus y año por año (sin canceladas)
+  function hojaTablero(MK, wb) {
+    var ws = wb.addWorksheet('Tablero'), l = baseLista(true), mar = esMarca(), v = 0, u = 0, p = 0, r = 0, c = {};
+    l.forEach(function (f) { v += +f.valor; u += +f.usado; p += +f.perdida; r += +f.restante; });
+    baseLista(false).forEach(function (f) { c[f.estatus] = (c[f.estatus] || 0) + 1; });
+    ws.columns = [{ width: 44 }, { width: 22 }, { width: 22 }, { width: 16 }];
+    var f0 = MK.encabezado(wb, ws, 4, { titulo: T.nombre + ' · Tablero', lineas: [l.length + (l.length === 1 ? ' estrategia' : ' estrategias') + ' sin canceladas', hoy()] });
+    var x = f0;
+    function cab(t) { ws.getRow(x).values = t; MK.cabecera(ws, x, 1, t.length); x++; }
+    function fila(t, fmt) { var row = ws.getRow(x); row.values = t; if (fmt) for (var i = 2; i <= t.length; i++) row.getCell(i).numFmt = fmt; x++; }
+    cab(['Tu trabajo', 'Cuántas']);
+    pilasDef().forEach(function (q) { fila([q[1], l.filter(q[2]).length]); });
+    x++; cab(['Totales', 'Monto']);
+    fila(['Valor', v], '#,##0.00'); fila(['Usado', u], '#,##0.00'); if (mar) fila(['Amortización perdida', p], '#,##0.00'); fila(['Restante', r], '#,##0.00');
+    fila(['Usado del valor total', v > 0 ? (u + p) / v : 0], '0%');
+    x++; cab(['Por estatus', 'Cuántas']);
+    ESTATUS.forEach(function (q) { fila([q[1], c[q[0]] || 0]); });
+    x++; cab(['Año', mar ? 'Amortización' : 'Usado', mar ? 'Perdida' : 'Estrategias'].concat(mar ? ['Estrategias'] : []));
+    anios().slice().reverse().forEach(function (e) {
+      var m = 0, pp = 0, n = 0;
+      l.forEach(function (f) { var a = anioDe(f, e); if (a) { n++; m += Number(a.monto); pp += Number(a.perdida || 0); } });
+      var row = ws.getRow(x); row.values = [String(e), m].concat(mar ? [pp, n] : [n]); row.getCell(2).numFmt = '#,##0.00'; if (mar) row.getCell(3).numFmt = '#,##0.00'; x++;
+    });
+    MK.impresion(ws, {});
+  }
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS();
+      if (TAB === 'ut') {
+        if (!RES) await cargaUt();
+        var wu = MK.libro(EX, 'Utilidad o pérdida fiscal');
+        hojaUt(MK, wu, Object.assign({}, RES, { filas: utLista(true) }), [hoy()]);
+        await MK.guardar(wu, 'Estrategias fiscales - utilidad o perdida.xlsx');
+      } else {
+        var L = TAB === 'lis' ? filtradas() : baseLista(false), wb = MK.libro(EX, T.nombre);
+        if (TAB === 'tab') hojaTablero(MK, wb);
+        hojaLista(MK, wb, T, Object.assign({}, DATOS, { filas: L }), T.nombre.slice(0, 30), [L.length + (L.length === 1 ? ' estrategia' : ' estrategias') + (Q ? ' · búsqueda: ' + Q : '') + (VISTA ? ' · ' + pilaDe(VISTA)[1] : '') + (FE ? ' · ' + ESTATUS.filter(function (x) { return x[0] === FE; })[0][1] : ''), hoy()]);
+        await MK.guardar(wb, 'Estrategias fiscales - ' + T.nombre + '.xlsx');
+      }
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+  // «Excel completo (como el de hoy)»: una hoja por tipo de estrategia y la de utilidad o pérdida
+  $('x-todo').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Estrategias fiscales');
+      for (var i = 0; i < (EST.tipos || []).length; i++) {
+        var t = EST.tipos[i], d = await rpc('est_lista', { p: { tipo: t.clave } });
+        hojaLista(MK, wb, t, d, t.nombre.slice(0, 30), [d.filas.length + (d.filas.length === 1 ? ' estrategia' : ' estrategias'), hoy()]);
+      }
+      if (!RES) await cargaUt();
+      hojaUt(MK, wb, RES, [hoy()]);
+      await MK.guardar(wb, 'Estrategias fiscales.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  };
+  async function excelFicha(a, b) {
+    b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, quien(a) || 'Estrategia'), ws = wb.addWorksheet('Ficha');
+      var mar = a.modelo === 'marca', head = ['Año', mar ? '%' : '', mar ? 'Amortización' : 'Usado', mar ? 'Perdida' : '', 'Capturó', 'Comentario'].filter(Boolean);
+      ws.columns = [{ width: 28 }, { width: 40 }, { width: 18 }, { width: 18 }, { width: 26 }, { width: 40 }];
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: (quien(a) || '') + ' · ' + a.razon, lineas: [hoy()] });
+      var dt = [['Razón social', a.razon], ['RFC', a.rfc || ''], ['Cliente DECOMSA / PROFASE', cliTxt(a.cliente)]]
+        .concat(mar ? [['Marca', a.nombre], ['Registro IMPI', a.impi || 'Falta'], ['Fecha de registro', a.fecha_registro || 'Falta'], ['Vigencia', a.vigencia || 'Falta'], ['Fecha de adquisición', a.adquisicion || 'Falta']]
+          : [['Persona', a.persona], ['RFC de la persona', a.persona_rfc || 'Falta'], ['CURP', a.persona_curp || 'Falta']])
+        .concat([['Anual donde inicia', anualTxt(a)], ['Valor', +a.valor], ['Total usado', +a.usado]]).concat(mar ? [['Amortización perdida', +a.perdida]] : []).concat([['Restante', +a.restante], ['Estatus', a.estatus_txt]]);
+      dt.forEach(function (r, i) { var row = ws.getRow(f0 + i); row.values = r; row.getCell(1).font = { bold: true }; if (typeof r[1] === 'number') row.getCell(2).numFmt = '#,##0.00'; });
+      var h0 = f0 + dt.length + 1;
+      ws.getRow(h0).values = head; MK.cabecera(ws, h0, 1, head.length);
+      (a.anios || []).forEach(function (x, i) {
+        ws.getRow(h0 + 1 + i).values = [x.e].concat(mar ? [x.pct != null ? +x.pct / 100 : ''] : []).concat([x.no_uso ? 'No se usó' : +x.monto]).concat(mar ? [+x.perdida] : []).concat([x.declarado ? 'Como se declaró' : (x.capturo || ''), x.comentario || '']);
+        if (mar) ws.getRow(h0 + 1 + i).getCell(2).numFmt = '0.00%';
+      });
+      if ((a.anios || []).length) MK.cuerpo(ws, h0 + 1, h0 + a.anios.length, 1, head.length);
+      [mar ? 3 : 2, mar ? 4 : 0].filter(Boolean).forEach(function (c) { ws.getColumn(c).numFmt = '#,##0.00'; });
+      // documentos y seguimiento (la ficha completa, como en la pantalla)
+      var x = h0 + (a.anios || []).length + 2;
+      ws.getRow(x).values = ['Documentos', 'Archivo', 'Subió', 'Cuándo']; MK.cabecera(ws, x, 1, 4); x++;
+      if (!(a.docs || []).length) { ws.getRow(x).values = ['Sin documentos']; x++; }
+      (a.docs || []).forEach(function (d) { ws.getRow(x).values = [CLASES[d.clase] || d.clase, d.nombre, d.por || '', fechaHora(d.subido)]; x++; });
+      x++;
+      ws.getRow(x).values = ['Seguimiento', 'Qué', 'Quién', 'Cuándo']; MK.cabecera(ws, x, 1, 4); x++;
+      (a.bitacora || []).forEach(function (b) {
+        var row = ws.getRow(x); row.values = [b.texto || '', b.que, (b.quien || '') + (b.puesto ? ' (' + b.puesto + ')' : ''), fechaHora(b.hora)];
+        row.getCell(1).alignment = { wrapText: true, vertical: 'top' }; x++;
+      });
+      MK.impresion(ws, {});
+      await MK.guardar(wb, 'Estrategia ' + (quien(a) || '') + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Vuelve a intentar.'); }
+    b.disabled = false;
+  }
+
+  /* ---------- traer ---------- */
+  async function recarga() {
+    DATOS = await rpc('est_lista', { p: { tipo: TIPO } });
+    T = DATOS.tipo;
+    try { var e = await rpc('est_estado'); if (e && e.ve) { EST = e; if (window.parent && window.parent !== window && window.parent.__estEstado) window.parent.__estEstado(e); } } catch (er) {}
+    if (RES && esMarca()) { try { await cargaUt(); } catch (er) {} }
+    pintaSelects(); pinta();
+  }
+  function sub(t) { try { if (window.parent && window.parent !== window && window.parent.__estSub) window.parent.__estSub(t); } catch (e) {} }
+  async function ponTipo(t) {
+    if (!(EST.tipos || []).some(function (x) { return x.clave === t; })) return false;
+    if (t !== TIPO || !DATOS) { TIPO = t; VISTA = ''; FE = ''; CLI = ''; ANUAL = ''; CEN = ''; if (PAG) PAG.inicio(); DATOS = null; await recarga(); }
+    var x = (EST.tipos || []).filter(function (z) { return z.clave === t; })[0];
+    $('titulo').textContent = x.nombre;
+    $('tab-ut').hidden = x.modelo !== 'marca';
+    $('b-nueva').textContent = '+ ' + (x.genero === 'm' ? 'Nuevo ' : 'Nueva ') + x.singular;
+    $('f-q').placeholder = x.modelo === 'marca' ? 'Busca cliente, RFC, grupo o marca' : 'Busca cliente, RFC, grupo o persona';
+    $('expl').textContent = x.modelo === 'marca' ? 'Cada marca registrada de los clientes: su amortización año por año (hasta 15 %), lo que se perdió, lo que le queda y cómo cuadra con la anual que bajó Centauro.'
+      : x.modelo === 'premio' ? 'Cada premio de los clientes: lo usado cada año, lo que le queda y su entrega al cliente.'
+      : 'Cada ' + x.singular + ' de los clientes: lo usado cada año y lo que le queda.';
+    if (TAB === 'ut' && x.modelo !== 'marca') TAB = 'tab';
+    // otro tipo: lo que estaba abierto de FILTROS se cierra (sus opciones son del tipo de antes)
+    try { if (BAR && BAR.f && BAR.f.abierto && BAR.f.abierto()) BAR.f.cierra(); } catch (e) { /* sin filtros */ }
+    setTab(TAB);
+    sub(t);
+    // la franja de arriba dice la opción abierta (como Q Chat): «Premios», no la primera que se abrió
+    try { if (P && typeof P.franjaAlDia === 'function') P.franjaAlDia(); } catch (e) { /* sin franja */ }
+    return true;
+  }
+  // lo que pide el menú, la campanita o el Inicio (est_tab.js): un tipo («marca»), «agregar» o {tipo, id} (abre su ficha)
+  window.__estAbre = function (que) {
+    if (!EST) return false;
+    if (que === 'agregar') return agregaTipo();
+    var tp = typeof que === 'string' ? que : que && que.tipo, id = que && typeof que === 'object' ? parseInt(que.id, 10) : null;
+    if (!tp || !(EST.tipos || []).some(function (x) { return x.clave === tp; })) return false;
+    ponTipo(tp).then(function () { if (id) { COLA = LISTA.length ? LISTA.map(function (f) { return f.id; }) : [id]; if (COLA.indexOf(id) < 0) COLA = [id]; ficha(id); } });
+    return true;
+  };
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); if (PAGU) PAGU.inicio(); pinta(); });
+  $('f-cli').onchange = function () { CLI = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-anual').onchange = function () { ANUAL = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-cen').onchange = function () { CEN = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('b-nueva').onclick = function () { forma(null); };
+  $('b-como').onclick = function () { como(); };
+  $('chips-est').addEventListener('click', function (e) { var b = e.target.closest('[data-fe]'); if (b) { FE = b.getAttribute('data-fe'); if (PAG) PAG.inicio(); pinta(); } });
+  $('tab-est').addEventListener('click', function (e) { var b = e.target.closest('[data-tfe]'); if (b) { FE = b.getAttribute('data-tfe'); VISTA = ''; setTab('lis'); } });
+  $('ut-b').addEventListener('click', function (e) { var b = e.target.closest('button.cel'); if (b && PUEDE) capturaUt(b.getAttribute('data-k'), +b.getAttribute('data-e')); });
+  function abreFila(tr) { COLA = LISTA.map(function (f) { return f.id; }); ficha(+tr.getAttribute('data-id')); }
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) abreFila(tr); });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); abreFila(tr); } });
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('est_estado');
+      if (!EST || !EST.ve) throw new Error('Estrategias fiscales es solo para la Gerencia Contable y la Dirección.');
+      CONSULTA = !!P.consulta || !!EST.consulta; $('consulta').hidden = !CONSULTA;
+      PUEDE = !!EST.puede && !CONSULTA;
+      $('b-nueva').hidden = !PUEDE;
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'estrategias.lista', nombre: 'Estrategias', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      PAGU = window.PROFASE_PAGINAS.crea({ donde: $('pag-ut'), clave: 'estrategias.utilidad', nombre: 'Razones sociales', arriba: $('caja-ut'), cambio: function () { pinta(); } });
+      barra();
+      var pide = null; try { pide = new URLSearchParams(location.search).get('t'); } catch (e) {}
+      TIPO = pide && (EST.tipos || []).some(function (x) { return x.clave === pide; }) ? pide : ((EST.tipos || [])[0] || {}).clave || 'marca';
+      $('todo').hidden = false;
+      await ponTipo(TIPO);
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && DATOS && $('dlg').hidden) recarga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>
