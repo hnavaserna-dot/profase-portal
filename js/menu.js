@@ -51,6 +51,7 @@
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
     usr: '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1.5"/>',
     mul: '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',   // Multinacional: una caja (la comercializadora)
+    est: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.5-6.5M15.5 5.5h3v3"/>',   // Estrategias fiscales: una diana con su flecha
     cen: '<path d="M4 4.5h16v4H4z"/><path d="M5.5 8.5v11h13v-11"/><path d="M10 12.5h4"/><path d="m9 16 2 2 4-4"/>',   // Centauro: la bóveda de XML (una caja de archivo con palomita)
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
@@ -141,6 +142,15 @@
       // 331 (9-nov-2026; petición de Frank, Héctor Daniel: «Sí, así es.»): la e.firma y los sellos de cada cliente contra el SAT
       { k: 'centauro-certificados', v: 'cent', t: 'Certificados', d: 'La e.firma y los sellos de cada cliente contra el SAT: estatus, vencimiento y si coinciden con la ficha.' },
       { k: 'centauro-reportes', v: 'cenr', t: 'Reportes', d: 'Lo que sale de los XML: resumen por mes, XML Datos 4.0, Nómina 1.2, método de pago, tablero anual y pagos.' }] },
+    /* Estrategias fiscales (Héctor Daniel Nava, 9-nov-2026, a la petición de Fernando Barbosa; 329_estrategias_fiscales.sql):
+       marcas registradas, indemnizaciones y premios de cada cliente, año por año. Solo la Gerencia Contable y la Dirección
+       (est_estado()). Es una sola pantalla (estrategias.html, vista estf) con una opción por tipo de estrategia (p: la clave
+       del tipo; el botón de la vista dice cuál está abierta con data-sub y cuántas le tocan a cada una con data-avisos). Los
+       tipos que agregue la Dirección y «+ Agregar tipo de estrategia» los pone est_tab.js con PORTAL_MENU.subs('est', …). */
+    { k: 'est', t: 'Estrategias fiscales', d: 'Marcas registradas, indemnizaciones y premios de cada cliente, año por año.', subs: [
+      { k: 'est-marcas', v: 'estf', p: 'marca', t: 'Marcas registradas', d: 'Cada marca con su amortización año por año, lo que le queda y cómo cuadra con la anual.' },
+      { k: 'est-indemnizaciones', v: 'estf', p: 'indemnizacion', t: 'Indemnizaciones', d: 'Cada indemnización con lo usado cada año y lo que le queda.' },
+      { k: 'est-premios', v: 'estf', p: 'premio', t: 'Premios', d: 'Cada premio con lo usado cada año, lo que le queda y su entrega al cliente.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
@@ -222,7 +232,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', est: 'Estrategias', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
@@ -402,6 +412,29 @@
     return null;
   }
   function nombre(s) { return ROL === 'contador' && s.tc ? s.tc : s.t; }
+  // Cuántos pendientes tiene una opción: los de su botón (data-aviso) o, en una pantalla con varias opciones, los de la suya
+  // (data-avisos='{"<p>": n}'; Estrategias fiscales, 9-nov-2026: cada tipo de estrategia con su número)
+  function avisoDe(s) {
+    var b = boton(s.v); if (!b) return 0;
+    if (s.p && b.dataset.avisos) { try { return +(JSON.parse(b.dataset.avisos) || {})[s.p] || 0; } catch (e) { return 0; } }
+    return +b.dataset.aviso || 0;
+  }
+  // Las opciones que salen de lo que dice la base (Estrategias fiscales: los tipos que agrega la Dirección y «+ Agregar tipo
+  // de estrategia»): se agregan al final de su módulo y, si se vuelven a poner, cambian las de antes. Una opción así trae su
+  // clave (k), su botón (v), su pestaña (p), su nombre (t) y su descripción (d).
+  function ponSubs(mk, l) {
+    var m = MODS.filter(function (x) { return x.k === mk; })[0];
+    if (!m || !Array.isArray(l)) return false;
+    m.subs = m.subs.filter(function (s) { if (s.extra) { delete ENT[s.k]; return false; } return true; });
+    l.forEach(function (s) {
+      if (!s || !s.k || !s.v || ENT[s.k]) return;
+      var x = { k: String(s.k), v: String(s.v), t: String(s.t || s.k), d: s.d ? String(s.d) : '', extra: true, m: m };
+      if (s.p) x.p = String(s.p);
+      m.subs.push(x); ENT[x.k] = x;
+    });
+    hecho = ''; if (lista) luego();
+    return true;
+  }
 
   // «Abriendo…» (Fernando Cadengo, 6-nov-2026: «porque cuando se actualiza la pagina se va a otra pagina y regresa?»;
   // «sí, así es»): mientras se abre la sección pedida, la vista tapa lo que trae de fábrica (el Panel del WorkFlow o la
@@ -440,7 +473,7 @@
     var act = (!listo && espera) ? espera : activo(), h = '', guarda = false;
     modulos().forEach(function (x) {
       var m = x.m, on = !!act && x.subs.indexOf(act) >= 0, open = on || abiertos[m.k] === true;
-      var av = x.subs.some(function (s) { var b = boton(s.v); return b && +b.dataset.aviso > 0; });
+      var av = x.subs.some(function (s) { return avisoDe(s) > 0; });
       // el módulo de la sección abierta se queda abierto aunque luego se elija otro, hasta que lo cierren
       if (on && abiertos[m.k] !== true) { abiertos[m.k] = true; guarda = true; }
       h += '<div class="pm-mod' + (on ? ' on' : '') + (av ? ' con-aviso' : '') + '" data-m="' + m.k + '" data-open="' + open + '">'
@@ -449,7 +482,7 @@
         + '<span class="pm-lbl"><span class="pm-lg">' + esc(m.t) + '</span><span class="pm-ct">' + esc(CORTO[m.k] || m.t) + '</span></span>' + svg(FLECHA, 'pm-car') + '</button>'
         + '<div class="pm-subs"><div class="pm-fly" aria-hidden="true">' + esc(m.t) + '<span class="pm-fd">' + esc(m.d || '') + '</span></div><ul class="pm-sl">'
         + x.subs.map(function (s) {
-          var n = +((boton(s.v) || {}).dataset || {}).aviso || 0;
+          var n = avisoDe(s);
           return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s))
             + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + (s.d ? '<span class="pm-sd">' + esc(s.d) + '</span>' : '') + '</a></li>';
         }).join('') + '</ul></div></div>';
@@ -722,7 +755,7 @@
     });
 
     // Cuando una pestaña aparece (la base dice que sí), cambia o se elige, el menú se vuelve a pintar
-    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso', 'data-sub'] });
+    new MutationObserver(luego).observe(sw, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-pressed', 'data-aviso', 'data-avisos', 'data-sub'] });
     function vigilaQuo() {
       var q = document.querySelector('#v-quo .qsw');
       if (q && !quoObs) { quoObs = new MutationObserver(luego); quoObs.observe(q, { subtree: true, attributes: true, attributeFilter: ['aria-pressed'] }); luego(); }
@@ -830,6 +863,8 @@
       return true;
     },
     ve: function (k) { var s = ENT[k]; return !!(sw && s && tiene(s)); },
+    // las opciones de un módulo que salen de la base (ponSubs, arriba); regresa true si el módulo existe
+    subs: ponSubs,
     modulos: function () { return sw ? datosModulos() : []; },
     // se cumple cuando ya se sabe qué opciones le tocan a quien entró (menu_sin(); el recorrido general lo espera)
     listo: sinListo,
