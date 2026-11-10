@@ -306,6 +306,11 @@ img.av{background:var(--surface-3);overflow:hidden}
 .m-op .ic{width:16px;height:16px}
 .m:hover .m-op,.m-op:focus-visible,.m-op[aria-expanded="true"]{opacity:1}
 @media (hover:none){.m-op{display:none}}
+/* Con el dedo (iPhone, celular, iPad sin teclado), dejar el dedo encima de un mensaje abre sus opciones (Contestar,
+   Corregir, Eliminar…): el texto del globito no se selecciona ni sale el menú del iPhone (Copiar, Buscar, guardar la
+   foto), que le ganaba a las opciones (Héctor Daniel Nava, 9-nov-2026: «no puedo eliminar desde el chat iphone»). Para
+   copiar, «Copiar el texto» de las opciones. En la computadora se selecciona como siempre. */
+@media (hover:none){.m[data-id] .bur,.m[data-id] .bur *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.m[data-id] .bur img{-webkit-user-drag:none}}
 .m-reac{display:flex;flex-wrap:wrap;gap:4px;margin-top:-4px;position:relative;z-index:1}
 .m.yo .m-reac{justify-content:flex-end}
 .m-col{display:flex;flex-direction:column;min-width:0;max-width:min(620px,78%)}
@@ -1621,7 +1626,7 @@ audio.ad-med{width:280px;max-width:100%}
     }, { passive: true });   // el globito solo se deja mover a lo ancho (touch-action: pan-y): la página sigue deslizándose sola
     function fin() {
       if (!D) return;
-      var m = D.m, listo = D.eje === 'x' && D.listo;
+      var m = D.m, listo = D.eje === 'x' && D.listo && !MENU;   // con las opciones ya abiertas (el dedo se quedó encima), no se deja para contestar
       suelta(true);
       if (listo) contesta(m);
     }
@@ -1755,20 +1760,33 @@ audio.ad-med{width:280px;max-width:100%}
     if (!abrir) { try { bur.scrollIntoView({ block: 'nearest' }); } catch (e) { /* ya */ } }
     var nb = bur.querySelector('[data-largo]'); if (nb) try { nb.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
   }
-  // en el celular: dejar el dedo sobre un mensaje abre sus opciones
+  // en el celular: dejar el dedo sobre un mensaje abre sus opciones, también sobre una foto, un archivo, una liga o una
+  // nota de voz (menos su línea, que se arrastra para adelantar). Héctor Daniel Nava, 9-nov-2026: «no puedo eliminar desde
+  // el chat iphone»: el iPhone manda un clic al soltar el dedo y ese clic cerraba las opciones recién abiertas (o picaba
+  // lo que quedó debajo). Ahora, si el dedo ya abrió las opciones, al soltarlo no llega el clic (preventDefault del
+  // touchend) y, si llega de todos modos, en los siguientes 450 ms no cuenta. El menú del navegador tampoco sale encima.
+  var LP = { t: 0, x0: 0, y0: 0, fue: false, fin: 0 };
   (function () {
-    var t = 0, x0 = 0, y0 = 0;
+    var NO = 'video,audio,.vz-ondas,input,textarea,select';
+    function fuera() { if (LP.t) { clearTimeout(LP.t); LP.t = 0; } }
+    function suelta(ev) { fuera(); if (LP.fue) { LP.fue = false; LP.fin = Date.now(); if (ev && ev.cancelable) ev.preventDefault(); } }
     $('#msgs').addEventListener('touchstart', function (ev) {
-      var b = ev.target.closest('.m[data-id] .bur'); if (!b || ev.target.closest('a,button,video,audio,.vz-ondas')) return;
+      fuera(); LP.fue = false;
+      if (ev.touches.length !== 1) return;
+      var b = ev.target.closest('.m[data-id] .bur'); if (!b || ev.target.closest(NO)) return;
       var el = b.closest('.m'), m = ACT && ACT.msgs.get(+el.dataset.id); if (!m || m.borrado) return;
-      x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY;
-      t = setTimeout(function () { t = 0; try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* sin vibrar */ } menuMsg(m, b); }, 450);
+      LP.x0 = ev.touches[0].clientX; LP.y0 = ev.touches[0].clientY;
+      LP.t = setTimeout(function () { LP.t = 0; LP.fue = true; try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* sin vibrar */ } menuMsg(m, b); }, 450);
     }, { passive: true });
-    function fuera() { if (t) { clearTimeout(t); t = 0; } }
-    $('#msgs').addEventListener('touchmove', function (ev) { if (t && (Math.abs(ev.touches[0].clientX - x0) > 8 || Math.abs(ev.touches[0].clientY - y0) > 8)) fuera(); }, { passive: true });
-    $('#msgs').addEventListener('touchend', fuera); $('#msgs').addEventListener('touchcancel', fuera);
+    $('#msgs').addEventListener('touchmove', function (ev) { if (LP.t && (Math.abs(ev.touches[0].clientX - LP.x0) > 10 || Math.abs(ev.touches[0].clientY - LP.y0) > 10)) fuera(); }, { passive: true });
+    $('#msgs').addEventListener('touchend', suelta, { passive: false });
+    $('#msgs').addEventListener('touchcancel', function () { suelta(null); });
+    // el clic que manda el iPhone al soltar el dedo: ni cierra las opciones ni pica lo que quedó debajo
+    document.addEventListener('click', function (ev) { if (LP.fin && Date.now() - LP.fin < 450) { ev.preventDefault(); ev.stopPropagation(); } }, true);
     $('#msgs').addEventListener('contextmenu', function (ev) {
-      var b = ev.target.closest('.m[data-id] .bur'); if (!b || ev.target.closest('a,video,audio,img')) return;
+      var b = ev.target.closest('.m[data-id] .bur'); if (!b) return;
+      if (LP.t || LP.fue || Date.now() - LP.fin < 1500) { ev.preventDefault(); return; }   // el dedo ya abre (o abrió) las opciones
+      if (ev.target.closest('a,video,audio,img')) return;
       var m = ACT && ACT.msgs.get(+b.closest('.m').dataset.id); if (!m || m.borrado) return;
       ev.preventDefault(); menuMsg(m, b);
     });
@@ -1830,7 +1848,7 @@ audio.ad-med{width:280px;max-width:100%}
       else if (a === 'info') infoMsg(m);
       else if (a === 'borra') borra(m);
     };
-    try { el.querySelector('.op').focus(); } catch (e) { /* sin foco */ }
+    try { el.querySelector('.op').focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
   }
   // Corregir y eliminar un mensaje propio: mientras nadie más lo lea y hasta 3 minutos después de que lo leyeron (Daniel,
   // 30-oct-2026, 20:34: «para que mañana no eliminen algo y digan que no lo hicieron»). Aquí solo se decide qué opciones

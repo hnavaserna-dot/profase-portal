@@ -14,10 +14,28 @@
    - Agenda y reuniones con gente de fuera (31-oct-2026, 108_agenda_reuniones.sql): «X está esperando para entrar»
      (tag sala-…) y los recordatorios de las citas (tag cita-…). El de la sala, con el portal al frente, no se repite:
      se le avisa a la página para que lo enseñe al momento; los recordatorios de citas se enseñan siempre. Al picarlos
-     abren la reunión o la cita. */
+     abren la reunión o la cita.
+   - Picar el aviso de un mensaje abre la conversación de quien lo mandó (Héctor Daniel Nava, 9-nov-2026: «no te abre el
+     Chat automáticamente con la persona que te lo mandó; te abre el Chat completo»). Si el portal está abierto, se le
+     manda «chat-abre» con la conversación y un número (id); si no, se abre con ?chat=<conversación>. Y por si la página no
+     lo recibe (se estaba abriendo o recargando, o el iPhone abrió la app sin esa dirección), el último aviso picado se
+     queda aquí en la memoria un minuto (PICADO, nunca se guarda en ningún lado): la página pregunta al arrancar
+     («chat-picado»), se le contesta con «chat-abre» y avisa cuando ya lo abrió («chat-abierto»). */
 'use strict';
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
+
+var PICADO = null, PICADO_MS = 60000;
+self.addEventListener('message', function (e) {
+  var d = e.data || {};
+  if (d.tipo === 'chat-picado') {
+    var p = PICADO && Date.now() - PICADO.t < PICADO_MS ? PICADO : null;
+    if (p && e.source && e.source.postMessage) e.source.postMessage({ tipo: 'chat-abre', conv: p.conv, id: p.id });
+  } else if (d.tipo === 'chat-abierto' && PICADO && d.id === PICADO.id) {
+    var listo = PICADO.listo; PICADO = null;
+    if (listo) listo();
+  }
+});
 
 self.addEventListener('push', function (e) {
   var d = {};
@@ -59,17 +77,26 @@ self.addEventListener('push', function (e) {
 self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   var data = e.notification.data || {}, url = new URL(data.url || '/', self.location.origin).href;
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ws) {
+  // el de un mensaje del chat: se queda en la memoria hasta que la página lo abra (o un minuto); mientras, este archivo sigue vivo
+  var chat = !data.rcd && !data.sala && !data.cita && typeof data.conv === 'string' && /^[0-9a-f-]{36}$/i.test(data.conv);
+  var id = chat ? Date.now().toString(36) + Math.random().toString(36).slice(2, 8) : null, espera = null;
+  if (chat) {
+    var p = { conv: data.conv, id: id, t: Date.now(), listo: null };
+    espera = new Promise(function (ok) { p.listo = ok; setTimeout(ok, PICADO_MS); });
+    PICADO = p;
+  }
+  var abre = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ws) {
     for (var i = 0; i < ws.length; i++) {
       var w = ws[i];
       if (w.url.indexOf(self.location.origin) === 0 && /\/(director|gerentes|contadores)\.html/.test(w.url)) {
         if (data.rcd) w.postMessage({ tipo: 'rcd-abre', aviso: data.rcd });
         else if (data.sala) w.postMessage({ tipo: 'sala-abre', sala: data.sala });
         else if (data.cita) w.postMessage({ tipo: 'cita-abre', cita: data.cita });
-        else w.postMessage({ tipo: 'chat-abre', conv: data.conv || null });
-        return w.focus ? w.focus() : null;
+        else w.postMessage({ tipo: 'chat-abre', conv: data.conv || null, id: id });
+        return w.focus ? Promise.resolve(w.focus()).catch(function () {}) : null;
       }
     }
-    return self.clients.openWindow ? self.clients.openWindow(url) : null;
-  }));
+    return self.clients.openWindow ? Promise.resolve(self.clients.openWindow(url)).catch(function () {}) : null;
+  });
+  e.waitUntil(espera ? Promise.all([abre, espera]) : abre);
 });
