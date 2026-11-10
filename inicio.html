@@ -120,7 +120,7 @@ button.k{display:block;width:100%;text-align:left;font:inherit;color:inherit;bor
 button.k:hover{border-color:var(--line-strong)}
 button.k:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
-.barra{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
+.barra{display:block;height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
 .barra i{display:block;height:100%;background:var(--ok);border-radius:4px}
 
 /* Listas */
@@ -538,19 +538,27 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     var at = o.liga ? ' data-liga="' + esc(o.liga) + '"' : '';
     if (o.notif) at += ' data-notif="' + esc(o.notif) + '"';
     if (o.cxc) at += ' data-cxc="' + esc(o.cxc) + '"';
+    if (o.wf) at += ' data-wf="' + esc(o.wf) + '"';
     return '<li><button type="button" class="fila' + (o.liga ? '' : ' quieta') + '"' + at + (o.liga ? '' : ' tabindex="-1"') + '><span class="pt ' + (o.pt || '') + '" aria-hidden="true"></span><span class="tx"><span class="a">' + o.a + '</span>'
       + (o.b ? '<span class="b">' + o.b + '</span>' : '') + '</span>' + (o.n != null && o.n !== '' ? '<span class="n ' + (o.ncls || '') + '">' + o.n + '</span>' : '') + '</button></li>';
   }
   function lista(filas) { return filas.length ? '<ul class="lista">' + filas.map(fila).join('') + '</ul>' : ''; }
   function aldia(txt) { return '<div class="aldia">' + OK_SVG + '<span>' + esc(txt) + '</span></div>'; }
   function chip(n, txt, cls) { return '<span class="chip ' + (cls || '') + '"><b>' + fi(n) + '</b>' + esc(txt) + '</span>'; }
-  function barra(x) { return '<div class="barra"><i style="width:' + Math.max(0, Math.min(100, (x || 0) * 100)).toFixed(1) + '%"></i></div>'; }
+  function barra(x) { return '<span class="barra"><i style="width:' + Math.max(0, Math.min(100, (x || 0) * 100)).toFixed(1) + '%"></i></span>'; }
+  /* Las pilas y los renglones del WorkFlow se pican y abren el Panel ya filtrado (Héctor Daniel Nava, 10-nov-2026, 17:10:
+     «quiero picarle a las pilas y que me lleve ya filtrado (ejemplo, avance de octubre; quiero ver todo desde ahí ya con
+     ese filtro)»): wfq() arma lo que entiende PROFASE_ABRE.panel de la vista (portal/wf_abre_tab.js) y kw() es la pila. */
+  function wfq(o) {
+    return 'wf:' + Object.keys(o).filter(function (k) { return o[k] != null && o[k] !== ''; }).map(function (k) { return k + '=' + encodeURIComponent(o[k]); }).join(';');
+  }
+  function kw(q, t, v, s, cls) { return kb('data-wf="' + esc(q) + '" aria-label="' + esc(t) + ': verlo en el WorkFlow"', t, v, s, cls); }
 
   // Cada tarjeta: {id, t (título), s (subtítulo), liga (sección «Ver todo»), ancha, arma: async → html o null (no sale)}
   var TARJETAS = [], CORRIDA = 0;
   function cascaron(c) {
     return '<section class="card carga' + (c.ancha ? ' ancha' : '') + '" id="c-' + c.id + '" aria-busy="true"><header><div><h2>' + esc(c.t) + '</h2>'
-      + (c.s ? '<p class="sub">' + esc(c.s) + '</p>' : '') + '</div>' + (c.liga && ve(c.liga) ? '<button type="button" class="ir" data-liga="' + esc(c.liga) + '">' + esc(c.ligaTxt || 'Ver todo') + ' ›</button>' : '')
+      + (c.s ? '<p class="sub">' + esc(c.s) + '</p>' : '') + '</div>' + (c.liga && ve(c.liga) ? '<button type="button" class="ir" data-liga="' + esc(c.liga) + '"' + (c.wf ? ' data-wf="' + esc(c.wf) + '"' : '') + '>' + esc(c.ligaTxt || 'Ver todo') + ' ›</button>' : '')
       + '</header><div class="cuerpo"><div class="esq g"></div><div class="esq"></div><div class="esq"></div></div></section>';
   }
   function pintaCascarones() { $('grid').innerHTML = TARJETAS.map(cascaron).join(''); }
@@ -588,6 +596,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       if (!el.isConnected || el.querySelector('header .ir')) return;
       if (ve(c.liga)) {
         var b = document.createElement('button'); b.type = 'button'; b.className = 'ir'; b.setAttribute('data-liga', c.liga);
+        if (c.wf) b.setAttribute('data-wf', c.wf);
         b.textContent = (c.ligaTxt || 'Ver todo') + ' ›';
         el.querySelector('header').appendChild(b);
         return;
@@ -666,14 +675,14 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 
   // --- Cumplimiento SAT de todo el despacho (dirección) ---
   function tCumplimiento() {
-    return { id: 'sat', t: 'Cumplimiento SAT', s: 'El WorkFlow de todo el despacho', liga: 'panel', ancha: true, arma: async function () {
+    return { id: 'sat', t: 'Cumplimiento SAT', s: 'El WorkFlow de todo el despacho', liga: 'panel', wf: wfq({ pila: 'todo' }), ancha: true, arma: async function () {
       var W = await cargaWF(); if (!W) return null;
       var o = resumenWF(W, W.R), h = '';
       h += '<div class="kp">'
-        + k('Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
-        + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + (o.mVen ? ' · ' + fi(o.mVen) + ' vencidas' : '') + barra(o.mTar ? o.mTer / o.mTar : 0))
-        + k('Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
-        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas dentro del plazo')
+        + kw(wfq({ pila: 'ven' }), 'Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
+        + kw(wfq({ pila: 'mes', ym: o.mes }), 'Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + (o.mVen ? ' · ' + fi(o.mVen) + ' vencidas' : '') + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + kw(wfq({ pila: 'sem' }), 'Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
+        + kw(wfq({ pila: 'efe', anio: W.CUR_Y }), 'Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas dentro del plazo')
         + '</div>';
       // quién trae más atraso (este año) y qué vence esta semana
       var porR = {}, porT = {};
@@ -686,10 +695,11 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       var ts = Object.keys(porT).sort(function (a, b) { return porT[b] - porT[a]; }).slice(0, 5);
       h += '<div class="grid" style="gap:4px 18px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))"><div>';
       h += '<p class="tl">Quién trae más vencidas de ' + W.CUR_Y + '</p>' + (rs.length ? lista(rs.map(function (r) {
-        var d = W.depR(+r); return { pt: 'mal', a: esc(bonito(W.DIM.resp[r])), b: esc(DEPS[d]), n: fi(porR[r]), ncls: 'mal', liga: 'panel' };
+        var d = W.depR(+r); return { pt: 'mal', a: esc(bonito(W.DIM.resp[r])), b: esc(DEPS[d]), n: fi(porR[r]), ncls: 'mal', liga: 'panel',
+                                     wf: wfq({ pila: 'ven', anio: W.CUR_Y, resp: W.DIM.resp[r], ri: r }) };
       })) : aldia('Nadie trae vencidas de este año.'));
       h += '</div><div><p class="tl">Lo que vence en los próximos 7 días</p>' + (ts.length ? lista(ts.map(function (t) {
-        return { pt: 'ojo', a: esc(W.DIM.tar[t]), b: '', n: fi(porT[t]), ncls: 'ojo', liga: 'panel' };
+        return { pt: 'ojo', a: esc(W.DIM.tar[t]), b: '', n: fi(porT[t]), ncls: 'ojo', liga: 'panel', wf: wfq({ pila: 'sem', tar: W.DIM.tar[t], ti: t }) };
       })) : aldia('Nada vence en los próximos 7 días.')) + '</div></div>';
       h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. Sin lo que está en pausa por el cliente' + (o.pausa ? ' (' + fi(o.pausa) + ' tareas)' : '') + '. ' + datosAl(W.D) + '</p>';
       return h;
@@ -698,16 +708,17 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 
   // --- WorkFlow de un departamento (gerentes) ---
   function tEquipo(dep) {
-    return { id: 'equipo', t: 'Mi equipo · ' + DEPS[dep], s: 'El WorkFlow de tu departamento', liga: 'panel', ancha: true, arma: async function () {
+    var qd = function (o) { o.dep = DEPS[dep]; return wfq(o); };
+    return { id: 'equipo', t: 'Mi equipo · ' + DEPS[dep], s: 'El WorkFlow de tu departamento', liga: 'panel', wf: qd({ pila: 'todo' }), ancha: true, arma: async function () {
       var W = await cargaWF(); if (!W) return null;
       var mio = W.R.filter(function (x) { return W.depO(x) === dep; });
       if (!mio.length) return null;
       var o = resumenWF(W, mio), h = '';
       h += '<div class="kp">'
-        + k('Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
-        + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + barra(o.mTar ? o.mTer / o.mTar : 0))
-        + k('Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
-        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo')
+        + kw(qd({ pila: 'ven' }), 'Vencidas contra el SAT', fi(o.ven), fi(o.venAnio) + ' de ' + W.CUR_Y + ' · ' + fi(o.venRez) + ' de rezago', o.ven ? 'mal' : 'bien')
+        + kw(qd({ pila: 'mes', ym: o.mes }), 'Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mPen) + ' pendientes' + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + kw(qd({ pila: 'sem' }), 'Vencen en 7 días', fi(o.semana), 'pendientes en plazo', o.semana ? 'ojo' : '')
+        + kw(qd({ pila: 'efe', anio: W.CUR_Y }), 'Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo')
         + '</div>';
       var por = {};
       mio.forEach(function (x) {
@@ -761,9 +772,13 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   }
 
   // --- Mi avance del mes (contadores y Gabo; el mismo paquete de «Mi panel») ---
-  function soloMios(W) {
+  function miResp(W) {
     var mi = norm(NOMWF), r = -1;
     (W.DIM.resp || []).forEach(function (n, i) { if (norm(n) === mi) r = i; });
+    return r;
+  }
+  function soloMios(W) {
+    var r = miResp(W);
     return r < 0 ? null : W.R.filter(function (x) { return x.r === r; });
   }
   function tAvance() {
@@ -772,11 +787,12 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       var mio = soloMios(W);
       if (!mio && PERFIL === 'contador') mio = W.R;   // sin su nombre del WorkFlow: todo su paquete (lo mismo de Mi panel)
       if (!mio || !mio.length) return null;
-      var o = resumenWF(W, mio);
-      var h = '<div class="kp">' + k('Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mTer) + ' de ' + fi(o.mTar) + ' terminadas' + barra(o.mTar ? o.mTer / o.mTar : 0))
-        + k('Vencidas contra el SAT', fi(o.ven), o.venRez ? fi(o.venRez) + ' de años anteriores' : 'contando todos los meses', o.ven ? 'mal' : 'bien')
-        + k('Vencen en 7 días', fi(o.semana), 'en plazo todavía', o.semana ? 'ojo' : '')
-        + k('Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo') + '</div>';
+      var o = resumenWF(W, mio), ri = miResp(W);
+      var qr = function (x) { if (ri >= 0) { x.resp = W.DIM.resp[ri]; x.ri = ri; } return wfq(x); };
+      var h = '<div class="kp">' + kw(qr({ pila: 'mes', ym: o.mes }), 'Avance de ' + MESL[o.mes % 100 - 1], fp(o.mTar ? o.mTer / o.mTar : null), fi(o.mTer) + ' de ' + fi(o.mTar) + ' terminadas' + barra(o.mTar ? o.mTer / o.mTar : 0))
+        + kw(qr({ pila: 'ven' }), 'Vencidas contra el SAT', fi(o.ven), o.venRez ? fi(o.venRez) + ' de años anteriores' : 'contando todos los meses', o.ven ? 'mal' : 'bien')
+        + kw(qr({ pila: 'sem' }), 'Vencen en 7 días', fi(o.semana), 'en plazo todavía', o.semana ? 'ojo' : '')
+        + kw(qr({ pila: 'efe', anio: W.CUR_Y }), 'Efectividad SAT ' + W.CUR_Y, fp(o.terA ? o.satA / o.terA : null), 'terminadas en plazo') + '</div>';
       h += '<p class="nota">Mes contable que se trabaja: ' + esc(ymL(o.mes)) + '. ' + datosAl(W.D) + '</p>';
       return h;
     } };
@@ -1507,6 +1523,8 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     abre('cobranza', x);
   }
   document.addEventListener('click', function (e) {
+    var wv = e.target.closest('[data-wf]');
+    if (wv) { e.preventDefault(); e.stopPropagation(); abre('panel', wv.getAttribute('data-wf')); return; }
     var c = e.target.closest('[data-cxc]');
     if (c && window.PROFASE_CXC) {
       var p = String(c.getAttribute('data-cxc')).split('|');
