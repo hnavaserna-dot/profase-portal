@@ -249,13 +249,22 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       }
       if (!EST.accesos) { $('error').hidden = false; $('error').textContent = 'Esta pantalla es para la dirección y Fernando Cadengo.'; return; }
       var desde = new Date(Date.now() - 90 * DIA).toISOString();
-      var todos = [], i = 0;
-      for (;;) {   // de mil en mil, hasta 20 mil renglones (90 días)
-        var r = await sb.from('accesos').select('*').gte('at', desde).order('at', { ascending: false }).range(i, i + 999);
-        if (r.error) throw r.error;
-        todos = todos.concat(r.data || []);
-        if (!r.data || r.data.length < 1000 || todos.length >= 20000) break;
-        i += 1000;
+      // de mil en mil, hasta 20 mil renglones (90 días); cinco páginas a la vez y juntas en su orden (revisión de la noche
+      // del 10-nov-2026: una tras otra eran ~20 vueltas a la base y la pantalla tardaba 5 a 6 s en abrir)
+      var todos = [], i = 0, fin = false;
+      while (!fin && todos.length < 20000) {
+        var pags = [];
+        for (var k = 0; k < 5 && i + k * 1000 < 20000; k++) {
+          pags.push(sb.from('accesos').select('*').gte('at', desde).order('at', { ascending: false }).range(i + k * 1000, i + k * 1000 + 999));
+        }
+        var rs = await Promise.all(pags);
+        for (var j = 0; j < rs.length; j++) {
+          if (rs[j].error) throw rs[j].error;
+          var d = rs[j].data || [];
+          todos = todos.concat(d);
+          if (d.length < 1000 || todos.length >= 20000) { fin = true; break; }
+        }
+        i += pags.length * 1000;
       }
       filas = todos;
       var p = await sb.from('perfiles').select('usuario,nombre,rol').order('nombre');
