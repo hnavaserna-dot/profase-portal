@@ -1677,6 +1677,7 @@ function render(){
   v.appendChild(resumenArriba(base,rows));
   v.appendChild(tablaEmpresas(S.pend&&S.pend!=='pap'?rows.filter(r=>((PEND.emp.get(r.cli)||{})[S.pend]||0)>0):rows));
   if(S.cliente!=null && !document.getElementById('ov').hidden) pintaModal();
+  pintaAplAv(); aplPideSiHace();   // con muchas empresas, lo «Confirmado (CFDI)» se trae cuando algo de la pantalla ya lo usa (10-nov-2026)
 }
 /* lo de arriba (5-nov-2026, nueva vista que pidió Fernando: «ver tantos datos en una pantalla»): tres cifras (cuentas por
    cobrar, por pagar y lo que tiene más de 90 días; las tres filtran al picarlas, como siempre) y «Ver más del resumen»,
@@ -1774,6 +1775,7 @@ function modulos(base,cuales,conApl){
   [['Por CFDI',ap.n.conf],['Aceptadas',ap.n.acep],['Exactas',ap.n.auto],['Sugeridas',ap.n.sug+ap.n.rev]].forEach(([t,v],i)=>{
     if(i<2&&!v) return; const l=el('div','ln'); l.appendChild(el('span',null,t)); l.appendChild(el('b',null,F.int.format(v))); b.appendChild(l); });
   b.appendChild(el('div','n','Demostrativo · no cambia saldos'));
+  const av=el('div','n'); av.id='car-apl-av'; av.setAttribute('aria-live','polite'); av.hidden=true; b.appendChild(av);   // 10-nov-2026
   b.onclick=()=>{ S.aplE=sola?new Set():new Set(['con']); S.doc=null; guardaFiltros(); render(); };
   box.appendChild(b);
   return box;
@@ -3379,10 +3381,17 @@ function satAplica(){
 // soloApl (4-nov-2026, el Excel de aplicaciones): solo los folios de las facturas con saldo y de los anticipos y notas a
 // favor (lo único que puede ser «Confirmada (CFDI)»), sin repasar toda la cartera: quien llama hace satAplica() una vez.
 // Si ya se trajo todo lo de la empresa (al abrir su ventana), no se vuelve a pedir.
+// los documentos de cada empresa, en el mismo orden de ROWS (10-nov-2026: antes cada empresa recorría todos los documentos
+// de la cartera, y con todas las empresas eso trababa la página); se arma una vez por cada carga de la cartera
+let FCLI=null, FCLI_DE=null;
+function filasDe(ci){
+  if(FCLI_DE!==ROWS){ FCLI=new Map(); for(const r of ROWS){ let a=FCLI.get(r.cli); if(!a) FCLI.set(r.cli,a=[]); a.push(r); } FCLI_DE=ROWS; }
+  return FCLI.get(ci)||[];
+}
 async function cargaRelSat(ci,soloApl){
   if(ci==null||!D.cli[ci]) return false;
   const rfc=D.cli[ci][2];
-  const deCli=ROWS.filter(r=>r.cli===ci&&r.uuid&&r.mod!==TER);
+  const deCli=filasDe(ci).filter(r=>r.uuid&&r.mod!==TER);
   const llave=a=>{ const us=[...new Set(a.map(r=>r.uuid.toUpperCase()))].slice(0,20000); return {us,k:us.length+'|'+(us[0]||'')+'|'+(us[us.length-1]||'')}; };
   const todo=llave(deCli);
   if(soloApl&&todo.us.length&&SAT.relDe.get(rfc)===todo.k) return false;
@@ -3415,7 +3424,8 @@ function relApl(ci){
   if(!p){ p=cargaRelSat(ci,true).catch(()=>false); REL_PEND.set(ci,p); p.then(()=>{ if(REL_PEND.get(ci)===p) REL_PEND.delete(ci); }); }
   return p;
 }
-async function cargaRelApl(cis,avance){
+// par: cuántas empresas a la vez (4; 2 cuando se trae de fondo con la pantalla en uso: ver precargaApl)
+async function cargaRelApl(cis,avance,par){
   const tot=cis.length; let n=0, cambio=false;
   const di=()=>{ if(avance) avance(n,tot); };
   di();
@@ -3425,7 +3435,7 @@ async function cargaRelApl(cis,avance){
     try{ await cargaUuids(tanda.map(ci=>D.cli[ci][2])); }catch(e){}
     let j=0;
     const trabaja=async()=>{ while(j<tanda.length){ const ci=tanda[j++]; if(await relApl(ci)) cambio=true; n++; di(); } };
-    await Promise.all([trabaja(),trabaja(),trabaja(),trabaja()]);
+    await Promise.all(Array.from({length:Math.max(1,par||4)},trabaja));
   }
   if(cambio){ satAplica(); aplLimpia(); }
   return cambio;
@@ -3439,12 +3449,36 @@ function aplCandidatas(cis){
     if((f[0]&&d[0])||(f[1]&&d[1])) out.push(ci); });
   return out;
 }
-// al abrir la Cartera (ya con la pantalla a la vista): las de las empresas que se ven; al terminar, la tarjeta se pone al día
-let APL_PRE=null;
+/* al abrir la Cartera (ya con la pantalla a la vista): las de las empresas que se ven; al terminar, la tarjeta se pone al día.
+   Con muchas empresas, solo cuando algo lo usa (10-nov-2026, revisión nocturna; Héctor Daniel Nava, 10-nov-2026, 06:5x:
+   «Si autorizo cartera de dirección de crm», a la propuesta de la revisión). Como la dirección o un gerente (todas las
+   empresas: más de APL_PRE_MAX que pueden tener algo «Confirmado (CFDI)»), traer lo de todas al abrir bajaba ~18 MB, hacía
+   ~117 llamadas y trababa la página y la pantalla siguiente. Ahora se trae solo cuando se usa: la tarjeta «Se puede
+   aplicar» a la vista («Ver más del resumen»), la columna «Por aplicar», FILTROS › Aplicaciones, la pila «Se pueden
+   aplicar» de «Por depurar» o el Excel de aplicaciones (que ya trae lo suyo); y entonces de fondo, 2 empresas a la vez,
+   con la pantalla en uso y la tarjeta diciendo cuánto lleva. Al terminar los números son los mismos de antes. Con pocas
+   (un contador), como siempre: al abrir. */
+let APL_PRE_MAX=30;   // let: la prueba de pantallas lo baja para probar el camino de muchas empresas
+let APL_PRE=null, APL_ESPERA=false, APL_AV=null;
+const aplHaceFalta=()=>!!(PV.res||PV.cols||S.aplE.size||S.aplT.size||S.pend==='apl');
 function precargaApl(){
   const cis=aplCandidatas().filter(ci=>!OCU(D.cli[ci][2]));
-  const p=APL_PRE=cargaRelApl(cis).then(c=>{ if(c&&APL_PRE===p&&S.vista==='res') render(); return c; }).catch(()=>false);
+  const grande=cis.length>APL_PRE_MAX;
+  if(grande&&!aplHaceFalta()){ APL_ESPERA=true; return null; }
+  APL_ESPERA=false;
+  if(grande){ APL_AV={n:0,tot:cis.length}; pintaAplAv(); }
+  const av=grande?(n,t)=>{ APL_AV={n,tot:t}; pintaAplAv(); }:null;
+  const p=APL_PRE=cargaRelApl(cis,av,grande?2:4)
+    .then(c=>{ if(APL_PRE===p){ const ya=!!APL_AV; APL_AV=null; if((c||ya)&&S.vista==='res') render(); } return c; })
+    .catch(()=>{ if(APL_PRE===p&&APL_AV){ APL_AV=null; if(S.vista==='res') render(); } return false; });
   return p;
+}
+// al pintar la pantalla: si con muchas empresas algo ya usa lo «Confirmado (CFDI)», se trae (una sola vez por carga)
+function aplPideSiHace(){ if(APL_ESPERA&&aplHaceFalta()) setTimeout(()=>{ if(APL_ESPERA&&aplHaceFalta()) precargaApl(); },0); }
+// cuánto lleva, en la tarjeta «Se puede aplicar» (sin volver a pintar toda la pantalla)
+function pintaAplAv(){
+  const x=document.getElementById('car-apl-av'); if(!x) return;
+  x.hidden=!APL_AV; if(APL_AV) x.textContent='Trayendo lo confirmado por CFDI… '+F.int.format(APL_AV.n)+' de '+plural(APL_AV.tot,'empresa','empresas');
 }
 /* ── «Por depurar»: las pilas de la lista de empresas (5-nov-2026; Héctor Daniel: «quiero optimizar esos reportes para
    encontrar cosas fáciles y también poder trabajar desde ahí (los contadores)»; «agarráralo como base [la vista de Fernando]
