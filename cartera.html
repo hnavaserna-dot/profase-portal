@@ -670,7 +670,6 @@ td.ab{width:40px;padding-left:4px}
 .xapl .enota{margin:0}
 .mod.apl{border-style:dashed}
 .mod.apl[aria-pressed="true"]{border-style:solid}
-.mod.apl .n.cfdi{color:var(--ink-2);font-weight:600}
 .aplbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:13px}
 .aplbox > .k{font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
 .aplbox > .l{font-size:12.5px;color:var(--ink-2);margin-top:6px;overflow-wrap:anywhere}
@@ -1361,7 +1360,6 @@ async function arranca(recarga){
   // con datos nuevos cambian los números de las contrapartes: el filtro de cliente o proveedor de la ventana se quita
   if(abierto){ const i=D.cli.findIndex(c=>c[2]===abierto); S.cliente=i>=0?i:null; S.doc=null; if(S.mf) S.mf.cps=new Set(); quitaVF();
     if(i<0) cierraOv(); else cargaUuids([abierto]).then(()=>pintaModal()); }
-  aplDecide();
   render();
   precargaApl();
   if(recarga) avisaArriba('Llegaron datos nuevos de la cartera ('+fmtD(M.generado)+' '+M.hora+').');
@@ -1659,8 +1657,6 @@ function menuMas(){
 /* ── vista resumen ── */
 function render(){
   if(S.vista!=='res') return;
-  // con muchas empresas, lo «Confirmado (CFDI)» se trae cuando algo lo pide (10-nov-2026; ver precargaApl)
-  if(APL_DIF&&!APL_VA&&aplLoPide()&&aplFaltan()) completaApl();
   armaBarra();
   const base=ROWS.filter(r=>pasa(r,{sinMod:true}));
   const rows=base.filter(r=>S.mod.has(r.mod));
@@ -1778,8 +1774,6 @@ function modulos(base,cuales,conApl){
   b.appendChild(el('div','v',F.mxn.format(ap.tot)));
   [['Por CFDI',ap.n.conf],['Aceptadas',ap.n.acep],['Exactas',ap.n.auto],['Sugeridas',ap.n.sug+ap.n.rev]].forEach(([t,v],i)=>{
     if(i<2&&!v) return; const l=el('div','ln'); l.appendChild(el('span',null,t)); l.appendChild(el('b',null,F.int.format(v))); b.appendChild(l); });
-  // con muchas empresas, lo «Confirmado (CFDI)» se suma al picarla (10-nov-2026; ver precargaApl)
-  if(APL_DIF&&(APL_VA||aplFaltan())) b.appendChild(el('div','n cfdi',aplNotaCfdi()));
   b.appendChild(el('div','n','Demostrativo · no cambia saldos'));
   const av=el('div','n'); av.id='car-apl-av'; av.setAttribute('aria-live','polite'); av.hidden=true; b.appendChild(av);   // 10-nov-2026
   b.onclick=()=>{ S.aplE=sola?new Set():new Set(['con']); S.doc=null; guardaFiltros(); render(); };
@@ -1857,8 +1851,6 @@ function tablaEmpresas(rows){
   COLS_EMP.forEach(([k,lab,txt,xc])=>{
     const e=el('th',(txt?'tx':'')+(xc?' xc':'')+(k==='vieja'?' agc':'')); const on=S.sort===k; e.setAttribute('aria-sort',ariaOrden(on,S.dir));
     e.appendChild(botonOrden(lab,on,S.dir,()=>{ if(S.sort===k) S.dir*=-1; else { S.sort=k; S.dir=txt?1:-1; } guardaFiltros(); render(); }));
-    // con muchas empresas (10-nov-2026; ver precargaApl): ordenar por aquí suma lo confirmado por CFDI
-    if(k==='apl'&&APL_DIF&&(APL_VA||aplFaltan())) e.title=APL_VA?aplNotaCfdi():'Todavía sin lo confirmado por CFDI: se suma al ordenar por aquí o al picar «Se puede aplicar»';
     tr.appendChild(e);
   });
   { const e=el('th','ab'); e.setAttribute('aria-label',conMenu?'Estatus y abrir':'Abrir'); tr.appendChild(e); }
@@ -3366,7 +3358,6 @@ window.__carCierra=function(){ if(document.getElementById('modal')) cierraOv(); 
        que sugiere la Cartera. Se lee al abrir la ventana de cada empresa.
    Lo que todavía no se revisa en el SAT sigue sumando como siempre. ── */
 const SAT={ok:false,can:new Map(),rel:new Map(),sust:new Map(),relDe:new Map()};   // lo sin saldo y Sincronizados: en «Canceladas» (311)
-const REL_OK=new Set();   // empresas (RFC) cuyo «Confirmado (CFDI)» ya se pidió con estos datos (10-nov-2026; ver precargaApl)
 const REL_APL=new Set(['01','02','03','07']);   // nota de crédito, de débito, devolución y aplicación de anticipo
 async function cargaSat(){
   let q; try{ q=await SB.rpc('cartera_sat',{p:{modo:'canceladas'}}); }catch(e){ q={error:e}; }
@@ -3419,7 +3410,7 @@ async function cargaRelSat(ci,soloApl){
       if(!can.has(String(d.uuid).toUpperCase())) can.set(String(d.uuid).toUpperCase(),{rfc,uuid:d.uuid,cancelada_el:d.cancelada_el,detectada:d.detectada,sustituida_por:d.sustituida_por}); }
   });
   const antes=SAT.rel.get(rfc);
-  SAT.rel.set(rfc,m); SAT.sust.set(rfc,sust); SAT.relDe.set(rfc,k); REL_OK.add(rfc);
+  SAT.rel.set(rfc,m); SAT.sust.set(rfc,sust); SAT.relDe.set(rfc,k);
   const n=soloApl?0:satAplica(); APL.cache.delete(ci);
   return n>0||m.size>0||!!(antes&&antes.size);
 }
@@ -3443,14 +3434,8 @@ async function cargaRelApl(cis,avance,par){
     const tanda=cis.slice(i,i+24);
     try{ await cargaUuids(tanda.map(ci=>D.cli[ci][2])); }catch(e){}
     let j=0;
-<<<<<<< Updated upstream
     const trabaja=async()=>{ while(j<tanda.length){ const ci=tanda[j++]; if(await relApl(ci)) cambio=true; n++; di(); } };
     await Promise.all(Array.from({length:Math.max(1,par||4)},trabaja));
-=======
-    const trabaja=async()=>{ while(j<tanda.length){ const ci=tanda[j++]; if(await relApl(ci)) cambio=true; REL_OK.add(D.cli[ci][2]); n++; di(); } };
-    await Promise.all([trabaja(),trabaja(),trabaja(),trabaja()]);
-    await new Promise(r=>setTimeout(r,0));   // entre tanda y tanda la pantalla responde (10-nov-2026)
->>>>>>> Stashed changes
   }
   if(cambio){ satAplica(); aplLimpia(); }
   return cambio;
@@ -3465,7 +3450,6 @@ function aplCandidatas(cis){
   return out;
 }
 /* al abrir la Cartera (ya con la pantalla a la vista): las de las empresas que se ven; al terminar, la tarjeta se pone al día.
-<<<<<<< Updated upstream
    Con muchas empresas, solo cuando algo lo usa (10-nov-2026, revisión nocturna; Héctor Daniel Nava, 10-nov-2026, 06:5x:
    «Si autorizo cartera de dirección de crm», a la propuesta de la revisión). Como la dirección o un gerente (todas las
    empresas: más de APL_PRE_MAX que pueden tener algo «Confirmado (CFDI)»), traer lo de todas al abrir bajaba ~18 MB, hacía
@@ -3495,49 +3479,6 @@ function aplPideSiHace(){ if(APL_ESPERA&&aplHaceFalta()) setTimeout(()=>{ if(APL
 function pintaAplAv(){
   const x=document.getElementById('car-apl-av'); if(!x) return;
   x.hidden=!APL_AV; if(APL_AV) x.textContent='Trayendo lo confirmado por CFDI… '+F.int.format(APL_AV.n)+' de '+plural(APL_AV.tot,'empresa','empresas');
-=======
-   Con muchas empresas, al pedirlo (10-nov-2026; lo encontró la revisión de la noche con «Comprobar real» como la dirección y
-   lo autorizó Héctor Daniel Nava, 08:21: «Si»): la dirección y quien ve toda la cartera traían al abrir lo «Confirmado
-   (CFDI)» de unas 117 empresas (117 llamadas a cartera_sat y ~18 MB): la pantalla tardaba ~21 s en estar lista, se trababa
-   y alentaba la siguiente. Con más de APL_PRE_MAX empresas candidatas ya no se trae al abrir: se trae al pedirlo (picar la
-   tarjeta o la pila «Se pueden aplicar», FILTROS › Aplicaciones u ordenar por «Por aplicar»; el Excel de aplicaciones y la
-   ficha de cada empresa traen lo suyo, como siempre) y, mientras falte, la tarjeta y la pila lo dicen. Con pocas empresas
-   (los contadores), igual que antes. Solo cambia cuándo se trae: las cuentas son las mismas. */
-const APL_PRE_MAX=30;
-let APL_PRE=null, APL_VA=null, APL_DIF=false;
-const APL_AV={n:0,tot:0};
-let APL_CAND=null, APL_CAND_DE=null;
-function aplCand(){   // las candidatas que se ven, una vez por índice de aplicaciones
-  const I=aplIdx(); if(APL_CAND_DE!==I){ APL_CAND=aplCandidatas().filter(ci=>!OCU(D.cli[ci][2])); APL_CAND_DE=I; }
-  return APL_CAND;
-}
-const aplLoPide=()=>S.pend==='apl'||S.sort==='apl'||(S.aplE.size>0&&S.aplE.size<APL_EMP.length)||(S.aplT.size>0&&S.aplT.size<APL_EST.length);
-function aplFaltan(){ if(!APL_DIF) return 0; let n=0; aplCand().forEach(ci=>{ if(!REL_OK.has(D.cli[ci][2])) n++; }); return n; }
-const aplNotaCfdi=()=>APL_VA?'Sumando lo confirmado por CFDI… '+F.int.format(APL_AV.n)+' de '+F.int.format(APL_AV.tot):'Pícala para sumar lo confirmado por CFDI';
-const aplPilaD=d=>!APL_DIF||!(APL_VA||aplFaltan())?d:APL_VA?'sumando lo confirmado por CFDI… '+F.int.format(APL_AV.n)+' de '+F.int.format(APL_AV.tot):d+' · al picarla se suma lo confirmado por CFDI';
-function aplAvancePinta(){
-  document.querySelectorAll('#vista .mod.apl .cfdi').forEach(x=>{ x.textContent=aplNotaCfdi(); });
-  const d=document.querySelector('#car-pend [data-ppl="apl"] .ppl-d'); if(d) d.textContent=aplPilaD(PEND_DEF.find(x=>x.k==='apl').d);
-}
-function completaApl(){
-  if(APL_VA) return APL_VA;
-  const cis=aplCand().filter(ci=>!REL_OK.has(D.cli[ci][2]));
-  if(!cis.length) return Promise.resolve(false);
-  const dif=APL_DIF; APL_AV.n=0; APL_AV.tot=cis.length;
-  const p=APL_VA=APL_PRE=cargaRelApl(cis,(n,t)=>{ APL_AV.n=n; APL_AV.tot=t; if(dif) aplAvancePinta(); })
-    .catch(()=>false)
-    .then(c=>{ if(APL_VA===p) APL_VA=null; if((c||dif)&&APL_PRE===p&&S.vista==='res') render(); return c; });
-  if(dif) aplAvancePinta();
-  return p;
-}
-function aplDecide(){   // con datos nuevos, antes de pintar: ¿muchas empresas?
-  REL_OK.clear(); APL_PRE=null; APL_VA=null; APL_CAND_DE=null;
-  APL_DIF=aplCand().length>(window.__PRUEBA_APL_MAX!=null?window.__PRUEBA_APL_MAX:APL_PRE_MAX);   // la prueba lo baja
-}
-function precargaApl(){
-  if(APL_DIF&&!aplLoPide()) return Promise.resolve(false);
-  return completaApl();
->>>>>>> Stashed changes
 }
 /* ── «Por depurar»: las pilas de la lista de empresas (5-nov-2026; Héctor Daniel: «quiero optimizar esos reportes para
    encontrar cosas fáciles y también poder trabajar desde ahí (los contadores)»; «agarráralo como base [la vista de Fernando]
@@ -3596,7 +3537,7 @@ function pintaPend(host){
   if(!window.PROFASE_PILAS||!PEND) return;
   const pap=ESTC.ok&&yoApruebo()?ESTC.marcas.filter(m=>m.estado==='por_aprobar').length:0;
   const pilas=PEND_DEF.filter(x=>(x.k!=='sinrev'||!REV_ERR)&&(x.k!=='can'||CAN.ok)).map(x=>({k:x.k,t:x.t,on:S.pend===x.k,tono:x.tono,
-    d:x.k==='can'&&PEND.av.n?canPct(PEND.av)+' % limpias · '+x.d:x.k==='apl'?aplPilaD(x.d):x.d,
+    d:x.k==='can'&&PEND.av.n?canPct(PEND.av)+' % limpias · '+x.d:x.d,
     n:PEND.tot[x.k],txt:x.k==='sinrev'&&!PEND.listo?'…':null,title:x.k==='sinrev'&&!PEND.listo?'Contando lo que ya se revisó…':''}));
   if(pap) pilas.push({k:'pap',t:'Por aprobar',d:'lo que pidieron sacar del reporte',tono:'gris',n:pap});
   const nEmp=new Set([...PEND.emp.keys()]).size;
