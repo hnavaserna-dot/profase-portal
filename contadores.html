@@ -31,7 +31,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="a928f5a7ed4e"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="452775b36def"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -3530,6 +3530,12 @@ initDB=async function(){await initDB0();oirJust()};
      «calendario») o, si ya la cerró, al entrar. Abre «Nueva cita» › «Personal» de verdad (no guarda nada) y la cierra.
    - «agenda-equipo-1» (la agenda privada: «gerentes y gerentes, gerentes y su equipo; HNR y HDN ven todos»): a los
      gerentes que ya vieron el del Calendario (ese ya lo explica a los nuevos y, al terminarlo, este cuenta como visto).
+   - «editar-cita-1» (Héctor Daniel Nava, 10-nov-2026, 12:20: «Mándale un recorrido a Eva, para que sepa cómo puede editar
+     una agenda, ya hecha»): cómo cambiar una cita que ya está agendada. Solo a Eva (eva.rangel), una vez, al cerrar su
+     ventana de «Nuevos cambios» (liga «calendario») o, si ya la cerró, al entrar; y en «?» › «Lo nuevo» para ella y para
+     Héctor Daniel Nava. Busca una cita de verdad que ella pueda cambiar (agenda_lista de hoy a 45 días: que pueda
+     cambiarla, activa, sin cerrar y que no haya empezado; primero las que ella agendó), abre su detalle y «Cambiar» (no
+     guarda nada) y al terminar, o al saltarlo, cierra todo; si no hay ninguna, lo explica sin abrir nada.
    - Solo leen cuáles recorridos vio y quién puede qué; anotan que lo vio. Nunca encima de una ventana ni de otro recorrido.
      No mencionan nada que la persona no pueda ver. */
 (function(){
@@ -3713,6 +3719,90 @@ initDB=async function(){await initDB0();oirJust()};
      texto:'Escoge «Mi equipo» o a una persona de tu equipo y ves sus citas, sus fechas de entrega y límite y sus pendientes. Si quieres agendarle algo a alguien a una hora en que ya tiene algo, te sale «Ocupado» con las horas.'}
   ];
 
+  // «Cambiar una cita ya agendada» (editar-cita-1; Héctor Daniel Nava, 10-nov-2026): con una cita de verdad, sin guardar nada
+  const yo=()=>{const P=window.PORTAL;return (P&&P.perfil&&P.perfil.usuario)||''};
+  let citaEd=null;
+  async function citaParaCambiar(){
+    try{
+      const H=window.PROFASE_HORA,ahora=new Date(),hoy=H.dia(ahora),ya=H.hora(ahora);
+      const f=new Date(hoy+'T12:00:00Z');f.setUTCDate(f.getUTCDate()+45);
+      const l=await rpc('agenda_lista',{p_desde:hoy,p_hasta:f.toISOString().slice(0,10),p_de:null});
+      const sirve=c=>!!c&&c.edito===true&&c.estado==='activa'&&!(c.cierre&&(c.cierre.cierre||(c.cierre.fase&&c.cierre.fase!=='antes')))
+        &&(c.dia>hoy||(c.dia===hoy&&String(c.inicio||'')>ya));
+      const ok=(Array.isArray(l)?l:[]).filter(sirve);
+      return ok.filter(c=>c.capturo===yo())[0]||ok[0]||null;
+    }catch(err){return null}
+  }
+  const hayDet=()=>{const d=doc('cal-frame');return !!(d&&d.querySelector('.cdet [data-edita]'))};
+  const hayForma=()=>{const d=doc('cal-frame');return !!(d&&d.getElementById('cTit')&&d.getElementById('fCita'))};
+  const cierraCita=()=>{try{const d=doc('cal-frame'),x=d&&d.querySelector('.cdet [data-x]');if(x)x.click()}catch(err){}};
+  const cierraTodoEd=()=>{cierraForma();cierraCita()};
+  const sinVentanas=async()=>{cierraTodoEd();await aCal()};
+  const abreCitaEd=async()=>{
+    await aCal();
+    if(hayForma()){cierraForma();await dormir(250)}   // si regresó con «Atrás» desde la forma
+    if(!hayDet()){
+      try{const w=calWin();if(w&&w.__agenda&&citaEd)w.__agenda.abre({cita:citaEd.id})}catch(err){}
+      for(let i=0;i<40&&!hayDet();i++)await dormir(150);
+    }
+    await dormir(300);
+  };
+  const abreCambiar=async()=>{
+    if(!hayForma()){
+      if(!hayDet())await abreCitaEd();
+      try{const d=doc('cal-frame'),b=d&&d.querySelector('.cdet [data-edita]');if(b)b.click()}catch(err){}
+      for(let i=0;i<40&&!hayForma();i++)await dormir(150);
+    }
+    await dormir(350);
+  };
+  async function pasosEditar(){
+    citaEd=await citaParaCambiar();
+    const eva=yo()==='eva.rangel';
+    const p=[
+      {etiqueta:'Para ti',icono:'listo',titulo:'Cambiar una cita ya agendada',
+       texto:(eva?'Héctor Daniel Nava te manda este recorrido para que sepas':'Así se ve el recorrido para saber')
+         +' cambiar una cita que ya está en la agenda: quiénes van, el asunto, el día, la hora o el lugar.'
+         +(citaEd?' Te lo enseñamos con una cita de verdad; no se cambia nada.':'')},
+      {menu:'agd',sub:'calendario',etiqueta:'Dónde está',titulo:'Agenda › Calendario',
+       texto:'Las citas se cambian desde el Calendario, en el menú Agenda.'},
+      {antes:sinVentanas,el:en('cal-frame','#verBox'),titulo:'¿De quién es la agenda?',
+       texto:eva?'En «Ver» escoges qué calendario ver: el tuyo, el de Héctor Daniel Nava o el de Héctor Nava Ramos. Así encuentras rápido la cita que vas a cambiar.'
+         :'En «Ver» escoges de quién es el calendario que quieres ver, para encontrar rápido la cita.'},
+      {antes:sinVentanas,el:en('cal-frame','#vistas'),titulo:'Encuentra la cita',
+       texto:'Búscala en Día, Semana o Mes y pícale. También sale en el detalle del día, a un lado.'}];
+    if(citaEd){
+      p.push(
+        {antes:abreCitaEd,el:en('cal-frame','.cdet [data-edita]'),etiqueta:'Aquí le picas',titulo:'«Cambiar»',
+         texto:'Al picar la cita se abre su detalle: día, hora, lugar, cliente y quiénes van. Abajo está «Cambiar». Esta es una cita de verdad, solo para enseñarte: no se cambia nada.'},
+        {antes:abreCambiar,el:en('cal-frame','#cQuiBox'),etiqueta:'1',titulo:'¿Quiénes van?',
+         texto:'Para agregar a alguien, escribe parte de su nombre y escógelo; para quitarlo, pica la × junto a su nombre. A quien puedes agendar le queda en su agenda; a los demás les llega la invitación para que contesten si van.'},
+        {antes:abreCambiar,el:en('cal-frame','#cParaF'),etiqueta:'1',titulo:'¿Para quién?',
+         texto:'En una cita personal escoges si es para Héctor Daniel Nava, para Héctor Nava Ramos o para los dos.'},
+        {antes:abreCambiar,el:en('cal-frame','#cTit'),etiqueta:'2',titulo:'El asunto',
+         texto:'Aquí corriges de qué es la cita.'},
+        {antes:abreCambiar,el:en('cal-frame','#cTipoBox'),etiqueta:'3',titulo:'¿Con quién es?',
+         texto:'Con un cliente (el grupo y una, varias o todas sus razones sociales), con un prospecto, un tema interno o personal. Si cambia, se corrige aquí igual que al agendarla. Si la reunión ya tiene minutas, su cliente ya no cambia.'},
+        {antes:abreCambiar,el:en('cal-frame','#cDia'),etiqueta:'4',titulo:'Día y hora',
+         texto:'Cambia el día y las horas de «Empieza» y «Termina». Debajo te avisa si alguien ya tiene algo a esa hora y te sugiere horarios libres.'},
+        {antes:abreCambiar,el:en('cal-frame','#cLug'),etiqueta:'5',titulo:'¿Dónde?',
+         texto:'En PROFASE, con el cliente, por teléfono, en línea u otro lugar (escribes cuál).'},
+        {antes:abreCambiar,el:en('cal-frame','#cRec'),etiqueta:'6',titulo:'Recordatorio y notas',
+         texto:'Cuánto antes les avisa a la campanita y al celular, y las notas de la cita.'},
+        {antes:abreCambiar,el:en('cal-frame','#cOk'),etiqueta:'Al final',titulo:'«Guardar cambios»',
+         texto:'Con «Guardar cambios» queda lista. Si cambiaste el día, la hora o el lugar, a quienes ya iban les llega el aviso «Cambió una cita» y a los invitados se les vuelve a preguntar si van. «Cancelar» solo cierra la ventana sin cambiar nada: no cancela la cita.'});
+    }else{
+      p.push(
+        {antes:sinVentanas,etiqueta:'Aquí le picas',titulo:'Pica la cita y luego «Cambiar»',
+         texto:'Al picar la cita se abre su detalle; abajo está «Cambiar». Se abre la misma ventana de «Nueva cita» con todo lo que ya tiene: ahí cambias quiénes van, el asunto, con quién es, el día y la hora, el lugar, el recordatorio y las notas.'},
+        {titulo:'«Guardar cambios»',
+         texto:'Con «Guardar cambios» queda lista. Si cambiaste el día, la hora o el lugar, a quienes ya iban les llega el aviso «Cambió una cita» y a los invitados se les vuelve a preguntar si van. «Cancelar» solo cierra la ventana sin cambiar nada: no cancela la cita.'});
+    }
+    p.push({antes:async()=>{cierraTodoEd();await dormir(250)},icono:'listo',titulo:'Cuándo ya no se cambia',
+      texto:'Una reunión con cliente que ya empezó o que ya se cerró ya no se cambia: quien la cierra marca si se hizo o «No se realizó». Si una cita ya no va, en su detalle está «Cancelar la cita»; si es con un cliente, te pide de parte de quién y el motivo.'});
+    p.__editar=true;
+    return p;
+  }
+
   async function rpc(n,a){const r=await window.PORTAL.sb.rpc(n,a||{});if(r.error)throw r.error;return r.data}
   const vistoLocal=id=>{try{return (JSON.parse(localStorage.getItem('profase-recorridos')||'[]')||[]).indexOf(id)>=0}catch(err){return false}};
   async function marcaVisto(id){
@@ -3730,7 +3820,7 @@ initDB=async function(){await initDB0();oirJust()};
     const r=R();if(!r||r.activo())return 'ocupado';
     vistaAntes=null;
     let como='ocupado';
-    try{como=await r.corre({pasos:pasos,fin:'¡Listo!'})}finally{if(pasos===PASOS_QUIENES||pasos===PASOS_PERSONAL)cierraForma();regresa();try{if(window.PORTAL_MENU&&window.PORTAL_MENU.suelta)window.PORTAL_MENU.suelta()}catch(err){}}
+    try{como=await r.corre({pasos:pasos,fin:'¡Listo!'})}finally{if(pasos===PASOS_QUIENES||pasos===PASOS_PERSONAL)cierraForma();if(pasos&&pasos.__editar)cierraTodoEd();regresa();try{if(window.PORTAL_MENU&&window.PORTAL_MENU.suelta)window.PORTAL_MENU.suelta()}catch(err){}}
     if(id&&(como==='fin'||como==='saltado')){
       await marcaVisto(id);
       if(id==='calendario-agenda-1'){await marcaVisto('agenda-menu-1');await marcaVisto('citas-quienes-1');await marcaVisto('agenda-equipo-1')}   // ya enseñó el menú nuevo, «¿Quiénes van?» y que la agenda es privada
@@ -3748,6 +3838,12 @@ initDB=async function(){await initDB0();oirJust()};
   (window.PROFASE_NOVEDADES=window.PROFASE_NOVEDADES||[]).push({titulo:'«¿Quiénes van?» en Nueva cita',texto:'Varias personas en un solo campo y el cliente con buscador: una, varias o todas sus razones sociales.',corre:()=>window.__recorridoQuienes()});
   window.__recorridoPersonal=()=>corre('agenda-personal-1',PASOS_PERSONAL);
   window.__recorridoEquipo=()=>corre('agenda-equipo-1',PASOS_EQUIPO);
+  window.__recorridoEditar=async()=>{const r=R();if(!r||r.activo())return 'ocupado';return corre('editar-cita-1',await pasosEditar())};
+  // en «?» › «Lo nuevo»: para Eva y para Héctor Daniel Nava (para que vea lo que se le mandó)
+  (async()=>{try{const P=window.PORTAL;if(!P)return;await P.listo;const u=yo();
+    if(u==='eva.rangel'||u==='daniel.nava')(window.PROFASE_NOVEDADES=window.PROFASE_NOVEDADES||[]).push({titulo:'Cambiar una cita ya agendada',
+      texto:'Quiénes van, el asunto, el día, la hora y el lugar',corre:()=>window.__recorridoEditar()});
+  }catch(err){}})();
   // «?» › «Recorrido de esta pantalla» en el Calendario: el mismo, por partes
   window.PROFASE_GUIAS=window.PROFASE_GUIAS||{};
   window.PROFASE_GUIAS.cal=()=>corre(null,[{titulo:'Calendario',icono:'listo',texto:'Tu agenda: tus citas, tus fechas de entrega y límite, tus pendientes y la e.firma y sellos por vencer, con los cumpleaños, aniversarios y eventos del despacho.'}].concat(pasosAgenda(true)));
@@ -3781,7 +3877,9 @@ initDB=async function(){await initDB0();oirJust()};
       const faltaP=!faltaA&&!ya('agenda-personal-1')&&ya('calendario-agenda-1')&&await puedoPersonal();
       // la agenda privada: a los gerentes que ya vieron el del Calendario (ven la de su equipo)
       const faltaE=!faltaA&&!ya('agenda-equipo-1')&&ya('calendario-agenda-1')&&rol()==='gerente'&&await tieneAgenda();
-      if(!faltaA&&!faltaR&&!faltaM&&!faltaC&&!faltaV&&!faltaQ&&!faltaP&&!faltaE)return;
+      // «Cambiar una cita ya agendada» (Héctor Daniel Nava, 10-nov-2026): solo a Eva; después del del Calendario si le falta
+      const faltaEd=!ya('editar-cita-1')&&yo()==='eva.rangel'&&await tieneAgenda();
+      if(!faltaA&&!faltaR&&!faltaM&&!faltaC&&!faltaV&&!faltaQ&&!faltaP&&!faltaE&&!faltaEd)return;
       if(!desdeAviso)await dormir(13000);   // al entrar: primero la ventana de «Nuevos cambios» y los otros recorridos
       for(let n=0;n<2;n++){
         for(let i=0;i<3600&&ocupado();i++)await dormir(500);
@@ -3792,6 +3890,12 @@ initDB=async function(){await initDB0();oirJust()};
       if(faltaQ){const c=await window.__recorridoQuienes();if(c==='ocupado')return;}
       if(faltaP){const c=await window.__recorridoPersonal();if(c==='ocupado')return;}
       if(faltaE){const c=await window.__recorridoEquipo();if(c==='ocupado')return;}
+      if(faltaEd){
+        for(let i=0;i<20&&ocupado();i++)await dormir(500);
+        // si mientras esperaba ya lo vio (desde «?» › «Lo nuevo»), ya no
+        const v2=await vistos();
+        if(!ocupado()&&!(v2&&v2.indexOf('editar-cita-1')>=0)&&!vistoLocal('editar-cita-1')){const c=await window.__recorridoEditar();if(c==='ocupado')return;}
+      }
       if(faltaR){
         for(let i=0;i<20&&ocupado();i++)await dormir(500);
         if(!ocupado())await window.__recorridoReuniones();
