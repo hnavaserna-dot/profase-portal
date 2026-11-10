@@ -319,8 +319,13 @@
     await Promise.all(que.map(function (k) { return LECTOR[k](); }));
     que.forEach(function (k) { S.cargado[k] = true; });
   }
+  // con su marco escondido no pregunta; al volver a enseñarse se pone al día (revisión de la noche del 10-nov-2026)
+  var dormido = false;
+  function aLaVista() { return window.PORTAL && PORTAL.aLaVista ? PORTAL.aLaVista() : !document.hidden; }
   async function revisaCambios() {
-    if (!sb || document.hidden) return;
+    if (!sb) return;
+    if (!aLaVista()) { dormido = true; return; }
+    dormido = false;
     try {
       var r = await sb.rpc('cot_firma');
       if (r.error) throw r.error;
@@ -1387,6 +1392,7 @@
     setInterval(revisaCambios, CADA);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisaCambios(); });
     window.addEventListener('focus', revisaCambios);
+    window.addEventListener('resize', function () { if (dormido) revisaCambios(); });
     var rq = new URLSearchParams(location.search).get('ren');
     if (rq) preparaRen(rq);
   }

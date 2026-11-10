@@ -2075,6 +2075,9 @@
     try { var fe = window.frameElement; if (fe && !fe.getClientRects().length) return false; } catch (e) { /* otro origen: pregunta */ }
     return true;
   }
+  // La misma regla para los relojes propios de cada pantalla (revisión de la noche del 10-nov-2026: Accesos, Cambios al
+  // portal, la Cartera y el Cotizador seguían preguntando con su marco escondido): una sola versión.
+  P.aLaVista = aLaVista;
   function despierta() { if (dormida && aLaVista()) { dormida = false; vuelta(); } }
   function arranca() {
     if (reloj) return;
