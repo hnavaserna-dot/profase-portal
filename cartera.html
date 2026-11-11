@@ -2212,6 +2212,8 @@ function notaRapida(){
   n.appendChild(b); return n;
 }
 // los grupos: un cliente o proveedor por lado, del de mayor saldo al de menor
+// si nadie escogió qué grupos abrir: todos abiertos cuando son pocos documentos o hay un filtro rápido
+const gruposAuto=(docs,grupos)=>docs.length<=60||grupos.length<=3||!!(S.rxf||S.pq);
 function agrupaDocs(docs){
   const mp=new Map();
   docs.forEach(d=>{ const k=d.cp+'|'+LADO_DE(d); let g=mp.get(k);
@@ -2232,9 +2234,16 @@ function listaDocs(lista,m,base,todos){
   let grupos=null, vistos;
   if(agr){
     grupos=agrupaDocs(docs);
-    const auto=docs.length<=60||grupos.length<=3||!!(S.rxf||S.pq);
+    const auto=gruposAuto(docs,grupos);
     const abierto=g=>S.gab?S.gab.has(g.k):auto;
-    vistos=[]; grupos.slice(0,G_MAS).forEach(g=>{ g.abierto=abierto(g); if(g.abierto) g.docs.forEach(d=>{ if(vistos.length<500) vistos.push(d); }); });
+    // el documento escogido («Guardar y siguiente ›», un aviso o «Ver») siempre en su renglón: su grupo se abre y se
+    // pinta, para que su detalle quede debajo de él y no suelto arriba de la lista (Fernando Cadengo, 11-nov-2026)
+    const gd=S.doc?grupos.findIndex(g=>g.docs.includes(S.doc)):-1;
+    if(gd>=0){
+      if(!abierto(grupos[gd])){ S.gab=new Set(S.gab||[]); S.gab.add(grupos[gd].k); }
+      if(gd>=G_MAS) G_MAS=Math.ceil((gd+1)/60)*60;
+    }
+    vistos=[]; grupos.slice(0,G_MAS).forEach(g=>{ g.abierto=abierto(g); if(g.abierto) g.docs.forEach(d=>{ if(vistos.length<500||d===S.doc) vistos.push(d); }); });
   } else vistos=docs.slice(0,500);
   if(!conSel) S.sel=new Set();
   else S.sel=new Set([...S.sel].filter(r=>vistos.includes(r)));
@@ -2282,7 +2291,9 @@ function listaDocs(lista,m,base,todos){
         const sv=el('span','gsv '+g.lado); sv.appendChild(document.createTextNode(F.mxn.format(g.saldo)));
         if(g.vieja!=null) sv.appendChild(el('small',null,'el más viejo: '+F.int.format(g.vieja)+' días'));
         h.appendChild(sv);
-        h.onclick=()=>{ if(!S.gab) S.gab=new Set(grupos.filter(x=>x.abierto).map(x=>x.k)); S.gab.has(g.k)?S.gab.delete(g.k):S.gab.add(g.k); pintaModal(); };
+        h.onclick=()=>{ if(!S.gab) S.gab=new Set(grupos.filter(x=>x.abierto).map(x=>x.k));
+          if(S.gab.has(g.k)){ S.gab.delete(g.k); if(S.doc&&g.docs.includes(S.doc)) S.doc=null; } else S.gab.add(g.k);   // al cerrar el grupo, se cierra su detalle
+          pintaModal(); };
         lista.appendChild(h);
         if(g.abierto) g.docs.filter(d=>vistos.includes(d)).forEach(d=>lista.appendChild(fila(d)));
       });
@@ -2292,7 +2303,7 @@ function listaDocs(lista,m,base,todos){
     const gs=el('div','gtodos');
     const ab=grupos.slice(0,G_MAS).every(g=>g.abierto);
     const bt=el('button','btnv',ab?'Cerrar todos los grupos':'Abrir todos los grupos'); bt.type='button'; bt.id='g-todos';
-    bt.onclick=()=>{ S.gab=ab?new Set():new Set(grupos.map(g=>g.k)); pintaModal(); };
+    bt.onclick=()=>{ S.gab=ab?new Set():new Set(grupos.map(g=>g.k)); if(ab) S.doc=null; pintaModal(); };
     gs.appendChild(bt); lista.insertBefore(gs,hd);
   } else vistos.forEach(d=>lista.appendChild(fila(d)));
   if(docs.length) lista.appendChild(totalDocs(docs,cols,conSel,conSel&&S.sel.size>0));
@@ -2947,12 +2958,15 @@ const segEstatus=(actual,parte)=>({actual,puede:segPuedo(parte),gc:!!SEG.puede.g
     :'«Consulta con Gerencia» le avisa a la Gerencia Contable; «Justificado» o «Modificación Exitosa» la dan por revisada.'});
 const segPlatica=(k,parte)=>({hilo:segHilo(k),puede:segPuedo(parte),yo:SEG.puede.yo||'',ph:'Qué revisaste, qué falta o con quién lo validaste',
   noPuede:SEG.puede.consulta||(window.PORTAL&&window.PORTAL.consulta)?'Tu usuario es de solo consulta: ves los comentarios, pero no comentas.':'Aquí solo se ve.'});
-// las facturas de la lista que se ve (en su orden), para ‹ › y «Guardar y siguiente ›»
+// las facturas de la lista que se ve (en su orden), para ‹ › y «Guardar y siguiente ›»: con los filtros rápidos y, en
+// «Agrupado», grupo por grupo y documento por documento, como en la pantalla (Fernando Cadengo, 11-nov-2026: de un
+// anticipo de un cliente brincaba al de otro proveedor, por saldo, como si fuera la vista «Documentos»)
 function segLista(){
   if(S.cliente==null||!FAM[S.tab]) return [];
   if(S.tab==='can') return CAN_VIS.filter(segSe);   // en «Canceladas», las de la cartera que se ven, en su orden
   const todos=docsCliente().filter(r=>LADO[S.lado].includes(r.mod)).filter(pasaMF);
-  return docsDeTab(todos).slice(0,500).filter(segSe);
+  const docs=docsDeTab(todos).filter(pasaRapido);
+  return (PV.agr!==false?agrupaDocs(docs).flatMap(g=>g.docs):docs).slice(0,500).filter(segSe);
 }
 // lo que hay que hacer con un documento, en palabras: lo que la Cartera ya sabe de él y qué estatus poner
 function queHacerDoc(d,parte){
