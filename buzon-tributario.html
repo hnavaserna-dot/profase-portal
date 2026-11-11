@@ -53,6 +53,11 @@
        cada contador, los de sus clientes y lo que le asignen. Los clientes que atiende solo la otra compañía, solo la
        dirección, Frank y Liliana (y a quien se le asigna, solo ese aviso).
      - «Cancelaciones de factura» van en su pestaña, solo para consultar, con su plazo de 3 días hábiles.
+     - (362, 11-nov-2026, mejora de Francisco Rivera) cada cancelación nueva (la que llega por correo, el Excel o «Es
+       cancelación de factura») sale también en «Avisos del SAT»: «Informativo», «Sin asignar» y, en «Concepto»,
+       «CANCELACIÓN DE FACTURA» con un «UUID: …» por renglón (f.en_avisos, f.uuids). No entra a «Empezar a revisar» ni
+       se asigna o reabre; si no era cancelación, se le cambia el concepto. «Es cancelación de factura» (quien asigna): en
+       la ficha (con el mensaje del SAT pegado, de ahí sale el UUID) o varios a la vez desde la selección.
      - «Cargar mi Excel» (Liliana y Frank): su Excel de siempre entra como «Histórico», sin repetir (por su índice).
      - (245) «+ Subir aviso» (Héctor Daniel Nava, 4-nov-2026): para los clientes que no tienen el correo de PROFASE en su
        buzón del SAT. Quien ve al cliente en el panel escoge la razón social, el día en que llegó y el archivo, y entra como
@@ -182,6 +187,9 @@ tr.click:hover td{background:var(--navy-soft)}
 .cuenta div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .cuenta b{display:block;font-family:var(--f-display);font-size:22px}
 /* (293) la última nota debajo del concepto, lo que falta para cerrar y lo que sale dentro de la ventana */
+.uuid{margin-top:3px;font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}
+.uuid b{font-family:inherit;font-weight:600;color:var(--ink)}
+@media (max-width:480px){.uuid{font-size:11px}}   /* (362) que el UUID quepa en un renglón en el celular */
 .nota-l{margin-top:3px;padding-left:7px;border-left:2px solid var(--line-strong);font-size:12px;line-height:1.35;color:var(--muted);max-width:min(360px,100%);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .falta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
 .falta .chip{white-space:normal}
@@ -274,6 +282,7 @@ tr.click:hover td{background:var(--navy-soft)}
         <span id="sel-n">0 seleccionados</span>
         <button class="btn chico acento" type="button" id="sel-asigna">Asignar</button>
         <button class="btn chico" type="button" id="sel-info">Solo informativo</button>
+        <button class="btn chico" type="button" id="sel-cancel">Es cancelación</button>
         <button class="btn chico" type="button" id="sel-concepto">Cambiar concepto</button>
         <button class="btn chico" type="button" id="sel-limpia">Quitar selección</button>
       </div>
@@ -324,8 +333,10 @@ tr.click:hover td{background:var(--navy-soft)}
   function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 7000); enVentana(t, 'bien'); }
   function error(t, cerca) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); enVentana(t, 'mal', cerca); } }
   function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  // (362) una cancelación registrada en «Avisos del SAT»: ahí (y en su ficha desde esa pestaña) es «Informativo»
+  function enAvisos(f) { return f.concepto === 'cancelacion' && !!f.en_avisos; }
   function estChip(f) {
-    if (f.concepto === 'cancelacion') return f.limite && f.limite >= DATOS.hoy ? chip('Vence ' + fecha(f.limite), 'ojo') : chip('Plazo vencido (se considera aceptada)', '');
+    if (f.concepto === 'cancelacion' && !(enAvisos(f) && PES !== 'cancel')) return f.limite && f.limite >= DATOS.hoy ? chip('Vence ' + fecha(f.limite), 'ojo') : chip('Plazo vencido (se considera aceptada)', '');
     var e = ESTADOS[f.estado] || [f.estado, '']; return chip(e[0], e[1]);
   }
   function cliente(f) { return f.razon || f.rfc; }
@@ -348,7 +359,13 @@ tr.click:hover td{background:var(--navy-soft)}
   var PEND = { abierto: 'abierto', proceso: 'en proceso', revision: 'en revisión', hecho: 'hecho', cancelado: 'cancelado' };
   // (293) el concepto arriba y, debajo, en letra chica, la última nota (recortada; completa en la ficha). Sin concepto, la nota
   // va donde decía «Sin concepto»
+  // (362) los UUID de una cancelación, uno por renglón (sin UUID: «sin dato»)
+  function uuidsHtml(f) {
+    var u = Array.isArray(f.uuids) ? f.uuids : [];
+    return u.length ? u.map(function (x) { return '<div class="uuid"><b>UUID:</b> ' + esc(x) + '</div>'; }).join('') : '<div class="uuid"><b>UUID:</b> sin dato</div>';
+  }
   function conceptoCelda(f) {
+    if (enAvisos(f)) return 'CANCELACIÓN DE FACTURA' + uuidsHtml(f) + (f.nota ? '<div class="nota-l" title="' + esc(f.nota) + '">' + esc(f.nota) + '</div>' : '');
     var h = f.concepto_n ? esc(f.concepto_n) + (f.tipo ? ' <span class="mut">· ' + esc(TIPO[f.tipo] || '') + '</span>' : '') : (f.nota ? '' : '<span class="mut">Sin concepto</span>');
     return h + (f.nota ? '<div class="nota-l" title="' + esc(f.nota) + '">' + esc(f.nota) + '</div>' : '');
   }
@@ -425,7 +442,7 @@ tr.click:hover td{background:var(--navy-soft)}
     $('f-estado').innerHTML = est.map(function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; }).join('');
     if (est.some(function (o) { return o[0] === v; })) $('f-estado').value = v;
     $('f-concepto').hidden = PES === 'cancel';
-    var cs = (EST.conceptos || []).filter(function (c) { return c.k !== 'cancelacion'; });
+    var cs = EST.conceptos || [];   // (362) las cancelaciones registradas también salen aquí
     var vc = $('f-concepto').value;
     $('f-concepto').innerHTML = '<option value="">Todos los conceptos</option><option value="-">Sin concepto</option>'
       + cs.map(function (c) { return '<option value="' + esc(c.k) + '">' + esc(c.t) + '</option>'; }).join('');
@@ -494,7 +511,7 @@ tr.click:hover td{background:var(--navy-soft)}
         if (asg === '-' && f.asignado) return false;
         if (asg && asg !== '-' && !enAviso(f, asg)) return false;   // (296) el responsable o cualquiera de sus apoyos
       }
-      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; })).join(' ')).indexOf(t) < 0) return false;
+      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; }), f.uuids || []).join(' ')).indexOf(t) < 0) return false;
       return true;
     });
   }
@@ -515,7 +532,7 @@ tr.click:hover td{background:var(--navy-soft)}
     $('thead').innerHTML = '<tr>' + (sel ? '<th class="chk"><input type="checkbox" id="sel-todos" aria-label="Seleccionar los de la página"></th>' : '')
       + '<th>Fecha</th><th>Cliente</th><th>RFC</th>' + (PES === 'cancel' ? '<th>De quién</th><th>Plazo</th>' : '<th>Concepto</th><th id="th-asg">Asignado a</th><th>Estado</th>') + '</tr>';
     $('tbody').innerHTML = ver.map(function (f) {
-      return '<tr class="click" data-id="' + f.id + '">' + (sel ? '<td class="chk"><input type="checkbox" data-sel="' + f.id + '"' + (SEL[f.id] ? ' checked' : '') + ' aria-label="Seleccionar"></td>' : '')
+      return '<tr class="click" data-id="' + f.id + '">' + (sel ? '<td class="chk">' + (enAvisos(f) ? '' : '<input type="checkbox" data-sel="' + f.id + '"' + (SEL[f.id] ? ' checked' : '') + ' aria-label="Seleccionar">') + '</td>' : '')
         + '<td class="nowrap" data-l="Fecha">' + esc(fecha(f.fecha)) + (f.hora ? ' <span class="mut">' + esc(f.hora) + '</span>' : '') + (f.origen === 'manual' ? '<div class="mut">Subido a mano</div>' : '') + '</td>'
         + '<td><div class="rs">' + esc(cliente(f)) + '</div>' + (f.grupo ? '<div class="mut">' + esc(f.grupo) + '</div>' : (f.en_ficha ? '' : '<div class="mut">No está en la ficha del CRM</div>')) + '</td>'
         + '<td class="nowrap" data-l="RFC">' + esc(f.rfc) + '</td>'
@@ -662,7 +679,8 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<dt>Cliente</dt><dd>' + esc(cliente(a)) + (a.grupo ? '<div class="mut">' + esc(a.grupo) + '</div>' : '') + '</dd>'
       + '<dt>RFC</dt><dd>' + esc(a.rfc) + '</dd>'
       + '<dt>Tipo</dt><dd>' + esc(TIPO[a.tipo] || 'Sin tipo') + '</dd>'
-      + '<dt>Concepto</dt><dd>' + esc(a.concepto_n || 'Sin concepto') + (a.concepto_texto && a.concepto_texto !== a.concepto_n ? ' <span class="mut">(en el Excel: ' + esc(a.concepto_texto) + ')</span>' : '') + '</dd>'
+      + '<dt>Concepto</dt><dd>' + esc(a.concepto_n || 'Sin concepto') + (a.concepto_texto && a.concepto_texto !== a.concepto_n ? ' <span class="mut">(en el Excel: ' + esc(a.concepto_texto) + ')</span>' : '')
+          + (a.concepto === 'cancelacion' ? uuidsHtml(a) : '') + '</dd>'
       + (a.folio ? '<dt>Folio u oficio</dt><dd>' + esc(a.folio) + '</dd>' : '')
       + (a.detalle ? '<dt>Del buzón</dt><dd>' + esc(a.detalle) + '</dd>' : '')
       + (a.consulta ? '<dt>Se consultó en el SAT</dt><dd>' + esc(fecha(a.consulta)) + '</dd>' : '')
@@ -676,6 +694,8 @@ tr.click:hover td{background:var(--navy-soft)}
           + (a.pendiente && a.pendiente.ve ? ' · <button class="lnk" type="button" id="a-pend">' + (a.soy ? 'Ver mi pendiente' : 'Ver su pendiente') + '</button> <span class="mut">(' + esc(PEND[a.pendiente.estatus] || a.pendiente.estatus) + ')</span>' : '') + '</dd>' : '')
       + '<dt>Asignado a</dt><dd>' + equipoFicha(a) + '</dd>'
       + (a.cerrado_por ? '<dt>' + (a.estado === 'informativo' ? 'Marcado informativo' : 'Lo cerró') + '</dt><dd>' + esc(a.cerrado_por) + ' · ' + esc(fh(a.cerrado_en)) + (a.nota_cierre ? '<div>' + esc(a.nota_cierre) + '</div>' : '') + '</dd>' : '')
+      // (362) la cancelación que se registró sola en «Avisos del SAT»
+      + (enAvisos(a) && !a.cerrado_por ? '<dt>Informativo</dt><dd>Se registró solo en «Avisos del SAT» · ' + esc(fh(a.en_avisos)) + '</dd>' : '')
       + (a.observaciones ? '<dt>Observaciones</dt><dd>' + esc(a.observaciones) + '</dd>' : '')
       + '</dl></div></div>');
     if (a.asunto || a.cuerpo) h.push('<div class="sec"><h3>El correo del SAT</h3><div class="in">' + (a.asunto ? '<div class="t"><b>' + esc(a.asunto) + '</b></div>' : '')
@@ -697,6 +717,14 @@ tr.click:hover td{background:var(--navy-soft)}
       + (pu.informativo ? '<button class="btn" type="button" id="a-info">Solo informativo (sin asignar)</button>' : '') + '</div></div>');
     else if (pu.clasificar) acc.push('<div class="campo"><label for="a-con">Concepto</label><select id="a-con">' + opcionesConcepto(a.concepto, true) + '</select></div>'
       + '<div class="acciones"><button class="btn" type="button" id="a-guarda-con">Guardar concepto</button></div>');
+    // (362) «Es cancelación de factura» (quien asigna): con el mensaje del SAT pegado, el CRM saca el UUID; ya registrada y sin
+    // UUID, «Agregar el UUID»
+    if (pu.cancelacion && !(enAvisos(a) && (a.uuids || []).length)) acc.push('<div class="bloque" id="a-can-box"><div class="t">' + (enAvisos(a) ? 'Agregar el UUID' : '¿Es una cancelación de factura?') + '</div>'
+      + '<div class="campo"><label for="a-can-txt">Mensaje del SAT' + (enAvisos(a) ? '' : ' (opcional)') + '</label>'
+      + '<textarea id="a-can-txt" maxlength="4000" placeholder="Pega el mensaje del Buzón Tributario: «… solicita la cancelación de la(s) factura(s) con folio(s) …»"></textarea>'
+      + '<div class="mut">De ahí el CRM saca el UUID. Queda «Informativo» y «Sin asignar», aquí y en «Cancelaciones de factura».</div></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="a-can">' + (enAvisos(a) ? 'Guardar el UUID' : 'Es cancelación de factura') + '</button></div></div>');
+    if (enAvisos(a) && pu.clasificar) acc.push('<div class="mut">Es una cancelación de factura informativa: no se asigna. Si no lo es, cámbiale el concepto.</div>');
     if (pu.cerrar && !pu.asignar && !a.asignado) acc.push('<div class="mut">Para cerrarlo, primero lo asigna ' + esc(EST.asignan || 'quien asigna los avisos') + ' o la dirección.</div>');
     // (202) el plazo: el CRM propone la fecha de notificación; Liliana o Frank la confirman y dicen si lleva plazo
     if (pu.plazo) acc.push('<div class="bloque" id="a-plazo-box"><div class="t">El plazo</div>'
@@ -859,6 +887,12 @@ tr.click:hover td{background:var(--navy-soft)}
       pintaFicha(r); avisa('Listo: el aviso se reabrió' + (cam === 'trabajo' ? ' y lleva trabajo (quedó en los Pendientes de quien lo tiene).' : '.')); await carga();
     });
     if ($('a-pend')) $('a-pend').onclick = function () { if (!abreEnPortal('pendientes', String(a.pendiente.id))) error('Abre Agenda › Pendientes para verlo.'); else cierra(); };
+    boton('a-can', async function () {   // (362)
+      var t = String($('a-can-txt').value || '').trim(), ya = enAvisos(a);
+      if (ya && !t) throw new Error('Pega el mensaje del SAT con el UUID (folio fiscal)');
+      await rpc('bzt_es_cancelacion', { p_ids: [a.id], p_texto: t }); await ficha(a.id);
+      avisa(ya ? 'Listo: se guardó el UUID.' : 'Listo: quedó como cancelación de factura, informativa.'); await carga();
+    });
     boton('a-info', async function () { await rpc('bzt_informativo', { p_ids: [a.id], p_nota: '' }); await ficha(a.id); avisa('Quedó como informativo.'); await carga(); });
     boton('a-guarda-con', async function () { if (!$('a-con').value) throw new Error('Escoge el concepto'); await rpc('bzt_clasifica', { p_ids: [a.id], p_concepto: $('a-con').value }); await ficha(a.id); avisa('Listo: se guardó el concepto.'); await carga(); });
     boton('a-reabre', async function () {
@@ -931,9 +965,22 @@ tr.click:hover td{background:var(--navy-soft)}
       catch (e) { error(falla(e)); this.disabled = false; }
     };
   };
+  // (362) varios a la vez como cancelación de factura (sin el UUID: ese se pega en la ficha de cada uno)
+  $('sel-cancel').onclick = function () {
+    var n = ids().length;
+    pregunta('<h2 id="pq-t">Es cancelación de factura</h2><div>' + (n === 1 ? 'El aviso queda' : 'Los ' + n + ' avisos quedan') + ' como cancelación de factura: «Informativo» y «Sin asignar», aquí y en «Cancelaciones de factura». Solo cambian los que no están asignados.</div>'
+      + '<div class="mut">El UUID se agrega en la ficha de cada uno, pegando el mensaje del SAT.</div>'
+      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Es cancelación</button></div>');
+    $('m-no').onclick = noPregunta;
+    $('m-ok').onclick = async function () {
+      this.disabled = true;
+      try { var r = await rpc('bzt_es_cancelacion', { p_ids: ids(), p_texto: '' }); noPregunta(); SEL = {}; avisa((r.marcados || 0) + (r.marcados === 1 ? ' quedó' : ' quedaron') + ' como cancelación de factura.'); await carga(); }
+      catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  };
   $('sel-concepto').onclick = function () {
     pregunta('<h2 id="pq-t">Cambiar el concepto</h2><div class="campo"><label for="m-con">Concepto</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
-      + '<div class="mut">Si escoges «Cancelación de factura», se pasan a su pestaña.</div>'
+      + '<div class="mut">Si escoges «Cancelación de factura», quedan «Informativo» y salen también en su pestaña (las asignadas, solo en su pestaña).</div>'
       + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Guardar</button></div>');
     $('m-no').onclick = noPregunta;
     $('m-ok').onclick = async function () {
@@ -1165,7 +1212,9 @@ tr.click:hover td{background:var(--navy-soft)}
       var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado', 'Queda notificado', 'Plazo', 'Camino'];
       var filas = L.map(function (f) {
         return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, deQuien(f), f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
-          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '', f.concepto_n || '', f.folio || '', asignadosTexto(f), (ESTADOS[f.estado] || [f.estado])[0],
+          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '',
+             enAvisos(f) ? 'CANCELACIÓN DE FACTURA\n' + ((f.uuids || []).length ? f.uuids.map(function (u) { return 'UUID: ' + u; }).join('\n') : 'UUID: sin dato') : f.concepto_n || '',   // (362)
+             f.folio || '', asignadosTexto(f), (ESTADOS[f.estado] || [f.estado])[0],
              f.notificado ? fecha(f.notificado) + (f.notif_prop ? ' (propuesta)' : '') : '',
              f.plazo === 'con' ? 'Vence el ' + fecha(f.vence) : f.plazo === 'sin' ? 'Sin plazo' : abierto(f) ? 'Por confirmar' : '',
              CAMINOS[f.camino] || ''];
@@ -1211,6 +1260,7 @@ tr.click:hover td{background:var(--navy-soft)}
       if (q.get('ver') === 'subir-aviso') window.__bztAbre('ver:subir-aviso');
       if (q.get('ver') === 'cerrar-aviso') window.__bztAbre('ver:cerrar-aviso');
       if (q.get('ver') === 'apoyos') window.__bztAbre('ver:apoyos');
+      if (q.get('ver') === 'cancelaciones') window.__bztAbre('ver:cancelaciones');
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
@@ -1255,6 +1305,26 @@ tr.click:hover td{background:var(--navy-soft)}
                          : 'Nuevo: un aviso puede tener a varias personas: una responsable y las demás de apoyo. En la tabla salen todas, el responsable primero, y «Asignados a mí» cuenta también donde estás de apoyo.');
       };
       ilu2(); return;
+    }
+    // (362) lo nuevo: las cancelaciones de factura también en «Avisos del SAT» («Nuevos cambios», clave ver|cancelaciones|…):
+    // los informativos de esta pestaña, con «Informativos» y la columna «Concepto» iluminados
+    if (String(x || '') === 'ver:cancelaciones') {
+      var t4 = 0, ilu4 = function () {
+        if (!EST || !$('cargando').hidden || !$('principal') || $('principal').hidden) { if (t4++ < 60) setTimeout(ilu4, 150); return; }
+        if (PES !== 'avisos') document.querySelector('[data-pes="avisos"]').click();
+        var t5 = 0, sigue = function () {
+          if (!(PES === 'avisos' && DATOS)) { if (t5++ < 40) setTimeout(sigue, 100); return; }
+          $('f-estado').value = 'informativo'; VISTAS = 50; pinta();
+          var k = document.querySelector('[data-ppl="informativo"]'), th = $('thead');
+          [k, th].forEach(function (el) { if (!el) return; el.style.outline = '3px solid var(--accent)'; el.style.outlineOffset = '2px'; });
+          try { (k || th).scrollIntoView({ block: 'center' }); } catch (e) {}
+          setTimeout(function () { [k, th].forEach(function (el) { if (el) { el.style.outline = ''; el.style.outlineOffset = ''; } }); }, 6000);
+          avisa(EST.asigna ? 'Nuevo: cada cancelación de factura queda también aquí, «Informativo» y «Sin asignar», con «CANCELACIÓN DE FACTURA» y su UUID en «Concepto». En un aviso nuevo, «Es cancelación de factura» la registra (pega el mensaje del SAT y el CRM saca el UUID).'
+                           : 'Nuevo: cada cancelación de factura queda también aquí, «Informativo» y «Sin asignar», con «CANCELACIÓN DE FACTURA» y su UUID en «Concepto».');
+        };
+        sigue();
+      };
+      ilu4(); return;
     }
     var v = VER[String(x || '').replace(/^ver:/, '')];
     if (/^ver:/.test(String(x || '')) && v) {
