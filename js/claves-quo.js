@@ -46,7 +46,7 @@
     + '.cqo-acc{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
     + '.cqo-b{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#FFFFFF);color:var(--ink,#132036);border-radius:8px;padding:6px 11px;cursor:pointer;min-height:32px;white-space:nowrap}'
     + '.cqo-b:hover{border-color:var(--navy,#1F3864)}'
-    + '.cqo-b.pri{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E);color:#fff}'
+    + '.cqo-b.pri{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E);color:#14233F}'
     + '.cqo-b:disabled{opacity:.6;cursor:default}'
     + '.cqo-b:focus-visible,.cqo input:focus-visible{outline:2px solid var(--accent,#F07A1E);outline-offset:2px}'
     + '.cqo-f{display:grid;gap:10px;border:1px solid var(--line,#DCE2EB);border-radius:10px;padding:10px 12px;background:var(--surface-2,#EEF2F7);min-width:0}'
