@@ -452,23 +452,33 @@
        filtro y «Limpiar» lo regresa ahí; o una función que dice cuál es ese valor (si la pantalla lo pone después). Su
        opción vacía (p. ej. «Todo el año») sale como una opción más;
      - si el <select> está escondido o apagado, el campo no sale en FILTROS (ver(); p. ej. un filtro que solo aplica a una
-       plantilla). */
+       plantilla);
+     - un <select multiple> (11-nov-2026, Panel de trabajo; pedido de Fernando Cadengo con la idea de Gabo) es un campo
+       'varios': se marcan varias opciones y la pantalla lee las que quedaron escogidas (selectedOptions). */
   function deSelect(sel, o) {
     o = o || {};
     if (!sel) return null;
     var vacia = Array.prototype.some.call(sel.options, function (x) { return x.value === ''; });
-    var ini = sel.value;
+    var ini = sel.value, multi = !!sel.multiple;
+    function marcadas() { return Array.prototype.filter.call(sel.options, function (x) { return x.selected && x.value !== ''; }).map(function (x) { return x.value; }); }
     function base() { return typeof o.defecto === 'function' ? String(o.defecto() || '') : ini; }
-    var fijo = !!o.defecto || !vacia;   // siempre trae algo escogido: su opción vacía («Todo el año») es una más
+    var fijo = !multi && (!!o.defecto || !vacia);   // siempre trae algo escogido: su opción vacía («Todo el año») es una más
     var c = {
-      k: o.k || sel.id, tipo: 'uno', buscar: !!o.buscar, ver: function () { return !sel.hidden && !sel.disabled; },
+      k: o.k || sel.id, tipo: multi ? 'varios' : 'uno', buscar: !!o.buscar, ver: function () { return !sel.hidden && !sel.disabled; },
       t: o.t || String(sel.getAttribute('aria-label') || sel.id || '').toUpperCase(),
       opciones: function () {
         return Array.prototype.filter.call(sel.options, function (x) { return (x.value !== '' || fijo) && !x.hidden && !x.disabled; })
           .map(function (x) { return { v: x.value, t: x.textContent.trim() }; });
       },
-      valor: function () { return sel.value || fijo ? [sel.value] : []; },
+      valor: function () { return multi ? marcadas() : sel.value || fijo ? [sel.value] : []; },
       pon: function (v) {
+        if (multi) {
+          var L = (v || []).map(String), antes = marcadas().join('\u0001');
+          Array.prototype.forEach.call(sel.options, function (x) { x.selected = x.value !== '' && L.indexOf(x.value) >= 0; });
+          if (marcadas().join('\u0001') === antes) return;
+          try { sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* nada */ }
+          return;
+        }
         var nv = v && v.length ? String(v[v.length - 1]) : (o.defecto || !vacia ? base() : '');
         if (sel.value === nv) return;
         sel.value = nv;
@@ -477,9 +487,16 @@
     };
     if (o.todos) c.todos = o.todos;
     else if (vacia) { var op0 = Array.prototype.filter.call(sel.options, function (x) { return x.value === ''; })[0]; c.todos = op0 ? op0.textContent.trim() : 'Todos'; }
-    if (o.defecto || !vacia) Object.defineProperty(c, 'defecto', { enumerable: true, get: function () { return [base()]; } });
+    if (!multi && (o.defecto || !vacia)) Object.defineProperty(c, 'defecto', { enumerable: true, get: function () { return [base()]; } });
     if (o.chip) c.chip = o.chip;
+    else if (multi) c.chip = function (vs) {   // «POR INICIAR Y EN PROCESO» o «3 MARCADOS» (no un número suelto)
+      if (vs.length > 2) return vs.length + ' marcados';
+      var ops = c.opciones();
+      return vs.map(function (v) { var x = ops.filter(function (z) { return String(z.v) === String(v); })[0]; return x ? x.t : v; }).join(' y ');
+    };
     if (o.lista) c.lista = true;
+    // de varias opciones: con casillas («se pueden marcar varios») aunque sean pocas; con muchas, también su buscador
+    else if (multi) Object.defineProperty(c, 'lista', { enumerable: true, get: function () { return c.opciones().length <= MUCHAS; } });
     return c;
   }
 
