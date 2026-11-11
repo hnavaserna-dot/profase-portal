@@ -202,26 +202,53 @@
     var m = document.createElement('div'); m.className = 'ppl-masm'; m.id = id + 'm'; m.hidden = true;
     m.setAttribute('role', 'group'); m.setAttribute('aria-label', o.etiqueta || 'Más');
     w.appendChild(b); w.appendChild(m);
+    // 11-nov-2026 (auditoría externa, H-01): la lista va fija en la pantalla y pegada a su botón (como la ventana de
+    // FILTROS de js/filtros.js), para que ningún recuadro de la página la corte. A 360 px, en Estrategias, Costos de
+    // sistemas, IMPI y Q Chat el recuadro de la barra (.caja de la página, que no deja salir nada) la cortaba y solo se
+    // veía su borde. Abre hacia abajo; si abajo no cabe y arriba hay más lugar, hacia arriba; pegada al lado derecho del
+    // botón y nunca fuera de la pantalla (8 px de las orillas). Sigue al botón si se desliza y se cierra si ya no se ve.
+    function seVe() {
+      if (!b.getClientRects().length) return false;
+      var r = b.getBoundingClientRect(), a = r.top, z = r.bottom, iz = r.left, de = r.right;
+      for (var p = b.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        var cs = getComputedStyle(p);
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+        var q = p.getBoundingClientRect();
+        a = Math.max(a, q.top); z = Math.min(z, q.bottom); iz = Math.max(iz, q.left); de = Math.min(de, q.right);
+      }
+      a = Math.max(a, 0); z = Math.min(z, window.innerHeight); iz = Math.max(iz, 0); de = Math.min(de, document.documentElement.clientWidth);
+      return z - a > 1 && de - iz > 1;
+    }
     function coloca() {
-      m.style.left = ''; m.style.right = ''; m.style.top = ''; m.style.bottom = ''; m.style.maxHeight = '';
-      var rb = b.getBoundingClientRect(), H = window.innerHeight || document.documentElement.clientHeight;
-      var abajo = H - rb.bottom - 12, arriba = rb.top - 12;
-      if (m.scrollHeight > abajo && arriba > abajo) { m.style.top = 'auto'; m.style.bottom = 'calc(100% + 6px)'; m.style.maxHeight = Math.max(160, arriba) + 'px'; }
-      else m.style.maxHeight = Math.max(160, abajo) + 'px';
-      var r = m.getBoundingClientRect();
-      if (r.left < 8) { m.style.right = 'auto'; m.style.left = '0'; }
-      r = m.getBoundingClientRect();
-      var W = window.innerWidth || document.documentElement.clientWidth;
-      if (r.right > W - 8) { m.style.left = 'auto'; m.style.right = '0'; }
-      // 11-nov-2026: si no cabe pegado a ningún lado del botón (el celular, con el botón a media barra), se acomoda dentro
-      // de la pantalla (antes quedaba 28 px fuera, a la izquierda, en Variaciones a 390 px)
-      r = m.getBoundingClientRect();
-      if (r.left < 8 || r.right > W - 8) { m.style.right = 'auto'; m.style.left = Math.round(8 - w.getBoundingClientRect().left) + 'px'; }
+      var s = m.style, rb = b.getBoundingClientRect();
+      var H = window.innerHeight || document.documentElement.clientHeight, W = document.documentElement.clientWidth || window.innerWidth;
+      // encima de las barras pegadas arriba de la página (la de Activo fijo es z-index 50), como la ventana de FILTROS (60)
+      s.position = 'fixed'; s.zIndex = '60'; s.right = 'auto'; s.bottom = 'auto'; s.top = '0px'; s.left = '0px'; s.maxHeight = '';
+      var alto = m.getBoundingClientRect().height, ancho = m.getBoundingClientRect().width;
+      var abajo = H - rb.bottom - 14, arriba = rb.top - 14;
+      var haciaAbajo = abajo >= alto || abajo >= arriba;
+      var lugar = Math.max(160, Math.floor(haciaAbajo ? abajo : arriba));
+      s.maxHeight = lugar + 'px';
+      var top = haciaAbajo ? rb.bottom + 6 : Math.max(8, rb.top - 6 - Math.min(alto, lugar));
+      var left = Math.max(8, Math.min(rb.right - ancho, W - 8 - ancho));
+      s.top = Math.round(top) + 'px'; s.left = Math.round(left) + 'px';
+      // si un recuadro de la página cambia desde dónde cuenta «fixed» (un transform), se corrige con lo que de verdad quedó
+      var r = m.getBoundingClientRect(), dx = left - r.left, dy = top - r.top;
+      if (Math.abs(dx) > 0.5) s.left = Math.round(left + dx) + 'px';
+      if (Math.abs(dy) > 0.5) s.top = Math.round(top + dy) + 'px';
+    }
+    var cuadro = 0;
+    function sigue(ev) {
+      if (m.hidden || cuadro) return;
+      if (ev && ev.target && ev.target.nodeType === 1 && m.contains(ev.target)) return;   // su propia lista
+      cuadro = requestAnimationFrame(function () { cuadro = 0; if (m.hidden) return; if (!seVe()) abre(false); else coloca(); });
     }
     function abre(v) {
       m.hidden = !v; b.setAttribute('aria-expanded', String(!!v));
       if (v) {
         try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu(id); } catch (e) { /* sin aviso */ }
+        // si se abre con el botón fuera de la pantalla (desde otra parte de la página), primero se trae el botón
+        try { if (!seVe()) b.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' }); } catch (e) { /* nada */ }
         coloca();
       }
     }
@@ -234,6 +261,7 @@
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !m.hidden) { abre(false); try { b.focus(); } catch (e) { /* nada */ } } });
     document.addEventListener('profase-menu', function (ev) { if (ev.detail !== id && !m.hidden) abre(false); });
     window.addEventListener('resize', function () { if (!m.hidden) coloca(); });
+    window.addEventListener('scroll', sigue, true);
     // si nada de lo de adentro se ve, «Más ▾» no sale (cada pantalla esconde lo que no le toca a quien entró)
     function revisa() {
       var hay = Array.prototype.some.call(m.querySelectorAll('.ppl-masi > *'), function (x) {
