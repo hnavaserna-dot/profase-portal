@@ -4,9 +4,13 @@
    sus empresas» y «sí, así es»).
    Una sola pieza para Variaciones / Movimientos, Reclasificación de activo fijo y Depuración de CxC / CxP: el mismo botón
    en «Más ▾» de las tres pantallas y el mismo archivo desde cualquiera, con la marca PROFASE y su PDF al lado (data-excel).
-   Tres hojas: «Resumen» (por empresa, cuántos casos hay en cada reporte y cuántos pendientes y resueltos), «Bitácora» (un
-   renglón por caso, ordenada por empresa y con filtros) y «Comentarios» (toda la plática, un renglón por comentario).
-   Entran los casos con estatus o algún comentario; «Resuelto» = Justificado o Modificación Exitosa.
+   Cuatro hojas: «Resumen» (por empresa, cuántos casos hay en cada reporte, cuántos pendientes y resueltos y cuántas
+   aplicaciones), «Bitácora» (un renglón por caso, ordenada por empresa y con filtros), «Comentarios» (toda la plática, un
+   renglón por comentario) y «Aplicaciones» (367, el mismo día: «1 b, 2 b» y «sí, así es»: cada relación factura–anticipo o
+   nota de crédito marcada «Aplicada» en Depuración CxC / CxP, con su monto, si fue a mano o con «Agotar», quién y cuándo;
+   el CRM no sabe si ya se hizo en QUO). Entran los casos con estatus o algún comentario; «Resuelto» = Justificado o
+   Modificación Exitosa. Una factura de la Cartera que está cancelada y todavía sigue en el Tablero QUO o en su cartera lo
+   dice en «Qué es» (la base la marca con la regla de la pestaña «Canceladas»; lo reservado del SAT, solo a la dirección).
    Qué empresas le salen a cada quien lo decide la base (portal/sql/363_excel_hallazgos.sql, rep_hallazgos(): los contadores
    y Gabo, las suyas; los gerentes, las suyas y las de su equipo; la dirección, la Gerencia Contable y Fernando Cadengo,
    todas; y encima la regla de cada reporte). Aquí solo se arma el archivo: la pieza no lee tablas ni pide otra cosa a la base
@@ -30,6 +34,13 @@
   var MES3 = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, sept: 9, oct: 10, nov: 11, dic: 12 };
 
   function estTxt(e) { return EST[e] || EST.sin_respuesta; }
+  /* (367) la marca de una cancelada que todavía sigue en el Tablero QUO o en su cartera (la pone la base) */
+  function cancelada(k) {
+    if (!k) return '';
+    var en = k.sat && k.cq ? 'en el SAT y en QUO' : k.sat ? 'en el SAT' : k.cq ? 'en QUO' : '';
+    var donde = k.tab ? 'sigue en el Tablero QUO: quitarla' : k.car ? 'sigue en su cartera' : '';
+    return ' · Cancelada' + (en ? ' ' + en : '') + (donde ? ' · ' + donde : '');
+  }
   function resuelto(e) { return e === 'justificado' || e === 'resuelto'; }
   function num(n) { return Number(n || 0).toLocaleString('es-MX'); }
   function dinero(n) {
@@ -103,7 +114,7 @@
       x.uuid = c.uuid || '';
     } else if (c.r === 'car') {
       if (!c.k) x.que = 'La empresa completa';
-      else x.que = 'Factura' + (c.folio ? ' ' + c.folio : '') + (c.cp ? ' · ' + c.cp : '');
+      else x.que = 'Factura' + (c.folio ? ' ' + c.folio : '') + (c.cp ? ' · ' + c.cp : '') + cancelada(c.can);
       x.uuid = c.uuid || '';
     }
     return x;
@@ -122,13 +133,15 @@
     // los clientes ocultos de quien entró no salen (salvo con «Verlos por ahora»), como en la lista
     var OC = window.PROFASE_OCULTOS, ocultos = new Set();
     if (OC) { try { await OC.carga(); } catch (e) { /* sin lista */ } }
-    var casos = (D.casos || []).filter(function (c) {
+    var todos = (D.casos || []).filter(function (c) {
       if (OC && OC.es && OC.es(c.rfc)) { ocultos.add(c.rfc); return false; }
       return true;
     });
-    if (!casos.length) {
-      return ocultos.size ? 'Tus empresas a la vista no tienen casos con estatus o comentario (hay ' + ocultos.size + ' clientes ocultos)'
-                          : 'Tus empresas no tienen casos con estatus o comentario todavía';
+    // las aplicaciones (367) van en su propia hoja: no son casos con estatus
+    var casos = todos.filter(function (c) { return c.r !== 'apl'; }), apls = todos.filter(function (c) { return c.r === 'apl'; });
+    if (!casos.length && !apls.length) {
+      return ocultos.size ? 'Tus empresas a la vista no tienen casos con estatus o comentario ni aplicaciones (hay ' + ocultos.size + ' clientes ocultos)'
+                          : 'Tus empresas no tienen casos con estatus o comentario ni aplicaciones todavía';
     }
     var CU = casos.some(function (c) { return c.r === 'var' || c.r === 'mov'; }) ? await cuentasDe(op) : { nombres: new Map(), anioBase: 2026 };
     var emp = function (rfc) { var e = E[rfc] || []; return { razon: e[0] || rfc, grupo: e[1] || '—', cont: e[2] || '' }; };
@@ -139,6 +152,12 @@
     casos.sort(function (a, z) {
       return a.e.grupo.localeCompare(z.e.grupo, 'es') || a.e.razon.localeCompare(z.e.razon, 'es') || a.rfc.localeCompare(z.rfc)
         || (ORDEN[a.r] - ORDEN[z.r]) || (a.d.perK - z.d.perK) || a.d.que.localeCompare(z.d.que, 'es') || String(a.k).localeCompare(String(z.k));
+    });
+    apls.forEach(function (c) { c.e = emp(c.rfc); });
+    apls.sort(function (a, z) {
+      return a.e.grupo.localeCompare(z.e.grupo, 'es') || a.e.razon.localeCompare(z.e.razon, 'es') || a.rfc.localeCompare(z.rfc)
+        || String(a.cp || '').localeCompare(String(z.cp || ''), 'es') || String(a.ff || '').localeCompare(String(z.ff || ''), 'es', { numeric: true })
+        || String(a.k).localeCompare(String(z.k));
     });
 
     var EX = await MK.excelJS();
@@ -151,38 +170,44 @@
     var porEst = {}; casos.forEach(function (c) { porEst[c.est] = (porEst[c.est] || 0) + 1; });
     var estLinea = EST_ORDEN.filter(function (e) { return porEst[e]; }).map(function (e) { return estTxt(e) + ': ' + num(porEst[e]); }).join(' · ');
     var lin0 = alcance + (nombre ? ' · ' + nombre : '') + (ocultos.size ? ' · sin ' + num(ocultos.size) + ' clientes ocultos' : '');
-    var lin1 = num(casos.length) + ' casos: ' + num(pend) + ' pendientes y ' + num(res) + ' resueltos';
+    var lin1 = num(casos.length) + ' casos: ' + num(pend) + ' pendientes y ' + num(res) + ' resueltos'
+      + (apls.length ? ' · ' + num(apls.length) + (apls.length === 1 ? ' aplicación por hacer en QUO' : ' aplicaciones por hacer en QUO') : '');
     var lin2 = 'Exportado el ' + ahoraTxt();
 
     // 1. Resumen: por empresa
     var ws = wb.addWorksheet('Resumen');
     var cols = [['Grupo', 22], ['Empresa', 38], ['RFC', 15], ['Contador asignado', 26], ['Variaciones', 12], ['Movimientos', 13],
-      ['Activo fijo', 12], ['Depuración CxC / CxP', 14], ['Pendientes', 12], ['Resueltos', 11], ['Total', 9]];
+      ['Activo fijo', 12], ['Depuración CxC / CxP', 14], ['Pendientes', 12], ['Resueltos', 11], ['Total', 9], ['Aplicaciones', 13]];
     cols.forEach(function (c, i) { ws.getColumn(i + 1).width = c[1]; });
     var f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Resumen por empresa', lineas: [lin0, lin1, estLinea, lin2] });
     cols.forEach(function (c, i) { ws.getCell(f0, i + 1).value = c[0]; });
     MK.cabecera(ws, f0, 1, cols.length);
     var porEmp = [], ix = {};
-    casos.forEach(function (c) {
-      var g = ix[c.rfc]; if (!g) { g = ix[c.rfc] = { e: c.e, rfc: c.rfc, n: { 'var': 0, mov: 0, af: 0, car: 0 }, p: 0, r: 0 }; porEmp.push(g); }
-      g.n[c.r]++; if (resuelto(c.est)) g.r++; else g.p++;
+    var deEmp = function (c) {
+      var g = ix[c.rfc]; if (!g) { g = ix[c.rfc] = { e: c.e, rfc: c.rfc, n: { 'var': 0, mov: 0, af: 0, car: 0 }, p: 0, r: 0, a: 0 }; porEmp.push(g); }
+      return g;
+    };
+    casos.forEach(function (c) { var g = deEmp(c); g.n[c.r]++; if (resuelto(c.est)) g.r++; else g.p++; });
+    apls.forEach(function (c) { deEmp(c).a++; });
+    porEmp.sort(function (a, z) {
+      return a.e.grupo.localeCompare(z.e.grupo, 'es') || a.e.razon.localeCompare(z.e.razon, 'es') || a.rfc.localeCompare(z.rfc);
     });
-    var tot = { 'var': 0, mov: 0, af: 0, car: 0, p: 0, r: 0 };
+    var tot = { 'var': 0, mov: 0, af: 0, car: 0, p: 0, r: 0, a: 0 };
     porEmp.forEach(function (g, j) {
       var r = ws.getRow(f0 + 1 + j);
-      [g.e.grupo, g.e.razon, g.rfc, g.e.cont, g.n['var'], g.n.mov, g.n.af, g.n.car, g.p, g.r, g.p + g.r]
+      [g.e.grupo, g.e.razon, g.rfc, g.e.cont, g.n['var'], g.n.mov, g.n.af, g.n.car, g.p, g.r, g.p + g.r, g.a]
         .forEach(function (v, i) { r.getCell(i + 1).value = v; });
-      for (var k = 5; k <= 11; k++) r.getCell(k).numFmt = '#,##0';
+      for (var k = 5; k <= 12; k++) r.getCell(k).numFmt = '#,##0';
       for (var m = 1; m <= 4; m++) r.getCell(m).alignment = { wrapText: true, vertical: 'top' };
-      ['var', 'mov', 'af', 'car'].forEach(function (k) { tot[k] += g.n[k]; }); tot.p += g.p; tot.r += g.r;
+      ['var', 'mov', 'af', 'car'].forEach(function (k) { tot[k] += g.n[k]; }); tot.p += g.p; tot.r += g.r; tot.a += g.a;
     });
     var ult = f0 + porEmp.length;
     if (porEmp.length > 1) {
       ult++;
       var t = ws.getRow(ult);
-      ['Total', num(porEmp.length) + ' empresas', '', '', tot['var'], tot.mov, tot.af, tot.car, tot.p, tot.r, tot.p + tot.r]
+      ['Total', num(porEmp.length) + ' empresas', '', '', tot['var'], tot.mov, tot.af, tot.car, tot.p, tot.r, tot.p + tot.r, tot.a]
         .forEach(function (v, i) { t.getCell(i + 1).value = v; });
-      for (var k2 = 5; k2 <= 11; k2++) t.getCell(k2).numFmt = '#,##0';
+      for (var k2 = 5; k2 <= 12; k2++) t.getCell(k2).numFmt = '#,##0';
     }
     MK.cuerpo(ws, f0 + 1, ult, 1, cols.length);
     if (porEmp.length > 1) ws.getRow(ult).font = { bold: true };
@@ -208,9 +233,10 @@
       for (var k = 1; k <= cols.length; k++) if (k !== 12 && k !== 13 && k !== 16) r.getCell(k).alignment = { wrapText: true, vertical: 'top' };
       r.getCell(12).alignment = r.getCell(13).alignment = r.getCell(16).alignment = { vertical: 'top' };
     });
-    ult = f0 + casos.length;
+    ult = f0 + Math.max(casos.length, 1);
+    if (!casos.length) ws.getCell(f0 + 1, 1).value = 'Sin casos con estatus o comentario';
     MK.cuerpo(ws, f0 + 1, ult, 1, cols.length);
-    ws.autoFilter = { from: { row: f0, column: 1 }, to: { row: ult, column: cols.length } };
+    if (casos.length) ws.autoFilter = { from: { row: f0, column: 1 }, to: { row: ult, column: cols.length } };
     ws.views = [{ state: 'frozen', ySplit: f0, xSplit: 2 }];
     MK.impresion(ws, { repetir: f0 });
 
@@ -242,6 +268,33 @@
     ws.views = [{ state: 'frozen', ySplit: f0 }];
     MK.impresion(ws, { repetir: f0 });
 
+    // 4. Aplicaciones (367): las relaciones marcadas «Aplicada» en Depuración CxC / CxP, para hacerlas en QUO
+    ws = wb.addWorksheet('Aplicaciones');
+    cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Contador asignado', 24], ['Cliente o proveedor', 32], ['Factura', 14],
+      ['Folio fiscal de la factura', 38], ['Anticipo o nota de crédito', 16], ['Su folio fiscal (o número de QUO)', 38],
+      ['Monto a aplicar', 16], ['Cómo se decidió', 14], ['Lo decidió', 24], ['Fecha', 17]];
+    cols.forEach(function (c, i) { ws.getColumn(i + 1).width = c[1]; });
+    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Aplicaciones',
+      lineas: [lin0, num(apls.length) + (apls.length === 1 ? ' aplicación marcada' : ' aplicaciones marcadas')
+        + ' «Aplicada» en Depuración CxC / CxP', 'El CRM no sabe si ya se hizo en QUO: solo guarda la decisión', lin2] });
+    cols.forEach(function (c, i) { ws.getCell(f0, i + 1).value = c[0]; });
+    MK.cabecera(ws, f0, 1, cols.length);
+    apls.forEach(function (c, j) {
+      var r = ws.getRow(f0 + 1 + j), m = c.m == null ? null : Number(c.m);
+      [c.e.grupo, c.e.razon, c.rfc, c.e.cont, c.cp || '', c.ff || '', c.uf || '', c.fd || '', c.ud || '',
+        m != null && isFinite(m) ? m : 'Lo que alcance', c.o === 'agotar' ? 'Agotar' : 'A mano', c.por || '', fecha(c.en)]
+        .forEach(function (v, i) { r.getCell(i + 1).value = v; });
+      r.getCell(10).numFmt = '$#,##0.00'; r.getCell(13).numFmt = 'dd/mm/yyyy hh:mm';
+      for (var k = 1; k <= cols.length; k++) if (k !== 10 && k !== 13) r.getCell(k).alignment = { wrapText: true, vertical: 'top' };
+      r.getCell(10).alignment = { vertical: 'top', horizontal: 'right' }; r.getCell(13).alignment = { vertical: 'top' };
+    });
+    ult = f0 + Math.max(apls.length, 1);
+    if (!apls.length) ws.getCell(f0 + 1, 1).value = 'Sin aplicaciones marcadas «Aplicada»';
+    MK.cuerpo(ws, f0 + 1, ult, 1, cols.length);
+    if (apls.length) ws.autoFilter = { from: { row: f0, column: 1 }, to: { row: ult, column: cols.length } };
+    ws.views = [{ state: 'frozen', ySplit: f0, xSplit: 2 }];
+    MK.impresion(ws, { repetir: f0 });
+
     await MK.guardar(wb, 'Hallazgos de Reportes ' + hoyArchivo() + '.xlsx');
     return null;
   }
@@ -252,7 +305,7 @@
     b.type = 'button'; b.className = op.clase || 'btn'; b.textContent = TXT;
     b.setAttribute('data-excel', TXT);   // js/marca.js le pone al lado su «PDF de hallazgos»
     b.title = 'Los casos con estatus o comentario de Variaciones, Movimientos, Activo fijo y Depuración CxC / CxP de tus empresas, '
-      + 'en un solo archivo: resumen por empresa, bitácora y comentarios';
+      + 'en un solo archivo: resumen por empresa, bitácora, comentarios y las aplicaciones por hacer en QUO';
     var ocupado = false;
     b.addEventListener('click', async function () {
       if (ocupado) return;
