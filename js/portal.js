@@ -662,6 +662,29 @@
       // recuadro o fondo) lo dice en su página con «/* renglón completo */» y width:auto. construir.py
       // (exige_desplegables()) no publica si se quita.
       + ':where(details)>summary{width:fit-content;max-width:100%}'
+      // Lo que va pegado al lado de una pantalla (un índice, una lista de opciones o una vista previa) se desliza por
+      // dentro (Héctor Daniel Nava, 11-nov-2026, 10:30, con la ficha de Clientes › Base de clientes: «quiero poder
+      // deslizarme hacia abajo sin tener que mover todo lo de la parte derecha»; «revisa en qué otras partes hay opciones
+      // así y este tipo de pantalla y ponlo en todas»). La página le pone data-lado y, si lo pega más abajo, --lado-top con
+      // lo mismo que su «top» (--lado-pie: lo que deja abajo): nunca mide más que la pantalla, se desliza solo, al llegar a
+      // la orilla no se lleva lo de junto y una sombrita dice que hay más. Una lista adentro con data-lado-lista toma lo que
+      // sobra y es la que se desliza, para que lo de arriba del lado (sus secciones) se quede siempre a la vista. :where()
+      // no pesa: la página puede cambiar cualquier cosa (en el celular, donde el lado pasa arriba). Una sola versión, para
+      // lo de hoy y lo nuevo; construir.py (exige_lado()) no publica si se quita.
+      + ':where([data-lado],[data-lado-lista]){overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;'
+      + 'background:linear-gradient(var(--lado-fondo,var(--surface,#fff)) 30%,transparent) top/100% 28px no-repeat local,'
+      + 'linear-gradient(transparent,var(--lado-fondo,var(--surface,#fff)) 70%) bottom/100% 28px no-repeat local,'
+      + 'radial-gradient(farthest-side at 50% 0,var(--lado-sombra,rgba(10,18,32,.24)),transparent) top/100% 10px no-repeat scroll,'
+      + 'radial-gradient(farthest-side at 50% 100%,var(--lado-sombra,rgba(10,18,32,.24)),transparent) bottom/100% 10px no-repeat scroll;'
+      + 'background-color:var(--lado-fondo,var(--surface,#fff))}'
+      // --lado-alto lo pone lados() (abajo): lo que de verdad queda de pantalla desde donde empieza el lado, para que
+      // tampoco se salga por abajo antes de pegarse (con la página hasta arriba)
+      + ':where([data-lado]){max-height:calc(100vh - var(--lado-top,0px) - var(--lado-pie,12px));max-height:var(--lado-alto,calc(100dvh - var(--lado-top,0px) - var(--lado-pie,12px)))}'
+      // la lista de adentro se encoge hasta --lado-lista-min (la página lo pone solo si la lista es más larga que eso);
+      // si ni así cabe, se desliza todo el lado
+      + ':where([data-lado-lista]){flex:0 1 auto;min-height:var(--lado-lista-min,0px)}'
+      + ':where(:root[data-theme="dark"]){--lado-sombra:rgba(0,0,0,.6)}'
+      + '@media (prefers-color-scheme:dark){:where(:root:not([data-theme="light"])){--lado-sombra:rgba(0,0,0,.6)}}'
       + '.pt-desliza{scroll-behavior:smooth;overscroll-behavior-x:contain}'
       + ':is(.pt-desliza,.pt-tabla).pt-der{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}'
       + ':is(.pt-desliza,.pt-tabla).pt-izq{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}'
@@ -708,11 +731,44 @@
       }
       return null;
     }
+    /* Lo pegado al lado (data-lado; ver arriba, en la capa común): mide lo que queda de pantalla desde donde empieza,
+       sin pasar de lo que mide ya pegado. Así, con la página hasta arriba (el lado todavía más abajo, debajo de los
+       cuadros de resumen), tampoco se sale por abajo y su lista se desliza completa sin mover lo de junto; al bajar,
+       crece hasta pegarse. Solo cambia una variable de su estilo (no despierta a los MutationObserver). */
+    function ajustaLado(el) {
+      var cs = getComputedStyle(el);
+      if (cs.position !== 'sticky' || !el.getClientRects().length) {
+        if (el.style.getPropertyValue('--lado-alto')) el.style.removeProperty('--lado-alto');
+        return;
+      }
+      var sc = null;
+      for (var a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(a).overflowY)) { sc = a; break; }
+      }
+      var arriba = sc ? sc.getBoundingClientRect().top + sc.clientTop : 0;
+      var abajo = sc ? arriba + sc.clientHeight : document.documentElement.clientHeight || innerHeight;
+      var pie = parseFloat(cs.getPropertyValue('--lado-pie')); if (isNaN(pie)) pie = 12;
+      var pegado = abajo - (arriba + (parseFloat(cs.top) || 0)) - pie;   // lo que mide ya pegado (lo más)
+      var queda = abajo - el.getBoundingClientRect().top - pie;          // lo que queda de pantalla desde donde empieza
+      // nunca menos de 6/10 de lo que mide pegado: si empieza muy abajo (el Calendario), no se aplasta; se ve al bajar
+      var alto = Math.round(Math.max(120, pegado * 0.6, Math.min(pegado, queda))) + 'px';
+      if (el.style.getPropertyValue('--lado-alto') !== alto) el.style.setProperty('--lado-alto', alto);
+    }
+    var ladoCuadro = 0;
+    function lados() {
+      if (ladoCuadro) return;
+      ladoCuadro = requestAnimationFrame(function () {
+        ladoCuadro = 0;
+        var l = document.querySelectorAll('[data-lado]');
+        for (var i = 0; i < l.length; i++) { try { ajustaLado(l[i]); } catch (e) { /* nada */ } }
+      });
+    }
     var espera = null;
     function todas(centra) {
       clearTimeout(espera);
       espera = setTimeout(function () {
         if (!document.body) return;
+        lados();
         document.querySelectorAll(TIRAS).forEach(function (t) { try { marca(t, centra); } catch (e) { /* nada */ } });
         document.querySelectorAll(GRUPOS).forEach(function (t) { try { if (!t.matches(TIRAS)) marca(t, centra, 'pt-tabla'); } catch (e) { /* nada */ } });
         var tablas = document.querySelectorAll('table');
@@ -723,6 +779,7 @@
     }
     document.addEventListener('scroll', function (e) {
       var t = e.target;
+      if (document.querySelector('[data-lado]')) lados();
       if (t && t.classList && t.classList.contains('pt-desliza')) marca(t, false);
       else if (t && t.classList && t.classList.contains('pt-tabla')) marca(t, false, 'pt-tabla');
     }, true);
@@ -733,7 +790,7 @@
       else if (g) setTimeout(function () { marca(g, true, 'pt-tabla'); }, 60);
       else todas(false);
     }, true);
-    window.addEventListener('resize', function () { todas(true); });
+    window.addEventListener('resize', function () { lados(); todas(true); });
     function arranca() {
       todas(true);
       if (window.MutationObserver && document.body) {
