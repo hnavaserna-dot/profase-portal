@@ -623,13 +623,21 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   // cada 5 s a la vista (cada 3 s con una conversación abierta); escondida, solo si estás disponible o atiendes alguna:
   // cada 30 s (así sigues «disponible» para la fila y te llega el aviso), y cada 5 s si te toca una llamada. Si no, no
   // pregunta. Los tickets, cada 30 s mientras se ven.
-  var VUELTA = 0;
+  // Revisión nocturna del 11-nov-2026: con una conversación abierta preguntaba cada segundo (no cada 3 s, como dice arriba)
+  // y sin esperar a la anterior: cada pregunta a Quo tarda de 0.5 a 1.2 s, así que se juntaban dos o tres a la vez. Ahora
+  // pregunta como dice arriba y nunca empieza otra mientras la anterior no termina.
+  var VUELTA = 0, TICK_CARGA = false, TICK_DEBE = false;
   setInterval(function () {
     if (!YO || !DATOS) return;
     VUELTA++;
     var vis = aLaVista(), activo = DATOS.yo && (DATOS.yo.disponible || DATOS.yo.activas > 0);
     var llamando = puede() && conversaciones().some(function (c) { return c.estado === 'atencion' && c.agente === YO.usuario && !c.llamada_entro && (c.llamada === 'pedida' || c.llamada === 'abierta'); });
-    if ((vis && (CV ? true : VUELTA % 5 === 0 || VUELTA % 5 === 2)) || (!vis && activo && VUELTA % (llamando ? 5 : 30) === 0)) carga().catch(function () {});
+    if ((vis && (CV ? VUELTA % 3 === 0 : VUELTA % 5 === 0)) || (!vis && activo && VUELTA % (llamando ? 5 : 30) === 0)) TICK_DEBE = true;
+    // si la anterior sigue, esta espera a que termine (no se pierde: sale en el siguiente segundo libre)
+    if (TICK_DEBE && !TICK_CARGA) {
+      TICK_DEBE = false; TICK_CARGA = true;
+      carga().catch(function () {}).then(function () { TICK_CARGA = false; });
+    }
     if (vis && TAB === 'tk' && VUELTA % 30 === 15 && !TKA) cargaTk().catch(function () {});
   }, 1000);
 
