@@ -620,11 +620,16 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       <button class="btn" type="button" data-excel id="x-devol">Excel</button>
     </div></div>
     <section class="cpilas" id="dv-kpis"></section>
-    <div class="card">
+    <div class="card" id="dv-tram-c">
       <header><div><h2 id="dv-h">Devoluciones</h2><div class="sub" id="dv-sub"></div></div></header>
       <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Trámite</th><th>Periodo</th><th>Presentada</th><th class="monto">Monto a devolver</th><th>El SAT dice</th><th>En el WorkFlow</th><th></th></tr></thead>
         <tbody id="dv-lista"></tbody></table></div>
       <nav class="pgn" id="dv-pag" aria-label="Páginas"></nav>
+    </div>
+    <div class="card" id="dv-isr-c" hidden>
+      <header><div><h2 id="dv-isr-h">Saldo a favor de ISR de las anuales</h2><div class="sub" id="dv-isr-s"></div></div></header>
+      <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Ejercicio</th><th class="monto">Saldo a favor</th><th>Qué pasa</th><th>En el SAT</th><th>En el WorkFlow</th><th></th></tr></thead>
+        <tbody id="dv-isr"></tbody></table></div>
     </div>
     <div class="card" id="dv-casos-c" hidden>
       <header><div><h2>En el WorkFlow y el SAT no las enseña</h2><div class="sub" id="dv-casos-s"></div></div></header>
@@ -636,7 +641,8 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       <div class="tabla"><table class="resp"><thead><tr><th>Cliente</th><th>Por qué</th><th>Último intento</th><th></th></tr></thead>
         <tbody id="dv-nopudo"></tbody></table></div>
     </div>
-    <div id="dv-como" hidden><div class="nota info" id="dv-nota"></div><p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente de la tabla de devoluciones (lo que se cobra en cada devolución; solo los que atiende el despacho) y lee «Consulta de trámites»: cada tipo de devolución, cada ejercicio que da el SAT y lo que enseña en «Mostrar solicitudes». Solo consulta: nunca adjunta, solventa, desiste, aclara ni contesta nada, y de la página del Buzón Tributario que rodea esa consulta no lee ni pica nada. Todo una vez a la semana y, a diario, lo que sigue en proceso. Cada trámite de IVA se cruza con su devolución del WorkFlow (el mismo cliente y el mismo mes): si el SAT y el WorkFlow no dicen lo mismo, les llega el aviso al contador y al gerente del caso, a Héctor Daniel Nava, Héctor Nava Ramos y Fernando Gutiérrez; cuando el SAT autoriza o paga, a los tres últimos. Los avisos nunca llevan montos.</p></div>
+    <div id="dv-como" hidden><div class="nota info" id="dv-nota"></div><p class="pie">El robot de Centauro entra al portal del SAT con la e.firma de cada cliente de la tabla de devoluciones (lo que se cobra en cada devolución; solo los que atiende el despacho) y lee «Consulta de trámites»: cada tipo de devolución, cada ejercicio que da el SAT y lo que enseña en «Mostrar solicitudes». Solo consulta: nunca adjunta, solventa, desiste, aclara ni contesta nada, y de la página del Buzón Tributario que rodea esa consulta no lee ni pica nada. Todo una vez a la semana y, a diario, lo que sigue en proceso. Cada trámite de IVA se cruza con su devolución del WorkFlow (el mismo cliente y el mismo mes): si el SAT y el WorkFlow no dicen lo mismo, les llega el aviso al contador y al gerente del caso, a Héctor Daniel Nava, Héctor Nava Ramos y Fernando Gutiérrez; cuando el SAT autoriza o paga, a los tres últimos. Los avisos nunca llevan montos.</p>
+      <p class="pie">El saldo a favor de ISR (363): de la declaración anual vigente de cada cliente (la última presentada) sale su saldo a favor y, en las personas físicas, lo que escogió (devolución o compensación). En las personas morales se busca en sus declaraciones mensuales si ese saldo se compensa (su «Detalle de compensaciones»). Con los trámites del SAT y las devoluciones de ISR del WorkFlow, cada saldo queda en «Saldo a favor sin pedir», «Se pidió y no está en el WorkFlow», «Automática negada: se puede pedir manual», «Por revisar» (lo que no está claro), «Se compensa», «Devuelto», «En el WorkFlow» o «Automática en trámite». Del ejercicio 2023 en adelante, lo que toca pedir a mano les avisa (sin montos) al contador del cliente y a Fernando Gutiérrez; la automática nunca avisa. Solo lee: nunca cambia el WorkFlow.</p></div>
   </section>
 
   <!-- Certificados (331; petición de Francisco Rivera, autorizada por Héctor Daniel Nava el 9-nov-2026 con «Sí, así es.»): la
@@ -3537,16 +3543,39 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
      devolución tal cual los enseña el SAT en «Consulta de trámites» (en qué están y desde cuándo, con su historia), su devolución
      del WorkFlow y si no dicen lo mismo. Pilas arriba (filtran), FILTROS y páginas comunes, Excel y PDF con la marca, «Ver la
      resolución» (con la marca u original) y «Revisar ahora con el SAT». Solo lee. */
-  var DV = { tram: [], clientes: [], casos: [], vis: [], k: '', f: null, cargado: false, al: null, puede: false };
+  var DV = { tram: [], clientes: [], casos: [], isr: [], vis: [], isrVis: [], k: '', f: null, cargado: false, al: null, puede: false, nueva: false };
+  // 363: el saldo a favor de ISR de las anuales, en qué está (los mismos nombres de la base: sat_decl_isr.estado)
+  var DV_ISR = { sin_pedir: ['Saldo a favor sin pedir', 'mal', 'rojo', 'ni se pidió ni se compensa'], pedida_sin_wf: ['Se pidió y no está en el WorkFlow', 'ojo', 'ambar', 'el SAT la tiene y el WorkFlow no'],
+                 automatica_negada: ['Automática negada: se puede pedir manual', 'mal', 'rojo', 'el SAT negó la automática'], por_revisar: ['Por revisar', '', 'gris', 'no está claro qué pasó'],
+                 se_compensa: ['Se compensa', 'ok', 'verde', 'en sus mensuales o lo escogió'], devuelto: ['Devuelto', 'ok', 'verde', 'el SAT ya lo pagó'],
+                 en_wf: ['En el WorkFlow', 'ok'], automatica: ['Automática en trámite', ''] };
+  var DV_ISR_P = ['sin_pedir', 'pedida_sin_wf', 'automatica_negada', 'por_revisar', 'se_compensa', 'devuelto'];
+  function isrPasa(x, sinK) {
+    var g = DV.f, q = nfc(g.q);
+    if (!sinK && /^isr_/.test(DV.k) && x.estado !== DV.k.slice(4)) return false;
+    if (g.cli.length && g.cli.indexOf(x.rfc) < 0) return false;
+    if (g.grupo.length && g.grupo.indexOf(x.grupo || '') < 0) return false;
+    if (g.cont.length && !g.cont.some(function (y) { return (x.contadores || '').split(', ').indexOf(y) >= 0; })) return false;
+    if (g.ej.length && g.ej.indexOf(String(x.ejercicio || '')) < 0) return false;
+    if (q && nfc((x.cliente || '') + ' ' + x.rfc + ' ' + (x.grupo || '') + ' ' + (x.contadores || '') + ' ' + x.ejercicio + ' ' + ((DV_ISR[x.estado] || [''])[0])).indexOf(q) < 0) return false;
+    return true;
+  }
+  function isrPersona(x) { return x.persona === 'fisica' ? 'Persona física' : 'Persona moral'; }
+  function isrQue(x) {
+    return (x.opcion === 'devolucion' ? 'Escogió devolución en su anual' : x.opcion === 'compensacion' ? 'Escogió compensación en su anual' : x.compensa ? 'Se compensa en sus mensuales' : '')
+      + (x.motivo ? (x.opcion || x.compensa ? ' · ' : '') + x.motivo : '');
+  }
   var DV_K = { proceso: ['En proceso', 'ojo'], requerimiento: ['En requerimiento', 'ojo'], autorizada: ['Autorizada', 'ok'], pagada: ['Pagada', 'ok'],
               negada: ['Negada', 'mal'], desistida: ['Desistida', 'mal'], concluida: ['Concluida', ''], otro: ['Otro', ''] };
   var DV_DIF = { sat_autorizo: 'El SAT ya la autorizó o pagó', sat_requerimiento: 'El SAT hizo un requerimiento', sat_nego: 'El SAT la negó o se desistió',
-                wf_adelante: 'El WorkFlow va adelante del SAT', sin_caso: 'No está en el WorkFlow', no_esta_sat: 'El SAT no la enseña' };
+                wf_adelante: 'El WorkFlow va adelante del SAT', sin_caso: 'No está en el WorkFlow', sin_caso_isr: 'No está en el WorkFlow', no_esta_sat: 'El SAT no la enseña' };
   function vLimpia() { DV.f = { cli: [], grupo: [], cont: [], tipo: [], imp: [], ej: [], k: [], wf: [], q: '' }; }
   vLimpia();
   var FV = null, PV = null;
   function vCli(rfc) { return DV.clientes.filter(function (c) { return c.rfc === rfc; })[0] || { rfc: rfc, cliente: rfc }; }
-  function vWf(t) { return t.caso ? t.caso.estado_txt : (/valor agregado|\biva\b/i.test((t.impuesto || '') + ' ' + (t.concepto || '')) ? 'Sin caso' : 'No aplica'); }
+  // 363: las de ISR que se piden a mano también van al WorkFlow (la automática no)
+  function vWf(t) { var ic = (t.impuesto || '') + ' ' + (t.concepto || '');
+    return t.caso ? t.caso.estado_txt : (/valor agregado|\biva\b/i.test(ic) || (/\bisr\b|sobre la renta/i.test(ic + ' ' + (t.tipo || '')) && /manual/i.test(t.tipo || '')) ? 'Sin caso' : 'No aplica'); }
   function vPasa(t, sinK) {
     var g = DV.f, q = nfc(g.q), c = vCli(t.rfc);
     if (!sinK) {
@@ -3599,10 +3628,15 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
              ['requerimiento', 'En requerimiento', n(function (t) { return t.k === 'requerimiento'; }), 'el SAT pidió algo', 'ambar'],
              ['listas', 'Autorizadas o pagadas', n(function (t) { return t.k === 'autorizada' || t.k === 'pagada'; }), 'el SAT ya resolvió a favor', 'verde'],
              ['negadas', 'Negadas o desistidas', n(function (t) { return t.k === 'negada' || t.k === 'desistida'; }), 'el SAT no la devolvió', 'gris']];
+    // 363: las pilas del saldo a favor de ISR (si algún cliente que ves lo tiene)
+    if (DV.isr.length) {
+      var li = DV.isr.filter(function (x) { return isrPasa(x, true); });
+      DV_ISR_P.forEach(function (k) { var d = DV_ISR[k]; P.push(['isr_' + k, 'ISR · ' + d[0], li.filter(function (x) { return x.estado === k; }).length, d[3], d[2]]); });
+    }
     PROFASE_PILAS.pinta($('dv-kpis'), {
       titulo: 'Tu trabajo · devoluciones',
       meta: cuenta(l.length, 'trámite', 'trámites') + ' · ' + cuenta(DV.clientes.length, 'cliente', 'clientes'),
-      pilas: P.map(function (x) { return { k: x[0], t: x[1], n: +x[2] || 0, d: x[3], tono: x[4], on: DV.k === x[0], tag: x[0] === 'nocuadra' && x[2] ? 'Te toca' : '' }; }),
+      pilas: P.map(function (x) { return { k: x[0], t: x[1], n: +x[2] || 0, d: x[3], tono: x[4], on: DV.k === x[0], tag: (x[0] === 'nocuadra' || x[0] === 'isr_sin_pedir' || x[0] === 'isr_automatica_negada') && x[2] ? 'Te toca' : '' }; }),
       alPicar: function (k) { DV.k = DV.k === k ? '' : k; if (PV) PV.inicio(); pintaKpisV(); pintaV(); },
       boton: null
     });
@@ -3613,9 +3647,10 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     if (document.activeElement !== $('dv-q') && $('dv-q').value !== (DV.f.q || '')) $('dv-q').value = DV.f.q || '';
     DV.vis = l;
     var x = { '': 'Devoluciones', nocuadra: 'No cuadran con el WorkFlow', proceso: 'En proceso', requerimiento: 'En requerimiento', listas: 'Autorizadas o pagadas', negadas: 'Negadas o desistidas' };
+    pintaIsr();
     $('dv-h').textContent = x[DV.k] || 'Devoluciones';
     $('dv-sub').textContent = cuenta(l.length, 'trámite', 'trámites') + (DV.al ? ' · el SAT se revisó por última vez el ' + fechaHora(DV.al) : '');
-    $('x-devol').disabled = !DV.tram.length;
+    $('x-devol').disabled = !DV.tram.length && !DV.isr.length;
     var tb = $('dv-lista'), pag = PV ? PV.corta(l) : l;
     if (!l.length) vacio(tb, 8, DV.tram.length ? 'Nada con estos filtros.' : (DV.cargado ? 'Todavía no hay trámites: el robot está revisando a los clientes de la tabla de devoluciones.' : 'Cargando…'));
     else tb.innerHTML = pag.map(function (t) {
@@ -3628,9 +3663,9 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         + '<td data-l="Monto a devolver" class="monto">' + dinero(t.monto) + '</td>'
         + '<td data-l="El SAT dice">' + chip(t.estado || k[0], k[1]) + '<div class="mut">Desde el ' + esc(fecha(String(t.desde || '').slice(0, 10))) + '</div>'
         + (h.length ? '<details><summary>Cómo ha ido</summary><ul class="csf-l">' + h.map(function (y) { return '<li>' + esc(fecha(String(y.cuando).slice(0, 10))) + ': de «' + esc(y.antes) + '» a «' + esc(y.despues) + '»</li>'; }).join('') + '</ul></details>' : '') + '</td>'
-        + '<td data-l="En el WorkFlow">' + (t.caso ? esc(t.caso.estado_txt) + '<div class="mut">' + esc(mes(t.caso.mes)) + (t.caso.contador ? ' · ' + esc(t.caso.contador) : '') + '</div>'
+        + '<td data-l="En el WorkFlow">' + (t.caso ? esc(t.caso.estado_txt) + '<div class="mut">' + esc(t.caso.impuesto === 'isr' ? 'ISR · ejercicio ' + t.caso.ejercicio : mes(t.caso.mes)) + (t.caso.contador ? ' · ' + esc(t.caso.contador) : '') + '</div>'
               + (t.caso.monto != null ? '<div class="mut">Devuelto: ' + dinero(t.caso.monto) + '</div>' : '') : '<span class="mut">' + esc(vWf(t)) + '</span>')
-        + (t.difs || []).map(function (f) { return '<div>' + chip(DV_DIF[f.que] || 'Revisar', f.que === 'sat_autorizo' || f.que === 'sin_caso' ? 'ojo' : 'mal') + '</div>'; }).join('') + '</td>'
+        + (t.difs || []).map(function (f) { return '<div>' + chip(DV_DIF[f.que] || 'Revisar', f.que === 'sat_autorizo' || f.que === 'sin_caso' || f.que === 'sin_caso_isr' ? 'ojo' : 'mal') + '</div>'; }).join('') + '</td>'
         + '<td>' + (t.ruta ? '<button class="btn chico" type="button" data-dvres="' + esc(String(t.id)) + '">Ver la resolución</button>' : '') + '</td></tr>';
     }).join('');
     tb.querySelectorAll('[data-dvres]').forEach(function (b) { b.onclick = function () { var t = DV.tram.filter(function (z) { return String(z.id) === b.getAttribute('data-dvres'); })[0]; if (t) visorDecl().ver(docDev(t), b); }; });
@@ -3639,17 +3674,48 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     $('dv-casos-c').hidden = !cs.length || (DV.k && DV.k !== 'nocuadra');
     $('dv-casos-s').textContent = cuenta(cs.length, 'devolución', 'devoluciones') + ' · ya se revisó todo lo que da el SAT de ese cliente';
     $('dv-casos').innerHTML = cs.map(function (w) { var c = vCli(w.rfc);
-      return '<tr><td data-l="Cliente"><span class="rs">' + esc(c.cliente || w.rfc) + '</span><div class="mut">' + esc(w.rfc) + '</div></td><td data-l="Mes que se solicita">' + esc(mes(w.mes)) + '</td>'
+      return '<tr><td data-l="Cliente"><span class="rs">' + esc(c.cliente || w.rfc) + '</span><div class="mut">' + esc(w.rfc) + '</div></td><td data-l="Mes que se solicita">' + esc(w.impuesto === 'isr' ? 'ISR · ejercicio ' + w.ejercicio : mes(w.mes)) + '</td>'
         + '<td data-l="Solicitud" class="nowrap">' + esc(fecha(w.solicitud)) + '</td><td data-l="En el WorkFlow">' + esc(w.estado_txt) + '</td>'
         + '<td data-l="Contador y gerente">' + esc([w.contador, w.gerente].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('');
     var np = DV.clientes.filter(function (c) { return c.tramo && (c.tramo.estado === 'sin' || c.tramo.estado === 'error') && (!DV.f.cli.length || DV.f.cli.indexOf(c.rfc) >= 0); });
     $('dv-nopudo-c').hidden = !np.length || !!DV.k;
+    $('dv-tram-c').hidden = /^isr_/.test(DV.k);
     $('dv-nopudo-s').textContent = cuenta(np.length, 'cliente', 'clientes') + ' · el robot lo vuelve a intentar solo';
     $('dv-nopudo').innerHTML = np.map(function (c) {
       return '<tr><td data-l="Cliente"><span class="rs">' + esc(c.cliente || c.rfc) + '</span><div class="mut">' + esc(c.rfc) + '</div></td><td data-l="Por qué">' + esc(c.tramo.mensaje || 'No se pudo entrar al SAT') + '</td>'
         + '<td data-l="Último intento" class="nowrap">' + esc(c.tramo.revisado ? fechaHora(c.tramo.revisado) : '') + '</td>'
         + '<td>' + (DV.puede && !CONSULTA ? '<button class="btn chico" type="button" data-dvpide="' + esc(c.rfc) + '">Revisar ahora con el SAT</button>' : '') + '</td></tr>'; }).join('');
     document.querySelectorAll('#s-devoluciones [data-dvpide]').forEach(function (b) { b.onclick = function () { pideDev(b.getAttribute('data-dvpide'), b); }; });
+  }
+  // 363: el saldo a favor de ISR de las anuales de los clientes que ves; «Dar de alta en el WorkFlow» abre «Nueva devolución» del
+  // Panel de trabajo con el cliente y el ejercicio (solo a quien da de alta devoluciones)
+  function pintaIsr() {
+    var l = DV.isr.filter(function (x) { return isrPasa(x); });
+    DV.isrVis = l;
+    var ver = /^isr_/.test(DV.k) || (!DV.k && DV.isr.length > 0);
+    $('dv-isr-c').hidden = !ver;
+    if (!ver) return;
+    $('dv-isr-h').textContent = /^isr_/.test(DV.k) ? 'ISR · ' + DV_ISR[DV.k.slice(4)][0] : 'Saldo a favor de ISR de las anuales';
+    $('dv-isr-s').textContent = cuenta(l.length, 'saldo a favor', 'saldos a favor') + ' · de la declaración anual vigente; avisa desde el ejercicio 2023';
+    var tb = $('dv-isr');
+    if (!l.length) { vacio(tb, 7, 'Nada con estos filtros.'); return; }
+    tb.innerHTML = l.map(function (x) {
+      var d = DV_ISR[x.estado] || [x.estado, ''], t = x.tramite, c = x.caso;
+      var alta = DV.nueva && !CONSULTA && x.empresa && ['sin_pedir', 'pedida_sin_wf', 'automatica_negada'].indexOf(x.estado) >= 0;
+      return '<tr><td data-l="Cliente"><span class="rs">' + esc(x.cliente || x.rfc) + '</span><div class="mut">' + esc(x.rfc + (x.grupo ? ' · ' + x.grupo : '')) + '</div>'
+        + (x.contadores ? '<div class="mut">' + esc(x.contadores) + '</div>' : '') + '</td>'
+        + '<td data-l="Ejercicio"><b>' + esc(x.ejercicio) + '</b><div class="mut">' + esc(isrPersona(x)) + '</div></td>'
+        + '<td data-l="Saldo a favor" class="monto">' + dinero(x.saldo) + '</td>'
+        + '<td data-l="Qué pasa">' + chip(d[0], d[1]) + (isrQue(x) ? '<div class="mut">' + esc(isrQue(x)) + '</div>' : '') + '</td>'
+        + '<td data-l="En el SAT">' + (t ? esc(t.tipo) + '<div class="mut">Número de control ' + esc(t.folio) + ' · ' + esc(t.estado || (DV_K[t.k] || [''])[0]) + '</div>' : '<span class="mut">Sin trámite</span>') + '</td>'
+        + '<td data-l="En el WorkFlow">' + (c ? esc(c.estado_txt) + '<div class="mut">' + esc(c.titulo) + '</div>' : '<span class="mut">No está</span>') + '</td>'
+        + '<td>' + (alta ? '<button class="btn chico" type="button" data-dvisr="' + esc(x.empresa + ':' + x.ejercicio) + '">Dar de alta en el WorkFlow</button>' : '') + '</td></tr>';
+    }).join('');
+    tb.querySelectorAll('[data-dvisr]').forEach(function (b) { b.onclick = function () {
+      var arg = 'devisr:' + b.getAttribute('data-dvisr');
+      try { var A = window.top !== window.self ? window.top.PROFASE_ABRE : null; if (A && A['workflow-trabajo'] && A['workflow-trabajo'](arg)) return; } catch (e) {}
+      avisa('Ábrelo en Workflow › Panel de trabajo › «Nueva devolución» › ISR.');
+    }; });
   }
   async function pideDev(rfc, b) {
     if (!rfc) { avisa('Escoge un cliente en FILTROS (uno solo) y vuelve a picar «Revisar ahora con el SAT».'); return; }
@@ -3666,10 +3732,11 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   async function cargaDev(otraVez) {
     var r = await rpc('cen_decl_dev', { p: {} }) || {};
     DV.tram = r.tramites || []; DV.clientes = r.clientes || []; DV.casos = r.casos || []; DV.al = r.al || null; DV.puede = !!r.puede; DV.cargado = true;
+    DV.isr = r.isr || []; DV.nueva = !!r.nueva;
     notaV(); filtrosV();
     if (!otraVez) {   // desde un aviso: ese cliente
       var ab = null; try { ab = sessionStorage.getItem('cen-dev-abre'); sessionStorage.removeItem('cen-dev-abre'); } catch (e) { ab = null; }
-      if (ab && DV.clientes.some(function (c) { return c.rfc === ab; })) { vLimpia(); DV.f.cli = [ab]; DV.k = ''; }
+      if (ab && (DV.clientes.some(function (c) { return c.rfc === ab; }) || DV.isr.some(function (x) { return x.rfc === ab; }))) { vLimpia(); DV.f.cli = [ab]; DV.k = ''; }
     }
     if (PV) PV.inicio();
     if (FV) FV.pinta();
@@ -3688,8 +3755,12 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
           (t.difs || []).map(function (f) { return DV_DIF[f.que] || f.que; }).join('; ')]; }),
         formatos: { 11: '$#,##0.00;-$#,##0.00' }, totales: [11], anchos: [32, 15, 20, 24, 22, 18, 20, 24, 12, 9, 12, 16, 16, 12, 18, 30], pdfDeja: ['Cliente', 'Tipo de solicitud', 'Periodo', 'Ejercicio', 'Monto a devolver', 'El SAT dice', 'En el WorkFlow'] },
       { nombre: 'Sin trámite en el SAT', titulo: 'En el WorkFlow y el SAT no las enseña', head: ['Cliente', 'RFC', 'Mes que se solicita', 'Solicitud', 'En el WorkFlow', 'Contador', 'Gerente'],
-        filas: DV.casos.map(function (w) { var c = vCli(w.rfc); return [c.cliente || w.rfc, w.rfc, mes(w.mes), fecha(w.solicitud), w.estado_txt, w.contador || '', w.gerente || '']; }),
-        anchos: [32, 15, 18, 12, 18, 24, 24] }],
+        filas: DV.casos.map(function (w) { var c = vCli(w.rfc); return [c.cliente || w.rfc, w.rfc, w.impuesto === 'isr' ? 'ISR ' + w.ejercicio : mes(w.mes), fecha(w.solicitud), w.estado_txt, w.contador || '', w.gerente || '']; }),
+        anchos: [32, 15, 18, 12, 18, 24, 24] },
+      { nombre: 'Saldo a favor de ISR', titulo: 'El saldo a favor de ISR de las anuales y en qué está', head: ['Cliente', 'RFC', 'Grupo', 'Contador', 'Ejercicio', 'Persona', 'Saldo a favor', 'Qué pasa', 'Detalle', 'En el SAT', 'En el WorkFlow'],
+        filas: (DV.isrVis || []).map(function (x) { return [x.cliente || x.rfc, x.rfc, x.grupo || '', x.contadores || '', x.ejercicio, isrPersona(x), x.saldo == null ? '' : +x.saldo, (DV_ISR[x.estado] || [x.estado])[0], isrQue(x),
+          x.tramite ? x.tramite.tipo + ' ' + x.tramite.folio + ' · ' + (x.tramite.estado || '') : '', x.caso ? x.caso.estado_txt : '']; }),
+        formatos: { 6: '$#,##0.00;-$#,##0.00' }, totales: [6], anchos: [32, 15, 20, 24, 10, 14, 16, 30, 40, 30, 20], pdfDeja: ['Cliente', 'Ejercicio', 'Saldo a favor', 'Qué pasa', 'En el WorkFlow'] }],
       [cuenta(l.length, 'trámite', 'trámites'), 'Tal cual los enseña el SAT en «Consulta de trámites», contra las devoluciones del WorkFlow']);
   };
 

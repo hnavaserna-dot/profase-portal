@@ -438,13 +438,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     <button class="btn acento" type="button" id="gen-abre" hidden>Generar el mes</button>
     <button class="btn" type="button" id="mes-abre" hidden>Reiniciar o borrar</button>
     <button class="btn" type="button" id="agr-abre" hidden>Agregar tarea</button>
-    <button class="btn" type="button" id="dev-abre" hidden>Nueva devolución de IVA</button>
+    <button class="btn" type="button" id="dev-abre" hidden>Nueva devolución (IVA o ISR)</button>
     <button class="btn" type="button" id="at-abre" hidden>Tareas a tiempo</button>
   </div>
   <div id="wft-sel" hidden>
     <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
     <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
-    <select id="f-dmes" aria-label="Mes que se solicita" hidden><option value="">Todos los meses que se solicitan</option></select>
+    <select id="f-dmes" aria-label="Mes o ejercicio que se solicita" hidden><option value="">Todos los meses que se solicitan</option></select>
     <select id="f-act" aria-label="Actividad"><option value="">Todas las actividades</option></select>
     <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
     <select id="f-cont" aria-label="Contador asignado"><option value="">Todos los contadores asignados</option></select>
@@ -558,6 +558,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       var hv = /^#ver-([a-z-]{1,40})$/.exec(location.hash || ''); if (hv) verNuevo(hv[1]);
       var ha = /^#act-(\d{1,12})(?:-(\d{4}-\d{2}))?(-com)?$/.exec(location.hash || ''); if (ha) abreAct(+ha[1], ha[2] || '', ha[3] ? 'com' : '');
       var hd = /^#dev-(\d{1,12})$/.exec(location.hash || ''); if (hd) abreDevCaso(+hd[1]);
+      var hn = /^#devisr-(\d{1,12})-(\d{4})$/.exec(location.hash || ''); if (hn) abreDevNueva({ impuesto: 'isr', empresa: +hn[1], ejercicio: +hn[2] });
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
       $('error').textContent = 'No se pudo leer el WorkFlow. Vuelve a intentar en un momento.';
@@ -640,18 +641,20 @@ tr.fila:hover td{background:var(--navy-soft)}
   // el filtro de plantillas»; «sí, así es»): cada solicitud lleva su título como plantilla («Devolución de IVA · abril 2026 (2)»),
   // así que en «Plantilla» van todas en un solo renglón y, al escogerlo, sale «Mes que se solicita» (sin el «(2)», que solo
   // distingue dos solicitudes del mismo cliente). En la lista y en el Excel cada actividad sigue con su título.
-  var DEV_PLA = 'Devolución de IVA', DEV_PRE = /^Devolución de IVA · /,
+  // 362 (11-nov-2026): las de ISR, igual, en su propio renglón («Devolución de ISR») y por ejercicio («ejercicio 2025»)
+  var DEV_PLA = 'Devolución de IVA', DEV_ISR = 'Devolución de ISR', DEV_PRE = /^Devolución de (IVA|ISR) · /,
     MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  function plaDe(a) { return a.dev_caso ? DEV_PLA : a.plantilla; }
+  function esIsr(a) { return !!a.dev_caso && /^Devolución de ISR/.test(String(a.plantilla || '')); }
+  function plaDe(a) { return a.dev_caso ? (esIsr(a) ? DEV_ISR : DEV_PLA) : a.plantilla; }
   function devMes(a) { return a.dev_caso ? String(a.plantilla || '').replace(DEV_PRE, '').replace(/\s*\(\d+\)$/, '') : ''; }
-  function devMesOrden(t) { var m = /^(\S+) (\d{4})$/.exec(t), i = m ? MESES_ES.indexOf(m[1]) : -1; return i >= 0 ? (+m[2]) * 12 + i : -1; }
+  function devMesOrden(t) { var e = /^ejercicio (\d{4})$/.exec(t); if (e) return (+e[1]) * 12 + 11; var m = /^(\S+) (\d{4})$/.exec(t), i = m ? MESES_ES.indexOf(m[1]) : -1; return i >= 0 ? (+m[2]) * 12 + i : -1; }
   function devMeses() {
-    var ve = $('f-pla').value === DEV_PLA, v = $('f-dmes').value, o = {}, L = [];
+    var pl = $('f-pla').value, ve = pl === DEV_PLA || pl === DEV_ISR, v = $('f-dmes').value, o = {}, L = [];
     if (ve) {
-      A.forEach(function (a) { var t = devMes(a); if (t) o[t] = 1; });
+      A.forEach(function (a) { var t = plaDe(a) === pl ? devMes(a) : ''; if (t) o[t] = 1; });
       L = Object.keys(o).sort(function (x, y) { return devMesOrden(y) - devMesOrden(x) || x.localeCompare(y); });
     }
-    $('f-dmes').innerHTML = '<option value="">Todos los meses que se solicitan</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    $('f-dmes').innerHTML = '<option value="">' + (pl === DEV_ISR ? 'Todos los ejercicios' : 'Todos los meses que se solicitan') + '</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
     $('f-dmes').value = L.indexOf(v) >= 0 ? v : '';
     $('f-dmes').hidden = !ve;
   }
@@ -679,7 +682,7 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   function filtradas(sinEstatus) {
     var q = norm($('f-buscar').value.trim()), pl = $('f-pla').value, ac = $('f-act').value, r = $('f-resp').value, c = $('f-cont').value,
-      au = $('f-aut').value, es = $('f-est').value, pe = +$('f-per').value || 0, dm = pl === DEV_PLA ? $('f-dmes').value : '';
+      au = $('f-aut').value, es = $('f-est').value, pe = +$('f-per').value || 0, dm = pl === DEV_PLA || pl === DEV_ISR ? $('f-dmes').value : '';
     return A.filter(function (a) {
       if (pl && plaDe(a) !== pl) return false;
       if (dm && devMes(a) !== dm) return false;
@@ -761,7 +764,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       caja: true, buscar: $('f-buscar'), periodo: [$('f-mes'), $('f-anio')],
       filtros: d ? {
         grupos: [
-          { t: 'ACTIVIDAD', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-pla'), { t: 'PLANTILLA' }), d($('f-act'), { t: 'ACTIVIDAD', buscar: true }), d($('f-dmes'), { t: 'MES QUE SE SOLICITA' }), d($('f-per'), { t: 'PERIODICIDAD' })] },
+          { t: 'ACTIVIDAD', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-pla'), { t: 'PLANTILLA' }), d($('f-act'), { t: 'ACTIVIDAD', buscar: true }), d($('f-dmes'), { t: 'MES O EJERCICIO QUE SE SOLICITA' }), d($('f-per'), { t: 'PERIODICIDAD' })] },
           { t: 'PERSONAS', campos: [d($('f-resp'), { t: 'RESPONSABLE' }), d($('f-cont'), { t: 'CONTADOR ASIGNADO' }), d($('f-aut'), { t: 'AUTORIZA' })] }],
         limpiar: function () { $('limpia').click(); },
         resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' actividad' : ' actividades'); }
@@ -1054,7 +1057,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     BIT = { act: a.id };
     var inst = window.PROFASE_SEG.abre({
       ancho: true,
-      kick: [a.grupo, a.dev_caso ? 'Devolución de IVA' : a.plantilla, mesTxt(a.periodo)].filter(Boolean).join(' · '),
+      kick: [a.grupo, a.dev_caso ? plaDe(a) : a.plantilla, mesTxt(a.periodo)].filter(Boolean).join(' · '),
       titulo: a.actividad,
       nav: idx >= 0 ? { pos: idx + 1, total: COLA.length, donde: 'en tu lista', ant: idx > 0, sig: idx < COLA.length - 1,
         ir: function (dir) { var nx = COLA[idx + dir]; if (nx != null && POR_ID[nx]) abre(nx, TAB); } } : null,
@@ -1176,10 +1179,11 @@ tr.fila:hover td{background:var(--navy-soft)}
   function devNotaPaso(a) {
     if (a.dev_paso === 'respuesta') return 'Este paso se cierra abajo, con «¿Qué contestó el SAT?»: lo registra ' + (a.aut_nombre || 'quien autoriza') + ', un gerente o la dirección.';
     if (a.dev_paso === 'contestar') return 'Al terminarlo (con los papeles de trabajo y el acuse de solventación) nace solo la siguiente respuesta del SAT.';
-    if (a.dev_paso === 'deposito') return 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nacen las facturas. El monto devuelto lo captura ' + (a.aut_nombre || 'el gerente que autoriza') + ' en la ficha de la devolución.';
-    if (a.dev_paso === 'factura') return 'Se termina sola al subir su XML aquí abajo, en la ficha de la devolución (o al confirmarla en Tesorería › Facturación, «¿Es de la devolución de IVA de …?»).';
+    if (a.dev_paso === 'deposito') return esIsr(a) ? 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nace la factura de honorarios.'
+      : 'Márcalo terminado cuando le depositen al cliente, con su comprobante: nacen las facturas. El monto devuelto lo captura ' + (a.aut_nombre || 'el gerente que autoriza') + ' en la ficha de la devolución.';
+    if (a.dev_paso === 'factura') return 'Se termina sola al subir su XML aquí abajo, en la ficha de la devolución (o al confirmarla en Tesorería › Facturación, «¿Es de la devolución ' + (esIsr(a) ? 'de ISR del ejercicio …' : 'de IVA de …') + '?»).';
     if (a.dev_paso === 'factura_eq') return 'Se termina sola al subir su XML aquí abajo, en la ficha de la devolución: se da de alta sola en la Facturación de su compañía.';
-    return 'Es parte de una devolución de IVA: abajo está todo el caso.';
+    return 'Es parte de una devolución ' + (esIsr(a) ? 'de ISR' : 'de IVA') + ': abajo está todo el caso.';
   }
   function devChip(e) { var x = DEV_EST[e] || [e, '']; return '<span class="dev-est ' + x[1] + '">' + esc(x[0]) + '</span>'; }
   async function pintaDev(a, aviso) {
@@ -1190,16 +1194,17 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (r.error || !r.data) { box.innerHTML = '<div class="vacio">' + esc(r.error ? falla(r.error) : 'No se pudo leer la devolución.') + '</div>'; return; }
     var c = r.data; DEVC[c.id] = c;
     var pu = c.puede || {}, ops = [];
-    $('dev-n').textContent = c.titulo.replace(/^Devolución de IVA · /, '');
+    $('dev-n').textContent = c.titulo.replace(DEV_PRE, '');
     var h = '<div class="dev-res"><div class="grande">' + esc(c.rs) + '</div><div style="margin-top:4px">' + devChip(c.estado) + '</div></div>';
     h += '<div class="in"><dl class="dl">'
       + '<dt>Solicitada</dt><dd>' + esc(fecha(c.solicitud)) + ' <span class="rfc">(mes contable ' + esc(mesTxt(c.periodo)) + ')</span></dd>'
-      + '<dt>Mes que se solicita</dt><dd>' + esc(mesTxt(c.mes_solicitado)) + '</dd>'
+      + (c.impuesto === 'isr' ? '<dt>Impuesto</dt><dd>ISR · saldo a favor de la anual</dd><dt>Ejercicio</dt><dd>' + esc(c.ejercicio) + '</dd>'
+                              : '<dt>Mes que se solicita</dt><dd>' + esc(mesTxt(c.mes_solicitado)) + '</dd>')
       + (c.n_req ? '<dt>Requerimientos</dt><dd>' + esc(c.n_req) + (c.notificado ? ' <span class="rfc">· el último notificado el ' + esc(fecha(c.notificado)) + '</span>' : '') + '</dd>' : '')
       + (c.autorizado ? '<dt>Autorizada</dt><dd>' + esc(fecha(c.autorizado)) + '</dd>' : '')
       + (c.pagado ? '<dt>Depositada</dt><dd>' + esc(fecha(c.pagado)) + '</dd>' : '')
       // el monto que devolvió el SAT (163): lo captura el gerente que autoriza; de ahí salen las facturas
-      + (c.monto_devuelto != null || pu.monto || c.estado === 'pagada' || c.estado === 'facturada' ? '<dt>Monto devuelto</dt><dd>'
+      + (c.impuesto !== 'isr' && (c.monto_devuelto != null || pu.monto || c.estado === 'pagada' || c.estado === 'facturada') ? '<dt>Monto devuelto</dt><dd>'
         + (c.monto_devuelto != null ? '<b>' + esc(pesos(c.monto_devuelto)) + '</b>' + (c.monto_por ? ' <span class="rfc">· lo capturó ' + esc(c.monto_por) + '</span>' : '')
                                     : '<span class="no">Falta</span> <span class="rfc">(lo captura ' + esc(c.gerente || 'el gerente que autoriza') + ')</span>')
         + (pu.monto && !CONSULTA ? ' <button class="link" type="button" id="dev-monto">' + (c.monto_devuelto != null ? 'Cambiar' : 'Capturar') + '</button>' : '') + '</dd>' : '')
@@ -1382,21 +1387,42 @@ tr.fila:hover td{background:var(--navy-soft)}
     catch (e) { devMsg('dev-canc-m', falla(e), false); b.disabled = false; }
   }
 
-  /* «Nueva devolución de IVA»: una por solicitud (la da de alta quien genera el mes) */
-  var DVB = null;
-  async function abreDev() {
+  /* «Nueva devolución»: una por solicitud (la da de alta quien genera el mes); de IVA (por mes) o, desde 362 (11-nov-2026,
+     idea de Fernando Gutiérrez que pidió Fernando Cadengo), de ISR (por ejercicio: el saldo a favor de la anual). Desde el aviso
+     de Centauro («dev-isr-nueva|…») abre ya con el cliente y el ejercicio (p = {impuesto, empresa, ejercicio}). */
+  var DVB = null, DVI = 'iva';
+  function abreDevNueva(p) {
+    if (!$('p-lista') || $('p-lista').hidden) { setTimeout(function () { abreDevNueva(p); }, 400); return; }
+    abreDev(p || null);
+  }
+  window.__abreDevNueva = abreDevNueva;
+  function devImpuesto(k) {
+    DVI = k === 'isr' ? 'isr' : 'iva';
+    document.querySelectorAll('[data-dvi]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-dvi') === DVI ? 'true' : 'false'); });
+    if ($('dv-mes-c')) $('dv-mes-c').hidden = DVI === 'isr';
+    if ($('dv-ej-c')) $('dv-ej-c').hidden = DVI !== 'isr';
+    if ($('f-tit')) $('f-tit').textContent = DVI === 'isr' ? 'Nueva devolución de ISR' : 'Nueva devolución de IVA';
+  }
+  async function abreDev(pre) {
     if (!(DEV.crea && !CONSULTA)) return;
     cierraFicha();
     ABIERTA = null;
     var y = +HOY.slice(0, 4), m = +HOY.slice(5, 7) - 1; if (m === 0) { m = 12; y--; }
     var anios = []; for (var k = +HOY.slice(0, 4); k >= 2015; k--) anios.push(k);
-    var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Nueva devolución de IVA</h2><div class="rfc">Una por solicitud: cada una es su propio caso, con las fechas de ley</div></div>'
+    var ejs = []; for (var k2 = +HOY.slice(0, 4) - 1; k2 >= 2015; k2--) ejs.push(k2);
+    var ejPre = pre && pre.ejercicio && ejs.indexOf(+pre.ejercicio) >= 0 ? +pre.ejercicio : ejs[0];
+    DVI = pre && pre.impuesto === 'isr' ? 'isr' : 'iva';
+    var h = '<div class="cab"><div><div class="rfc">WorkFlow</div><h2 id="f-tit">Nueva devolución</h2><div class="rfc">Una por solicitud: cada una es su propio caso, con las fechas de ley</div></div>'
       + '<button class="btn" type="button" id="cerrar" aria-label="Cerrar">Cerrar</button></div><div class="cuerpo">';
     var form = '<div class="form">'
+      + '<div id="dv-imp-c" hidden><label>¿De qué impuesto?</label><div class="dev-sat"><button class="btn" type="button" data-dvi="iva" aria-pressed="false">IVA (de un mes)</button>'
+      + '<button class="btn" type="button" data-dvi="isr" aria-pressed="false">ISR (de la anual)</button></div></div>'
       + '<div><label for="dv-cli-in">Cliente (razón social)</label><div id="dv-cli"></div></div>'
       + '<div><label for="dv-sol">Fecha de solicitud</label><input type="date" id="dv-sol" max="' + esc(HOY) + '" value="' + esc(HOY) + '"><div class="dev-nota">De aquí sale el mes contable de la devolución.</div></div>'
-      + '<div><label for="dv-mes">Mes que se solicita (el del saldo a favor)</label><div class="dos"><select id="dv-mes" aria-label="Mes">' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'
+      + '<div id="dv-mes-c"><label for="dv-mes">Mes que se solicita (el del saldo a favor)</label><div class="dos"><select id="dv-mes" aria-label="Mes">' + MESES_L.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'
       + '<select id="dv-anio" aria-label="Año">' + anios.map(function (a) { return '<option' + (a === y ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div></div>'
+      + '<div id="dv-ej-c" hidden><label for="dv-ej">Ejercicio (el de la declaración anual con el saldo a favor)</label><select id="dv-ej">' + ejs.map(function (a) { return '<option' + (a === ejPre ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select>'
+      + '<div class="dev-nota">Solo las que se piden a mano en el SAT. La automática de las personas físicas no va aquí: se ve en Centauro › Devoluciones.</div></div>'
       + '<div><label for="dv-con">Contador responsable</label><select id="dv-con"><option value="">Cargando…</option></select></div>'
       + '<div><label for="dv-ger">Gerente que autoriza (registra la respuesta del SAT)</label><select id="dv-ger"><option value="">Cargando…</option></select></div>'
       + '<div><label for="dv-fac">Quién hace la factura de honorarios</label><select id="dv-fac"><option value="">Cargando…</option></select></div>'
@@ -1405,19 +1431,28 @@ tr.fila:hover td{background:var(--navy-soft)}
       + '<div class="botones"><button class="btn acento" type="button" id="dv-ok">Dar de alta la devolución</button></div>'
       + '<div class="msg" id="dv-msg" hidden></div></div>';
     h += sec('La solicitud', form);
-    h += '<p class="rfc gen-nota">Al darla de alta nacen «Documentos de solicitud» y «Acuse de solicitud» (2 días hábiles después de la solicitud) y «Respuesta del SAT» (40 días hábiles, art. 22 del CFF; la fecha Profase, 3 días hábiles antes). Cuando el SAT conteste, quien autoriza lo registra en la ficha y nace solo el paso que sigue. Las devoluciones que ya estaban en proceso siguen con sus plantillas de antes.</p>';
+    h += '<p class="rfc gen-nota">Al darla de alta nacen «Documentos de solicitud» y «Acuse de solicitud» (2 días hábiles después de la solicitud) y «Respuesta del SAT» (40 días hábiles, art. 22 del CFF; la fecha Profase, 3 días hábiles antes). Cuando el SAT conteste, quien autoriza lo registra en la ficha y nace solo el paso que sigue. Las de ISR llevan solo la factura de honorarios. Las devoluciones que ya estaban en proceso siguen con sus plantillas de antes.</p>';
     h += '</div>';
     $('ficha').innerHTML = h; $('velo').hidden = false; $('ficha').scrollTop = 0;
     try { $('cerrar').focus(); } catch (er) {}
     try {
       if (!DEVF) { var r = await P.sb.rpc('wf_dev_opciones'); if (r.error) throw r.error; DEVF = r.data; }
       if (!$('dv-cli')) return;
+      // 362: IVA o ISR (si ya existe la plantilla de ISR)
+      var imps = DEVF.impuestos || ['iva'];
+      if (imps.indexOf('isr') < 0) DVI = 'iva';
+      $('dv-imp-c').hidden = imps.length < 2;
+      devImpuesto(DVI);
       var op = function (L, v) { return '<option value="">Escoge…</option>' + (L || []).map(function (x) { return '<option value="' + esc(x.u) + '"' + (x.u === v ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join(''); };
       $('dv-con').innerHTML = op(DEVF.contadores); $('dv-ger').innerHTML = op(DEVF.gerentes); $('dv-fac').innerHTML = op(DEVF.facturan);
       DVB = window.PROFASE_BUSCA.crea({ donde: $('dv-cli'), id: 'dv-cli-in', varios: false, lista: 'al-buscar',
         opciones: (DEVF.clientes || []).map(function (c) { return { v: String(c.id), t: c.rs, nota: [c.rfc, c.grupo].filter(Boolean).join(' · ') }; }),
         marcador: 'Escribe parte de la razón social, el RFC o el grupo', vacio: 'No hay clientes activos con eso',
         cambio: function (v) { devSugerido(+v[0] || 0); } });
+      if (pre && pre.empresa && (DEVF.clientes || []).some(function (c) { return c.id === +pre.empresa; })) {
+        try { DVB.pon([String(pre.empresa)]); } catch (e1) {}
+        devSugerido(+pre.empresa);
+      }
     } catch (e) { devMsg('dv-msg', 'No se pudieron leer los clientes. Cierra y vuelve a abrir.', false); }
   }
   async function devSugerido(emp) {
@@ -1427,15 +1462,15 @@ tr.fila:hover td{background:var(--navy-soft)}
       var s = r.data || {}, pon = function (id, v) { var e = $(id); if (e && v && Array.prototype.some.call(e.options, function (o) { return o.value === v; })) e.value = v; };
       pon('dv-con', s.contador); pon('dv-ger', s.gerente); pon('dv-fac', s.factura);
       var L = s.casos || [];
-      $('dv-prev').innerHTML = L.length ? '<div class="dev-nota"><b>Devoluciones de este cliente:</b> ' + L.slice(0, 6).map(function (c) { return esc(c.titulo.replace(/^Devolución de IVA · /, '')) + ' (' + esc((DEV_EST[c.estado] || [c.estado])[0].toLowerCase()) + ', solicitada el ' + esc(fecha(c.solicitud)) + ')'; }).join(' · ') + '</div>' : '';
+      $('dv-prev').innerHTML = L.length ? '<div class="dev-nota"><b>Devoluciones de este cliente:</b> ' + L.slice(0, 6).map(function (c) { return esc(c.titulo.replace(/^Devolución de /, '')) + ' (' + esc((DEV_EST[c.estado] || [c.estado])[0].toLowerCase()) + ', solicitada el ' + esc(fecha(c.solicitud)) + ')'; }).join(' · ') + '</div>' : '';
     } catch (e) { $('dv-prev').innerHTML = ''; }
   }
   async function creaDev(b) {
     var emp = DVB ? +(DVB.valor()[0] || 0) : 0;
     if (!emp) { devMsg('dv-msg', 'Escoge el cliente.', false); return; }
     if (!$('dv-sol').value) { devMsg('dv-msg', 'Pon la fecha de solicitud.', false); return; }
-    var p = { empresa_id: emp, solicitud: $('dv-sol').value, mes_solicitado: $('dv-anio').value + '-' + dos(+$('dv-mes').value) + '-01',
-              contador: $('dv-con').value, gerente: $('dv-ger').value, factura: $('dv-fac').value, nota: $('dv-not').value };
+    var p = { impuesto: DVI, empresa_id: emp, solicitud: $('dv-sol').value, contador: $('dv-con').value, gerente: $('dv-ger').value, factura: $('dv-fac').value, nota: $('dv-not').value };
+    if (DVI === 'isr') p.ejercicio = +$('dv-ej').value; else p.mes_solicitado = $('dv-anio').value + '-' + dos(+$('dv-mes').value) + '-01';
     if (!p.contador || !p.gerente || !p.factura) { devMsg('dv-msg', 'Escoge al contador, al gerente que autoriza y a quien hace la factura.', false); return; }
     b.disabled = true; devMsg('dv-msg', '');
     try {
@@ -1451,14 +1486,17 @@ tr.fila:hover td{background:var(--navy-soft)}
   // Lo nuevo, desde su aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']; regla de Daniel del 2-nov-2026: lo que avisa
   // Claude lleva a lo nuevo): «devolucion-iva» ilumina «Nueva devolución de IVA» con una nota corta de qué es
   function verNuevo(t) {
-    if (t !== 'devolucion-iva' && t !== 'devolucion-facturas') return;
+    if (t !== 'devolucion-iva' && t !== 'devolucion-facturas' && t !== 'devolucion-isr') return;
     if (!$('p-lista') || $('p-lista').hidden) { setTimeout(function () { verNuevo(t); }, 400); return; }
     var nota = document.getElementById('nuevo-dev');
     if (!nota) { nota = document.createElement('div'); nota.id = 'nuevo-dev'; nota.className = 'nuevo-nota'; nota.setAttribute('role', 'status'); $('p-lista').parentNode.insertBefore(nota, $('p-lista')); }
-    nota.textContent = t === 'devolucion-facturas'
+    nota.textContent = t === 'devolucion-isr'
+      ? 'Nuevo: las devoluciones de ISR (el saldo a favor de la anual) van como las de IVA, una por solicitud y por ejercicio, con los mismos pasos y fechas de ley y solo la factura de honorarios.'
+        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución» › ISR.' : ' Las encuentras en «Más filtros» › Plantilla › «Devolución de ISR».')
+      : t === 'devolucion-facturas'
       ? 'Nuevo: en las devoluciones de IVA, al marcar el depósito nacen las dos facturas. Cada una se sube como su XML en la ficha de la devolución y se da de alta sola en Facturación; el gerente que autoriza captura ahí el monto devuelto.'
       : 'Nuevo: las devoluciones de IVA van una por solicitud, con las fechas de ley de cada paso y los botones de «¿Qué contestó el SAT?» en la ficha.'
-        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución de IVA».' : ' Las encuentras en «Más filtros» › Plantilla › «Devolución de IVA» (y, si quieres, el mes que se solicita).');
+        + (DEV.crea && !CONSULTA ? ' Se dan de alta con «Nueva devolución».' : ' Las encuentras en «Más filtros» › Plantilla › «Devolución de IVA» (y, si quieres, el mes que se solicita).');
     var b = $('dev-abre');
     if (b && !b.hidden) { b.classList.add('nuevo'); try { b.scrollIntoView({ block: 'center' }); } catch (e) {} setTimeout(function () { b.classList.remove('nuevo'); }, 12000); }
     else { try { nota.scrollIntoView({ block: 'center' }); } catch (e) {} }
@@ -2301,6 +2339,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'gen-abre') { abreGenerar(); return; }
     if (ev.target.id === 'dev-abre') { abreDev(); return; }
     if (ev.target.id === 'dv-ok') { creaDev(ev.target); return; }
+    var dvi = ev.target.closest('[data-dvi]'); if (dvi) { devImpuesto(dvi.getAttribute('data-dvi')); return; }
     var ds = ev.target.closest('[data-dsat]'); if (ds) { devSatForm(ds.getAttribute('data-dsat'), ds); return; }
     if (ev.target.id === 'dev-sat-ok') { devResponde(ev.target); return; }
     if (ev.target.id === 'dev-sat-x') { var sf = $('dev-sat-f'); if (sf) { sf.hidden = true; sf.innerHTML = ''; } document.querySelectorAll('[data-dsat]').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); }); return; }
