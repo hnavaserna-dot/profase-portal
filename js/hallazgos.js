@@ -7,7 +7,7 @@
    Tres hojas: «Resumen» (por empresa, cuántos casos hay en cada reporte y cuántos pendientes y resueltos), «Bitácora» (un
    renglón por caso, ordenada por empresa y con filtros) y «Comentarios» (toda la plática, un renglón por comentario).
    Entran los casos con estatus o algún comentario; «Resuelto» = Justificado o Modificación Exitosa.
-   Qué empresas le salen a cada quien lo decide la base (portal/sql/362_excel_hallazgos.sql, rep_hallazgos(): los contadores
+   Qué empresas le salen a cada quien lo decide la base (portal/sql/363_excel_hallazgos.sql, rep_hallazgos(): los contadores
    y Gabo, las suyas; los gerentes, las suyas y las de su equipo; la dirección, la Gerencia Contable y Fernando Cadengo,
    todas; y encima la regla de cada reporte). Aquí solo se arma el archivo: la pieza no lee tablas ni pide otra cosa a la base
    (construir.py, exige_hallazgos_js). Los clientes ocultos de quien entró (js/ocultos.js) no salen, como en la lista, salvo
@@ -113,6 +113,10 @@
     var MK = window.PROFASE_MARCA, P = window.PORTAL;
     if (!MK || !P || !P.sb) return 'Entra al portal para bajar el Excel';
     var q = await P.sb.rpc('rep_hallazgos');
+    // mientras la base todavía no tiene la puerta (se publica la página antes de que corra su SQL), un aviso claro
+    if (q.error && (q.error.code === 'PGRST202' || /rep_hallazgos/.test(q.error.message || ''))) {
+      return 'El Excel de hallazgos se está terminando de instalar; vuelve a intentar en un rato';
+    }
     if (q.error || !q.data || !q.data.ok) return 'No se pudo leer los casos; vuelve a intentar en unos minutos';
     var D = q.data, E = D.empresas || {};
     // los clientes ocultos de quien entró no salen (salvo con «Verlos por ahora»), como en la lista
