@@ -36,7 +36,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=d4504a5f5b"></script><script src="js/buscador.js?v=514b1d6650"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=d4504a5f5b"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/seguimiento.js?v=1c386cce1f"></script>
 <style>
 /* Portal PROFASE · Estrategias fiscales (petición de Fernando Barbosa, gerente contable; decisiones de Héctor Daniel Nava del
    9-nov-2026: «1; ok / 2; a) / 3) sí 15% / 4) sí / 5) sí / 6) no; no se pierde / 7) sí»; «que Él lo capture todo»; «sí así
@@ -216,6 +216,15 @@ button.cel{cursor:pointer}
   input,select,textarea,.campo input,.campo select,.campo textarea,.declarados input{font-size:16px}
   .band h1{font-size:22px}
 }
+/* la ficha (ventana común ancha, 11-nov-2026): el año por año en tarjetas, para que quepa en su columna */
+.anios-l{display:grid;gap:8px}
+.anio-c{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:0}
+.anio-c .h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;justify-content:space-between}
+.anio-c .h b{font-size:15px}
+.anio-c .k{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;margin-top:4px}
+.anio-c .k span{color:var(--muted)}
+.anio-c .k b{font-weight:600;color:var(--ink);font-size:13px}
+.anio-c>.mut,.anio-c>div>.chip{margin-top:4px}
 </style></head><body>
 <div class="band"><div class="wrap">
   <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -298,7 +307,7 @@ button.cel{cursor:pointer}
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
-  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); avisa.ult = { t: t, en: Date.now() }; try { if (VE) VE.pie(t); } catch (e) {} }   // la ficha abierta lo dice abajo; la que se abre enseguida, arriba
   function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
   function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
   function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -631,129 +640,169 @@ button.cel{cursor:pointer}
     if (a.estatus === 'propuesta' || a.estatus === 'implementacion') l.push('Para capturar lo usado desde ' + reglasDesde() + ', pásala a «En uso».');
     return { t: l, b: b };
   }
+  /* La ficha, en la ventana común de las fichas de trabajo (js/seguimiento.js, ancha; 11-nov-2026, Héctor Daniel Nava:
+     «2,3,4 y 5», la del Panel de trabajo en las demás pantallas): a la izquierda la estrategia, sus años en una línea (picar uno
+     lo captura o lo corrige), «Qué falta» y el estatus en botones; a la derecha, en pestañas, los comentarios, el año por año,
+     los documentos, los datos y la bitácora. Las mismas funciones de siempre (est_*); capturar un año, editar los datos y
+     quitar un documento siguen en su ventana (#dlg) y al terminar regresan a la ficha. */
+  var VE = null;   // la ficha abierta
+  function dlgFuera() { if (!$('dlg').hidden) { $('dlg').hidden = true; $('dlg-c').innerHTML = ''; } }
+  function fichaFuera() { if (VE) { var v = VE; VE = null; try { v.cerrar(); } catch (e) {} } }
+  // de la ficha a una ventana suya (capturar, datos, cambiar el estatus, quitar un documento): sin soltar la estrategia abierta
+  function aVentana(fn) { return function () { fichaFuera(); fn(); }; }
+  var EST_AYUDA = [['Propuesta', 'Se le propuso al cliente; todavía no se usa.'], ['En implementación', 'El cliente dijo que sí y se está armando.'],
+    ['En uso', 'Ya se usa: desde ' + 2026 + ' lo usado de cada año se captura con las reglas de la ley.'], ['Agotada', 'Ya no le queda nada (se pone a mano).'],
+    ['Cancelada', 'Ya no se usa: lo usado se queda como histórico y ya no se mueve. Se cancela con su porqué en el comentario.']];
   function pintaFicha(a) {
+    dlgFuera(); fichaFuera();
     var t = (EST.tipos || []).filter(function (x) { return x.clave === a.tipo; })[0] || T, mar = a.modelo === 'marca', pre = a.modelo === 'premio';
-    var h = '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 12px;align-items:flex-start">'
-      + '<div style="min-width:0"><div class="mut" style="font-weight:650">' + esc(t.nombre) + ' · #' + a.numero + '</div><h3 id="dlg-t">' + esc(quien(a) || '—') + '</h3><div class="mut">' + esc(a.razon) + (a.rfc ? ' · ' + esc(a.rfc) : '') + (a.grupo ? ' · ' + esc(a.grupo) : '') + '</div></div>'
-      + '<div class="acciones"><button class="btn" type="button" data-excel id="x-ficha">Excel de la ficha</button></div></div>';
-    // estatus
-    h += '<div class="sec"><div class="cab"><h4>Estatus</h4>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" id="f-est">Cambiar estatus</button>' : '') + '</div><div class="pasos">'
-      + ESTATUS.slice(0, 4).map(function (x, i) { return '<span class="paso' + (x[0] === a.estatus ? ' on' : '') + '">' + esc(x[1]) + '</span>' + (i < 3 ? '<span class="mut" aria-hidden="true">›</span>' : ''); }).join('')
-      + (a.estatus === 'cancelada' ? '<span class="paso can">Cancelada</span>' : '') + '</div>'
-      + '<div class="mut">«Agotada» se pone a mano; «Cancelada», desde «Cambiar estatus» y con su porqué.</div></div>';
-    // qué hacer
-    var qh = queHacer(a);
-    h += '<div class="sec"><div class="hacer' + (qh.t.length ? '' : ' bien') + '"><div><b>Qué hacer</b>' + (qh.t.length ? '<ul>' + qh.t.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<div>Todo en orden.</div>') + '</div>' + qh.b + '</div></div>';
-    // datos
-    function d(et, v, falta) { return '<div><span>' + esc(et) + '</span>' + (v ? '<b>' + esc(v) + '</b>' : '<b class="falta">' + (falta ? 'Falta' : '—') + '</b>') + '</div>'; }
-    h += '<div class="sec"><div class="cab"><h4>Datos</h4>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" id="f-edita">Editar datos</button>' : '') + '</div><div class="kv">'
-      + d('Razón social', a.razon) + d('Cliente DECOMSA / PROFASE', cliTxt(a.cliente))
-      + (mar ? d('Marca', a.nombre) + d('Número de registro IMPI', a.impi, 1) + d('Fecha de registro', fecha(a.fecha_registro), 1) + d('Vigencia', fecha(a.vigencia), 1) + d('Fecha de adquisición', fecha(a.adquisicion), 1)
-        : d(pre ? 'Persona ganadora' : 'Persona indemnizada', a.persona) + d('RFC', a.persona_rfc, 1) + d('CURP', a.persona_curp, 1))
-      + d(a.anual_pendiente ? 'Pendiente de inyectar en el anual' : 'Anual donde inicia', String(a.anual)) + d('Valor', dinero(a.valor)) + '</div></div>';
-    // resumen
-    h += '<div class="res"><div><span>Total usado</span><b>' + dinero(a.usado) + '</b></div>' + (mar ? '<div><span>Amortización perdida</span><b>' + dinero(a.perdida) + '</b></div>' : '')
-      + '<div><span>Restante</span><b>' + dinero(a.restante) + '</b></div>' + (!mar && a.ult_e != null ? '<div><span>Usado en ' + a.ult_e + '</span><b>' + dinero(a.ult_monto) + '</b></div>' : '') + (mar ? '<div><span>% actual' + (a.pct_desde ? ' (desde ' + a.pct_desde + ')' : '') + '</span><b>' + (a.pct_actual != null ? esc(pct(a.pct_actual)) : '—') + '</b></div>' : '') + '</div>';
-    // año por año
-    var ini = a.anual_pendiente ? null : a.anual;
+    var edita = PUEDE && a.estatus !== 'cancelada', reciente = avisa.ult && Date.now() - avisa.ult.en < 6000 ? avisa.ult.t : '';
+    // los años, en una línea: de su anual (o del primero capturado) al año en curso
+    var ini = a.anual_pendiente ? null : a.anual, c = a.centauro || {};
     (a.anios || []).forEach(function (x) { if (ini == null || x.e < ini) ini = x.e; });
-    var c = a.centauro || {}, filasA = [], resto = Number(a.valor);
+    var lin = [];
+    if (ini != null) for (var e0 = ini; e0 <= anio(); e0++) {
+      var x0 = anioDe(a, e0), ce0 = mar && c[e0] ? c[e0].estado : '';
+      lin.push({ id: edita && !a.anual_pendiente ? e0 : '', t: String(e0), aqui: false,
+        est: x0 ? (x0.no_uso ? 'off' : ce0 === 'menos' ? 'mal' : 'ok') : (e0 === ejercicio() && a.pilas && a.pilas.falta_anio ? 'na' : ''),
+        marca: x0 ? (x0.no_uso ? '—' : ce0 === 'menos' ? '!' : '✓') : String(e0).slice(-2),
+        title: e0 + ' · ' + (x0 ? (x0.no_uso ? 'No se usó' : (mar && x0.pct != null ? pct(x0.pct) + ' = ' : '') + dinero(x0.monto)) + (ce0 ? ' · ' + CENTXT[ce0][0] : '') : 'Sin capturar') + (edita ? ' · pica para ' + (x0 ? 'corregirlo' : 'capturarlo') : '') });
+    }
+    var qh = queHacer(a);
+    var falta = window.PROFASE_SEG.falta(qh.t.length ? 'Qué falta' : 'Cómo va', qh.t.length ? qh.t.map(function (z) { return ['no', esc(z)]; }) : [['si', 'Todo en orden.']]);
+    // año por año: una tarjeta por año, del más nuevo al más viejo (lo mismo que la tabla de antes, en su columna)
+    var filasA = [], resto = Number(a.valor);
     if (ini != null) for (var e = ini; e <= anio(); e++) {
       var x = anioDe(a, e);
       if (x) resto -= Number(x.monto) + Number(x.perdida || 0);
-      var ce = mar && c[e] ? chip(CENTXT[c[e].estado][0], CENTXT[c[e].estado][1]) + (c[e].estado !== 'sin' ? '<div class="mut">La anual: ' + dinero(c[e].anual) + ' · las marcas del cliente: ' + dinero(c[e].marcas) + '</div>' : '') : '';
+      var ce = mar && c[e] ? '<div>' + chip(CENTXT[c[e].estado][0], CENTXT[c[e].estado][1]) + '</div>' + (c[e].estado !== 'sin' ? '<div class="mut">La anual: ' + dinero(c[e].anual) + ' · las marcas del cliente: ' + dinero(c[e].marcas) + '</div>' : '') : '';
       var cambio = x && x.cambio ? chip({ libre: 'Primer cambio de %', cinco: 'Cambio a los cinco años', anticipado: 'Cambio antes de tiempo (una vez)', autorizado: 'Cambio autorizado por ' + (x.capturo || '') }[x.cambio] || '', x.cambio === 'autorizado' ? 'na' : 'az') : '';
-      filasA.push('<tr><td><b>' + e + '</b></td>'
-        + (x ? (mar ? '<td><span class="pc">' + (x.no_uso ? '—' : esc(pct(x.pct))) + '</span></td>' : '')
-          + '<td class="der">' + (x.no_uso ? '<span class="mut">No se usó</span>' : '<span class="num">' + dinero(x.monto) + '</span>') + (x.solo_restante ? '<div class="mut">Solo el restante</div>' : '') + '</td>'
-          + (mar ? '<td class="der"><span class="num">' + dinero(x.perdida) + '</span></td>' : '') + '<td class="der"><span class="num">' + dinero(Math.max(resto, 0)) + '</span></td>'
-          + (mar ? '<td>' + (ce || '<span class="mut">—</span>') + '</td>' : '')
-          + '<td>' + (x.declarado ? '<span class="mut">Como se declaró</span>' : esc(x.capturo || '')) + (x.capturado ? '<div class="mut">' + esc(fechaHora(x.capturado)) + '</div>' : '') + cambio + (x.comentario ? '<div class="mut">' + esc(x.comentario) + '</div>' : '') + '</td>'
-          + '<td>' + (PUEDE && a.estatus !== 'cancelada' ? '<button class="btn chico" type="button" data-cap="' + e + '">Corregir</button>' : '') + '</td>'
-          : '<td colspan="' + (mar ? 6 : 3) + '"><span class="mut">Sin capturar</span></td><td>' + (PUEDE && a.estatus !== 'cancelada' && !a.anual_pendiente ? '<span class="acciones"><button class="btn chico acento" type="button" data-cap="' + e + '">Capturar ' + e + '</button><button class="btn chico" type="button" data-cap="' + e + '" data-nouso="1">No se usó</button></span>' : '') + '</td>')
-        + '</tr>');
+      var bot = !edita ? '' : x ? '<button class="btn chico" type="button" data-cap="' + e + '">Corregir</button>'
+        : !a.anual_pendiente ? '<span class="acciones"><button class="btn chico acento" type="button" data-cap="' + e + '">Capturar ' + e + '</button><button class="btn chico" type="button" data-cap="' + e + '" data-nouso="1">No se usó</button></span>' : '';
+      filasA.push('<div class="anio-c"><div class="h"><b>' + e + '</b>' + bot + '</div>'
+        + (x ? '<div class="k">' + (mar ? '<span>% <b>' + (x.no_uso ? '—' : esc(pct(x.pct))) + '</b></span>' : '')
+            + '<span>' + (mar ? 'Amortización' : 'Usado') + ' <b>' + (x.no_uso ? 'No se usó' : dinero(x.monto)) + '</b></span>'
+            + (mar ? '<span>Perdida <b>' + dinero(x.perdida) + '</b></span>' : '') + '<span>Le queda al cierre <b>' + dinero(Math.max(resto, 0)) + '</b></span></div>'
+            + (x.solo_restante ? '<div class="mut">Solo el restante</div>' : '') + ce
+            + '<div class="mut">' + (x.declarado ? 'Como se declaró' : 'Capturó ' + esc(x.capturo || '')) + (x.capturado ? ' · ' + esc(fechaHora(x.capturado)) : '') + '</div>' + (cambio ? '<div>' + cambio + '</div>' : '')
+            + (x.comentario ? '<div class="mut">' + esc(x.comentario) + '</div>' : '')
+          : '<div class="mut">Sin capturar</div>' + ce)
+        + '</div>');
     }
-    h += '<div class="sec"><div class="cab"><h4>Año por año</h4><span class="mut">Antes de ' + reglasDesde() + ', como se declaró; desde ' + reglasDesde() + ', con las reglas de la ley</span></div>'
-      + (filasA.length ? '<div class="desliza"><table class="tabla"><thead><tr><th>Año</th>' + (mar ? '<th>%</th>' : '') + '<th class="der">' + (mar ? 'Amortización' : 'Usado') + '</th>' + (mar ? '<th class="der">Perdida</th>' : '') + '<th class="der">Restante al cierre</th>' + (mar ? '<th>Contra la anual (Centauro)</th>' : '') + '<th>Capturó</th><th></th></tr></thead><tbody>' + filasA.reverse().join('') + '</tbody></table></div>'
-        : '<div class="mut">Pendiente de inyectar en el anual ' + a.anual + ': cuando ya tenga año, aquí se captura lo usado.</div>') + '</div>';
-    // utilidad o pérdida del cliente (marcas)
-    if (mar) {
-      var rs = a.resultados || [];
-      h += '<div class="sec"><div class="cab"><h4>Utilidad o pérdida fiscal del cliente</h4><button class="btn chico" type="button" id="f-ut">Ir a Utilidad o pérdida</button></div>'
-        + (rs.length ? '<div class="pasos">' + rs.map(function (r) { return '<span class="cel ' + (r.resultado === 'utilidad' ? 'ut' : 'pe') + '"><span>' + r.e + ' ' + (r.resultado === 'utilidad' ? 'Utilidad' : 'Pérdida') + '</span><span class="num">' + dinero(r.monto) + '</span></span>'; }).join('') + '</div>' : '<div class="mut">Todavía no se captura. Se necesita para revisar un cambio de porcentaje antes de cinco años.</div>') + '</div>';
-    }
-    // entrega del premio
-    if (pre) {
-      h += '<div class="sec"><div class="cab"><h4>Entrega al cliente</h4></div>'
-        + (PUEDE && a.estatus !== 'cancelada' ? '<div class="dos"><div class="campo"><label for="e-en">Cómo va</label><select id="e-en"><option value="">Sin estatus</option>' + ENTREGA.map(function (x) { return '<option value="' + x[0] + '"' + (a.entrega === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>'
-          + '<div class="campo e-ent"><label for="e-mo">Monto entregado</label><input id="e-mo" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(a.entrega_monto != null ? a.entrega_monto : '') + '"></div>'
-          + '<div class="campo e-ent"><label for="e-fe">Fecha de la entrega</label><input id="e-fe" type="date" value="' + esc(a.entrega_fecha || '') + '"></div></div>'
-          + '<div class="msg mal" id="e-e" hidden></div><div class="acciones" style="justify-content:flex-start"><button class="btn" type="button" id="e-si">Guardar la entrega</button></div>'
-          : '<div>' + (a.entrega ? esc(a.entrega_txt) + (a.entrega === 'entregado' ? ' · ' + dinero(a.entrega_monto) + (a.entrega_fecha ? ' · ' + esc(fecha(a.entrega_fecha)) : '') : '') : '<span class="mut">Sin estatus</span>') + '</div>') + '</div>';
-    }
+    var aniosT = '<p class="sg-hint" style="margin:0 0 8px">Antes de ' + reglasDesde() + ', como se declaró; desde ' + reglasDesde() + ', con las reglas de la ley.</p>'
+      + (filasA.length ? '<div class="anios-l">' + filasA.reverse().join('') + '</div>'
+        : '<div class="mut">Pendiente de inyectar en el anual ' + a.anual + ': cuando ya tenga año, aquí se captura lo usado.</div>');
     // documentos
     DOCS = {};
-    var cls = Object.keys(CLASES).filter(function (k) { return mar || k !== 'impi'; });
-    h += '<div class="sec"><div class="cab"><h4>Documentos</h4><span class="mut">Opcionales, en cualquier estatus</span></div><div class="docs">' + cls.map(function (k) {
+    var cls = Object.keys(CLASES).filter(function (k) { return mar || k !== 'impi'; }), nDocs = 0;
+    var docsT = '<p class="sg-hint" style="margin:0 0 8px">Opcionales, en cualquier estatus.</p><div class="docs">' + cls.map(function (k) {
       var ds = (a.docs || []).filter(function (x) { return x.clase === k; });
-      ds.forEach(function (x) { DOCS[x.id] = x; });
+      ds.forEach(function (x) { DOCS[x.id] = x; nDocs++; });
       return '<div class="doc"><div class="cab"><b>' + esc(CLASES[k]) + '</b>' + (PUEDE ? '<button class="btn chico" type="button" data-sube="' + k + '">Subir</button>' : '') + '</div>'
         + (ds.length ? '<ul>' + ds.map(function (x) {
           return '<li><span>' + esc(x.nombre) + '<span class="mut"> · ' + esc(x.por) + ' · ' + esc(fecha(x.subido)) + '</span></span><span class="acciones">'
             + (esPdf(x) ? '<button class="btn chico" type="button" data-xver="' + x.id + '">Ver</button>' : '') + '<button class="btn chico" type="button" data-xbaja="' + x.id + '">Bajar</button>'
             + (PUEDE ? '<button class="btn chico peligro" type="button" data-xquita="' + x.id + '">Quitar</button>' : '') + '</span></li>';
         }).join('') + '</ul>' : '<div class="mut">Sin archivo</div>') + '</div>';
-    }).join('') + '</div><div class="mut" id="doc-msg" role="status"></div></div>';
-    // seguimiento
-    h += '<div class="sec"><div class="cab"><h4>Seguimiento</h4></div>'
-      + (PUEDE ? '<div class="campo"><label for="s-txt">Comentario</label><textarea id="s-txt" maxlength="2000" placeholder="Escribe un comentario…"></textarea></div><div class="acciones" style="justify-content:flex-start"><button class="btn" type="button" id="s-si">Agregar comentario</button></div>' : '')
-      + '<ul class="bit">' + (a.bitacora || []).map(function (b) {
-        return '<li><span class="mut">' + esc(fechaHora(b.hora)) + ' · ' + esc(b.quien) + (b.puesto ? ' (' + esc(b.puesto) + ')' : '') + ' · ' + esc(b.que) + '</span>' + esc(b.texto) + '</li>';
-      }).join('') + '</ul></div>';
-    h += '<div class="acciones"><button class="btn" type="button" id="f-cierra">Cerrar</button></div>';
-    abre(h, 'f-cierra');
-    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: ABIERTO, abre: ficha, antes: $('f-cierra'), clase: 'btn' });
-    $('f-cierra').onclick = function () { cierra(); pinta(); };
-    if ($('f-est')) $('f-est').onclick = function () { cambiaEstatus(a); };
-    if ($('f-edita')) $('f-edita').onclick = function () { forma(a); };
-    if ($('h-datos')) $('h-datos').onclick = function () { forma(a); };
-    if ($('f-ut')) $('f-ut').onclick = function () { cierra(); setTab('ut'); };
-    $('dlg-c').querySelectorAll('[data-cap]').forEach(function (b) { b.onclick = function () { captura(a, +b.getAttribute('data-cap'), b.hasAttribute('data-nouso')); }; });
-    if ($('e-en')) { var ver = function () { $('dlg-c').querySelectorAll('.e-ent').forEach(function (x) { x.hidden = $('e-en').value !== 'entregado'; }); }; $('e-en').onchange = ver; ver(); $('e-si').onclick = function () { entrega(a, this); }; }
-    if ($('s-si')) $('s-si').onclick = async function () {
-      var b = this, t = $('s-txt').value.trim(); if (!t) { $('s-txt').focus(); return; }
-      b.disabled = true;
-      try { await rpc('est_comenta', { p_id: a.id, p_texto: t }); await ficha(a.id); avisa('Listo: quedó el comentario.'); } catch (e) { error(falla(e)); b.disabled = false; }
-    };
-    $('dlg-c').querySelectorAll('[data-sube]').forEach(function (b) { b.onclick = function () { SUBE = { id: a.id, clase: b.getAttribute('data-sube') }; $('doc-arch').value = ''; $('doc-arch').click(); }; });
-    $('dlg-c').querySelectorAll('[data-xver]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.ver(DOCS[+b.getAttribute('data-xver')], b); }; });
-    $('dlg-c').querySelectorAll('[data-xbaja]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.baja(DOCS[+b.getAttribute('data-xbaja')], b); }; });
-    $('dlg-c').querySelectorAll('[data-xquita]').forEach(function (b) { b.onclick = function () { quitaDoc(a, DOCS[+b.getAttribute('data-xquita')]); }; });
-    $('x-ficha').onclick = function () { excelFicha(a, this); };
+    }).join('') + '</div><div class="mut" id="doc-msg" role="status"></div>';
+    // datos (y, en las marcas, la utilidad o pérdida del cliente; en los premios, su entrega)
+    function d(et, v, f) { return '<div><span>' + esc(et) + '</span>' + (v ? '<b>' + esc(v) + '</b>' : '<b class="falta">' + (f ? 'Falta' : '—') + '</b>') + '</div>'; }
+    var datosT = '<div class="sec"><div class="cab"><h4>Datos</h4><span class="acciones">' + (edita ? '<button class="btn chico" type="button" id="f-edita">Editar datos</button>' : '')
+      + '<button class="btn chico" type="button" data-excel id="x-ficha">Excel de la ficha</button></span></div><div class="kv">'
+      + d('Razón social', a.razon) + d('Cliente DECOMSA / PROFASE', cliTxt(a.cliente))
+      + (mar ? d('Marca', a.nombre) + d('Número de registro IMPI', a.impi, 1) + d('Fecha de registro', fecha(a.fecha_registro), 1) + d('Vigencia', fecha(a.vigencia), 1) + d('Fecha de adquisición', fecha(a.adquisicion), 1)
+        : d(pre ? 'Persona ganadora' : 'Persona indemnizada', a.persona) + d('RFC', a.persona_rfc, 1) + d('CURP', a.persona_curp, 1))
+      + d(a.anual_pendiente ? 'Pendiente de inyectar en el anual' : 'Anual donde inicia', String(a.anual)) + d('Valor', dinero(a.valor)) + '</div></div>';
+    if (mar) {
+      var rs = a.resultados || [];
+      datosT += '<div class="sec"><div class="cab"><h4>Utilidad o pérdida fiscal del cliente</h4><button class="btn chico" type="button" id="f-ut">Ir a Utilidad o pérdida</button></div>'
+        + (rs.length ? '<div class="pasos">' + rs.map(function (r) { return '<span class="cel ' + (r.resultado === 'utilidad' ? 'ut' : 'pe') + '"><span>' + r.e + ' ' + (r.resultado === 'utilidad' ? 'Utilidad' : 'Pérdida') + '</span><span class="num">' + dinero(r.monto) + '</span></span>'; }).join('') + '</div>' : '<div class="mut">Todavía no se captura. Se necesita para revisar un cambio de porcentaje antes de cinco años.</div>') + '</div>';
+    }
+    if (pre) {
+      datosT += '<div class="sec"><div class="cab"><h4>Entrega al cliente</h4></div>'
+        + (edita ? '<div class="dos"><div class="campo"><label for="e-en">Cómo va</label><select id="e-en"><option value="">Sin estatus</option>' + ENTREGA.map(function (x) { return '<option value="' + x[0] + '"' + (a.entrega === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>'
+          + '<div class="campo e-ent"><label for="e-mo">Monto entregado</label><input id="e-mo" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(a.entrega_monto != null ? a.entrega_monto : '') + '"></div>'
+          + '<div class="campo e-ent"><label for="e-fe">Fecha de la entrega</label><input id="e-fe" type="date" value="' + esc(a.entrega_fecha || '') + '"></div></div>'
+          + '<div class="msg mal" id="e-e" hidden></div><div class="acciones" style="justify-content:flex-start"><button class="btn" type="button" id="e-si">Guardar la entrega</button></div>'
+          : '<div>' + (a.entrega ? esc(a.entrega_txt) + (a.entrega === 'entregado' ? ' · ' + dinero(a.entrega_monto) + (a.entrega_fecha ? ' · ' + esc(fecha(a.entrega_fecha)) : '') : '') : '<span class="mut">Sin estatus</span>') + '</div>') + '</div>';
+    }
+    var bit = a.bitacora || [];
+    var bitT = bit.length ? '<ul class="bit">' + bit.map(function (b) {
+      return '<li><span class="mut">' + esc(fechaHora(b.hora)) + ' · ' + esc(b.quien) + (b.puesto ? ' (' + esc(b.puesto) + ')' : '') + ' · ' + esc(b.que) + '</span>' + esc(b.texto) + '</li>';
+    }).join('') + '</ul>' : '<p class="sg-hint">Todavía no hay movimientos.</p>';
+    // los comentarios (y los cambios de estatus) de la bitácora, del más viejo al más nuevo: no se corrigen ni se borran
+    var hilo = bit.filter(function (b) { return b.que === 'comentario' || b.que === 'estatus'; }).slice().reverse().map(function (b, i) {
+      return { id: 'b' + i, por: '', porNombre: b.quien || '', ts: fechaHora(b.hora), tsISO: b.hora || '', texto: b.texto || '', legado: true };
+    });
+    var idx = COLA.indexOf(a.id);
+    var inst = window.PROFASE_SEG.abre({
+      ancho: true,
+      kick: t.nombre + ' · #' + a.numero,
+      titulo: quien(a) || '—',
+      nav: idx >= 0 && COLA.length > 1 ? { pos: idx + 1, total: COLA.length, donde: 'en tu lista', ant: idx > 0, sig: idx < COLA.length - 1,
+        ir: function (dd) { var nx = COLA[idx + dd]; if (nx != null) { ABIERTO = nx; ficha(nx); } } } : null,
+      nota: reciente,
+      resumen: '<div class="r1"><h3>' + esc(a.razon) + '</h3><span class="big">' + chipEst(a) + '</span></div>'
+        + '<p>' + esc([a.rfc, a.grupo, 'cliente: ' + cliTxt(a.cliente)].filter(Boolean).join(' · ')) + '</p>'
+        + '<div class="r2"><span>Valor <b>' + dinero(a.valor) + '</b></span><span>Usado <b>' + dinero(a.usado) + '</b></span>'
+        + (mar ? '<span>Perdida <b>' + dinero(a.perdida) + '</b></span>' : '') + '<span>Le queda <b>' + dinero(a.restante) + '</b></span>'
+        + (mar ? '<span>% actual <b>' + (a.pct_actual != null ? esc(pct(a.pct_actual)) : '—') + '</b></span>' : '')
+        + (!mar && a.ult_e != null ? '<span>Usado en ' + a.ult_e + ' <b>' + dinero(a.ult_monto) + '</b></span>' : '') + '</div>'
+        + (mar ? '<div class="seg-chips">' + cenResumen(a) + '</div>' : ''),
+      bajoResumen: window.PROFASE_SEG.pasos({ titulo: 'Año por año', nota: edita ? 'Pica uno para capturarlo' : '', chico: lin.length > 7, lista: lin }) + falta
+        + (qh.b ? '<div class="sg-fila">' + qh.b + '</div>' : ''),
+      estatus: { actual: a.estatus, puede: edita, titulo: 'Estatus', ayuda: EST_AYUDA,
+        lista: ESTATUS.map(function (z) { return { id: z[0], t: z[1], cls: z[0] === 'en_uso' ? 'ok' : z[0] === 'cancelada' ? 'mal' : z[0] === 'agotada' ? 'sin' : '' }; }),
+        nota: function () { return CONSULTA ? 'Solo consulta.' : !PUEDE ? 'El estatus lo cambia la Gerencia Contable.' : a.estatus === 'cancelada' ? 'Cancelada ya no se mueve: lo usado se queda como histórico.'
+          : '«Agotada» se pone a mano. Para «Cancelada», escribe por qué en el comentario: ya no se mueve.'; } },
+      platica: { hilo: hilo, puede: PUEDE, yo: '', titulo: 'Comentarios', ph: 'Escribe un comentario…',
+        pie: 'Se guarda con tu nombre y la hora en la bitácora de esta estrategia.',
+        noPuede: CONSULTA ? 'Solo consulta: ves los comentarios, pero no comentas.' : 'Comenta la Gerencia Contable.' },
+      pestanas: [{ id: 'anios', t: 'Año por año', n: (a.anios || []).length, html: aniosT }, { id: 'docs', t: 'Documentos', n: nDocs, html: docsT },
+        { id: 'datos', t: 'Datos', html: datosT }, { id: 'bit', t: 'Bitácora', n: bit.length, html: bitT }],
+      guarda: async function (g) {
+        try {
+          if (g.estatus !== undefined && g.estatus !== a.estatus) {
+            if (g.estatus === 'cancelada' && !g.texto) return 'Para cancelarla, escribe por qué en el comentario.';
+            await rpc('est_estatus', { p_id: a.id, p_estatus: g.estatus, p_comentario: g.texto || '' });
+          } else if (g.texto) await rpc('est_comenta', { p_id: a.id, p_texto: g.texto });
+          return true;
+        } catch (er) { return falla(er); }
+      },
+      // «Guardar» deja la ficha abierta con lo guardado; «Guardar y siguiente ›» pasa a la que sigue
+      alGuardar: function () { var id0 = a.id; setTimeout(function () { recarga().catch(function () {}); if (!VE && ABIERTO == null) { ABIERTO = id0; avisa('Listo: quedó guardado.'); ficha(id0); } }, 0); },
+      alCerrar: function () {
+        if (VE !== inst) return;
+        VE = null; ABIERTO = null; FICHA = null;
+        try { if (P.escribiendo) P.escribiendo('estrategias', false); } catch (e) {}
+        pinta();
+      },
+      alEsc: function () { return !!(VISOR && VISOR.abierta && VISOR.abierta()); },
+      enlaza: function (scrim, ctl) {
+        var q = function (id) { return scrim.querySelector('#' + id); };
+        scrim.querySelectorAll('[data-cap]').forEach(function (b) { b.onclick = aVentana(function () { captura(a, +b.getAttribute('data-cap'), b.hasAttribute('data-nouso')); }); });
+        scrim.querySelectorAll('[data-paso]').forEach(function (b) { b.onclick = function () {
+          if (inst.sucio()) { ctl.pie('Tienes cambios sin guardar: guárdalos (o bórralos) antes de capturar el año.'); return; }
+          aVentana(function () { captura(a, +b.getAttribute('data-paso'), false); })(); }; });
+        if (q('f-edita')) q('f-edita').onclick = aVentana(function () { forma(a); });
+        if (q('h-datos')) q('h-datos').onclick = aVentana(function () { forma(a); });
+        if (q('f-ut')) q('f-ut').onclick = function () { ctl.cerrar(); setTab('ut'); };
+        if (q('e-en')) { var ver = function () { scrim.querySelectorAll('.e-ent').forEach(function (z) { z.hidden = q('e-en').value !== 'entregado'; }); }; q('e-en').onchange = ver; ver(); q('e-si').onclick = function () { entrega(a, this); }; }
+        scrim.querySelectorAll('[data-sube]').forEach(function (b) { b.onclick = function () { SUBE = { id: a.id, clase: b.getAttribute('data-sube') }; $('doc-arch').value = ''; $('doc-arch').click(); }; });
+        scrim.querySelectorAll('[data-xver]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.ver(DOCS[+b.getAttribute('data-xver')], b); }; });
+        scrim.querySelectorAll('[data-xbaja]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.baja(DOCS[+b.getAttribute('data-xbaja')], b); }; });
+        scrim.querySelectorAll('[data-xquita]').forEach(function (b) { b.onclick = aVentana(function () { quitaDoc(a, DOCS[+b.getAttribute('data-xquita')]); }); });
+        q('x-ficha').onclick = function () { excelFicha(a, this); };
+      }
+    });
+    VE = inst;
+    try { if (P.escribiendo) P.escribiendo('estrategias', true); } catch (e) {}
   }
-
   async function entrega(a, b) {
     b.disabled = true; $('e-e').hidden = true;
     try { await rpc('est_entrega', { p: { id: a.id, entrega: $('e-en').value, monto: $('e-mo').value, fecha: $('e-fe').value } }); await recarga(); await ficha(a.id); avisa('Listo: quedó la entrega al cliente.'); }
     catch (e) { $('e-e').textContent = falla(e); $('e-e').hidden = false; b.disabled = false; }
   }
-  function cambiaEstatus(a) {
-    abre('<h3 id="dlg-t">Cambiar estatus</h3><p class="mut">' + esc(quien(a)) + ' · ' + esc(a.razon) + '</p>'
-      + '<div class="campo"><label for="c-es">Estatus</label><select id="c-es">' + ESTATUS.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === a.estatus ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>'
-      + '<div class="msg ojo" id="c-can" hidden>Cancelada ya no se mueve: lo usado se queda como histórico y ya no se captura más.</div>'
-      + '<div class="campo"><label for="c-co" id="c-co-et">Comentario (opcional)</label><textarea id="c-co" maxlength="1000"></textarea></div>'
-      + '<div class="msg mal" id="c-e" hidden></div>'
-      + '<div class="acciones"><button class="btn" type="button" id="c-no">Cancelar</button><button class="btn acento" type="button" id="c-si">Guardar</button></div>', 'c-es', true);
-    var ver = function () { var c = $('c-es').value === 'cancelada'; $('c-can').hidden = !c; $('c-co-et').textContent = c ? 'Por qué se cancela (obligatorio)' : 'Comentario (opcional)'; };
-    $('c-es').onchange = ver; ver();
-    $('c-no').onclick = function () { ficha(a.id); };
-    $('c-si').onclick = async function () {
-      var b = this; b.disabled = true;
-      try { await rpc('est_estatus', { p_id: a.id, p_estatus: $('c-es').value, p_comentario: $('c-co').value }); await recarga(); await ficha(a.id); avisa('Listo: cambió el estatus.'); }
-      catch (e) { $('c-e').textContent = falla(e); $('c-e').hidden = false; b.disabled = false; }
-    };
-  }
-
   // la que sigue en «Empezar a revisar» (o en la lista): «Guardar y siguiente ›»
   function sigDe(id) { var i = COLA.indexOf(id); return i >= 0 && i < COLA.length - 1 ? COLA[i + 1] : null; }
   /* ---------- capturar lo usado de un año (las reglas las revisa la base antes de guardar: est_revisa_pide) ---------- */

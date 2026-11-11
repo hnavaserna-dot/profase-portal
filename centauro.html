@@ -36,7 +36,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/pilas.js?v=d4504a5f5b"></script><script src="js/seguimiento.js?v=a86447d818"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/pilas.js?v=d4504a5f5b"></script><script src="js/seguimiento.js?v=1c386cce1f"></script>
 <style>
 /* Portal PROFASE · Centauro (3-nov-2026; Héctor Daniel: «crea un nuevo menú en CRM llamado Centauro donde vayamos a correr esto»;
    portal/sql/198_centauro.sql). Lo de los programas de la bóveda de la oficina, hecho en el CRM:
@@ -3219,6 +3219,18 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       nota: lista.length ? (puede ? 'Abre el primero, en el orden de la lista; con «Guardar y siguiente ›» pasas al que sigue.' : 'Abre el primero; con ‹ › pasas al siguiente.') : 'Nada por revisar con estos filtros.'
     });
   }
+  /* La ficha de un riesgo, ancha (11-nov-2026, Héctor Daniel Nava: «2,3,4 y 5», la ventana del Panel de trabajo en las demás
+     pantallas de trabajo): a la izquierda el riesgo, los demás riesgos del cliente en ese año en una línea (picar uno lo abre),
+     «Qué hacer» y el estatus; a la derecha, en pestañas, los comentarios, el detalle del riesgo y el historial del estatus.
+     Las mismas reglas y las mismas funciones de la base de siempre (cen_seg_*); nada nuevo se guarda. */
+  var VF = null;
+  function histSeg(sg) {   // los cambios de estatus de un seguimiento (de su plática), del más nuevo al más viejo
+    var l = ((sg && sg.hilo) || []).filter(function (c) { return c.est && c.de !== c.est; }).slice().reverse();
+    if (!l.length) return '<p class="sg-hint">Todavía nadie le cambia el estatus.</p>';
+    return '<dl class="sg-dl">' + l.map(function (c) {
+      return '<dt>' + esc(fechaHora(c.ts)) + '</dt><dd><b>' + esc(c.quien || '') + '</b>: de «' + esc(PROFASE_SEG.t(c.de || 'sin_respuesta')) + '» a «' + esc(PROFASE_SEG.t(c.est)) + '»' + (c.texto ? '<div class="mut">' + esc(c.texto) + '</div>' : '') + '</dd>';
+    }).join('') + '</dl>';
+  }
   function segF(clave, op) {
     op = op || {};
     var h = F.filas.filter(function (x) { return fClave(x) === clave; })[0]; if (!h || !window.PROFASE_SEG) return;
@@ -3227,14 +3239,34 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     var puede = F.sp.puede && !CONSULTA, gc = F.sp.gc;
     var quien = sg && sg.quien ? esc(sg.quien) + (sg.rol === 'gc' ? ' (gerencia)' : '') + (sg.ts ? ' · ' + esc(fechaHora(sg.ts)) : '') : 'Nadie lo ha revisado todavía';
     var donde = F_PILAS.filter(function (p) { return p.k === F.p; })[0];
+    // los riesgos del mismo cliente y año, en una línea (el más alto primero en cada mes)
+    var ORD = { alto: 0, medio: 1, bajo: 2 };
+    var otros = F.filas.filter(function (x) { return x.rfc === h.rfc && String(x.ejercicio) === String(h.ejercicio); })
+      .sort(function (x, y) { return ((+x.mes || 0) - (+y.mes || 0)) || ((ORD[x.riesgo] || 3) - (ORD[y.riesgo] || 3)); });
+    var linea = otros.length > 1 ? PROFASE_SEG.pasos({ titulo: 'Sus riesgos de ' + h.ejercicio + ' · ' + cuenta(otros.length, 'riesgo', 'riesgos'), nota: 'Pica uno para abrirlo', chico: otros.length > 8,
+      lista: otros.map(function (x) {
+        var es = (fSeg(x) || {}).estatus, rev = es === 'justificado' || es === 'resuelto';
+        return { id: fClave(x), aqui: fClave(x) === clave, t: x.mes ? MESES[+x.mes - 1] : 'Año', est: rev ? 'ok' : x.riesgo === 'alto' ? 'mal' : x.riesgo === 'medio' ? 'am' : '',
+                 marca: rev ? '✓' : ((RIESGO[x.riesgo] || ['', '?'])[1] || '?').charAt(0),
+                 title: (RIESGO[x.riesgo] || ['', x.riesgo])[1] + ' · ' + (x.titulo || '') + (es && es !== 'sin_respuesta' ? ' · ' + PROFASE_SEG.t(es) : '') };
+      }) }) : '';
+    var detalle = '<dl class="sg-dl" style="margin-top:0">'
+      + '<dt>El hallazgo</dt><dd>' + esc(h.titulo || '') + (h.detalle ? '<div class="mut">' + esc(h.detalle) + '</div>' : '') + '</dd>'
+      + '<dt>Qué puede pasar</dt><dd>' + esc(h.reaccion || '—') + '</dd><dt>Qué lo resuelve</dt><dd>' + esc(h.resuelve || '—') + '</dd>'
+      + '<dt>Clasificación</dt><dd>' + (claseCel(h) || '—') + '</dd>'
+      + '<dt>Tema</dt><dd>' + esc(temaTxt(h.tema) + (h.obligacion ? ' · ' + h.obligacion : '')) + '</dd>'
+      + '<dt>Se encontró</dt><dd>' + esc(h.desde ? fecha(h.desde) : '—') + '</dd></dl>'
+      + '<div class="sg-fila"><button class="btn chico" type="button" data-fabre="' + esc(h.rfc) + '|' + esc(String(h.ejercicio)) + '">Abrir la revisión fiscal completa</button></div>';
     var VS = PROFASE_SEG.abre({
-      kick: 'Riesgo fiscal · ' + h.ejercicio + (h.mes ? ' · ' + mesTxt(+h.mes) : ''), titulo: 'Seguimiento de revisión',
+      ancho: true,
+      kick: 'Riesgo fiscal · ' + h.ejercicio + (h.mes ? ' · ' + mesTxt(+h.mes) : ''), titulo: h.titulo || 'Seguimiento de revisión',
       nav: pos >= 0 ? { pos: pos + 1, total: lista.length, donde: donde ? 'en «' + donde.t + '»' : 'por revisar', ant: !!ant, sig: !!sig,
         ir: function (d) { var y = d > 0 ? sig : ant; if (y) segF(y, { lista: lista }); } } : null,
       resumen: '<div class="r1"><h3>' + esc(h.cliente || h.rfc) + '</h3><span class="big">' + chip('Riesgo ' + k[1].toLowerCase(), k[0]) + '</span></div>'
         + '<p>' + esc(h.rfc + (h.grupo ? ' · ' + h.grupo : '') + (h.contadores ? ' · ' + h.contadores : '')) + '</p>'
-        + '<p><b>' + esc(h.titulo || '') + '</b>' + (h.detalle ? ' ' + esc(h.detalle) : '') + '</p>'
+        + '<div class="r2"><span>Tema <b>' + esc(temaTxt(h.tema)) + '</b></span>' + (h.desde ? '<span>Se encontró <b>' + esc(fecha(h.desde)) + '</b></span>' : '') + '</div>'
         + '<div class="seg-chips">' + PROFASE_SEG.chip(e) + '<span class="seg-quien">' + quien + '</span></div>',
+      bajoResumen: linea,
       queHacer: (h.resuelve ? '<p><b>Qué lo resuelve:</b> ' + esc(h.resuelve) + '</p>' : '')
         + (puede ? '<ul><li>¿Ya se corrigió (complementaria o en QUO)? «Modificación QUO» y, ya corregido, «Modificación Exitosa».</li>'
         + '<li>¿Está bien así (tiene explicación)? «Justificado» y escribe por qué.</li>'
@@ -3243,11 +3275,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         ayudaPie: 'Los mismos estatus de Reportes. «Justificado» o «Modificación Exitosa» lo dan por revisado. Si el riesgo ya no sale en la revisión, se quita solo de la lista.',
         nota: function (a, pu) { return !pu ? 'El estatus lo cambia quien trabaja a este cliente en Centauro.' : a === 'modif_quo' ? PROFASE_SEG.MSJ.quo + '.' : a === 'resuelto' && !gc ? PROFASE_SEG.MSJ.fijo + '.' : '«Justificado» o «Modificación Exitosa» lo dan por revisado.'; } },
       platica: { hilo: hiloM(sg), puede: puede, yo: F.sp.yo, ph: 'Qué revisaste, qué falta o con quién lo validaste', noPuede: CONSULTA ? 'Tu usuario es de solo consulta: ves los comentarios, pero no comentas.' : 'Solo lo ve.' },
-      detalles: '<details class="det"><summary>Detalle del riesgo</summary><dl class="sg-dl">'
-        + '<dt>Qué puede pasar</dt><dd>' + esc(h.reaccion || '—') + '</dd><dt>Clasificación</dt><dd>' + (claseCel(h) || '—') + '</dd>'
-        + '<dt>Tema</dt><dd>' + esc(temaTxt(h.tema) + (h.obligacion ? ' · ' + h.obligacion : '')) + '</dd>'
-        + '<dt>Se encontró</dt><dd>' + esc(h.desde ? fecha(h.desde) : '—') + '</dd></dl>'
-        + '<p><button class="btn chico" type="button" data-fabre="' + esc(h.rfc) + '|' + esc(String(h.ejercicio)) + '">Abrir la revisión fiscal completa</button></p></details>',
+      pestanas: [{ id: 'det', t: 'Detalle del riesgo', html: detalle }, { id: 'hist', t: 'Historial', html: histSeg(sg) }],
       guarda: async function (g) {
         try {
           var r = await rpc('cen_seg_guarda', { p: { que: 'riesgo', rfc: h.rfc, anio: +h.ejercicio, hallazgo: h.clave, estatus: g.estatus || null, texto: g.texto || null, de: g.de || null } }) || {};
@@ -3260,10 +3288,16 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       hiloDe: function () { return hiloM(fSeg(h)); },
       alGuardar: function () { pintaKpisF(); pintaF(); },
       alCambiar: function () { pintaKpisF(); pintaF(); },
-      enlaza: function (scrim) {
-        scrim.querySelectorAll('[data-fabre]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-fabre').split('|'); if (VS) VS.cerrar(); abreRev(v[0], v[1]); }; });
+      alCerrar: function () { if (VF === VS) VF = null; },
+      enlaza: function (scrim, ctl) {
+        scrim.querySelectorAll('[data-fabre]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-fabre').split('|'); ctl.cerrar(); abreRev(v[0], v[1]); }; });
+        // otro riesgo del mismo cliente: si dejaste algo sin guardar, primero lo dice (no se pierde sin avisar)
+        scrim.querySelectorAll('[data-paso]').forEach(function (b) { b.onclick = function () {
+          if (VS && VS.sucio()) { ctl.pie('Tienes cambios sin guardar: guárdalos (o bórralos) antes de abrir otro riesgo.'); return; }
+          var y = b.getAttribute('data-paso'); ctl.cerrar(); segF(y, { lista: lista.indexOf(y) >= 0 ? lista : [] }); }; });
       }
     });
+    VF = VS;
   }
   async function segCargaF() {
     try {
@@ -4124,6 +4158,10 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
   function hiloM(sg) {
     return ((sg && sg.hilo) || []).map(function (c) { return { id: c.id, por: c.por || '', porNombre: c.quien || '', ts: fechaHora(c.ts), tsISO: c.ts || '', texto: c.texto || '', editado: !!c.editado, de: c.de, est: c.est }; });
   }
+  /* La ficha de un mes del Semáforo, ancha (11-nov-2026, «2,3,4 y 5»): a la izquierda el mes, los doce meses del año del cliente
+     en una línea con su color (picar uno lo abre), «Qué trae» en palabras, «Qué hacer» y el estatus; a la derecha, en
+     pestañas, los comentarios, lo que trae el mes con su «Ver» a cada reporte y el historial del estatus. Las mismas reglas y
+     funciones de siempre (cen_seg_*); a quien solo tiene el Semáforo (sus clientes, sin los reportes), lo mismo de antes. */
   function segM(rfc, mes, op) {
     op = op || {};
     var c = M.filas.filter(function (z) { return z.rfc === rfc; })[0]; if (!c || !window.PROFASE_SEG) return;
@@ -4132,14 +4170,27 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
     var puede = M.sp.puede && !CONSULTA, gc = M.sp.gc;
     var quien = sg && sg.quien ? esc(sg.quien) + (sg.rol === 'gc' ? ' (gerencia)' : '') + (sg.ts ? ' · ' + esc(fechaHora(sg.ts)) : '') : 'Nadie lo ha revisado todavía';
     var donde = M_PILAS.filter(function (p) { return p.k === M.p; })[0];
+    var EC = { rojo: 'mal', amar: 'am', verde: 'ok' };
+    var meses = PROFASE_SEG.pasos({ titulo: 'Sus meses de ' + M.anio, nota: 'Pica uno para abrirlo', chico: true,
+      lista: (c.meses || []).map(function (y) {
+        var cy = mColor(y), sy = (cy === 'rojo' || cy === 'amar') ? (mSeg(c, y.mes) || {}).estatus : '';
+        return { id: y.mes, aqui: y.mes === mes, t: MESES[y.mes - 1], est: EC[cy] || '', marca: M_SIM[cy],
+                 title: MESES_L[y.mes - 1] + ' · ' + M_COL[cy] + (sy && sy !== 'sin_respuesta' ? ' · ' + PROFASE_SEG.t(sy) : '') };
+      }) });
+    var cs = mCosas(x);
+    var trae = PROFASE_SEG.falta('Qué trae ' + MESES_L[mes - 1].toLowerCase(), cs.map(function (y) {
+      var d = M_K[y[0]]; return [d[1] === 'rojo' ? 'no' : 'va', esc(d[0]) + ' · <b>' + y[1].toLocaleString('es-MX') + '</b>'];
+    }));
     var VS = PROFASE_SEG.abre({
-      kick: 'Semáforo · ' + MESES_L[mes - 1] + ' ' + M.anio, titulo: 'Seguimiento de revisión',
+      ancho: true,
+      kick: 'Semáforo · ' + MESES_L[mes - 1] + ' ' + M.anio, titulo: (c.cliente || c.rfc),
       nav: pos >= 0 ? { pos: pos + 1, total: lista.length, donde: donde ? 'en «' + donde.t + '»' : 'por revisar', ant: !!ant, sig: !!sig,
         ir: function (d) { var y = d > 0 ? sig : ant; if (y) { var v = y.split('|'); segM(v[0], +v[1], { lista: lista }); } } } : null,
-      resumen: '<div class="r1"><h3>' + esc(c.cliente || c.rfc) + '</h3><span class="big"><span class="sc ' + col + '">' + M_SIM[col] + '</span> ' + esc(M_COL[col]) + '</span></div>'
-        + '<p>' + esc(c.rfc + (c.grupo ? ' · ' + c.grupo : '') + (c.contadores ? ' · ' + c.contadores : '')) + ' · ' + esc(cuenta(+x.xml || 0, 'XML', 'XML')) + ' ese mes</p>'
-        + '<div class="msemc segcosas">' + cosasM(x) + '</div>'
+      resumen: '<div class="r1"><h3>' + esc(MESES_L[mes - 1] + ' ' + M.anio) + '</h3><span class="big"><span class="msemc"><span class="sc ' + col + '">' + M_SIM[col] + '</span></span> ' + esc(M_COL[col]) + '</span></div>'
+        + '<p>' + esc(c.rfc + (c.grupo ? ' · ' + c.grupo : '') + (c.contadores ? ' · ' + c.contadores : '')) + '</p>'
+        + '<div class="r2"><span>XML ese mes <b>' + esc((+x.xml || 0).toLocaleString('es-MX')) + '</b></span><span>Cosas por ver <b>' + esc(cs.reduce(function (t, y) { return t + y[1]; }, 0).toLocaleString('es-MX')) + '</b></span></div>'
         + '<div class="seg-chips">' + PROFASE_SEG.chip(e) + '<span class="seg-quien">' + quien + '</span></div>',
+      bajoResumen: meses + trae,
       queHacer: puede ? '<ul><li>¿Ya se corrigió en QUO o con el cliente? «Modificación QUO» y, ya corregido, «Modificación Exitosa».</li>'
         + '<li>¿Está bien así (tiene explicación)? «Justificado» y escribe por qué.</li>'
         + '<li>¿Falta información del cliente? «Consulta con el Cliente»; ¿dudas del criterio? «Consulta con Gerencia».</li></ul>' : '',
@@ -4147,6 +4198,7 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
         ayudaPie: 'Los mismos estatus de Reportes. «Justificado» o «Modificación Exitosa» lo dan por revisado; si el mes vuelve a rojo o amarillo por algo nuevo, regresa a «por revisar».',
         nota: function (a, pu) { return !pu ? 'El estatus lo cambia quien trabaja a este cliente en Centauro.' : a === 'modif_quo' ? PROFASE_SEG.MSJ.quo + '.' : a === 'resuelto' && !gc ? PROFASE_SEG.MSJ.fijo + '.' : '«Justificado» o «Modificación Exitosa» lo dan por revisado.'; } },
       platica: { hilo: hiloM(sg), puede: puede, yo: M.sp.yo, ph: 'Qué revisaste, qué falta o con quién lo validaste', noPuede: CONSULTA ? 'Tu usuario es de solo consulta: ves los comentarios, pero no comentas.' : 'Solo lo ve.' },
+      pestanas: [{ id: 'mes', t: 'Lo que trae', n: cs.length, html: '<div class="msemc segcosas">' + cosasM(x) + '</div>' }, { id: 'hist', t: 'Historial', html: histSeg(sg) }],
       guarda: async function (g) {
         try {
           var r = await rpc('cen_seg_guarda', { p: { que: 'semaforo', rfc: rfc, anio: M.anio, mes: mes, estatus: g.estatus || null, texto: g.texto || null, de: g.de || null } }) || {};
@@ -4159,8 +4211,15 @@ tr.pica{cursor:pointer}tr.pica:hover td{background:var(--surface-2)}tr.pica.sel 
       hiloDe: function () { return hiloM(mSeg(c, mes)); },
       alGuardar: function () { pintaKpisM(); pintaM(); },
       alCambiar: function () { pintaKpisM(); pintaM(); },
-      enlaza: function (scrim) {
-        scrim.querySelectorAll('[data-mir]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-mir').split('|'); if (VS) VS.cerrar(); irM(rfc, mes, v[0], v[1]); }; });
+      enlaza: function (scrim, ctl) {
+        scrim.querySelectorAll('[data-mir]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-mir').split('|'); ctl.cerrar(); irM(rfc, mes, v[0], v[1]); }; });
+        // otro mes del mismo cliente: en rojo o amarillo, su ficha; los demás, el detalle de siempre
+        scrim.querySelectorAll('[data-paso]').forEach(function (b) { b.onclick = function () {
+          if (VS && VS.sucio()) { ctl.pie('Tienes cambios sin guardar: guárdalos (o bórralos) antes de abrir otro mes.'); return; }
+          var m2 = +b.getAttribute('data-paso'), y = (c.meses || [])[m2 - 1], cy = y ? mColor(y) : 'gris';
+          ctl.cerrar();
+          if (cy === 'rojo' || cy === 'amar') segM(rfc, m2, { lista: lista.indexOf(rfc + '|' + m2) >= 0 ? lista : [] }); else detalleM(rfc, m2);
+        }; });
       }
     });
   }

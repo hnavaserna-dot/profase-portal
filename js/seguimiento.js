@@ -46,7 +46,17 @@
                ayuda: [['Estatus', 'qué quiere decir'], …]}   // estatus propios de la pantalla (si no, los 5 de Reportes)
      platica: {..., titulo: 'Comentarios', pie: 'texto bajo el cuadro', oculto: 'texto en lugar de la plática'},
      alEsc: function () { return true si la página ya usó el Esc (una ventana suya encima) }
-   y además: v.platica({hilo, puede, yo, oculto}) para ponerla cuando llega; v.pestana('id'); v.cual(); v.sucio(). */
+   y además: v.platica({hilo, puede, yo, oculto}) para ponerla cuando llega; v.pestana('id'); v.cual(); v.sucio().
+
+   La misma ficha ancha en las demás pantallas de trabajo (11-nov-2026, Héctor Daniel Nava: «2,3,4 y 5»: Estrategias
+   fiscales, Centauro › Semáforo y Riesgos fiscales, Clientes › Buzón tributario y Administración › IMPI). Las piezas que
+   eran del Panel de trabajo pasaron aquí, una sola versión para todas:
+     sinPlatica: true,               // la pantalla no tiene comentarios: sin la pestaña «Comentarios» (abre en la primera)
+     PROFASE_SEG.pasos({titulo, nota, lista: [{id, t, marca, est: 'ok'|'mal'|'na'|'am'|'az'|'off'|'', aqui, title}]})
+                                     // los pasos (o los meses, los años) en una línea; los que no son «aqui» llevan
+                                     // data-paso="id" para que la página los abra
+     PROFASE_SEG.falta(titulo, [['si'|'no'|'va', '<html>'], …])   // «Qué falta…» en palabras, con ✓ ✕ →
+     en el resumen, '<div class="r2"><span>Etiqueta <b>valor</b></span>…</div>' y '<span class="tg">…</span>'. */
 (function () {
   'use strict';
   if (window.PROFASE_SEG) return;
@@ -293,6 +303,39 @@
     + '.segv .sg-der .sg-tabs{padding:4px 22px 0}'
     + '.segv .sg-der .sg-pans{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 18px}}'
     + '@media (max-width:899px){.segv .sg-col.sg-der{margin-top:18px}.segv .sg-der .sg-tabs{position:sticky;top:-20px;z-index:1;background:var(--sg-sf)}}'
+    // los pasos en una línea y «Qué falta» (11-nov-2026: eran del Panel de trabajo; una sola versión para todas las fichas)
+    + '.segv .sg-pasos{margin:16px 0 0}'
+    + '.segv .sg-pasos .t{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sg-ink3);margin-bottom:8px}'
+    + '.segv .sg-pasos ol{list-style:none;margin:0;padding:0 0 2px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin}'
+    + '.segv .sg-pasos li{flex:1 0 74px;min-width:74px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}'
+    + '.segv .sg-pasos.chico li{flex-basis:38px;min-width:38px}'
+    + '.segv .sg-pasos li+li::before{content:"";position:absolute;top:14px;left:-50%;width:100%;height:2px;background:var(--sg-ln2);z-index:0}'
+    + '.segv .sg-pasos button{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;padding:0 2px;font:inherit;color:var(--sg-ink2);cursor:pointer}'
+    + '.segv .sg-pasos button[disabled]{cursor:default}'
+    + '.segv .sg-pasos b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:12.5px;font-weight:700;background:var(--sg-sf3);color:var(--sg-ink3);border:2px solid var(--sg-sf)}'
+    + '.segv .sg-pasos li.ok b{background:var(--sg-ok);color:#fff}'
+    + '.segv .sg-pasos li.mal b{background:var(--sg-rd);color:#fff}'
+    + '.segv .sg-pasos li.na b{background:#F07A1E;color:#fff}'
+    + '.segv .sg-pasos li.am b{background:#E0A800;color:#1d1d1d}'
+    + '.segv .sg-pasos li.az b{background:var(--sg-ac);color:#fff}'
+    + '.segv .sg-pasos li.off b{background:var(--sg-sf3);color:var(--sg-ink4);text-decoration:line-through}'
+    + '.segv .sg-pasos li.aqui b{box-shadow:0 0 0 3px var(--sg-nab)}'
+    + '.segv .sg-pasos span{font-size:11px;line-height:1.25;overflow-wrap:anywhere}'
+    + '.segv .sg-pasos li.aqui span{font-weight:700;color:var(--sg-ink)}'
+    + '.segv .sg-falta{margin-top:14px;border-radius:12px;border:1px solid var(--sg-nab);border-left:4px solid #F07A1E;background:var(--sg-nas);padding:10px 14px;font-size:12.5px;line-height:1.5;color:var(--sg-ink)}'
+    + '.segv .sg-falta>b{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-na2);margin-bottom:4px}'
+    + '.segv .sg-falta ul{list-style:none;margin:0;padding:0}'
+    + '.segv .sg-falta li{display:flex;gap:7px;margin:2px 0}'
+    + '.segv .sg-falta li>span{min-width:0}'
+    + '.segv .sg-falta li::before{flex:none;width:14px;font-weight:800}'
+    + '.segv .sg-falta li.si::before{content:"✓";color:var(--sg-ok)}'
+    + '.segv .sg-falta li.no::before{content:"✕";color:var(--sg-rd)}'
+    + '.segv .sg-falta li.va::before{content:"→";color:var(--sg-na2)}'
+    + '.segv .seg-res .r2{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;font-size:12px;color:var(--sg-ink3)}'
+    + '.segv .seg-res .r2 b{font-weight:600;color:var(--sg-ink2)}'
+    + '.segv .seg-res .r2 .mal{color:var(--sg-rd);font-weight:700}'
+    + '.segv .seg-res .tg{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:600;background:var(--sg-sf3);color:var(--sg-ink3)}'
+    + '.segv .sg-fila{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}'
     + '@media (max-width:560px){.segv{padding:8px;align-items:flex-end}.sg-modal{max-height:94vh}.sg-head,.sg-body,.sg-foot{padding-left:16px;padding-right:16px}'
     + '.sg-x.seg-fl{width:32px;height:32px}.segv .seg-pie{flex-basis:100%}}';
 
@@ -367,9 +410,10 @@
       + '<div data-despues></div>';
     var platHTML = '<div class="seg-sec"><b>' + esc(pl.titulo || 'Comentarios') + ' · <span data-ncom>' + NUM.format(hilo.length) + '</span></b><span class="sg-hint">del más viejo al más nuevo</span></div>'
       + '<div data-hilo>' + hiloDentro() + '</div><div data-escribe>' + escribeHTML() + '</div>';
-    var TODAS = TABS ? [{id: 'com', t: pl.titulo || 'Comentarios', com: true}].concat(TABS) : null;
-    var tab0 = TODAS ? (TODAS.some(function (x) { return x.id === o.pestana; }) ? o.pestana : 'com') : null;
-    var derHTML = !TODAS ? platHTML
+    var sinPl = !!o.sinPlatica;
+    var TODAS = TABS ? (sinPl ? [] : [{id: 'com', t: pl.titulo || 'Comentarios', com: true}]).concat(TABS) : null;
+    var tab0 = TODAS ? (TODAS.some(function (x) { return x.id === o.pestana; }) ? o.pestana : TODAS[0].id) : null;
+    var derHTML = !TODAS ? (sinPl ? '' : platHTML)
       : '<div class="sg-tabs" role="tablist" aria-label="Lo que se trabaja">' + TODAS.map(function (x) {
           return '<button type="button" class="sg-tab" role="tab" id="sgt-' + esc(x.id) + '" data-tab="' + esc(x.id) + '" aria-controls="sgp-' + esc(x.id) + '" aria-selected="' + (x.id === tab0) + '">'
             + esc(x.t) + (x.com ? '<i data-ncom>' + (hilo.length ? NUM.format(hilo.length) : '') + '</i>' : '<i' + (x.nid ? ' id="' + esc(x.nid) + '"' : '') + '>' + (x.n ? NUM.format(x.n) : '') + '</i>') + '</button>';
@@ -417,7 +461,7 @@
     // las pestañas que la página da como nodo
     if (TODAS) TODAS.forEach(function (x) { if (x.html && typeof x.html !== 'string') q('[data-pan="' + x.id + '"]').appendChild(x.html); });
 
-    var av = q('#sSaved'), ok = q('#sOk'), sg = q('#sSig'), txt = q('#sCom'), hiloBox = q('[data-hilo]');
+    var av = q('#sSaved'), ok = q('#sOk'), sg = q('#sSig'), txt = q('#sCom'), hiloBox = q('[data-hilo]') || document.createElement('div');   // sinPlatica: sin hilo
     var todos = false, avisado = false, ocupado = false, tic = null, cerrado = false;
     function sucio() { return (est && elegido !== actual) || !!(txt && txt.value.trim()); }
     function repinta() {
@@ -604,7 +648,29 @@
     return '«Justificado» o «Modificación Exitosa» lo dan por revisado.';
   }
 
+  /* los pasos en una línea (los del mes, los meses del año, los años de una estrategia…): o = {titulo, nota, chico,
+     lista: [{id, t, marca, est, aqui, title}]}; los que no son «aqui» (y traen id) llevan data-paso para que la página los abra */
+  function pasos(o) {
+    cssUnaVez();
+    o = o || {};
+    var L = o.lista || [];
+    if (!L.length) return '';
+    return '<div class="sg-pasos' + (o.chico ? ' chico' : '') + '"><div class="t"><span>' + esc(o.titulo || 'Pasos') + '</span>' + (o.nota ? '<span>' + esc(o.nota) + '</span>' : '') + '</div>'
+      + '<ol>' + L.map(function (x) {
+        var aqui = !!x.aqui, pica = !aqui && x.id != null && x.id !== '';
+        return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
+          + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span>' + esc(x.t || '') + '</span></button></li>';
+      }).join('') + '</ol></div>';
+  }
+  /* «Qué falta…» en palabras: l = [['si'|'no'|'va', '<html>'], …] (el texto ya escapado por la página) */
+  function falta(titulo, l) {
+    cssUnaVez();
+    if (!l || !l.length) return '';
+    return '<div class="sg-falta"><b>' + esc(titulo || 'Qué falta') + '</b><ul>' + l.map(function (x) { return '<li class="' + esc(x[0] || 'va') + '"><span>' + x[1] + '</span></li>'; }).join('') + '</ul></div>';
+  }
+
   window.PROFASE_SEG = {
+    pasos: pasos, falta: falta,
     abre: abre, ESTATUS: ESTATUS, AYUDA: AYUDA, MSJ: MSJ, MIN: MIN,
     t: t, cls: cls, cierra: cierra, regla: regla, opciones: opciones,
     chip: chip, pill: pill, esc: esc, iniciales: iniciales, ponFotos: ponFotos, quedaMin: quedaMin

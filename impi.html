@@ -36,7 +36,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=d4504a5f5b"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=d4504a5f5b"></script><script src="js/seguimiento.js?v=1c386cce1f"></script>
 <style>
 /* Portal PROFASE · Administración › IMPI (Héctor Daniel, 3-nov-2026, 17:15: «podemos subir lo del IMPI a CRM? Administración
    - IMPI?»; «Solo tú y HNR (lector)»). El control de las notificaciones de su cuenta PASE que antes vivía en su Excel: cada
@@ -269,7 +269,7 @@ details.hist summary{cursor:pointer;font-weight:700;padding:6px 0}
   function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
   function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
-  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); avisa.ult = { t: t, en: Date.now() }; try { if (VI) VI.pie(t); } catch (e) {} }   // la ficha abierta lo dice abajo; la que se abre enseguida, arriba
   function error(t) { $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, 12000); } }
   function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
   function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -426,16 +426,53 @@ details.hist summary{cursor:pointer;font-weight:700;padding:6px 0}
     return V;
   }
 
-  /* ---------- la ficha de un oficio ---------- */
+  /* ---------- la ficha de un oficio ----------
+     En la ventana común de las fichas de trabajo (js/seguimiento.js, ancha; 11-nov-2026, Héctor Daniel Nava: «2,3,4 y 5»):
+     a la izquierda el oficio, sus pasos en una línea (notificado, leído, el plazo y contestado), «Qué falta» y lo que se hace
+     con él; a la derecha, en pestañas, el oficio completo, el mismo expediente y la bitácora. Sin comentarios (no los tiene);
+     las mismas funciones de siempre (impi_*). Lo que se captura (contestado, corregir, el PDF) sigue en su ventana. */
+  var VI = null;   // la ficha abierta
   async function ficha(id) {
     try { var a = await rpc('impi_ficha', { p_id: id }); ABIERTO = id; SEL = id; pintaFicha(a); }
     catch (e) { error(falla(e)); }
   }
+  function dlgFuera() { if (!$('dlg').hidden) { $('dlg').hidden = true; $('dlg-c').innerHTML = ''; } }
+  function fichaFuera() { if (VI) { var v = VI; VI = null; try { v.cerrar(); } catch (e) {} } }
+  // de la ficha a una ventana suya (contestado, corregir, el PDF): la ficha se quita sin soltar el oficio abierto
+  function aVentana(fn) { return function () { fichaFuera(); fn(); }; }
   function pintaFicha(a) {
+    dlgFuera(); fichaFuera();
     var doc = a.ruta ? { ruta: a.ruta, nombre: 'Oficio ' + a.oficio + ' exp ' + a.expediente + '.pdf' } : null;
-    var h = '<h3 id="dlg-t">' + (a.marca ? esc(a.marca) : 'Exp. ' + esc(a.expediente)) + '</h3>'
-      + '<div style="margin:0 0 10px">' + (a.tipo ? chip(TIPOS[a.tipo] || a.tipo, 'az') + ' ' : '') + plazo(a) + '</div>'
-      + '<dl class="dl">'
+    var vencido = a.sem === 'vencido', reciente = avisa.ult && Date.now() - avisa.ult.en < 6000 ? avisa.ult.t : '';
+    // sus pasos en una línea
+    var leido = !!a.idea && a.estado !== 'solo_indice';
+    var pl = a.plazo === 'sin' || (!a.vence && a.estado === 'leido')
+      ? { t: 'Sin plazo', est: 'off', marca: '—' }
+      : { t: a.vence ? 'Vence ' + fecha(a.vence) : 'Plazo', est: a.contestado ? 'ok' : vencido ? 'mal' : a.sem === 'pronto' ? 'am' : a.vence ? 'na' : '', marca: a.contestado ? '✓' : vencido ? '✕' : '3' };
+    var pasos = window.PROFASE_SEG.pasos({ titulo: 'Cómo va el oficio', lista: [
+      { t: 'Notificado', est: a.fecha ? 'ok' : '', marca: a.fecha ? '✓' : '1', title: a.fecha ? 'Notificado el ' + fecha(a.fecha) : 'No consta' },
+      { t: a.estado === 'solo_indice' ? 'Solo índice' : 'Leído', est: a.estado === 'solo_indice' ? 'off' : leido ? 'ok' : a.sem === 'pendiente' ? 'na' : '', marca: leido ? '✓' : a.sem === 'pendiente' ? '!' : '2',
+        title: leido ? 'Qué es y qué pide, ya capturado' : a.pendiente || 'Falta leerlo' },
+      { t: pl.t, est: pl.est, marca: pl.marca, title: a.vence ? 'Fecha límite: ' + fecha(a.vence) + ' (' + diaSem(a.vence) + ')' : 'No da plazo' },
+      { t: 'Contestado', est: a.contestado ? 'ok' : '', marca: a.contestado ? '✓' : '4', title: a.contestado ? 'Contestado el ' + fecha(a.contestado) : 'Todavía no' }] });
+    var L = [];
+    if (a.contestado) L.push(['si', 'Contestado el ' + esc(fecha(a.contestado)) + '.' + (a.contest_nota ? ' ' + esc(a.contest_nota) : '')]);
+    if (a.estado === 'solo_indice') L.push(['va', 'Histórico: solo está en el índice del tablero; su oficio no se abrió (decisión del 12 de agosto de 2026).']);
+    if (a.sem === 'pendiente' || a.pendiente) L.push(['no', 'Por completar: ' + esc(a.pendiente || 'falta lo que dice el oficio') + (PUEDE ? ' Con «' + (a.estado === 'leido' ? 'Corregir' : 'Llenar con el oficio') + '» lo completas.' : '')]);
+    if (a.vence && !a.contestado) L.push([vencido ? 'no' : 'va', (vencido ? 'Venció el ' : 'Falta contestarlo: vence el ') + esc(fecha(a.vence)) + ' (' + esc(diaSem(a.vence)) + ').'
+      + (finde(a.vence) ? ' Cae en fin de semana: revisa el calendario de días inhábiles del IMPI.' : '') + (PUEDE ? ' Ya contestado, «Marcar contestado».' : '')]);
+    if (a.plazo === 'sin' && a.estado === 'leido' && !a.contestado) L.push(['si', 'El oficio no da plazo para contestar.']);
+    if (doc) L.push(['si', 'El PDF del oficio está aquí: «Ver el oficio» o «Bajar».']);
+    else if (a.estado === 'leido') L.push(['va', 'El PDF de este oficio está en tu Mac (en «IMPI oficios procesados»)' + (PUEDE ? '; si lo tienes, «Subir el PDF».' : '; lo nuevo ya se guarda aquí.')]);
+    var bs = [];
+    if (doc) bs.push('<button class="btn" type="button" id="f-ver">Ver el oficio</button><button class="btn" type="button" id="f-baja">Bajar</button>');
+    if (PUEDE) {
+      if (a.vence && !a.contestado) bs.push('<button class="btn bien" type="button" id="f-cont">Marcar contestado</button>');
+      if (a.contestado) bs.push('<button class="btn" type="button" id="f-reabre">Regresar a sin contestar</button>');
+      bs.push('<button class="btn" type="button" id="f-edita">' + (a.estado === 'leido' ? 'Corregir' : 'Llenar con el oficio') + '</button>');
+      if (a.estado === 'leido' && !a.pdf) bs.push('<button class="btn" type="button" id="f-pdf">Subir el PDF</button>');
+    }
+    var oficio = '<dl class="sg-dl" style="margin-top:0">'
       + '<dt>Oficio</dt><dd>' + esc(a.oficio) + '</dd>'
       + '<dt>Expediente</dt><dd>' + esc(a.expediente) + '</dd>'
       + '<dt>Notificado</dt><dd>' + (a.fecha ? esc(fecha(a.fecha)) + ' (' + esc(diaSem(a.fecha)) + ')' : 'No consta') + '</dd>'
@@ -449,28 +486,47 @@ details.hist summary{cursor:pointer;font-weight:700;padding:6px 0}
       + (a.contestado ? '<dt>Contestado</dt><dd>' + esc(fecha(a.contestado)) + (a.contest_nota ? '<div class="mut">' + esc(a.contest_nota) + '</div>' : '') + '</dd>' : '')
       + (a.pendiente ? '<dt>Pendiente</dt><dd>' + esc(a.pendiente) + '</dd>' : '')
       + '</dl>';
-    if (doc) h += '<div class="acciones" style="margin:0 0 6px"><button class="btn" type="button" id="f-ver">Ver el oficio</button><button class="btn" type="button" id="f-baja">Bajar</button></div>';
-    else if (a.estado === 'leido') h += '<div class="mut" style="margin:0 0 6px">El PDF de este oficio está en tu Mac (en «IMPI oficios procesados»); lo nuevo ya se guarda aquí.</div>';
-    if ((a.mismo || []).length) h += '<div class="sec"><h4>El mismo expediente</h4><ul class="bit">' + a.mismo.map(function (m) {
-      return '<li><b>' + esc(fecha(m.fecha)) + '</b> · oficio ' + esc(m.oficio) + (m.tipo ? ' · ' + esc(TIPOS[m.tipo] || m.tipo) : '') + (m.idea ? '<br>' + esc(m.idea) : '') + '</li>'; }).join('') + '</ul></div>';
-    if ((a.bitacora || []).length) h += '<div class="sec"><h4>Bitácora</h4><ul class="bit">' + a.bitacora.map(function (b) {
-      return '<li><b>' + esc(b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(fechaHora(b.hora)) + (b.texto ? '<br>' + esc(b.texto) : '') + '</li>'; }).join('') + '</ul></div>';
-    var bs = ['<button class="btn" type="button" id="f-cierra">Cerrar</button>'];
-    if (PUEDE) {
-      if (a.estado === 'leido' && !a.pdf) bs.unshift('<button class="btn" type="button" id="f-pdf">Subir el PDF</button>');
-      bs.unshift('<button class="btn" type="button" id="f-edita">' + (a.estado === 'leido' ? 'Corregir' : 'Llenar con el oficio') + '</button>');
-      if (a.vence && !a.contestado) bs.unshift('<button class="btn bien" type="button" id="f-cont">Marcar contestado</button>');
-      if (a.contestado) bs.unshift('<button class="btn" type="button" id="f-reabre">Regresar a sin contestar</button>');
-    }
-    h += '<div class="acciones">' + bs.join('') + '</div>';
-    abre(h, 'f-cierra');
-    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: ABIERTO, abre: ficha, antes: $('f-cierra'), clase: 'btn' });   // ‹ N de M Siguiente ›
-    $('f-cierra').onclick = function () { cierra(); pinta(); };
-    if (doc) { $('f-ver').onclick = function () { visor().ver(doc, this); }; $('f-baja').onclick = function () { visor().baja(doc, this); }; }
-    if ($('f-cont')) $('f-cont').onclick = function () { contesta(a); };
-    if ($('f-reabre')) $('f-reabre').onclick = function () { reabre(a); };
-    if ($('f-edita')) $('f-edita').onclick = function () { forma(a); };
-    if ($('f-pdf')) $('f-pdf').onclick = function () { subePdf(a); };
+    var tabs = [{ id: 'ofi', t: 'El oficio', html: oficio }];
+    if ((a.mismo || []).length) tabs.push({ id: 'mismo', t: 'El mismo expediente', n: a.mismo.length, html: '<ul class="bit">' + a.mismo.map(function (m) {
+      return '<li><b>' + esc(fecha(m.fecha)) + '</b> · oficio ' + esc(m.oficio) + (m.tipo ? ' · ' + esc(TIPOS[m.tipo] || m.tipo) : '') + (m.idea ? '<br>' + esc(m.idea) : '') + '</li>'; }).join('') + '</ul>' });
+    tabs.push({ id: 'bit', t: 'Bitácora', n: (a.bitacora || []).length, html: (a.bitacora || []).length ? '<ul class="bit">' + a.bitacora.map(function (b) {
+      return '<li><b>' + esc(b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(fechaHora(b.hora)) + (b.texto ? '<br>' + esc(b.texto) : '') + '</li>'; }).join('') + '</ul>' : '<p class="sg-hint">Todavía no hay movimientos.</p>' });
+    var idx = COLA.indexOf(a.id);
+    var inst = window.PROFASE_SEG.abre({
+      ancho: true, sinPlatica: true,
+      kick: 'Oficio del IMPI' + (a.tipo ? ' · ' + (TIPOS[a.tipo] || a.tipo) : ''),
+      titulo: a.marca || 'Exp. ' + a.expediente,
+      nav: idx >= 0 && COLA.length > 1 ? { pos: idx + 1, total: COLA.length, donde: 'en «' + vista(VISTA)[1] + '»', ant: idx > 0, sig: idx < COLA.length - 1,
+        ir: function (d) { var nx = COLA[idx + d]; if (nx != null) ficha(nx); } } : null,
+      nota: reciente,
+      resumen: '<div class="r1"><h3>Exp. ' + esc(a.expediente) + '</h3><span class="big">' + (a.tipo ? chip(TIPOS[a.tipo] || a.tipo, 'az') : '') + '</span></div>'
+        + '<p>Oficio ' + esc(a.oficio) + (a.notif_id ? ' · notificación ' + esc(a.notif_id) : '') + '</p>'
+        + '<div class="r2"><span>Notificado <b>' + (a.fecha ? esc(fecha(a.fecha)) : 'no consta') + '</b></span>'
+        + (a.vence ? '<span>Fecha límite <b' + (vencido ? ' class="mal"' : '') + '>' + esc(fecha(a.vence)) + '</b></span>' : '')
+        + (a.contestado ? '<span>Contestado <b>' + esc(fecha(a.contestado)) + '</b></span>' : '') + '</div>'
+        + '<div class="seg-chips">' + plazo(a) + '</div>',
+      bajoResumen: pasos + window.PROFASE_SEG.falta(a.contestado ? 'Cómo quedó' : 'Qué falta', L),
+      despues: bs.length ? '<div class="sg-fila">' + bs.join('') + '</div>' : '',
+      pestanas: tabs,
+      alCerrar: function () {
+        if (VI !== inst) return;
+        VI = null; ABIERTO = null;
+        try { if (P.escribiendo) P.escribiendo('impi', false); } catch (e) {}
+        pinta();
+      },
+      alEsc: function () { return !!(V && V.abierta && V.abierta()); },   // el visor del oficio, encima: Esc lo cierra a él
+      enlaza: function (scrim) {
+        var q = function (id) { return scrim.querySelector('#' + id); };
+        if (doc) { q('f-ver').onclick = function () { visor().ver(doc, this); }; q('f-baja').onclick = function () { visor().baja(doc, this); }; }
+        if (q('f-cont')) q('f-cont').onclick = aVentana(function () { contesta(a); });
+        if (q('f-reabre')) q('f-reabre').onclick = aVentana(function () { reabre(a); });
+        if (q('f-edita')) q('f-edita').onclick = aVentana(function () { forma(a); });
+        if (q('f-pdf')) q('f-pdf').onclick = aVentana(function () { subePdf(a); });
+      }
+    });
+    VI = inst;
+    try { if (P.escribiendo) P.escribiendo('impi', true); } catch (e) {}
+    pinta();
   }
   function contesta(a) {
     abre('<h3 id="dlg-t">Marcar contestado · ' + esc(a.marca || 'Exp. ' + a.expediente) + '</h3>'
