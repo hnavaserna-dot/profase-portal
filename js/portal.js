@@ -2300,9 +2300,18 @@
      quitar la foto propia se vuelve a pedir todo (fotosOlvida). Cualquier usuario del portal ve todas las fotos, igual
      que antes. */
   var FOTOS = { t: 0, todas: null, p: null };
-  P.fotosOlvida = function () { FOTOS.t = 0; FOTOS.todas = null; };
+  /* Revisión nocturna del 11-nov-2026: la lista ya firmada se comparte con las demás pantallas de la misma vista (cada
+     pantalla vive en su marco con su propio PORTAL y cada una volvía a listar la cubeta y a firmar: dos llamadas de ~0.6 s
+     al abrir el Calendario, Eventos o RH › Colaboradores). Se guarda en la vista de arriba (mismo sitio, misma sesión y
+     mismo usuario) y vale lo mismo, 10 minutos; se copia al marco (nunca se usa una promesa de otro marco). */
+  function fotosCasa() { try { if (window.top && window.top !== window && window.top.location.origin === location.origin) return window.top; } catch (e) {} return window; }
+  P.fotosOlvida = function () { FOTOS.t = 0; FOTOS.todas = null; try { fotosCasa().__profaseFotos = null; } catch (e) {} };
   async function todasLasFotos() {
     if (FOTOS.todas && Date.now() - FOTOS.t < 600000) return FOTOS.todas;
+    try {
+      var c = fotosCasa().__profaseFotos;
+      if (c && c.todas && P.uid && c.yo === P.uid && Date.now() - c.t < 600000) { FOTOS.todas = Object.assign({}, c.todas); FOTOS.t = c.t; return FOTOS.todas; }
+    } catch (e) {}
     if (!FOTOS.p) FOTOS.p = (async function () {
       var l = await sb.storage.from('fotos').list('', { limit: 1000 });
       if (l.error || !Array.isArray(l.data)) return null;
@@ -2320,7 +2329,7 @@
     })();
     try {
       var m = await FOTOS.p;
-      if (m) { FOTOS.todas = m; FOTOS.t = Date.now(); }
+      if (m) { FOTOS.todas = m; FOTOS.t = Date.now(); try { fotosCasa().__profaseFotos = { t: FOTOS.t, todas: Object.assign({}, m), yo: P.uid }; } catch (e) {} }
       return m || {};
     } finally { FOTOS.p = null; }
   }
