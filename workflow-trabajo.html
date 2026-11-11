@@ -36,7 +36,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -338,13 +338,16 @@ tr.fila:hover td{background:var(--navy-soft)}
     <button class="btn" type="button" id="at-abre" hidden>Tareas a tiempo</button>
   </div>
   <div id="wft-sel" hidden>
-    <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option></select>
-    <select id="f-pla" aria-label="Plantilla"><option value="">Todas las plantillas</option></select>
+    <!-- 11-nov-2026 (Fernando Cadengo con la idea de Gabo, «sí así es»): Estatus, Plantilla, Actividad, Responsable, Contador
+         asignado, Autoriza y Cliente dejan marcar varios (<select multiple>); Periodicidad y Mes que se solicita, uno. -->
+    <select id="f-cli" aria-label="Cliente" multiple><option value="">Todos los clientes</option></select>
+    <select id="f-est" aria-label="Estatus" multiple><option value="">Todos los estatus</option></select>
+    <select id="f-pla" aria-label="Plantilla" multiple><option value="">Todas las plantillas</option></select>
     <select id="f-dmes" aria-label="Mes que se solicita" hidden><option value="">Todos los meses que se solicitan</option></select>
-    <select id="f-act" aria-label="Actividad"><option value="">Todas las actividades</option></select>
-    <select id="f-resp" aria-label="Responsable"><option value="">Todos los responsables</option></select>
-    <select id="f-cont" aria-label="Contador asignado"><option value="">Todos los contadores asignados</option></select>
-    <select id="f-aut" aria-label="Autoriza"><option value="">Todos los que autorizan</option></select>
+    <select id="f-act" aria-label="Actividad" multiple><option value="">Todas las actividades</option></select>
+    <select id="f-resp" aria-label="Responsable" multiple><option value="">Todos los responsables</option></select>
+    <select id="f-cont" aria-label="Contador asignado" multiple><option value="">Todos los contadores asignados</option></select>
+    <select id="f-aut" aria-label="Autoriza" multiple><option value="">Todos los que autorizan</option></select>
     <select id="f-per" aria-label="Periodicidad"><option value="">Mensuales y anuales</option><option value="1">Mensuales</option><option value="2">Anuales</option></select>
     <button class="btn" type="button" id="limpia">Limpiar filtros</button>
   </div>
@@ -468,12 +471,26 @@ tr.fila:hover td{background:var(--navy-soft)}
 
   // Filtros fijos (2-nov-2026, pedido de Gabriel): lo que cada quien escoge se queda, aunque cambie de pestaña, recargue
   // o cierre el portal, hasta que pique «Limpiar filtros». Se guarda solo en su navegador (no en la base) y por usuario.
-  var FIJOS = ['f-anio', 'f-mes', 'f-buscar', 'f-est', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'], FIJO_OK = false;
+  var FIJOS = ['f-anio', 'f-mes', 'f-buscar', 'f-cli', 'f-est', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-per'], FIJO_OK = false;
+  // los de varias opciones (11-nov-2026): se leen y se ponen como lista; un valor guardado de antes (texto) cuenta como uno
+  var VARIOS = ['f-cli', 'f-est', 'f-pla', 'f-act', 'f-resp', 'f-cont', 'f-aut'];
+  function vals(id) {
+    var s = $(id);
+    if (!s.multiple) return s.value ? [s.value] : [];
+    return [].filter.call(s.options, function (o) { return o.selected && o.value !== ''; }).map(function (o) { return o.value; });
+  }
+  function ponVals(id, L) {
+    var s = $(id); L = (Array.isArray(L) ? L : (L ? [L] : [])).map(String);
+    if (!s.multiple) { s.value = L.length ? L[0] : ''; return; }
+    [].forEach.call(s.options, function (o) { o.selected = o.value !== '' && L.indexOf(o.value) >= 0; });
+  }
+  function valDe(k) { return VARIOS.indexOf(k) >= 0 ? vals(k) : $(k).value; }
+  function en(L, x) { return !L.length || L.indexOf(x) >= 0; }
   function fijoClave() { return 'profase-wft-filtros|' + (YO || ''); }
   function fijoLee() { try { return JSON.parse(localStorage.getItem(fijoClave()) || 'null'); } catch (e) { return null; } }
   function fijoGuarda() {
     if (!FIJO_OK) return;
-    var o = {}; FIJOS.forEach(function (k) { o[k] = $(k).value; });
+    var o = {}; FIJOS.forEach(function (k) { o[k] = valDe(k); });
     try { localStorage.setItem(fijoClave(), JSON.stringify(o)); } catch (e) { /* sin almacenamiento: no se recuerda */ }
   }
   function fijoBorra() { try { localStorage.removeItem(fijoClave()); } catch (e) { /* nada */ } }
@@ -486,10 +503,13 @@ tr.fila:hover td{background:var(--navy-soft)}
     var g = fijoLee();
     if (g) {
       $('f-buscar').value = g['f-buscar'] || '';
-      ['f-est', 'f-pla', 'f-resp', 'f-cont', 'f-aut', 'f-per'].forEach(function (k) { if (g[k] && [].some.call($(k).options, function (o) { return o.value === g[k]; })) $(k).value = g[k]; });
+      var hay = function (k, v) { return [].some.call($(k).options, function (o) { return o.value === v; }); };
+      var guardo = function (k) { var v = g[k]; return (Array.isArray(v) ? v : (v ? [v] : [])).map(String).filter(function (x) { return x && hay(k, x); }); };
+      ['f-cli', 'f-est', 'f-pla', 'f-resp', 'f-cont', 'f-aut'].forEach(function (k) { ponVals(k, guardo(k)); });
+      if (g['f-per'] && hay('f-per', g['f-per'])) $('f-per').value = g['f-per'];
       actividades();
-      if (g['f-dmes'] && [].some.call($('f-dmes').options, function (o) { return o.value === g['f-dmes']; })) $('f-dmes').value = g['f-dmes'];
-      if (g['f-act'] && [].some.call($('f-act').options, function (o) { return o.value === g['f-act']; })) $('f-act').value = g['f-act'];
+      if (g['f-dmes'] && hay('f-dmes', g['f-dmes'])) $('f-dmes').value = g['f-dmes'];
+      ponVals('f-act', guardo('f-act'));
     }
     FIJO_OK = true; fijoGuarda();
   }
@@ -539,7 +559,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   function devMes(a) { return a.dev_caso ? String(a.plantilla || '').replace(DEV_PRE, '').replace(/\s*\(\d+\)$/, '') : ''; }
   function devMesOrden(t) { var m = /^(\S+) (\d{4})$/.exec(t), i = m ? MESES_ES.indexOf(m[1]) : -1; return i >= 0 ? (+m[2]) * 12 + i : -1; }
   function devMeses() {
-    var ve = $('f-pla').value === DEV_PLA, v = $('f-dmes').value, o = {}, L = [];
+    var ve = vals('f-pla').indexOf(DEV_PLA) >= 0, v = $('f-dmes').value, o = {}, L = [];
     if (ve) {
       A.forEach(function (a) { var t = devMes(a); if (t) o[t] = 1; });
       L = Object.keys(o).sort(function (x, y) { return devMesOrden(y) - devMesOrden(x) || x.localeCompare(y); });
@@ -550,48 +570,59 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
 
   function opciones() {
-    var sel = function (id, todos, lista) { var v = $(id).value; $(id).innerHTML = '<option value="">' + todos + '</option>' + lista.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join(''); if (lista.indexOf(v) >= 0) $(id).value = v; };
+    var sel = function (id, todos, lista) {
+      var v = vals(id), ks = lista.map(function (n) { return Array.isArray(n) ? n[0] : n; });
+      $(id).innerHTML = '<option value="">' + todos + '</option>' + lista.map(function (n) { var k = Array.isArray(n) ? n[0] : n, t = Array.isArray(n) ? n[1] : n; return '<option value="' + esc(k) + '">' + esc(t) + '</option>'; }).join('');
+      ponVals(id, v.filter(function (x) { return ks.indexOf(x) >= 0; }));
+    };
     var u = function (f) { var o = {}; A.forEach(function (a) { var x = f(a); if (x) o[x] = 1; }); return Object.keys(o).sort(function (x, y) { return x.localeCompare(y); }); };
     sel('f-pla', 'Todas las plantillas', u(plaDe));
     actividades();
     sel('f-resp', 'Todos los responsables', u(function (a) { return a.resp_nombre; }));
     sel('f-cont', 'Todos los contadores asignados', u(cont));
     sel('f-aut', 'Todos los que autorizan', u(function (a) { return a.aut_nombre; }));
-    var e = $('f-est').value;
+    // Cliente (11-nov-2026): cada razón social, con su RFC y su grupo para encontrarla en el buscador de FILTROS
+    var cl = {}; A.forEach(function (a) { var k = cliDe(a); if (k && !cl[k]) cl[k] = (a.rs || a.rfc || k) + (a.rfc ? ' · ' + a.rfc : '') + (a.grupo && a.grupo !== a.rs ? ' · ' + a.grupo : ''); });
+    sel('f-cli', 'Todos los clientes', Object.keys(cl).map(function (k) { return [k, cl[k]]; }).sort(function (x, y) { return x[1].localeCompare(y[1]); }));
+    var e = vals('f-est');
     $('f-est').innerHTML = '<option value="">Todos los estatus</option><option value="abiertas">Abiertas (por iniciar y en proceso)</option><option value="vencidas">Vencidas</option><option value="pausa">En pausa (por el cliente)</option>' + ORDEN_EST.map(function (k) { return '<option value="' + k + '">' + esc(EST[k]) + '</option>'; }).join('');
-    $('f-est').value = e;
+    ponVals('f-est', e);
   }
+  function cliDe(a) { return a.empresa_id != null ? String(a.empresa_id) : String(a.rfc || ''); }
   function actividades() {
-    var pl = $('f-pla').value, v = $('f-act').value, o = {};
+    var pl = vals('f-pla'), v = vals('f-act'), o = {};
     devMeses();
-    A.forEach(function (a) { if (!pl || plaDe(a) === pl) o[a.actividad] = 1; });
+    A.forEach(function (a) { if (en(pl, plaDe(a))) o[a.actividad] = 1; });
     var L = Object.keys(o).sort(function (x, y) { return x.localeCompare(y); });
     $('f-act').innerHTML = '<option value="">Todas las actividades</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
-    if (L.indexOf(v) >= 0) $('f-act').value = v;
+    ponVals('f-act', v.filter(function (x) { return L.indexOf(x) >= 0; }));
   }
 
   function filtradas(sinEstatus) {
-    var q = norm($('f-buscar').value.trim()), pl = $('f-pla').value, ac = $('f-act').value, r = $('f-resp').value, c = $('f-cont').value,
-      au = $('f-aut').value, es = $('f-est').value, pe = +$('f-per').value || 0, dm = pl === DEV_PLA ? $('f-dmes').value : '';
+    // cada filtro de varias opciones pasa si es cualquiera de las marcadas (sin marcar, todas)
+    var q = norm($('f-buscar').value.trim()), pl = vals('f-pla'), ac = vals('f-act'), r = vals('f-resp'), c = vals('f-cont'),
+      au = vals('f-aut'), es = vals('f-est'), cl = vals('f-cli'), pe = +$('f-per').value || 0, dm = pl.indexOf(DEV_PLA) >= 0 ? $('f-dmes').value : '';
     return A.filter(function (a) {
-      if (pl && plaDe(a) !== pl) return false;
-      if (dm && devMes(a) !== dm) return false;
-      if (ac && a.actividad !== ac) return false;
-      if (r && a.resp_nombre !== r) return false;
-      if (c && cont(a) !== c) return false;
-      if (au && a.aut_nombre !== au) return false;
+      if (!en(pl, plaDe(a))) return false;
+      if (dm && plaDe(a) === DEV_PLA && devMes(a) !== dm) return false;
+      if (!en(ac, a.actividad)) return false;
+      if (!en(r, a.resp_nombre || '')) return false;
+      if (!en(c, cont(a))) return false;
+      if (!en(au, a.aut_nombre || '')) return false;
+      if (!en(cl, cliDe(a))) return false;
       if (pe && a.periodicidad !== pe) return false;
-      if (!sinEstatus && es) {
-        if (es === 'abiertas') { if (a.estatus !== 4 && a.estatus !== 5) return false; }
-        else if (es === 'vencidas') { if (!vencida(a)) return false; }
-        else if (es === 'pausa') { if (!enPausa(a)) return false; }
-        else if (a.estatus !== +es) return false;
-      }
+      if (!sinEstatus && es.length && !es.some(function (k) { return estPasa(a, k); })) return false;
       if (q && norm([a.grupo, a.rs, a.rfc].join(' ')).indexOf(q) < 0) return false;
       return true;
     });
   }
 
+  function estPasa(a, k) {
+    if (k === 'abiertas') return a.estatus === 4 || a.estatus === 5;
+    if (k === 'vencidas') return vencida(a);
+    if (k === 'pausa') return enPausa(a);
+    return a.estatus === +k;
+  }
   function venceHtml(a) {
     var h = '';
     if (a.ven_pro) h += '<div class="vence' + (vencida(a) ? ' mal' : '') + '">Profase ' + esc(fecha(a.ven_pro)) + '</div>';
@@ -614,21 +645,22 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (!window.PROFASE_PILAS) return;
     var n = {}; PILAS_W.forEach(function (p) { n[p.k] = 0; });
     base.forEach(function (a) { if (n[a.estatus] != null) n[a.estatus]++; if (vencida(a)) n.vencidas++; if (enPausa(a)) n.pausa++; });
-    var es = $('f-est').value, pct = function (x) { return base.length ? Math.round(100 * x / base.length) + ' % del periodo' : ''; };
+    var es = vals('f-est'), pct = function (x) { return base.length ? Math.round(100 * x / base.length) + ' % del periodo' : ''; };
     var abiertas = base.filter(function (a) { return a.estatus === 4 || a.estatus === 5; }).sort(abiertaOrden);
-    var cola = es ? LISTA : abiertas;
+    var cola = es.length ? LISTA : abiertas;
     var per = $('f-mes').value ? MESES_L[+$('f-mes').value - 1] + ' ' + $('f-anio').value : 'Todo ' + $('f-anio').value;
     PROFASE_PILAS.pinta($('pilas'), {
       titulo: ROL === 'contador' ? 'Tu trabajo · tus actividades' : 'Tu trabajo · las actividades',
       meta: per + ' · ' + base.length + (base.length === 1 ? ' actividad' : ' actividades') + (base.length ? ' · ' + Math.round(100 * n[2] / base.length) + ' % terminadas' : ''),
       pilas: PILAS_W.map(function (p) {
-        return { k: p.k, t: p.t, n: n[p.k], d: p.k === '2' ? pct(n[2]) : p.d, tono: p.tono, on: es === p.k, oculta: p.k === '3' && !n[3] && es !== '3',
+        return { k: p.k, t: p.t, n: n[p.k], d: p.k === '2' ? pct(n[2]) : p.d, tono: p.tono, on: es.indexOf(p.k) >= 0, oculta: p.k === '3' && !n[3] && es.indexOf('3') < 0,
           tag: p.k === 'vencidas' && n.vencidas && !CONSULTA && ROL === 'contador' ? 'Te toca' : '' };
       }),
-      alPicar: function (k) { var s = $('f-est'); s.value = s.value === k ? '' : k; s.dispatchEvent(new Event('change', { bubbles: true })); if (BAR && BAR.f) BAR.f.pinta(); },
-      boton: { t: CONSULTA ? 'Ver una por una' : es ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
+      // la pila deja solo ese estatus (si ya era solo ese, lo quita); en FILTROS se marcan varios
+      alPicar: function (k) { var s = $('f-est'), e = vals('f-est'); ponVals('f-est', e.length === 1 && e[0] === k ? [] : [k]); s.dispatchEvent(new Event('change', { bubbles: true })); if (BAR && BAR.f) BAR.f.pinta(); },
+      boton: { t: CONSULTA ? 'Ver una por una' : es.length ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
         alPicar: function () { if (!cola.length) return; COLA = cola.map(function (a) { return a.id; }); abre(COLA[0]); } },
-      nota: es ? 'Abre la primera de la lista; con «Siguiente ›» pasas a la que sigue.' : 'Abre la primera de las que faltan (las vencidas primero y luego por fecha); con «Siguiente ›» pasas a la que sigue.'
+      nota: es.length ? 'Abre la primera de la lista; con «Siguiente ›» pasas a la que sigue.' : 'Abre la primera de las que faltan (las vencidas primero y luego por fecha); con «Siguiente ›» pasas a la que sigue.'
     });
   }
   var BAR = null;
@@ -639,6 +671,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       caja: true, buscar: $('f-buscar'), periodo: [$('f-mes'), $('f-anio')],
       filtros: d ? {
         grupos: [
+          { t: 'CLIENTE', campos: [d($('f-cli'), { t: 'CLIENTE', buscar: true })] },
           { t: 'ACTIVIDAD', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-pla'), { t: 'PLANTILLA' }), d($('f-act'), { t: 'ACTIVIDAD', buscar: true }), d($('f-dmes'), { t: 'MES QUE SE SOLICITA' }), d($('f-per'), { t: 'PERIODICIDAD' })] },
           { t: 'PERSONAS', campos: [d($('f-resp'), { t: 'RESPONSABLE' }), d($('f-cont'), { t: 'CONTADOR ASIGNADO' }), d($('f-aut'), { t: 'AUTORIZA' })] }],
         limpiar: function () { $('limpia').click(); },
@@ -653,7 +686,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   function pinta() {
     var base = filtradas(true);
     var L = filtradas(false); LISTA = L;
-    var firma = FIJOS.map(function (k) { return $(k).value; }).join('|') + '|' + A.length;
+    var firma = FIJOS.map(function (k) { var v = valDe(k); return Array.isArray(v) ? v.join('\u0001') : v; }).join('|') + '|' + A.length;
     if (PG && firma !== FIRMA) PG.inicio();
     FIRMA = firma;
     pintaPilas(base);
@@ -1873,9 +1906,10 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('f-anio').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-mes').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-pla').addEventListener('change', function () { actividades(); mostrar = PAGINA; pinta(); });
-  ['f-buscar', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  ['f-buscar', 'f-cli', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
   $('limpia').onclick = function () {
-    ['f-buscar', 'f-pla', 'f-dmes', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).value = ''; });
+    ['f-buscar', 'f-dmes', 'f-per'].forEach(function (k) { $(k).value = ''; });
+    VARIOS.forEach(function (k) { ponVals(k, []); });
     fijoBorra();
     // el periodo regresa al de siempre (el mes contable que se trabaja)
     var y0 = $('f-anio').value, m0 = $('f-mes').value; periodos();

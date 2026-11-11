@@ -48,12 +48,12 @@
     ['Sin revisión', 'Así empieza todo: nadie lo ha revisado. No se escoge y nada regresa ahí; si alguien se equivoca de estatus, lo cambia al correcto.'],
     ['Consulta con el Cliente', 'Se revisó y la explicación depende del cliente: se le pidió información o soporte y se espera su respuesta.'],
     ['Consulta con Gerencia', 'Se revisó y falta algo para cerrarlo: se consultó a la Gerencia Contable (le llega el aviso) y se espera su respuesta.'],
-    ['Modificación QUO', 'Hay que corregirlo en QUO y la corrección está en proceso. De aquí solo se pasa a Modificación Exitosa o a Consulta con Gerencia.'],
+    ['Modificación QUO', 'Hay que corregirlo en QUO y la corrección está en proceso. De aquí se pasa a Modificación Exitosa, a Consulta con Gerencia o, si hay que volver a preguntarle al cliente, de regreso a Consulta con el Cliente.'],
     ['Justificado', 'Está bien como está: tiene explicación y soporte y no hay nada que corregir. Cuenta como revisado.'],
     ['Modificación Exitosa', 'Era un error de registro y ya se corrigió en QUO. Cuenta como revisado. El contador la pone después de Modificación QUO; ya en Modificación Exitosa, solo la Gerencia Contable la cambia.']
   ];
   var MSJ = {
-    quo: 'Desde Modificación QUO solo se pasa a Modificación Exitosa o a Consulta con Gerencia',
+    quo: 'Desde Modificación QUO solo se pasa a Modificación Exitosa, a Consulta con Gerencia o de regreso a Consulta con el Cliente',
     exito: 'Modificación Exitosa se pone cuando está en Modificación QUO; si no, la pone la Gerencia Contable',
     fijo: 'Lo que está en Modificación Exitosa solo lo cambia la Gerencia Contable',
     inicial: '«Sin revisión» no se escoge: así empieza todo'
@@ -70,7 +70,7 @@
     if (antes === nuevo) return null;
     if (nuevo === 'sin_respuesta') return MSJ.inicial;
     if (!gc && antes === 'resuelto') return MSJ.fijo;
-    if (antes === 'modif_quo' && nuevo !== 'resuelto' && nuevo !== 'pend_aprob') return MSJ.quo;
+    if (antes === 'modif_quo' && nuevo !== 'resuelto' && nuevo !== 'pend_aprob' && nuevo !== 'consulta') return MSJ.quo;
     if (!gc && nuevo === 'resuelto' && antes !== 'modif_quo') return MSJ.exito;
     return null;
   }
