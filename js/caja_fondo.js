@@ -103,7 +103,7 @@
   var CSS = '.cfv{position:fixed;inset:0;z-index:60;background:rgba(10,16,28,.55);display:flex;flex-direction:column;align-items:center;overflow:auto;padding:12px;overscroll-behavior:contain}'
     + '.cfv-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;justify-content:flex-end;width:100%;max-width:820px;margin-bottom:10px}'
     + '.cfv-bar button{font:600 14px/1 "Public Sans",system-ui,sans-serif;border-radius:10px;padding:10px 14px;border:1px solid #c9d2de;background:#fff;color:#132036;cursor:pointer}'
-    + '.cfv-bar button.nar{background:#F07A1E;border-color:#F07A1E;color:#fff}'
+    + '.cfv-bar button.nar{background:#F07A1E;border-color:#F07A1E;color:#14233F}'
     + '.cfv-bar button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
     + '.cfh{background:#fff;color:#132036;width:100%;max-width:820px;border-radius:12px;padding:22px 20px 26px;font:12px/1.45 "Public Sans",system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.25);position:relative;overflow:hidden}'
     + '.cfh .cb{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:2px solid #1F3864;padding-bottom:10px;margin-bottom:14px;position:relative}'

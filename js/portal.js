@@ -427,7 +427,7 @@
     + '.pt-b.pri{background:#1F3864;border-color:#1F3864;color:#fff}.pt-b:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
     + ':root[data-theme="dark"] .pt-dlg{background:#172133;color:#E5EAF2;box-shadow:0 18px 50px rgba(0,0,0,.6)}'
     + ':root[data-theme="dark"] .pt-dlg h2{color:#fff}:root[data-theme="dark"] .pt-ic{background:#22324D;color:#F07A1E}'
-    + ':root[data-theme="dark"] .pt-b{background:#1E2A40;border-color:#3A4A66;color:#E5EAF2}:root[data-theme="dark"] .pt-b.pri{background:#F07A1E;border-color:#F07A1E;color:#fff}';
+    + ':root[data-theme="dark"] .pt-b{background:#1E2A40;border-color:#3A4A66;color:#E5EAF2}:root[data-theme="dark"] .pt-b.pri{background:#F07A1E;border-color:#F07A1E;color:#14233F}';
   function cssModo() {
     if (document.getElementById('pt-css')) return;
     var st = document.createElement('style'); st.id = 'pt-css'; st.textContent = CSS_MODO; document.head.appendChild(st);
@@ -498,7 +498,7 @@
     // con dos botones: el texto y la ✕ arriba, los botones abajo (la ✕ nunca queda sola en otro renglón)
     + '.pa-av.dos{flex-wrap:wrap}.pa-av.dos .pa-tx{flex:1 1 calc(100% - 52px)}.pa-av.dos .pa-x{order:1;align-self:flex-start}.pa-av.dos .pa-ok,.pa-av.dos .pa-sec{order:2}'
     + '.pa-av button{flex:none;font:inherit;font-weight:600;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;min-height:34px}'
-    + '.pa-av .pa-ok{background:#F07A1E;color:#fff}.pa-av .pa-sec{background:rgba(255,255,255,.14);color:#fff}'
+    + '.pa-av .pa-ok{background:#F07A1E;color:#14233F}.pa-av .pa-sec{background:rgba(255,255,255,.14);color:#fff}'
     + '.pa-av .pa-x{background:transparent;color:#DCE5F3;padding:7px 10px;font-size:15px;line-height:1}.pa-av .pa-x:hover{background:rgba(255,255,255,.12)}'
     + '.pa-av button:focus-visible{outline:2px solid #fff;outline-offset:2px}'
     + '.pa-x-auto{flex:none;font:inherit;font-size:15px;line-height:1;border:0;border-radius:8px;background:transparent;color:inherit;opacity:.8;padding:7px 10px;cursor:pointer;margin-left:4px}'
@@ -623,6 +623,34 @@
     } catch (e) { /* navegador viejo: sin la red */ }
   }
   vigilaAvisos();
+  /* ---- Sin conexión (11-nov-2026, auditoría externa, H-09; Héctor Daniel Nava: «hagamos lo que sí recomiendas»).
+     Si el equipo se queda sin internet, abajo sale «Sin conexión a internet» con desde qué hora, para que nadie crea que
+     guardó algo que no llegó; se queda hasta que regresa la conexión y entonces dice «Ya hay conexión otra vez». Solo en la
+     página de arriba (las pantallas en su marco no lo repiten) y con la pieza común de avisos (P.avisoChico). No lee ni
+     escribe nada de la base. */
+  (function () {
+    var enMarco = false;
+    try { enMarco = window.parent !== window; } catch (e) { enMarco = true; }
+    if (enMarco) return;
+    var av = null;
+    function sin() {
+      if (av) return;
+      if (!document.body) { document.addEventListener('DOMContentLoaded', sin); return; }
+      var h = '';
+      try { h = window.PROFASE_HORA.hora(new Date()); } catch (e) { h = ''; }
+      av = P.avisoChico({ id: 'pa-sin-red', texto: 'Sin conexión a internet',
+        detalle: (h ? 'Desde las ' + h + '. ' : '') + 'Lo que guardes ahorita no va a llegar; espera a que regrese.', ms: 0 });
+    }
+    function con() {
+      if (!av) return;
+      try { av.cierra(); } catch (e) { /* nada */ }
+      av = null;
+      P.avisoChico({ id: 'pa-sin-red', texto: 'Ya hay conexión otra vez', ms: 5000 });
+    }
+    addEventListener('offline', sin);
+    addEventListener('online', con);
+    if (navigator.onLine === false) sin();
+  })();
   P.pintaTema();
   // otra ventana del portal lo cambió
   window.addEventListener('storage', function (e) { if (e.key === MODO) { modoMem = ''; P.pintaTema(); } });
@@ -655,6 +683,11 @@
       // 31-oct-2026: «COMPA / ÑÍA», «N0200 / 2», «INVENTA / DO»). overflow-wrap:anywhere encogía la columna hasta partir
       // cada palabra; break-word solo parte lo que de verdad no cabe y, si la tabla no cabe, se desliza en su recuadro.
       + 'td,th,td *,th *{overflow-wrap:break-word!important}'
+      // Con el dedo, los botones de cada pantalla miden al menos 44 px de alto (auditoría externa, 11-nov-2026, H-06:
+      // medían unos 35 px en el celular y el iPad; 43 pantallas traen su propia copia del estilo, así que va aquí, una
+      // sola vez, para las de hoy y las nuevas). Solo en pantallas táctiles: la computadora con mouse no cambia. Los de
+      // adentro de una tabla y los de los avisos chicos se quedan como están (harían cada renglón más alto).
+      + '@media (pointer:coarse){:is(button.btn,a.btn,label.btn,.ppl-masb,.pf-btn,button[data-pdf-de],.ppl-go):not(td *):not(th *):not(.pa-av *){min-height:44px;box-sizing:border-box}}'
       // Desplegables (<details>): se abren o se cierran solo al picar sus palabras, no con el blanco del mismo renglón
       // (Daniel, 2-nov-2026, 18:57, con «Más filtros» del Panel de trabajo que encontró Chuy: «ponlo como regla para que
       // no cometas ese error en lo nuevo»). Por omisión el título mide lo que sus palabras, en todas las páginas, las de
@@ -1689,7 +1722,7 @@
       + '.pba-nota{font-size:13px;line-height:1.45;color:var(--muted,#5A6577);margin:0}'
       + '.pba-bot{flex:none;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;padding:0 16px 16px}'
       + '.pba-bot button{min-height:44px;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;font-size:15px;cursor:pointer}'
-      + '.pba-si{background:#F07A1E;color:#fff;border:1px solid #F07A1E;flex:1 1 auto}'
+      + '.pba-si{background:#F07A1E;color:#14233F;border:1px solid #F07A1E;flex:1 1 auto}'
       + '.pba-no{background:transparent;color:var(--ink,#132036);border:1px solid var(--line-strong,#C4CDDA)}'
       + '.pba-bot button:focus-visible{outline:2px solid #F07A1E;outline-offset:2px}'
       + ':root[data-theme="dark"] .pba-caja{background:var(--surface,#16213A);color:var(--ink,#E6ECF7)}'
@@ -2261,7 +2294,7 @@
     + '.pu-perfil .pu-pp{color:var(--muted);font-size:13.5px;margin-top:-6px}'
     + '.pu-fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}'
     + '.pu-ayuda{font-size:12px;color:var(--muted);margin:0}'
-    + '.pu .btn.pu-ac,.ov .btn.pu-ac{background:var(--accent);border-color:var(--accent);color:#fff}'
+    + '.pu .btn.pu-ac,.ov .btn.pu-ac{background:var(--accent);border-color:var(--accent);color:#14233F}'
     + '.pu-rec{position:relative;width:260px;height:260px;max-width:100%;margin:0 auto;border-radius:12px;overflow:hidden;background:#000;touch-action:none;cursor:grab}'
     + '.pu-rec canvas{display:block;width:100%;height:100%}'
     + '.pu-rec .pu-masc{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at center,transparent 45.5%,rgba(0,0,0,.55) 46%)}'
@@ -2517,7 +2550,7 @@
     + '.fp-top{display:flex;justify-content:center;margin:2px 0 10px}'
     + '.fp-ci{position:relative;display:inline-block}'
     + '.fp-ci .pu-av.l{width:96px;height:96px;font-size:32px}'
-    + '.fp-cam{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;border:3px solid var(--surface)}'
+    + '.fp-cam{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#14233F;display:grid;place-items:center;border:3px solid var(--surface)}'
     + '.fp-cam svg{width:17px;height:17px;display:block}'
     + '.dlg.fp-dlg h2{text-align:center}.dlg.fp-dlg .sub{text-align:center;font-size:13.5px;line-height:1.45;margin-bottom:12px}'
     + '.fp-pasos{list-style:none;counter-reset:fp;margin:0 0 10px;padding:0;display:grid;gap:8px}'
