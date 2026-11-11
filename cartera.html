@@ -2628,7 +2628,14 @@ const stDe=m=>m.estatus==='fuera'?(m.estado==='por_aprobar'?'por_aprobar':'fuera
 const cuando=x=>{ try{ return window.PROFASE_HORA?window.PROFASE_HORA.fechaHora(x):fmtD(String(x).slice(0,10)); }catch(e){ return ''; } };
 const msgErr=e=>String((e&&(e.message||e.details||e.hint))||e||'No se pudo').replace(/^.*?ERROR:\s*/,'');
 // ¿puede quitarle a esta marca su estatus? (la base lo vuelve a revisar)
-const quitaMarca=m=>!!m&&yoMarco()&&(yoApruebo()||m.mia||m.estatus==='estrategia');
+const quitaMarca=m=>!!m&&yoMarco()&&(yoApruebo()||m.mia||m.estatus==='estrategia'||m.motivo==='sin_estrategia');
+/* «Sin estrategia fiscal (solo esta factura)» (357; ajuste de Gabo, Fernando Cadengo, 11-nov-2026): una marca «normal» de una
+   factura que solo dice que no va en la estrategia fiscal de su empresa. Manda solo mientras su empresa esté en «Estrategia
+   fiscal»; no le gana a una regla automática ni a «Fuera del reporte» (no es «Que cuente»). */
+const sinEst=m=>!!m&&m.motivo==='sin_estrategia';
+const empEst=rfc=>{ const e=ESTC.porRfc.get(rfc); return !!e&&e.estatus==='estrategia'; };
+// ¿a esta factura se le puede quitar la «Estrategia fiscal»? (la suya o la de su empresa completa)
+const quitaEst=r=>r.st==='estrategia'&&(r.por==='empresa'?yoMarco():r.por==='factura'&&quitaMarca(r.mk));
 
 async function cargaMarcas(pq){
   let q; try{ q=await (pq||SB.rpc('cartera_marcas')); }catch(e){ q={error:e}; }
@@ -2649,9 +2656,10 @@ async function cargaMarcas(pq){
 function estatusDe(r){
   const rfc=rfcDe(r);
   const m=r.uuid?ESTC.porUuid.get(rfc+'|'+r.uuid.toUpperCase()+'|'+r.parte):null;
-  if(m) return {st:stDe(m),m,por:'factura',mot:m.motivo};
+  if(m&&!sinEst(m)) return {st:stDe(m),m,por:'factura',mot:m.motivo};
   for(const k in REGLAS_DEF){ const g=ESTC.reglas[k]; if(g&&g.activa&&REGLAS_DEF[k].pasa(r)) return {st:'fuera',rg:k,por:'regla',mot:REGLAS_DEF[k].motivo}; }
   const e=ESTC.porRfc.get(rfc);
+  if(e&&m&&e.estatus==='estrategia') return {st:'normal',m,por:'factura',mot:m.motivo};   // sin estrategia: solo esta factura
   if(e) return {st:stDe(e),m:e,por:'empresa',mot:e.motivo};
   return {st:'normal',por:null,mot:null};
 }
@@ -2702,8 +2710,9 @@ async function hazCon(b,fn,err){
 }
 
 /* ── marcar ── */
-function hecho(d,est,n){
+function hecho(d,est,n,sin){
   if(!d) return;
+  if(est==='normal'&&sin) return avisaArriba('Listo: '+plural(sin,'factura ya no va','facturas ya no van')+' en la estrategia fiscal; las demás de la empresa siguen igual.');
   if(est==='normal') return avisaArriba(d.marcadas?'Listo: '+plural(d.marcadas,'factura cuenta','facturas cuentan')+' como siempre.':'Listo: se quitó el estatus.');
   if(est==='estrategia') return avisaArriba('Listo: '+plural(n,'factura marcada','facturas marcadas')+' como estrategia fiscal.');
   avisaArriba(d.estado==='por_aprobar'?'Listo: quedó «Por aprobar». Mientras lo aprueban, sigue sumando.':'Listo: ya no suma en los saldos ni en el IVA.');
@@ -2711,11 +2720,14 @@ function hecho(d,est,n){
 async function marcaDocs(rows,estatus,motivo,comentario,cuenta){
   if(!rows.length) return;
   if(rows.some(r=>!r.uuid)) throw new Error('Todavía se están cargando los folios fiscales; intenta en un momento.');
-  const items=rows.map(r=>({uuid:r.uuid,parte:r.parte,tipo:r.tipo,rfc_cp:D.cp[r.cp][0]||'',contraparte:D.cp[r.cp][1]||'',
-    folio:[r.serie,r.folio].filter(Boolean).join(' '),fecha:r.fecha,mod:r.mod,cuenta:!!cuenta}));
+  // «Quitar estatus» a una factura que está en estrategia por su empresa completa: solo esa factura deja la estrategia (357)
+  const sin=r=>estatus==='normal'&&!cuenta&&r.st==='estrategia'&&empEst(rfcDe(r));
+  const items=rows.map(r=>Object.assign({uuid:r.uuid,parte:r.parte,tipo:r.tipo,rfc_cp:D.cp[r.cp][0]||'',contraparte:D.cp[r.cp][1]||'',
+    folio:[r.serie,r.folio].filter(Boolean).join(' '),fecha:r.fecha,mod:r.mod,cuenta:!!cuenta},sin(r)?{sin_estrategia:true}:{}));
+  const nSin=items.filter(x=>x.sin_estrategia).length;
   const q=await SB.rpc('cartera_marca',{p:{rfc:rfcDe(rows[0]),estatus,motivo:motivo||null,comentario:comentario||'',items}});
   if(q.error) throw q.error;
-  S.sel=new Set(); await recargaMarcas(); hecho(q.data,estatus,rows.length);
+  S.sel=new Set(); await recargaMarcas(); hecho(q.data,estatus,rows.length,nSin);
   return q.data;
 }
 async function marcaEmpresa(ci,estatus,motivo,comentario){
@@ -2760,8 +2772,10 @@ function barraSel(sel){
     (m,c)=>marcaDocs(sel,'fuera',m,c)));
   [b1,b2].forEach(b=>{ b.disabled=!listo; bar.appendChild(b); });
   if(segPuedo()){ const b3=boton('Comentar…','l',()=>comentaVarias(sel)); b3.disabled=!listo; b3.title='Un comentario (y, si quieres, el estatus de revisión) en las '+plural(sel.length,'factura','facturas'); bar.appendChild(b3); }
-  const quitar=sel.filter(r=>r.por==='factura'&&r.mk&&r.mk.estatus!=='normal'&&quitaMarca(r.mk));
-  if(quitar.length){ const b=boton('Quitar estatus','l',()=>hazCon(b,()=>marcaDocs(quitar,'normal'),err)); b.title='Regresa '+plural(quitar.length,'factura','facturas')+' a como estaban'; bar.appendChild(b); }
+  const quitar=sel.filter(r=>(r.por==='factura'&&r.mk&&r.mk.estatus!=='normal'&&quitaMarca(r.mk))||quitaEst(r));
+  if(quitar.length){ const b=boton('Quitar estatus','l',()=>hazCon(b,()=>marcaDocs(quitar,'normal'),err)); b.disabled=!listo;
+    b.title=quitar.some(r=>r.por==='empresa')?'Les quita la estrategia fiscal solo a '+plural(quitar.length,'esta factura','estas facturas')+'; las demás de la empresa siguen igual'
+      :'Regresa '+plural(quitar.length,'factura','facturas')+' a como estaban'; bar.appendChild(b); }
   const cuentan=yoApruebo()?sel.filter(r=>r.st==='fuera'&&r.por!=='factura'):[];
   if(cuentan.length){ const b=boton('Que cuenten','l',()=>hazCon(b,()=>marcaDocs(cuentan,'normal','','',true),err));
     b.title=plural(cuentan.length,'factura sacada','facturas sacadas')+' por su empresa o una regla automática: que sí sumen'; bar.appendChild(b); }
@@ -2779,6 +2793,7 @@ function bloqueEstatus(d){
   else if(d.mk){
     const m=d.mk;
     if(d.por==='empresa') l('Por la empresa completa'+(m.estatus==='fuera'?' · '+motivoTxt(m.motivo):'')+'.');
+    else if(sinEst(m)) l('No va en la estrategia fiscal de su empresa (solo esta factura).');
     else if(m.estatus==='normal') l('Cuenta como siempre aunque su empresa o una regla lo sacara.');
     else if(m.estatus==='fuera') l('Motivo: '+motivoTxt(m.motivo)+(m.comentario?' · «'+m.comentario+'»':''));
     l('Lo marcó '+m.marco+' · '+cuando(m.marco_en)+(m.aprobo&&m.estado==='aprobada'&&m.aprobo!==m.marco?' · aprobó '+m.aprobo:''));
@@ -2787,10 +2802,13 @@ function bloqueEstatus(d){
   if(!(d.mod===0||d.mod===1)||!yoMarco()) return b;
   const a=el('div','acts'), err=el('p','eerr'); err.hidden=true;
   const listo=!!d.uuid;
-  if(d.st!=='estrategia'){ const x=boton('Estrategia fiscal','o',()=>hazCon(x,()=>marcaDocs([d],'estrategia'),err)); x.disabled=!listo; a.appendChild(x); }
+  if(d.por==='factura'&&sinEst(d.mk)){ if(quitaMarca(d.mk)){ const x=boton('Regresar a «Estrategia fiscal»','o',()=>hazCon(x,async()=>{
+      const q=await SB.rpc('cartera_regresa',{p_ids:[d.mk.id],p_nota:''}); if(q.error) throw q.error; await recargaMarcas(); avisaArriba('Listo: vuelve a la estrategia fiscal de su empresa.'); },err)); a.appendChild(x); } }
+  else if(d.st!=='estrategia'){ const x=boton('Estrategia fiscal','o',()=>hazCon(x,()=>marcaDocs([d],'estrategia'),err)); x.disabled=!listo; a.appendChild(x); }
   if(d.st!=='fuera'&&d.st!=='por_aprobar'){ const x=boton('Fuera del reporte…','',()=>pideMotivo('Sacar del reporte',[d.serie,d.folio].filter(Boolean).join(' ')+' · '+(D.cp[d.cp][1]||''),'',
     (m,c)=>marcaDocs([d],'fuera',m,c))); x.disabled=!listo; a.appendChild(x); }
-  if(d.por==='factura'&&d.mk&&d.mk.estatus!=='normal'&&quitaMarca(d.mk)){ const x=boton('Quitar estatus','l',()=>hazCon(x,()=>marcaDocs([d],'normal'),err)); a.appendChild(x); }
+  if((d.por==='factura'&&d.mk&&d.mk.estatus!=='normal'&&quitaMarca(d.mk))||quitaEst(d)){ const x=boton('Quitar estatus','l',()=>hazCon(x,()=>marcaDocs([d],'normal'),err)); x.disabled=!listo;
+    if(d.por==='empresa') x.title='Solo a esta factura; las demás de la empresa siguen en estrategia fiscal'; a.appendChild(x); }
   if(yoApruebo()&&d.st==='fuera'&&d.por!=='factura'){ const x=boton('Que cuente','l',()=>hazCon(x,()=>marcaDocs([d],'normal','','',true),err)); x.disabled=!listo; a.appendChild(x); }
   if(!listo) l('Cargando su folio fiscal…');
   if(a.childNodes.length) b.appendChild(a);
@@ -3132,7 +3150,7 @@ const nomEmpresa=rfc=>{ const c=D.cli.find(x=>x[2]===rfc); return c?c[1]:rfc; };
 function tarjetaMarca(m,ix){
   const k=el('div','emk'+(EXC.resalta===m.id?' on':'')); k.dataset.marca=m.id;
   const t=el('div','t');
-  const ep=m.estado==='regresada'?['p-cl','Regresada']:m.estado==='por_aprobar'?['p-pap','Por aprobar']:m.estatus==='estrategia'?['p-est','Estrategia fiscal']:m.estatus==='normal'?['p-ok','Cuenta']:['p-fue','Fuera del reporte'];
+  const ep=m.estado==='regresada'?['p-cl','Regresada']:m.estado==='por_aprobar'?['p-pap','Por aprobar']:m.estatus==='estrategia'?['p-est','Estrategia fiscal']:sinEst(m)?['p-ok','Sin estrategia']:m.estatus==='normal'?['p-ok','Cuenta']:['p-fue','Fuera del reporte'];
   t.appendChild(el('span','pill '+ep[0],ep[1]));
   t.appendChild(el('span','q',m.uuid?((m.folio?'Factura '+m.folio:'Factura')+(m.contraparte?' · '+m.contraparte:'')):'Empresa completa'));
   k.appendChild(t);
@@ -3140,7 +3158,8 @@ function tarjetaMarca(m,ix){
   l('Empresa',nomEmpresa(m.rfc)+' · '+m.rfc);
   if(m.estatus==='fuera') l('Motivo',motivoTxt(m.motivo)+(m.comentario?' · «'+m.comentario+'»':''));
   else if(m.comentario) l('Comentario',m.comentario);
-  if(m.estatus==='normal') l('','Cuenta como siempre aunque su empresa o una regla automática lo sacaran.');
+  if(sinEst(m)) l('','Esta factura no va en la estrategia fiscal de su empresa. «↺ Regresar» la vuelve a poner.');
+  else if(m.estatus==='normal') l('','Cuenta como siempre aunque su empresa o una regla automática lo sacaran.');
   l('Lo marcó',m.marco+' · '+cuando(m.marco_en)+(m.estado==='aprobada'&&m.aprobo&&m.aprobo!==m.marco?' · aprobó '+m.aprobo+' · '+cuando(m.aprobo_en):''));
   if(m.estado==='regresada') l('Lo regresó',(m.regreso||'')+' · '+cuando(m.regreso_en)+(m.regreso_nota?' · «'+m.regreso_nota+'»':''));
   const r=filaDe(m,ix);
@@ -3155,19 +3174,20 @@ function tarjetaMarca(m,ix){
   k.appendChild(err);
   return k;
 }
-function pideRegreso(ms){
+function pideRegreso(ms,o){
+  o=o||{};
   const body=el('div');
-  body.appendChild(el('p','enota',ms.length===1?'Vuelve a contar como siempre (o como diga su empresa o una regla automática). No se borra nada: queda en «Regresados».'
+  body.appendChild(el('p','enota',o.texto?o.texto:ms.length===1?'Vuelve a contar como siempre (o como diga su empresa o una regla automática). No se borra nada: queda en «Regresados».'
     :plural(ms.length,'marca vuelve','marcas vuelven')+' a contar como siempre. No se borra nada: quedan en «Regresados».'));
   const c=el('label','fmot'); c.style.marginTop='12px'; c.appendChild(el('span','k','Nota (opcional)'));
   const t=el('input'); t.type='text'; t.maxLength=300; t.id='reg-nota'; c.appendChild(t); body.appendChild(c);
   const err=el('p','eerr'); err.hidden=true; body.appendChild(err);
   const pie=el('div','sheet-f');
-  const si=boton('Regresar','',async()=>{ if(await hazCon(si,async()=>{
+  const si=boton(o.boton||'Regresar','',async()=>{ if(await hazCon(si,async()=>{
       const q=await SB.rpc('cartera_regresa',{p_ids:ms.map(m=>m.id),p_nota:t.value.trim()}); if(q.error) throw q.error;
       await recargaMarcas(); avisaArriba('Listo: '+plural((q.data&&q.data.regresadas)||0,'marca regresada','marcas regresadas')+'.'); },err)) cierraOv2(); });
   pie.appendChild(boton('Cancelar','g',cierraOv2)); pie.appendChild(si);
-  abreOv2(sheet2('Regresar',ms.length===1?(ms[0].uuid?(ms[0].folio||'Factura'):'Empresa completa')+' · '+nomEmpresa(ms[0].rfc):'',body,pie));
+  abreOv2(sheet2(o.titulo||'Regresar',ms.length===1?(ms[0].uuid?(ms[0].folio||'Factura'):'Empresa completa')+' · '+nomEmpresa(ms[0].rfc):'',body,pie));
 }
 async function verMarca(m){
   const ci=D.cli.findIndex(c=>c[2]===m.rfc);
@@ -3203,7 +3223,7 @@ function pintaExcluidos(nuevo){
   if(EXC.nota){ const n=el('div','info'); n.style.marginBottom='12px'; const t=el('div'); t.style.cssText='font-size:12.5px;color:var(--ink-2)';
     t.appendChild(el('div','k','Nuevo')); t.appendChild(document.createTextNode(EXC.nota)); n.appendChild(t); body.appendChild(n); }
   const vivas=ESTC.marcas.filter(viva);
-  const L={fuera:vivas.filter(m=>m.estatus==='fuera'||m.estatus==='normal'),est:vivas.filter(m=>m.estatus==='estrategia'),
+  const L={fuera:vivas.filter(m=>m.estatus==='fuera'||(m.estatus==='normal'&&!sinEst(m))),est:vivas.filter(m=>m.estatus==='estrategia'||sinEst(m)),
     ret:ESTC.marcas.filter(m=>m.estado==='regresada')};
   const pap=L.fuera.filter(m=>m.estado==='por_aprobar'), ina=inactivasSinMarca();
   if(EXC.tab==='ina'&&!ina.length) EXC.tab='fuera';
@@ -3259,6 +3279,13 @@ function pintaExcluidos(nuevo){
           const r=await SB.rpc('cartera_aprueba',{p_ids:pa.map(m=>m.id)}); if(r.error) throw r.error; await recargaMarcas();
           avisaArriba('Aprobado: '+plural((r.data&&r.data.aprobadas)||0,'marca','marcas')+'.'); },err));
         b.style.marginBottom='10px'; body.appendChild(b); body.appendChild(err); }
+    }
+    if(EXC.tab==='est'){
+      const qt=ls.filter(m=>m.estatus==='estrategia'&&viva(m)&&quitaMarca(m));
+      if(qt.length>1){ const b=boton('Quitar a todas · '+F.int.format(qt.length),'l',()=>pideRegreso(qt,{titulo:'Quitar la estrategia fiscal',
+          texto:(EXC.q?'Las '+F.int.format(qt.length)+' que se ven con lo que buscaste':'Las '+F.int.format(qt.length)+' de la lista')
+            +' dejan de estar en «Estrategia fiscal» y vuelven a como estaban (siguen sumando). No se borra nada: quedan en «Regresados».',boton:'Quitar a todas'}));
+        b.id='exc-quita-todas'; b.title='Les quita la estrategia fiscal a las que se ven en la lista (usa el buscador para escoger)'; b.style.marginBottom='10px'; body.appendChild(b); }
     }
     if(!ls.length) body.appendChild(el('div','empty',EXC.tab==='est'?'Nada marcado como estrategia fiscal.':EXC.tab==='ret'?'Nada regresado en los últimos 45 días.':
       'Nada fuera del reporte'+(EXC.q||EXC.solo!=='todas'?' con lo que buscas':' (además de lo que sacan las reglas automáticas)')+'.'));
@@ -3316,7 +3343,7 @@ function abreDesdeAviso(x){
   if(v){ (NUEVOS[v[1]]||NUEVOS['cartera-estatus'])(); return; }
   if(/^\d{1,12}$/.test(s)){
     const m=ESTC.marcas.find(z=>String(z.id)===s);
-    const tab=!m?'fuera':m.estado==='regresada'?'ret':m.estatus==='estrategia'?'est':'fuera';
+    const tab=!m?'fuera':m.estado==='regresada'?'ret':m.estatus==='estrategia'||sinEst(m)?'est':'fuera';
     abreExcluidos(tab,{resalta:m?m.id:null,solo:m&&m.estado==='por_aprobar'&&yoApruebo()?'por_aprobar':'todas'});
     return;
   }
