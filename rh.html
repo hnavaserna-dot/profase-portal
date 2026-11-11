@@ -1004,7 +1004,7 @@ tr.click:hover td{background:var(--navy-soft)}
     $('mov-b').innerHTML = V.length ? V.map(function (m) {
       var est = m.tipo === 'alta' ? '' : !m.confirmada ? chip('Por confirmar (Daniel o Cadengo)', 'ojo')
         : (m.aplicado ? chip('Confirmada · ya salió', '') : chip('Confirmada · sale después del ' + fecha(m.fecha), 'az'));
-      return '<tr><td data-l="Movimiento">' + chip(m.tipo === 'alta' ? 'Alta' : 'Baja', m.tipo === 'alta' ? 'ok' : 'mal') + '</td><td data-l="Colaborador" class="rs">' + esc(m.nombre) + '</td>'
+      return '<tr data-mov="' + (+m.id) + '"><td data-l="Movimiento">' + chip(m.tipo === 'alta' ? 'Alta' : 'Baja', m.tipo === 'alta' ? 'ok' : 'mal') + '</td><td data-l="Colaborador" class="rs">' + esc(m.nombre) + '</td>'
         + '<td data-l="Área">' + esc(m.area) + '</td><td data-l="Fecha">' + esc((m.tipo === 'alta' ? 'Ingreso: ' : 'Último día: ') + fecha(m.fecha)) + '</td>'
         + '<td data-l="Motivo" class="mut">' + esc(m.motivo || '') + (m.nota ? (m.motivo ? ' · ' : '') + esc(m.nota) : '') + '</td>'
         + '<td data-l="Usuario del portal">' + (m.usuario_portal ? (m.tipo === 'alta' ? 'Darle usuario' : 'Quitárselo') : '<span class="mut">No</span>') + '</td>'
@@ -1018,6 +1018,18 @@ tr.click:hover td{background:var(--navy-soft)}
   async function cargaMov() {
     var r = await Promise.all([rpc('rh_movimientos_lista'), rpc('rh_colaboradores')]);
     MOV = r[0] || []; COL = r[1] || []; pintaMov();
+  }
+  /* 360 (11-nov-2026, «que todo abra exacto»): desde la campanita (rh_tab.js), «?mov=<n>» (una baja) o «?colab=<n>» (el alta de
+     un colaborador): se busca su nombre y se ilumina su renglón */
+  function abreMov(q) {
+    var mv = +q.get('mov') || 0, cl = q.get('colab') || '';
+    var m = MOV.filter(function (z) { return mv ? +z.id === mv : z.tipo === 'alta' && String(z.colab_id) === cl; }).sort(function (a, b) { return b.id - a.id; })[0];
+    if (!m) return;
+    MFX = ''; $('m-q').value = m.nombre; pintaMov();
+    var tr = $('mov-b').querySelector('tr[data-mov="' + (+m.id) + '"]'); if (!tr) return;
+    try { tr.scrollIntoView({ block: 'center' }); } catch (e) {}
+    tr.style.outline = '3px solid var(--accent, #F07A1E)'; tr.style.outlineOffset = '-3px';
+    setTimeout(function () { tr.style.outline = ''; tr.style.outlineOffset = ''; }, 8000);
   }
   /* =============================== EXPEDIENTES =============================== */
   // Los tipos de documento los da la base (rh_expediente()); estos son los mismos, para el formulario del alta
@@ -1285,6 +1297,7 @@ tr.click:hover td{background:var(--navy-soft)}
         PGM = pagina('mov-pag', 'rh-movimientos', 'Movimientos', function () { pintaMov(); });
         $('m-q').addEventListener('input', pintaMov);
         await cargaMov();
+        abreMov(new URLSearchParams(location.search));   // 360: desde la campanita
       }
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }

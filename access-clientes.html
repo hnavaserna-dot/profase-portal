@@ -836,7 +836,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   /* ---------- Renovaciones de e.firma y sellos (Daniel, 30-oct-2026; portal/sql/71_renovaciones.sql) ----------
      La base decide todo: quién ve qué seguimiento (ren_lista) y qué botón puede picar cada quien (ren_marca). La
      factura solo llega a quien la puede ver; aquí no se adivina nada. */
-  var REN = null, REN_CERR = false, REN_ABRE = 0;
+  var REN = null, REN_CERR = false, REN_ABRE = 0, REN_ID = 0;   // REN_ID (360): el seguimiento que pidió abrir su aviso
   var ETAPA = { cotizar: ['Por cotizar', 'mal'], cotizado: ['Cotizado · esperando la factura', 'az'], facturado: ['Facturado · falta el pago', 'ojo'],
                 tramite: ['En trámite', 'az'], cargar: ['Cargar el nuevo', 'ojo'], vencimiento: ['Falta poner el vencimiento nuevo', 'ojo'],
                 baja: ['Ya no es cliente · falta marcarlo inactivo', 'az'] };
@@ -920,6 +920,19 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('ren-vacio').hidden = V.length > 0;
     $('ren-vacio').textContent = REN_CERR ? 'Nada cerrado en los últimos 4 meses.' : 'No tienes renovaciones en curso. Cuando a uno de tus clientes le falten 3 meses para que le venza la e.firma o los sellos, aparece aquí y te llega el aviso.';
     $('t-ren').textContent = 'Renovaciones' + (abiertos.length ? ' (' + abiertos.length + ')' : '');
+    if (REN_ID) luzRen();
+  }
+  /* 360 (11-nov-2026, «que todo abra exacto»): el aviso de la campanita de un seguimiento (clave «ren|<id>|…») lo deja a la
+     vista y lo ilumina (si ya se cerró, en «Cerrados»); si esa persona ya no lo ve, se queda la lista */
+  function luzRen() {
+    var id = REN_ID, x = (REN || []).filter(function (r) { return +r.id === id; })[0];
+    REN_ID = 0;
+    if (!x) return;
+    if ((x.etapa === 'cerrado') !== REN_CERR) { verRen(x.etapa === 'cerrado'); }
+    var li = document.querySelector('#ren-lista li[data-ren="' + id + '"]'); if (!li) return;
+    try { li.scrollIntoView({ block: 'center' }); } catch (e) {}
+    li.style.outline = '3px solid var(--accent, #F07A1E)'; li.style.outlineOffset = '2px'; li.style.borderRadius = '10px';
+    setTimeout(function () { li.style.outline = ''; li.style.outlineOffset = ''; }, 8000);
   }
   async function cargaRen() {
     try {
@@ -994,7 +1007,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     document.querySelectorAll('[data-rver]').forEach(function (x) { x.setAttribute('aria-pressed', (x.getAttribute('data-rver') === '1') === c ? 'true' : 'false'); });
     if (REN) pintaRen();
   }
-  window.__abreSeccion = function (t) { if (NUEVOS[t]) { VER = t; if (D) verNuevo(); return; } muestra(t === 'renovaciones' ? 'ren' : t === 'firmas' ? 'fir' : 'cli'); if (t === 'renovaciones') cargaRen(); };
+  window.__abreSeccion = function (t, id) { if (NUEVOS[t]) { VER = t; if (D) verNuevo(); return; } if (t === 'renovaciones' && +id) REN_ID = +id; muestra(t === 'renovaciones' ? 'ren' : t === 'firmas' ? 'fir' : 'cli'); if (t === 'renovaciones') cargaRen(); };
 
   /* ---------- Excel (con la marca PROFASE: js/marca.js) ---------- */
   async function conBoton(b, fn) { b.disabled = true; try { await fn(); } catch (e) { alert0('No se pudo armar el Excel. Vuelve a intentar.'); } finally { b.disabled = false; } }
@@ -1077,6 +1090,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   (function () {   // si la vista de afuera pidió abrir en Renovaciones (aviso de la campanita o el Inicio)
     var t = '';
     try { if (window.parent !== window && window.parent.__axcliTab) { t = String(window.parent.__axcliTab); window.parent.__axcliTab = ''; } } catch (e) { /* sin vista de afuera */ }
+    try { if (window.parent !== window && +window.parent.__axcliRen) { REN_ID = +window.parent.__axcliRen; window.parent.__axcliRen = 0; } } catch (e) { /* sin vista de afuera */ }
     if (!t && location.hash) t = location.hash.slice(1);
     if (t === 'renovaciones') REN_ABRE = 1;
     else if (NUEVOS[t]) VER = t;   // lo nuevo, en cuanto lleguen los clientes (carga())
