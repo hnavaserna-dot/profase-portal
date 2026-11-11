@@ -31,7 +31,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Depuración de CxC / CxP</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=6973ccfeb1"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6fbbeb4ec0"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Depuración de CxC / CxP</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=6973ccfeb1"></script><script src="js/marca.js?v=8eb6f0cb8f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6fbbeb4ec0"></script><script src="js/quo-al-dia.js"></script><script src="js/filtros.js?v=fa3a42e572"></script><script src="js/pilas.js?v=e11dcfe3e0"></script><script src="js/paginas.js?v=146d3e173f"></script><script src="js/cartera-datos.js?v=8bc48cd41e"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1214,73 +1214,44 @@ const fallo=e=>{document.getElementById('vista').innerHTML='<div class="empty">N
 const COLS_K=['mod','cp','saldo','total','fecha','mp','est','tipo','quo','mon','tc','tme','cta','cl','fp','regf','ser','folio','pl','ver',
   'sub','iva','ivaret','isrret','ter','mif','rol','cc','proy','conta','cic','ieps','dsc'];
 const DIC_K=['mon','cl','ver','ser','cta','fp','pl','rol','cc','proy'];
-let SB=null, YO=null, ALCANCE=null, META=null, RANGO={}, UUID_OK=new Set(), K_FIRMA={};
-async function desb64(b64){
-  const r=await fetch('data:application/octet-stream;base64,'+b64);
-  const s=r.body.pipeThrough(new DecompressionStream('gzip'));
-  return JSON.parse(await new Response(s).text());
-}
-/* lo ya bajado se guarda en este navegador por usuario y firma; si entra otra persona, se borra */
-const CACHE=(()=>{
-  let p=null;
-  const abre=()=>p||(p=new Promise((res,rej)=>{
-    const r=indexedDB.open('portal-cartera',1);
-    r.onupgradeneeded=()=>r.result.createObjectStore('docs');
-    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
-  }));
-  const tx=async(modo,fn)=>{ try{ const db=await abre(); return await new Promise(res=>{
-    const t=db.transaction('docs',modo), st=t.objectStore('docs'); let out; const q=fn(st);
-    if(q) q.onsuccess=()=>{out=q.result;}; t.oncomplete=()=>res(out); t.onerror=()=>res(undefined); t.onabort=()=>res(undefined); }); }
-    catch(e){ return undefined; } };
-  return {
-    get:k=>tx('readonly',st=>st.get(k)),
-    set:(k,v)=>tx('readwrite',st=>st.put(v,k)),
-    borra:()=>tx('readwrite',st=>st.clear())
-  };
-})();
-async function cacheDe(id,firma){ const c=await CACHE.get(id); return c&&c.firma===firma?c.obj:null; }
-async function bajaDocs(ids){
-  const out={};
-  for(let i=0;i<ids.length;i+=12){
-    const lote=ids.slice(i,i+12);
-    const q=await SB.from('docs').select('id,data').eq('col','cartera').in('id',lote);
-    if(q.error) throw q.error;
-    for(const x of q.data||[]) out[x.id]=x.data;
-  }
-  return out;
-}
-async function firmas(pref){
-  const q=await SB.from('docs').select('id,firma:data->>firma').eq('col','cartera').like('id',pref+'|%');
-  if(q.error) throw q.error;
-  const o={}; (q.data||[]).forEach(x=>{ o[x.id]=x.firma; }); return o;
-}
+let SB=null, YO=null, ALCANCE=null, META=null, RANGO={}, UUID_OK=new Set(), K_FIRMA={}, K_N={};
+/* 11-nov-2026 (Héctor Daniel Nava: «más rápido»): lo que baja y guarda la cartera vive en una sola pieza, js/cartera-datos.js,
+   la misma que usa la precarga de la vista: descomprimir en un trabajador aparte, tandas parejas varias a la vez, lo guardado
+   en este navegador con su firma y escrito después de pintar. */
+const CD=window.PROFASE_CARTERA;
+const desb64=CD.desb64, cacheVarios=CD.cacheVarios, guardaLuego=CD.guardaLuego, enPar=CD.enPar, tandas=CD.tandas, PAR=CD.PAR, uDe=CD.uDe;
+let ARMANDO=false;
+const guardaYa=()=>CD.guardaYa();
+const bajaDocs=ids=>CD.bajaDocs(SB,ids);
+async function firmas(pref){ const r=await CD.firmas(SB,pref); Object.assign(K_N,r.n); return r.f; }
 /* arma M y D con el mismo formato que usaba la página «Cartera SQL» (un renglón por documento) */
-async function cargaCartera(avance){
-  const m=await SB.from('docs').select('data').eq('col','cartera').eq('id','meta').maybeSingle();
+async function cargaCartera(avance,pre){
+  // la ficha general y las firmas, a la vez
+  const [m,fk,fp]=await Promise.all([SB.from('docs').select('data').eq('col','cartera').eq('id','meta').maybeSingle(),
+    firmas('k'), YO&&YO.rol==='director'?firmas('p'):Promise.resolve({})]);
   if(m.error) throw m.error;
   if(!m.data) return null;
   META=m.data.data;
   // k|RFC: lo que ve quien tiene ese cliente; p|RFC: lo que solo ve la dirección (la base no se lo da a nadie más)
-  const fs=Object.assign(await firmas('k'), YO&&YO.rol==='director'?await firmas('p'):{});
+  const fs=Object.assign(fk,fp);
   const ids=Object.keys(fs).sort();
-  const objs={}, faltan=[];
-  for(const id of ids){ const o=await cacheDe(id,fs[id]); if(o) objs[id]=o; else faltan.push(id); }
+  // lo ya guardado en este navegador, en una sola lectura
+  const objs=await cacheVarios(ids,id=>fs[id]), faltan=ids.filter(id=>!objs[id]);
   let hechos=ids.length-faltan.length; avance&&avance(hechos,ids.length);
-  // las tandas de 12 se piden de 4 en 4 a la vez (6-nov-2026, Reportes lento: antes una tras otra, 13 seguidas la primera vez)
-  const lotes=[]; for(let i=0;i<faltan.length;i+=12) lotes.push(faltan.slice(i,i+12));
-  for(let j=0;j<lotes.length;j+=4){
-    const grupo=lotes.slice(j,j+4), bajadas=await Promise.all(grupo.map(bajaDocs));
-    for(let g=0;g<grupo.length;g++){
-      const lote=grupo[g], docs=bajadas[g];
-      for(const id of lote){
-        const d=docs[id]; if(!d) continue;
-        const o=await desb64(d.b64); objs[id]=o;
-        CACHE.set(id,{firma:d.firma,obj:o});
-        fs[id]=d.firma;
-      }
-      hechos+=lote.length; avance&&avance(hechos,ids.length);
-    }
-  }
+  // al mismo tiempo, los folios fiscales que se van a necesitar al abrir (lo marcado, lo aplicado y lo cancelado en el SAT)
+  const pu=pre&&pre.uuids?pre.uuids(fs):null;
+  // tandas parejas, 6 a la vez (11-nov-2026; antes de 12 en 12 y 4 a la vez; 6-nov-2026: antes una tras otra)
+  await enPar(tandas(faltan,id=>K_N[id]),PAR,async lote=>{
+    const docs=await bajaDocs(lote);
+    await Promise.all(lote.map(async id=>{
+      const d=docs[id]; if(!d) return;
+      objs[id]=await desb64(d.b64);
+      guardaLuego(id,d.firma,objs[id]);
+      fs[id]=d.firma;
+    }));
+    hechos+=lote.length; avance&&avance(hechos,ids.length);
+  });
+  if(pu) await pu;
   const cont=[], ixC={}, gx=(arr,ix,v)=>{ if(v==null) return null; if(!(v in ix)){ ix[v]=arr.length; arr.push(v);} return ix[v]; };
   const regs=META.regimenes.slice(), procs=META.procesos.slice(), ixR={}, ixP={};
   regs.forEach((r,i)=>ixR[r]=i); procs.forEach((p,i)=>ixP[p]=i);
@@ -1311,32 +1282,29 @@ async function cargaCartera(avance){
   return {meta,filas:f,extra:{cli,cp,dic,mp:META.mp,est:META.est,tipo:META.tipo,parte}};
 }
 /* los UUID de un cliente (o de todos) se bajan la primera vez que hacen falta; van en u|RFC (y q|RFC para p|RFC) */
-const uDe=id=>(id[0]==='k'?'u':'q')+id.slice(1);
 async function cargaUuids(rfcs){
   const ids=[];
   rfcs.forEach(r=>{ if(!UUID_OK.has(r)) ['k|','p|'].forEach(t=>{ if(RANGO[t+r]) ids.push(t+r); }); });
   if(!ids.length) return false;
-  const objs={}, faltan=[];
-  for(const id of ids){ const o=await cacheDe(uDe(id),K_FIRMA[id]); if(o) objs[id]=o; else faltan.push(id); }
-  if(faltan.length){
-    const docs=await bajaDocs(faltan.map(uDe));
-    for(const id of faltan){ const d=docs[uDe(id)]; if(!d||d.firma!==K_FIRMA[id]) continue;
-      const o=await desb64(d.b64); objs[id]=o; CACHE.set(uDe(id),{firma:d.firma,obj:o}); }
-  }
+  const objs=await traeUuids(ids,id=>K_FIRMA[id]);
   let viejo=false; const listos=new Set();
   for(const id of ids){
     const u=objs[id], [a,b]=RANGO[id];
     // si los UUID ya son de una actualización más nueva que la del cliente, se recarga todo
     if(!u||u.length!==b-a){ viejo=true; continue; }
     for(let i=a;i<b;i++){ ROWS[i].uuid=u[i-a]||''; D.f[i][9]=ROWS[i].uuid; }
+    if(a<b) UIDX.delete(ROWS[a].cli);
     listos.add(id);
   }
   rfcs.forEach(r=>{ if(['k|','p|'].every(t=>!RANGO[t+r]||listos.has(t+r))) UUID_OK.add(r); });
+  if(!ARMANDO) guardaYa();
   if(listos.size&&typeof satAplica==='function') satAplica();   // con los folios fiscales se reconocen las canceladas en el SAT
   if(listos.size&&typeof aplLimpia==='function') aplLimpia();   // con los folios fiscales se reconoce lo que ya se decidió
   if(viejo) setTimeout(()=>arranca(true).catch(()=>{}),0);
   return true;
 }
+/* los folios fiscales (u|RFC o q|RFC) de esos documentos: lo ya traído al abrir, lo guardado y lo que falte (la pieza común) */
+const traeUuids=(ids,firmaDe)=>CD.traeUuids(SB,ids,firmaDe,id=>K_N[id]);
 let TODOS_UUID=null;
 const pareceUuid=q=>/^[0-9a-f-]{6,}$/i.test(q)&&/[a-f]/i.test(q)&&/\d/.test(q)&&q.length>=8;
 function aplica(meta,filas,extra){
@@ -1345,17 +1313,32 @@ function aplica(meta,filas,extra){
 }
 let CARGADA=null;
 async function arranca(recarga){
+  ARMANDO=true;
+  try{ return await arrancaYa(recarga); }finally{ ARMANDO=false; guardaYa(); }
+}
+async function arrancaYa(recarga){
   const v=document.getElementById('vista');
   const avance=(n,t)=>{ if(!recarga) v.innerHTML='<div class="loading">Cargando cartera… '+n+' de '+t+' clientes</div>'; };
-  const r=await cargaCartera(avance);
+  // 11-nov-2026 (Héctor Daniel Nava: «más rápido»): lo que se pide a la base (marcas, aplicaciones, lo de Centauro y las
+  // canceladas) sale al mismo tiempo que la cartera, y los folios fiscales que esas respuestas van a necesitar se traen
+  // mientras baja la cartera. Lo que se aplica y en qué orden no cambia.
+  const pre=CD.pideTodo(SB);
+  pre.uuids=async fs=>{
+    const [qm,qa,qs]=await Promise.all([pre.marcas,pre.apl,pre.sat]);
+    const ids=[]; CD.rfcsQueUsan(qm,qa,qs).forEach(r=>['k|','p|'].forEach(t=>{ if(fs[t+r]) ids.push(t+r); }));
+    try{ await traeUuids(ids,id=>fs[id]); }catch(e){}
+  };
+  const r=await cargaCartera(avance,pre);
   if(!r){ v.innerHTML='<div class="empty">Todavía no hay datos de la cartera. Llegan con la próxima actualización del portal.</div>'; return; }
   if(recarga&&CARGADA===r.meta.id) return;
   const abierto=S.cliente!=null?D.cli[S.cliente][2]:null;
+  // entre paso y paso se le deja respirar al navegador (todo ya llegó: sin esto, todo el armado era un solo bloque largo)
+  const respira=()=>new Promise(res=>setTimeout(res,0));
   aplica(r.meta,r.filas,r.extra); prep(!!recarga); CARGADA=r.meta.id; TODOS_UUID=null;
-  await cargaMarcas(); aplicaMarcas();
-  await cargaApl();
-  await cargaSat();
-  await cargaCan();
+  await respira(); await cargaMarcas(pre.marcas); aplicaMarcas();
+  await respira(); await cargaApl(pre.apl);
+  await cargaSat(pre.sat);
+  await cargaCan(pre.can); await respira();
   if(!recarga) restauraFiltros();
   // con datos nuevos cambian los números de las contrapartes: el filtro de cliente o proveedor de la ventana se quita
   if(abierto){ const i=D.cli.findIndex(c=>c[2]===abierto); S.cliente=i>=0?i:null; S.doc=null; if(S.mf) S.mf.cps=new Set(); quitaVF();
@@ -1381,8 +1364,7 @@ function avisaArriba(txt){
     SB=window.PORTAL.sb; YO=window.PORTAL.perfil;
     const q=await SB.rpc('veo_cartera'); ALCANCE=q.error?null:q.data;
     if(!ALCANCE){ v.innerHTML='<div class="empty">Tu usuario no tiene acceso a la cartera. Si lo necesitas, pídeselo a Daniel.</div>'; return; }
-    const dueno=await CACHE.get('__usuario');
-    if(dueno!==YO.id){ await CACHE.borra(); await CACHE.set('__usuario',YO.id); }
+    await CD.dueno(YO.id);
     try{ const a=new URLSearchParams(location.search).get('abre'); if(a&&/^(\d{1,12}|ver:[a-z-]{1,40})$/.test(a)) ABRE_PEND=a; }catch(e){}
     if(window.PROFASE_OCULTOS){ await window.PROFASE_OCULTOS.carga(); window.PROFASE_OCULTOS.alCambiar(()=>{ if(CARGADA){ S.doc=null; render(); } }); }
     await arranca(false);
@@ -2641,15 +2623,15 @@ let ABRE_PEND=null, EXC=null, VIG=null;
 const yoMarco=()=>ESTC.ok&&!!ESTC.puede.marcar&&!(window.PORTAL&&window.PORTAL.consulta);
 const yoApruebo=()=>yoMarco()&&!!ESTC.puede.aprobar;
 const rfcDe=r=>D.cli[r.cli][2];
-const viva=m=>m.estado==='aprobada'||m.estado==='por_aprobar';
+const viva=CD.viva;
 const stDe=m=>m.estatus==='fuera'?(m.estado==='por_aprobar'?'por_aprobar':'fuera'):m.estatus==='estrategia'?'estrategia':'normal';
 const cuando=x=>{ try{ return window.PROFASE_HORA?window.PROFASE_HORA.fechaHora(x):fmtD(String(x).slice(0,10)); }catch(e){ return ''; } };
 const msgErr=e=>String((e&&(e.message||e.details||e.hint))||e||'No se pudo').replace(/^.*?ERROR:\s*/,'');
 // ¿puede quitarle a esta marca su estatus? (la base lo vuelve a revisar)
 const quitaMarca=m=>!!m&&yoMarco()&&(yoApruebo()||m.mia||m.estatus==='estrategia');
 
-async function cargaMarcas(){
-  let q; try{ q=await SB.rpc('cartera_marcas'); }catch(e){ q={error:e}; }
+async function cargaMarcas(pq){
+  let q; try{ q=await (pq||SB.rpc('cartera_marcas')); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ ESTC.ok=false; ESTC.reglas={}; ESTC.porUuid=new Map(); ESTC.porRfc=new Map(); return false; }
   const d=q.data; ESTC.ok=true; ESTC.puede=d.puede||{}; ESTC.reglas={}; (d.reglas||[]).forEach(r=>{ ESTC.reglas[r.clave]=r; });
   ESTC.marcas=d.marcas||[]; ESTC.firma=d.firma||null; ESTC.porUuid=new Map(); ESTC.porRfc=new Map();
@@ -3359,8 +3341,8 @@ window.__carCierra=function(){ if(document.getElementById('modal')) cierraOv(); 
    Lo que todavía no se revisa en el SAT sigue sumando como siempre. ── */
 const SAT={ok:false,can:new Map(),rel:new Map(),sust:new Map(),relDe:new Map()};   // lo sin saldo y Sincronizados: en «Canceladas» (311)
 const REL_APL=new Set(['01','02','03','07']);   // nota de crédito, de débito, devolución y aplicación de anticipo
-async function cargaSat(){
-  let q; try{ q=await SB.rpc('cartera_sat',{p:{modo:'canceladas'}}); }catch(e){ q={error:e}; }
+async function cargaSat(pq){
+  let q; try{ q=await (pq||SB.rpc('cartera_sat',{p:{modo:'canceladas'}})); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ SAT.ok=false; return false; }
   SAT.ok=true; SAT.can=new Map();
   (q.data.canceladas||[]).forEach(x=>{ let m=SAT.can.get(x.rfc); if(!m) SAT.can.set(x.rfc,m=new Map()); m.set(String(x.uuid||'').toUpperCase(),x); });
@@ -3370,10 +3352,18 @@ async function cargaSat(){
   satAplica();
   return true;
 }
+/* 11-nov-2026 (Héctor Daniel Nava: «más rápido»): antes recorría los ~183 mil documentos cada vez (y al abrir se llamaba
+   varias veces); ahora va directo a cada cancelada por su folio (uIdx) y regresa las que ya no lo están. Mismo resultado. */
+let SAT_MARC=new Set(), SAT_MARC_DE=null;
 function satAplica(){
   let n=0;
-  ROWS.forEach(r=>{ const m=SAT.can.get(r.rfcCli), x=m&&r.uuid?m.get(r.uuid.toUpperCase()):null, v=x&&r.est!=='Cancelada'?x:null;
-    if(v!==r.satCan){ r.satCan=v; n++; } });
+  if(SAT_MARC_DE!==ROWS){ SAT_MARC=new Set(); SAT_MARC_DE=ROWS; }
+  const nuevas=new Map(), cis=new Map(); D.cli.forEach((c,ci)=>{ if(c) cis.set(c[2],ci); });
+  SAT.can.forEach((m,rfc)=>{ const ci=cis.get(rfc); if(ci==null) return; const ix=uIdx(ci);
+    m.forEach((x,u)=>{ const rs=ix.get(u); if(rs) rs.forEach(r=>{ if(r.rfcCli===rfc&&r.est!=='Cancelada') nuevas.set(r,x); }); }); });
+  SAT_MARC.forEach(r=>{ if(!nuevas.has(r)&&r.satCan!==null){ r.satCan=null; n++; } });
+  nuevas.forEach((x,r)=>{ if(r.satCan!==x){ r.satCan=x; n++; } });
+  SAT_MARC=new Set(nuevas.keys());
   if(n&&typeof aplLimpia==='function') aplLimpia();
   return n;
 }
@@ -3384,6 +3374,15 @@ function satAplica(){
 // los documentos de cada empresa, en el mismo orden de ROWS (10-nov-2026: antes cada empresa recorría todos los documentos
 // de la cartera, y con todas las empresas eso trababa la página); se arma una vez por cada carga de la cartera
 let FCLI=null, FCLI_DE=null;
+/* folio fiscal (en mayúsculas) → sus documentos, por empresa; se arma la primera vez que hace falta y se rehace cuando
+   llegan sus folios (cargaUuids) o una carga nueva de la cartera */
+let UIDX=new Map(), UIDX_DE=null;
+function uIdx(ci){
+  if(UIDX_DE!==ROWS){ UIDX=new Map(); UIDX_DE=ROWS; }
+  let m=UIDX.get(ci); if(m) return m; m=new Map();
+  for(const r of filasDe(ci)) if(r.uuid){ const k=r.uuid.toUpperCase(), a=m.get(k); if(a) a.push(r); else m.set(k,[r]); }
+  UIDX.set(ci,m); return m;
+}
 function filasDe(ci){
   if(FCLI_DE!==ROWS){ FCLI=new Map(); for(const r of ROWS){ let a=FCLI.get(r.cli); if(!a) FCLI.set(r.cli,a=[]); a.push(r); } FCLI_DE=ROWS; }
   return FCLI.get(ci)||[];
@@ -3593,8 +3592,8 @@ function cenCanceladas(){ try{ const b=window.top.document.querySelector('.vsw b
    novena excepción no pasa a la Cartera). No cambia ningún monto: lo cancelado ya no sumaba. ── */
 const CAN={ok:false,emp:new Map(),det:new Map(),pide:new Map(),err:new Set()};
 let CAN_PG=null, CAN_VIS=[], CAN_DOC=new Map(), CAN_AYUDA=false;
-async function cargaCan(){
-  let q; try{ q=await SB.rpc('cartera_can',{p:{}}); }catch(e){ q={error:e}; }
+async function cargaCan(pq){
+  let q; try{ q=await (pq||SB.rpc('cartera_can',{p:{}})); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ CAN.ok=false; return false; }
   CAN.ok=true; CAN.emp=new Map((q.data.empresas||[]).map(x=>[x.rfc,x])); CAN.det=new Map(); CAN.err=new Set();
   return true;
@@ -4051,8 +4050,8 @@ function aplSuma(rows){
   return o;
 }
 const yoApl=()=>APL.ok&&!!APL.puede.cambiar&&!(window.PORTAL&&window.PORTAL.consulta);
-async function cargaApl(){
-  let q; try{ q=await SB.rpc('cartera_apl'); }catch(e){ q={error:e}; }
+async function cargaApl(pq){
+  let q; try{ q=await (pq||SB.rpc('cartera_apl')); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ APL.ok=false; APL.dec=new Map(); APL.pp=new Set(); APL.porRfc=new Map(); aplLimpia(); return false; }
   const d=q.data; APL.ok=true; APL.puede=d.puede||{}; APL.firma=d.firma||null; APL.dec=new Map(); APL.porRfc=new Map();
   // 263: m = cuánto se aplica en esa relación (lo guardó «Agotar»; sin m, lo que alcance) y o = 'agotar'; pp = las empresas
