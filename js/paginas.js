@@ -15,7 +15,9 @@
      cambio: function () { … } // vuelve a pintar la tabla
    });
    pg.corta(lista)   // la página que toca de esa lista (y pinta los controles)
-   pg.inicio()       // regresa a la página 1 (al buscar o filtrar) */
+   pg.inicio()       // regresa a la página 1 (al buscar o filtrar)
+   pg.nombre('Clientes')   // (11-nov-2026) cambia lo que cuenta, cuando la misma tabla se ve de otra forma (WorkFlow › Panel
+                           // de trabajo: «Ver: Por cliente / Por actividad») */
 (function () {
   'use strict';
   if (window.PROFASE_PAGINAS) return;
@@ -88,7 +90,8 @@
       guarda(o.clave, tam);
       if (o.cambio) o.cambio();
     });
-    return { corta: corta, inicio: function () { p = 1; } };
+    return { corta: corta, inicio: function () { p = 1; },
+      nombre: function (t) { o.nombre = t; el.setAttribute('aria-label', 'Páginas de ' + String(t || 'la tabla').toLowerCase()); } };
   }
 
   window.PROFASE_PAGINAS = { crea: crea, tamanos: TAMS.slice() };

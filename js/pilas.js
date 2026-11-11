@@ -213,6 +213,10 @@
       r = m.getBoundingClientRect();
       var W = window.innerWidth || document.documentElement.clientWidth;
       if (r.right > W - 8) { m.style.left = 'auto'; m.style.right = '0'; }
+      // 11-nov-2026: si no cabe pegado a ningún lado del botón (el celular, con el botón a media barra), se acomoda dentro
+      // de la pantalla (antes quedaba 28 px fuera, a la izquierda, en Variaciones a 390 px)
+      r = m.getBoundingClientRect();
+      if (r.left < 8 || r.right > W - 8) { m.style.right = 'auto'; m.style.left = Math.round(8 - w.getBoundingClientRect().left) + 'px'; }
     }
     function abre(v) {
       m.hidden = !v; b.setAttribute('aria-expanded', String(!!v));

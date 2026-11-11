@@ -31,7 +31,22 @@
      enlaza: function (scrim) {…}    // para lo propio de la página (botones de «antes», «despues» o «detalles»)
    });
    Cada comentario: {id, por, porNombre, ts (a la vista), tsISO, texto, editado, de, est, legado}.
-   v.cerrar(); v.scrim; v.pie('texto'). */
+   v.cerrar(); v.scrim; v.pie('texto').
+
+   Para una ficha de trabajo más grande (11-nov-2026, WorkFlow › Panel de trabajo, pedido de Fernando Cadengo: «sí, así es,
+   A»; con ideas de la propuesta #19 de Gabriel Cavazos), todo opcional y sin cambiar lo de arriba:
+     ancho: true,                    // dos columnas en computadora y iPad acostado (a la izquierda qué es y cómo va; a la
+                                     // derecha lo que se trabaja); en pantallas más chicas, una sola columna
+     pestanas: [{id, t, html o nodo, nid}],   // pestañas a la derecha; «Comentarios» (la plática) va primero solo; nid: el id
+                                     // del número de la pestaña, para que la página lo ponga al día
+     pestana: 'id',                  // la que se ve al abrir (si no, Comentarios)
+     bajoResumen: '<html>',          // lo que va justo abajo del resumen (con ancho o pestañas)
+     alPestana: function (id) {…},   // al cambiar de pestaña
+     estatus: {..., lista: [{id, t, cls: 'ok'|'mal'|'sin'|''}], regla: function (actual, nuevo) { return 'por qué no' || null; },
+               ayuda: [['Estatus', 'qué quiere decir'], …]}   // estatus propios de la pantalla (si no, los 5 de Reportes)
+     platica: {..., titulo: 'Comentarios', pie: 'texto bajo el cuadro', oculto: 'texto en lugar de la plática'},
+     alEsc: function () { return true si la página ya usó el Esc (una ventana suya encima) }
+   y además: v.platica({hilo, puede, yo, oculto}) para ponerla cuando llega; v.pestana('id'); v.cual(); v.sucio(). */
 (function () {
   'use strict';
   if (window.PROFASE_SEG) return;
@@ -137,11 +152,11 @@
      los tres reportes, aunque cada página tenga los suyos */
   var TOK = '--sg-sf:#ffffff;--sg-sf2:#f5f7fa;--sg-sf3:#eef1f5;--sg-ln:#dde3ea;--sg-ln2:#c9d2dd;--sg-ink:#131f2d;--sg-ink2:#3d4c5e;'
     + '--sg-ink3:#617285;--sg-ink4:#7f8d9e;--sg-ac:#1F3864;--sg-ac2:#2a5aa6;--sg-acs:#e6ecf6;--sg-na:#F07A1E;--sg-na2:#b85509;'
-    + '--sg-nas:#fdf0e6;--sg-nab:rgba(240,122,30,.38);--sg-quo:#0b7480;--sg-quos:#e2f3f5;--sg-ok:#1b7a52;--sg-oks:#e1f2ea;'
+    + '--sg-nas:#fdf0e6;--sg-nab:rgba(240,122,30,.38);--sg-quo:#0b7480;--sg-quos:#e2f3f5;--sg-ok:#1b7a52;--sg-oks:#e1f2ea;--sg-rd:#b42318;--sg-rds:#fdecea;'
     + '--sg-scrim:rgba(12,22,34,.55);--sg-sh:0 30px 60px -24px rgba(12,22,34,.45);';
   var TOK_OSC = '--sg-sf:#16202b;--sg-sf2:#1c2733;--sg-sf3:#223040;--sg-ln:#2c3b4c;--sg-ln2:#3a4b5e;--sg-ink:#e8eef4;--sg-ink2:#b3c1cf;'
     + '--sg-ink3:#8c9cad;--sg-ink4:#6f8092;--sg-ac:#3d7fd0;--sg-ac2:#7fb2ee;--sg-acs:#1d2c44;--sg-na:#ff9247;--sg-na2:#ffae74;'
-    + '--sg-nas:rgba(255,146,71,.13);--sg-nab:rgba(255,146,71,.42);--sg-quo:#34d6ec;--sg-quos:rgba(52,214,236,.13);--sg-ok:#4fc28c;--sg-oks:rgba(79,194,140,.13);'
+    + '--sg-nas:rgba(255,146,71,.13);--sg-nab:rgba(255,146,71,.42);--sg-quo:#34d6ec;--sg-quos:rgba(52,214,236,.13);--sg-ok:#4fc28c;--sg-oks:rgba(79,194,140,.13);--sg-rd:#f2867b;--sg-rds:rgba(242,134,123,.14);'
     + '--sg-scrim:rgba(2,8,14,.74);--sg-sh:0 30px 60px -20px rgba(0,0,0,.7);';
   var CSS = ''
     + '.segv,.sg-pill{' + TOK + '}'
@@ -257,6 +272,27 @@
     + '.segv .sg-dl dt{color:var(--sg-ink3)}'
     + '.segv .sg-dl dd{margin:0;color:var(--sg-ink);overflow-wrap:anywhere}'
     + '@media (max-width:520px){.segv .sg-dl{grid-template-columns:1fr;gap:0}.segv .sg-dl dd{margin-bottom:8px}}'
+    + '.segv .seg-act.mal,.sg-pill.mal{background:var(--sg-rds);color:var(--sg-rd);border-color:var(--sg-rd)}'
+    + '.segv .opt.mal.on{border-color:var(--sg-rd);background:var(--sg-rds);color:var(--sg-rd)}'
+    // la ficha ancha (11-nov-2026, WorkFlow › Panel de trabajo): dos columnas que se deslizan cada una; abajo de 900 px, una
+    + '.sg-modal.sg-ancho{max-width:1180px}'
+    + '.segv .sg-tabs{display:flex;gap:0 18px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--sg-ln);flex:none}'
+    + '.segv .sg-tabs::-webkit-scrollbar{display:none}'
+    + '.segv .sg-tab{flex:none;display:inline-flex;align-items:center;gap:6px;border:0;border-bottom:2px solid transparent;background:none;padding:10px 0 9px;'
+    + 'font:inherit;font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sg-ink3);cursor:pointer;white-space:nowrap}'
+    + '.segv .sg-tab:hover{color:var(--sg-ink)}'
+    + '.segv .sg-tab[aria-selected="true"]{color:var(--sg-ink);border-bottom-color:var(--sg-na)}'
+    + '.segv .sg-tab i{font-style:normal;font-weight:600;letter-spacing:0;color:var(--sg-ink4)}'
+    + '.segv .sg-tab i:empty{display:none}'
+    + '.segv .sg-pan{padding-top:14px}'
+    + '.segv .sg-pan>.seg-sec:first-child{margin-top:0}'
+    + '@media (min-width:900px){.sg-modal.sg-ancho{height:min(90vh,880px)}'
+    + '.sg-modal.sg-ancho .sg-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);padding:0;overflow:hidden;flex:1 1 auto;min-height:0}'
+    + '.segv .sg-col{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 22px}'
+    + '.segv .sg-col.sg-der{display:flex;flex-direction:column;padding:0;border-left:1px solid var(--sg-ln);overflow:hidden}'
+    + '.segv .sg-der .sg-tabs{padding:4px 22px 0}'
+    + '.segv .sg-der .sg-pans{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 18px}}'
+    + '@media (max-width:899px){.segv .sg-col.sg-der{margin-top:18px}.segv .sg-der .sg-tabs{position:sticky;top:-20px;z-index:1;background:var(--sg-sf)}}'
     + '@media (max-width:560px){.segv{padding:8px;align-items:flex-end}.sg-modal{max-height:94vh}.sg-head,.sg-body,.sg-foot{padding-left:16px;padding-right:16px}'
     + '.sg-x.seg-fl{width:32px;height:32px}.segv .seg-pie{flex-basis:100%}}';
 
@@ -274,8 +310,20 @@
       host = document.getElementById('segvHost');
       if (!host) { host = document.createElement('div'); host.id = 'segvHost'; document.body.appendChild(host); }
     }
-    var est = o.estatus || null, actual = est ? (est.actual || 'sin_respuesta') : null, elegido = actual;
+    var est = o.estatus || null, LST = est && est.lista ? est.lista : null;
+    var actual = est ? (LST ? String(est.actual) : (est.actual || 'sin_respuesta')) : null, elegido = actual;
     var pl = o.platica || {}, hilo = (pl.hilo || []).slice();
+    var ancho = !!o.ancho, TABS = o.pestanas && o.pestanas.length ? o.pestanas : null;
+    // estatus propios de la pantalla (lista) o los 5 de Reportes
+    var clsE = function (id) {
+      if (!LST) return cls(id);
+      var e = LST.filter(function (x) { return String(x.id) === String(id); })[0]; return e && e.cls ? ' ' + e.cls : '';
+    };
+    var reglaE = function (a, n) {
+      if (!LST) return regla(a, n, est.gc);
+      return String(a) === String(n) ? null : (est.regla ? est.regla(a, n) : null);
+    };
+    var AYU = LST ? (est.ayuda || null) : AYUDA;
     var nav = o.nav || null;
     var hayNav = !!(nav && nav.total);
     var bEst = !est || !est.puede, bCom = !pl.puede, soloVer = bEst && bCom;
@@ -284,27 +332,62 @@
     var estHTML = '';
     if (est) {
       estHTML = '<div class="seg-sec"><b>' + esc(est.titulo || 'Estatus de revisión') + '</b>'
-        + '<button class="sg-q" type="button" data-ayuda aria-expanded="false" title="Qué significa cada estatus">?</button></div>'
-        + '<div class="sg-ayuda" data-ayuda-txt hidden><dl>'
-        + AYUDA.map(function (a) { return '<dt>' + esc(a[0]) + '</dt><dd>' + esc(a[1]) + '</dd>'; }).join('')
-        + '<dt>Comentarios</dt><dd>Qué se revisó, qué soporte se pidió o se tiene y a qué conclusión se llegó. Cada uno queda aparte con quién lo escribió, la fecha y la hora; el tuyo lo puedes corregir o borrar en los primeros ' + MIN + ' minutos.</dd>'
-        + '</dl>' + (est.ayudaPie ? '<p>' + esc(est.ayudaPie) + '</p>' : '') + '</div>'
-        + '<div class="opts" data-eje="i">' + opciones().map(function (e) {
-          var m = est.puede ? regla(actual, e.id, est.gc) : '', dis = !est.puede || !!m;
-          return '<button type="button" class="opt i' + cls(e.id) + (actual === e.id ? ' on' : '') + '" data-v="' + e.id + '"'
+        + (AYU ? '<button class="sg-q" type="button" data-ayuda aria-expanded="false" title="Qué significa cada estatus">?</button>' : '') + '</div>'
+        + (AYU ? '<div class="sg-ayuda" data-ayuda-txt hidden><dl>'
+          + AYU.map(function (a) { return '<dt>' + esc(a[0]) + '</dt><dd>' + esc(a[1]) + '</dd>'; }).join('')
+          + (LST ? '<dt>Comentarios</dt><dd>Cada uno queda aparte con quién lo escribió, la fecha y la hora; el tuyo lo puedes corregir o borrar en los primeros ' + MIN + ' minutos.</dd>'
+            : '<dt>Comentarios</dt><dd>Qué se revisó, qué soporte se pidió o se tiene y a qué conclusión se llegó. Cada uno queda aparte con quién lo escribió, la fecha y la hora; el tuyo lo puedes corregir o borrar en los primeros ' + MIN + ' minutos.</dd>')
+          + '</dl>' + (est.ayudaPie ? '<p>' + esc(est.ayudaPie) + '</p>' : '') + '</div>' : '')
+        + '<div class="opts" data-eje="i">' + (LST || opciones()).map(function (e) {
+          var v = String(e.id), m = est.puede ? (e.bloq || reglaE(actual, e.id)) : '', dis = !est.puede || !!m;
+          if (String(actual) === v) { m = ''; dis = !est.puede; }
+          return '<button type="button" class="opt i' + clsE(e.id) + (String(actual) === v ? ' on' : '') + '" data-v="' + esc(v) + '"'
             + (dis ? ' disabled' : '') + (m ? ' title="' + esc(m) + '" data-bloq="' + esc(m) + '"' : '') + '>' + esc(e.t) + OK + '</button>';
         }).join('') + '</div>'
-        + '<p class="bloq" data-bloq-txt>' + esc(est.nota ? est.nota(actual, est.puede) : notaEst(actual, est.puede)) + '</p>';
+        + '<p class="bloq" data-bloq-txt>' + esc(est.nota ? est.nota(actual, est.puede) : LST ? '' : notaEst(actual, est.puede)) + '</p>';
     }
     var nCuantos = hayNav ? ' · ' + NUM.format(nav.pos) + ' de ' + NUM.format(nav.total) + (nav.donde ? ' ' + nav.donde : '') : '';
+    function hiloDentro() { return pl.oculto ? '<p class="sg-hint">' + esc(pl.oculto) + '</p>' : hiloHTML(hilo, pl, todos); }
+    function escribeHTML() {
+      if (pl.oculto) return '';
+      return !pl.puede ? '<p class="sg-hint" style="margin-top:10px">' + esc(pl.noPuede || 'Aquí solo se ve.') + '</p>'
+        : '<label class="sg-lb" for="sCom">Agregar comentario</label>'
+          + '<textarea class="sg-in" id="sCom" rows="2" placeholder="' + esc(pl.ph || 'Qué se revisó, qué soporte se pidió o se tiene y a qué conclusión se llegó') + '"></textarea>'
+          + '<p class="sg-hint" style="margin-top:6px">' + (pl.pie ? esc(pl.pie)
+            : 'Se guarda con tu nombre y la hora. El tuyo lo puedes corregir o borrar ' + MIN + ' minutos; nadie borra el de otro.'
+              + ' A quienes ya comentaron les llega el aviso.') + (conTecla ? ' Ctrl+Enter guarda.' : '') + '</p>';
+    }
+    var todos = false;
+    var izqHTML = (o.nota ? '<p class="seg-nuevo">' + esc(o.nota) + '</p>' : '')
+      + (o.antes || '')
+      + '<div class="seg-res">' + (o.resumen || '') + '</div>'
+      + (o.bajoResumen || '')
+      + (o.queHacer ? '<div class="seg-que"><b>Qué hacer</b><div>' + o.queHacer + '</div></div>' : '')
+      + estHTML
+      + '<div data-despues></div>';
+    var platHTML = '<div class="seg-sec"><b>' + esc(pl.titulo || 'Comentarios') + ' · <span data-ncom>' + NUM.format(hilo.length) + '</span></b><span class="sg-hint">del más viejo al más nuevo</span></div>'
+      + '<div data-hilo>' + hiloDentro() + '</div><div data-escribe>' + escribeHTML() + '</div>';
+    var TODAS = TABS ? [{id: 'com', t: pl.titulo || 'Comentarios', com: true}].concat(TABS) : null;
+    var tab0 = TODAS ? (TODAS.some(function (x) { return x.id === o.pestana; }) ? o.pestana : 'com') : null;
+    var derHTML = !TODAS ? platHTML
+      : '<div class="sg-tabs" role="tablist" aria-label="Lo que se trabaja">' + TODAS.map(function (x) {
+          return '<button type="button" class="sg-tab" role="tab" id="sgt-' + esc(x.id) + '" data-tab="' + esc(x.id) + '" aria-controls="sgp-' + esc(x.id) + '" aria-selected="' + (x.id === tab0) + '">'
+            + esc(x.t) + (x.com ? '<i data-ncom>' + (hilo.length ? NUM.format(hilo.length) : '') + '</i>' : '<i' + (x.nid ? ' id="' + esc(x.nid) + '"' : '') + '>' + (x.n ? NUM.format(x.n) : '') + '</i>') + '</button>';
+        }).join('') + '</div><div class="sg-pans">' + TODAS.map(function (x) {
+          return '<div class="sg-pan" role="tabpanel" id="sgp-' + esc(x.id) + '" aria-labelledby="sgt-' + esc(x.id) + '" data-pan="' + esc(x.id) + '"' + (x.id === tab0 ? '' : ' hidden') + '>'
+            + (x.com ? '<div data-hilo>' + hiloDentro() + '</div><div data-escribe>' + escribeHTML() + '</div>' : typeof x.html === 'string' ? x.html : '') + '</div>';
+        }).join('') + '</div>';
+    var cuerpoHTML = ancho
+      ? '<div class="sg-body"><div class="sg-col">' + izqHTML + (o.detalles || '') + '</div><div class="sg-col sg-der">' + (TODAS ? derHTML : '<div class="sg-pans">' + derHTML + '</div>') + '</div></div>'
+      : TODAS ? '<div class="sg-body">' + izqHTML + '<div class="sg-der">' + derHTML + '</div>' + (o.detalles || '') + '</div>' : null;
     var html = '<div class="segv" role="dialog" aria-modal="true" aria-label="' + esc(o.titulo || 'Seguimiento') + '">'
-      + '<div class="sg-modal">'
+      + '<div class="sg-modal' + (ancho ? ' sg-ancho' : '') + '">'
       + '<div class="sg-head"><div><p class="kick">' + esc((o.kick || '') + nCuantos) + '</p><h2>' + esc(o.titulo || 'Seguimiento de revisión') + '</h2></div>'
       + '<div class="sg-nav">'
       + (hayNav ? '<button type="button" class="sg-x seg-fl" data-nav="-1" title="Anterior" aria-label="Anterior"' + (nav.ant ? '' : ' disabled') + '>‹</button>'
         + '<button type="button" class="sg-x seg-fl" data-nav="1" title="Siguiente" aria-label="Siguiente"' + (nav.sig ? '' : ' disabled') + '>›</button>' : '')
       + '<button type="button" class="sg-x" data-x aria-label="Cerrar ventana">' + X + '</button></div></div>'
-      + '<div class="sg-body">'
+      + (cuerpoHTML !== null ? cuerpoHTML : '<div class="sg-body">'
       + (o.nota ? '<p class="seg-nuevo">' + esc(o.nota) + '</p>' : '')
       + (o.antes || '')
       + '<div class="seg-res">' + (o.resumen || '') + '</div>'
@@ -319,7 +402,7 @@
           + '<p class="sg-hint" style="margin-top:6px">Se guarda con tu nombre y la hora. El tuyo lo puedes corregir o borrar ' + MIN + ' minutos; nadie borra el de otro.'
           + ' A quienes ya comentaron les llega el aviso.' + (conTecla ? ' Ctrl+Enter guarda.' : '') + '</p>')
       + (o.detalles || '')
-      + '</div>'
+      + '</div>')
       + '<div class="sg-foot"><span class="seg-pie" id="sSaved">' + esc(o.sinGuardar ? o.sinGuardar : soloVer ? '' : 'Nada que guardar todavía') + '</span>'
       + '<div class="sg-acts"><button type="button" class="sg-b2" data-cancelar>Cerrar</button>'
       + (soloVer ? '' : '<button type="button" class="sg-b2" id="sOk" disabled>Guardar</button>')
@@ -331,6 +414,8 @@
     var despues = q('[data-despues]');
     if (o.despues) { if (typeof o.despues === 'string') despues.innerHTML = o.despues; else despues.appendChild(o.despues); }
     else despues.remove();
+    // las pestañas que la página da como nodo
+    if (TODAS) TODAS.forEach(function (x) { if (x.html && typeof x.html !== 'string') q('[data-pan="' + x.id + '"]').appendChild(x.html); });
 
     var av = q('#sSaved'), ok = q('#sOk'), sg = q('#sSig'), txt = q('#sCom'), hiloBox = q('[data-hilo]');
     var todos = false, avisado = false, ocupado = false, tic = null, cerrado = false;
@@ -346,10 +431,32 @@
     }
     function pintaHilo() {
       if (o.hiloDe) hilo = (o.hiloDe() || []).slice();
-      hiloBox.innerHTML = hiloHTML(hilo, pl, todos);
-      var n = q('[data-ncom]'); if (n) n.textContent = NUM.format(hilo.length);
+      hiloBox.innerHTML = pl.oculto ? '<p class="sg-hint">' + esc(pl.oculto) + '</p>' : hiloHTML(hilo, pl, todos);
+      var n = q('[data-ncom]'); if (n) n.textContent = TODAS && !hilo.length ? '' : NUM.format(hilo.length);
       ponFotos(hiloBox);
     }
+    // la plática que llega después de abrir (la página la pide a la base): se pinta con quién puede escribir
+    function ponPlatica(n) {
+      n = n || {};
+      ['hilo', 'puede', 'yo', 'oculto', 'noPuede'].forEach(function (k) { if (k in n) pl[k] = n[k]; });
+      hilo = (pl.hilo || []).slice();
+      var guardado = txt ? txt.value : '';
+      var es = q('[data-escribe]');
+      if (es) {
+        es.innerHTML = escribeHTML();
+        txt = q('#sCom');
+        if (txt) { txt.value = guardado; enlazaTxt(); }
+      }
+      pintaHilo(); arrancaTic(); repinta();
+    }
+    function pestana(id) {
+      if (!TODAS) return;
+      [].forEach.call(scrim.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === id)); });
+      [].forEach.call(scrim.querySelectorAll('[data-pan]'), function (x) { x.hidden = x.getAttribute('data-pan') !== id; });
+      var pans = q('.sg-pans'); if (pans) pans.scrollTop = 0;
+      if (o.alPestana) o.alPestana(id);
+    }
+    function cual() { var b = q('[data-tab][aria-selected="true"]'); return b ? b.getAttribute('data-tab') : ''; }
     function cerrar() {
       if (cerrado) return; cerrado = true;
       if (tic) clearInterval(tic);
@@ -379,6 +486,7 @@
     }
     function alTeclado(ev) {
       if (ev.key !== 'Escape' || !document.body.contains(scrim)) return;
+      if (o.alEsc && o.alEsc() === true) return;
       ev.stopPropagation();
       if (conf) { quitaConf(); if (txt) txt.focus(); } else pideCerrar();
     }
@@ -396,12 +504,15 @@
     });
     ponFotos(hiloBox);
     // los minutos para corregir o borrar lo propio corren solos mientras la ventana está abierta
-    if (hilo.some(function (c) { return quedaMin(c, pl.yo) > 0; })) {
+    function arrancaTic() {
+      if (tic || cerrado || !hilo.some(function (c) { return quedaMin(c, pl.yo) > 0; })) return;
       tic = setInterval(function () {
         if (!hiloBox.querySelector('textarea')) pintaHilo();
         if (!hilo.some(function (c) { return quedaMin(c, pl.yo) > 0; })) { clearInterval(tic); tic = null; }
       }, 30000);
     }
+    arrancaTic();
+    if (TODAS) scrim.addEventListener('click', function (ev) { var b = ev.target.closest('[data-tab]'); if (b && scrim.contains(b)) pestana(b.getAttribute('data-tab')); });
     hiloBox.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-todos]')) { todos = true; pintaHilo(); return; }
       var caja = ev.target.closest('.seg-c'); if (!caja) return;
@@ -447,12 +558,13 @@
         repinta();
       });
     }
-    if (txt) {
+    function enlazaTxt() {
       txt.addEventListener('input', repinta);
       txt.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && ok && !ok.disabled) { ev.preventDefault(); ok.click(); }
       });
     }
+    if (txt) enlazaTxt();
     function corre(siguiente) {
       if (!sucio()) { cerrar(); if (o.alGuardar) o.alGuardar(); if (siguiente && nav && nav.ir) nav.ir(1); return; }
       ocupado = true;
@@ -483,7 +595,8 @@
     if (o.enlaza) o.enlaza(scrim, {cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; }});
     repinta();
     var f = scrim.querySelector('.sg-body'); if (f) f.scrollTop = 0;
-    return {scrim: scrim, cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; }};
+    return {scrim: scrim, cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; },
+      platica: ponPlatica, pestana: pestana, cual: cual, sucio: pendiente};
   }
   function notaEst(actual, puede) {
     if (!puede) return 'El estatus lo cambian la Gerencia Contable y los contadores de este cliente.';
