@@ -1044,13 +1044,23 @@ details.hist>summary{width:auto}
     var txt = !r.tipo ? '<div class="vacio">Sin capturar: al depositarle una devolución, a quien factura le llega el aviso de que falta.</div>'
       : '<dl class="datos">' + dato('Se cobra', r.tipo === 'fijo' ? dinero(r.valor) + ' más IVA por devolución (cantidad fija)' : r.valor + ' % del monto devuelto, más IVA')
         + (r.nota ? dato('Nota', r.nota) : '') + dato('Lo capturó', (r.por || '') + (r.actualizado ? ' · ' + fechaHora(r.actualizado) : '')) + '</dl>';
-    z.innerHTML = sec('Devoluciones de IVA', txt + '<div id="dev-cond-f" style="padding:0 14px"></div>', 'lo que se cobra de ' + (r.cia || cia(1)),
+    /* Las de ISR (368, 11-nov-2026; Fernando Cadengo: «depende de el cliente, se empieza con un 15% de lo devuelto hasta lo minimo
+       un 10%»): un porcentaje de lo devuelto, de 10 a 15 %; sin capturar, el de inicio. */
+    var ri = r.isr || null;
+    if (ri) txt += '<div style="padding:10px 14px 0"><b>En las devoluciones de ISR</b></div><dl class="datos">'
+      + dato('Se cobra', ri.pct + ' % de lo devuelto, más IVA' + (ri.capturado ? '' : ' (el de inicio; se puede acordar de ' + ri.min + ' a ' + ri.max + ' %)'))
+      + (ri.capturado && ri.nota ? dato('Nota', ri.nota) : '')
+      + (ri.capturado ? dato('Lo capturó', (ri.por || '') + (ri.actualizado ? ' · ' + fechaHora(ri.actualizado) : '')) : '') + '</dl>'
+      + (r.edita && !CONSULTA ? '<div class="acciones" style="padding:0 14px">' + bt('devIsrEdita', ri.capturado ? 'Cambiar lo de ISR' : 'Acordar otro % en las de ISR', { id: id }) + '</div>' : '')
+      + '<div id="dev-isr-f" style="padding:0 14px"></div>';
+    z.innerHTML = sec(ri ? 'Devoluciones de IVA e ISR' : 'Devoluciones de IVA', txt + '<div id="dev-cond-f" style="padding:0 14px"></div>', 'lo que se cobra de ' + (r.cia || cia(1)),
       r.edita && !CONSULTA ? bt('devEdita', r.tipo ? 'Cambiar' : 'Capturar', { id: id }) : '', 'sec-dev');
     var ind = $('ind-dev');
     if (ind) { ind.outerHTML = '<button type="button" data-ir="sec-dev" aria-current="false"><span>Devoluciones de IVA</span><span class="n">' + (r.tipo ? '' : '<i class="pt ojo" aria-label="sin capturar"></i>') + '</span></button>'; indiceVivo(); }
   }
   function devForma() {
     var r = DEVC || {}, f = $('dev-cond-f'); if (!f) return;
+    var gi = $('dev-isr-f'); if (gi) gi.innerHTML = '';   // una forma a la vez (la de las de ISR se cierra)
     f.innerHTML = '<div class="campos" style="margin-top:10px">'
       + campo({ k: 'dtipo', l: 'Cómo se cobra', t: 'sel', op: [['pct', 'Porcentaje del monto devuelto'], ['fijo', 'Cantidad fija por devolución']] }, r.tipo || 'pct')
       + campo({ k: 'dvalor', l: 'Porcentaje (5 = 5 %) o cantidad en pesos, sin IVA', t: 'num', max: 20 }, r.valor)
@@ -1058,6 +1068,25 @@ details.hist>summary{width:auto}
       + '<div class="msg" id="dev-msg" hidden></div><div class="acciones" style="margin-top:10px">' + bt('devGuarda', 'Guardar', {}, 'acento')
       + (r.tipo ? bt('devQuita', 'Quitar', {}, 'peligro') : '') + bt('devCancela', 'Cancelar', {}) + '</div><div style="height:12px"></div>';
     try { $('z-dvalor').focus(); } catch (e) {}
+  }
+  function devIsrForma() {
+    var r = DEVC || {}, ri = r.isr || {}, f = $('dev-isr-f'); if (!f) return;
+    var g = $('dev-cond-f'); if (g) g.innerHTML = '';   // una forma a la vez (la de las de IVA se cierra)
+    f.innerHTML = '<div class="campos" style="margin-top:10px">'
+      + campo({ k: 'disr', l: 'Porcentaje de lo devuelto (de ' + (ri.min || 10) + ' a ' + (ri.max || 15) + ')', t: 'num', max: 8 }, ri.pct)
+      + campo({ k: 'disrnota', l: 'Nota (opcional)', t: 'area', ancho: true, max: 300 }, ri.capturado ? ri.nota : '') + '</div>'
+      + '<div class="msg" id="dev-isr-msg" hidden></div><div class="acciones" style="margin-top:10px">' + bt('devIsrGuarda', 'Guardar', {}, 'acento')
+      + (ri.capturado ? bt('devIsrQuita', 'Regresar al de inicio', {}, 'peligro') : '') + bt('devIsrCancela', 'Cancelar', {}) + '</div><div style="height:12px"></div>';
+    try { $('z-disr').focus(); } catch (e) {}
+  }
+  async function devIsrGuarda(quitar) {
+    var r = DEVC; if (!r) return;
+    var el = $('dev-isr-msg'), msg = function (c, t) { if (el) { el.className = 'msg ' + c; el.textContent = t; el.hidden = !t; } };
+    var v = quitar ? 0 : Number(String($('z-disr').value).replace(/[%\s]/g, ''));
+    if (!quitar && !(v >= 10 && v <= 15)) { msg('mal', 'Escribe un porcentaje de 10 a 15.'); return; }
+    msg('ojo', 'Guardando…');
+    try { await rpc('cli_dev_cond_guarda', { p_empresa_id: r.id, p: { isr: quitar ? { quitar: true } : { pct: v, nota: $('z-disrnota').value.trim() } } }); avisa('Guardado.'); devCond(r.id); historia(r.id); }
+    catch (e) { msg('mal', falla(e)); }
   }
   function devMsg(clase, t) { var el = $('dev-msg'); if (!el) return; el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; }
   async function devGuarda(quitar) {
@@ -1073,7 +1102,7 @@ details.hist>summary{width:auto}
     try {
       var L = await rpc('cli_historia', { p_empresa_id: id }) || [];
       var NOM = { cli_empresas: 'Datos de la empresa', cli_registros: 'Compañía que la atiende', cli_contadores: 'Contador', cli_contacto_reg: 'Contacto', cli_servicios: 'Servicio', cli_precios: 'Precio',
-                  cli_regimenes: 'Régimen', cli_actividades: 'Actividad', cli_obligaciones: 'Obligación', cli_dev_cond: 'Devoluciones de IVA' };
+                  cli_regimenes: 'Régimen', cli_actividades: 'Actividad', cli_obligaciones: 'Obligación', cli_dev_cond: 'Devoluciones de IVA', cli_dev_isr: 'Devoluciones de ISR' };
       if ($('historia')) $('historia').innerHTML = L.length ? '<ul class="lista">' + L.slice(0, 60).map(function (x) {
         return '<li><div class="t">' + esc((NOM[x.tabla] || x.tabla) + ': ' + x.accion) + '</div><div class="d">' + esc(x.nombre || ({ centauro: 'Centauro (del SAT)', claude: 'Claude' })[x.usuario] || x.usuario) + ' · ' + esc(fechaHora(x.cuando)) + '</div></li>';
       }).join('') + '</ul>' : '<div class="vacio">Sin cambios en el portal (lo de antes viene del Access).</div>';
@@ -1259,6 +1288,10 @@ details.hist>summary{width:auto}
     devGuarda: function () { devGuarda(false); },
     devQuita: function () { devGuarda(true); },
     devCancela: function () { var f = $('dev-cond-f'); if (f) f.innerHTML = ''; },
+    devIsrEdita: function () { devIsrForma(); },
+    devIsrGuarda: function () { devIsrGuarda(false); },
+    devIsrQuita: function () { devIsrGuarda(true); },
+    devIsrCancela: function () { var f = $('dev-isr-f'); if (f) f.innerHTML = ''; },
     emp: function (d) { abreEmpresa(+d.id); },
     grupo: function (d) { abreGrupo(+d.id); },
     zCancela: function () { Z = null; if ($('zona')) $('zona').innerHTML = ''; },
