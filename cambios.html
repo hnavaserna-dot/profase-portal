@@ -138,6 +138,11 @@ button,select,input,textarea{font:inherit;color:inherit}
 .chip.rojo,.chip.bloqueada{background:var(--red-soft);color:var(--red)}
 .chip.nuevo{background:var(--accent);color:#14233F}
 .chip.gris{background:var(--surface-2);color:var(--muted)}
+/* «En qué va» de una petición autorizada (380, 12-nov-2026): se está haciendo / ya quedó */
+.chip.haciendo{background:var(--navy-soft);color:var(--ink);box-shadow:inset 0 0 0 1px var(--band-dim)}
+.chip.haciendo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.chip.quedo{background:var(--ok-soft);color:var(--ok)}
+.item .dec.va{color:var(--muted)}
 .vacio{background:var(--surface);border:1px dashed var(--line-strong);border-radius:12px;padding:22px 16px;color:var(--muted)}
 
 /* Detalle */
@@ -224,7 +229,8 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
 .item.pcad{border-left-color:var(--accent)}.item.pcad.si{border-left-color:var(--ok)}.item.pcad.no{border-left-color:var(--red)}.item.pcad.otro{border-left-color:var(--line-strong)}
 .item .dec{margin-top:8px;font-size:13px;color:var(--ink);overflow-wrap:anywhere}
 .item .dec b{font-weight:700}
-.item .chip.area{white-space:normal;overflow-wrap:anywhere;text-align:left}
+/* la sección que toca, completa y en varios renglones si no cabe (en la lista y en la petición abierta; 12-nov-2026) */
+.chip.area{white-space:normal;overflow-wrap:anywhere;text-align:left}
 .md pre{margin:0 0 10px;overflow-x:auto;background:var(--surface-2);padding:10px 12px;border-radius:8px;font-family:var(--f-mono);font-size:12px;line-height:1.5;white-space:pre}
 .md pre code{background:none;padding:0}
 .frase{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
@@ -466,6 +472,18 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
   var ESTP = { por_decidir: ['Por decidir', 'amarillo'], si: ['Autorizada', 'verde'], no: ['No autorizada', 'rojo'], otro: ['Decidida', 'gris'] };
   function estP(p) { return p.estado === 'por_decidir' ? ESTP.por_decidir : (ESTP[p.sentido] || ESTP.otro); }
   function origen(p) { return p.origen === 'gabo' ? 'Idea de Gabo' : 'Idea de Cadengo'; }
+  // «En qué va» de una autorizada (380; Héctor Daniel Nava, 12-nov-2026: avisarle a Fernando cuando se empieza y cuando queda)
+  function chipVa(p) {
+    return p.avance === 'haciendo' ? '<span class="chip haciendo">Se está haciendo</span>'
+      : p.avance === 'quedo' ? '<span class="chip quedo">Ya quedó ✓</span>' : '';
+  }
+  function lineaVa(p) {
+    if (p.avance === 'haciendo') return 'Se está haciendo' + (p.avance_en ? ' desde ' + hora(p.avance_en) : '') + '.';
+    if (p.avance === 'quedo') return 'Ya quedó' + (p.avance_donde ? ' en ' + p.avance_donde : '') + (p.avance_en ? ' · ' + hora(p.avance_en) : '') + '.';
+    return '';
+  }
+  function puedoIr(k) { try { return !!(k && window.parent && window.parent !== window && window.parent.PORTAL_MENU && window.parent.PORTAL_MENU.ve(k)); } catch (e) { return false; } }
+  function irA(k) { try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU) window.parent.PORTAL_MENU.ir(k); } catch (e) { /* abierta sola */ } }
   function seMovio(p) { return p.actualizada && p.creada && Date.parse(p.actualizada) - Date.parse(p.creada) > 10 * 60000; }
   async function cargaPcad(callado) {
     if (!PCAD || pcargando) return;
@@ -492,17 +510,19 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     document.querySelector('#v-pcad [data-g="pend"]').textContent = 'Por decidir' + (pend.length ? ' (' + pend.length + ')' : '');
     document.querySelector('#v-pcad [data-g="hist"]').textContent = 'Decididas' + (hist.length ? ' (' + hist.length + ')' : '');
     var base = PFILTRO === 'pend' ? pend : hist, q = norm($('q-pc').value);
-    if (q) base = base.filter(function (p) { return norm([p.titulo, p.area, origen(p), p.decision, p.archivo].join(' ')).indexOf(q) >= 0; });
+    if (q) base = base.filter(function (p) { return norm([p.titulo, p.area, origen(p), p.decision, p.archivo, lineaVa(p)].join(' ')).indexOf(q) >= 0; });
     // «Tu trabajo» de la pestaña: cada pila deja la lista con esas (picarla otra vez la quita)
-    var PRED = { nue: function (p) { return p.nueva; }, mov: seMovio, si: function (p) { return p.sentido === 'si'; }, no: function (p) { return p.sentido === 'no'; } };
+    var PRED = { nue: function (p) { return p.nueva; }, mov: seMovio, si: function (p) { return p.sentido === 'si'; }, no: function (p) { return p.sentido === 'no'; },
+      hac: function (p) { return p.avance === 'haciendo'; } };
     var cuenta = function (k) { return base.filter(PRED[k]).length; }, decido = papel() === 'decide' && !P.consulta;
-    if ((PFILTRO === 'pend' ? ['nue', 'mov'] : ['si', 'no', 'nue']).indexOf(PPX) < 0) PPX = '';
+    if ((PFILTRO === 'pend' ? ['nue', 'mov'] : ['si', 'hac', 'no', 'nue']).indexOf(PPX) < 0) PPX = '';
     var pilas = PFILTRO === 'pend'
       ? [{ k: '', t: 'Por decidir', n: base.length, d: quienDecide() ? 'esperan a H\u00e9ctor Daniel Nava' : 'esperan tu «sí» o tu «no»', tono: 'naranja', on: false, tag: decido && base.length ? 'Te toca' : '' },
         { k: 'nue', t: 'Nuevas', n: cuenta('nue'), d: 'no las has leído', tono: 'azul', on: PPX === 'nue' },
         { k: 'mov', t: 'Se actualizaron', n: cuenta('mov'), d: 'Fernando les agregó algo', tono: 'violeta', on: PPX === 'mov' }]
       : [{ k: '', t: 'Decididas', n: base.length, d: 'todas', tono: 'azul', on: false },
         { k: 'si', t: 'Autorizadas', n: cuenta('si'), d: 'les dijo que sí', tono: 'verde', on: PPX === 'si' },
+        { k: 'hac', t: 'Se están haciendo', n: cuenta('hac'), d: 'autorizadas, en construcción', tono: 'azul', on: PPX === 'hac' },
         { k: 'no', t: 'No autorizadas', n: cuenta('no'), d: 'les dijo que no', tono: 'rojo', on: PPX === 'no' },
         { k: 'nue', t: 'Nuevas', n: cuenta('nue'), d: papel() === 'pide' ? 'ya decididas, sin verlas' : 'no las has leído', tono: 'naranja', on: PPX === 'nue' }];
     var l = PPX && PRED[PPX] ? base.filter(PRED[PPX]) : base;
@@ -529,9 +549,10 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     return '<button type="button" class="item pcad' + (p.estado === 'por_decidir' ? '' : ' ' + esc(p.sentido || 'otro')) + '" data-a="' + esc(p.archivo) + '">'
       + '<div class="t"><span class="h">' + esc(p.titulo) + '</span>' + (p.nueva ? '<span class="chip nuevo">Nuevo</span>' : '') + '</div>'
       + '<div class="m">Fernando Cadengo · ' + esc(hora(p.pedida)) + (seMovio(p) ? ' · se actualizó ' + esc(hace(p.actualizada)) : '') + '</div>'
-      + '<div class="chips"><span class="chip ' + e[1] + '">' + e[0] + '</span><span class="chip">' + origen(p) + '</span>'
+      + '<div class="chips"><span class="chip ' + e[1] + '">' + e[0] + '</span>' + chipVa(p) + '<span class="chip">' + origen(p) + '</span>'
       + (p.area ? '<span class="chip gris area">' + esc(p.area) + '</span>' : '') + '</div>'
       + (p.estado !== 'por_decidir' && p.decision ? '<div class="dec"><b>' + (quienDecide() ? 'Decidió:' : 'Decidiste:') + '</b> ' + esc(p.decision) + '</div>' : '')
+      + (lineaVa(p) ? '<div class="dec va">' + esc(lineaVa(p)) + '</div>' : '')
       + '</button>';
   }
   // k: el archivo completo o sus primeros 13 (AAAAMMDD-HHMM, como trae la clave del aviso de la campanita)
@@ -572,15 +593,19 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     }
     var d = PDET = r.data, sec = secciones(d.cuerpo), e = estP(d);
     var dec = sec.list.find(function (x) { return /^lo que decidi[oó] daniel/i.test(x.t); });
+    var va = d.avance ? sec.list.find(function (x) { return /^en qu[eé] va/i.test(x.t); }) : null;
     $('v-pdet').innerHTML = vol
       + '<h2>' + esc(d.titulo) + '</h2>'
       + '<div class="m">Fernando Cadengo · ' + esc(hora(d.pedida)) + (seMovio(d) ? ' · se actualizó ' + esc(hace(d.actualizada)) : '') + '</div>'
-      + '<div class="chips"><span class="chip ' + e[1] + '">' + e[0] + '</span><span class="chip">' + origen(d) + '</span>'
+      + '<div class="chips"><span class="chip ' + e[1] + '">' + e[0] + '</span>' + chipVa(d) + '<span class="chip">' + origen(d) + '</span>'
       + (d.area ? '<span class="chip gris area">' + esc(d.area) + '</span>' : '') + '</div>'
       + estadoPet(d, dec)
+      + estadoVa(d)
       + (sec.pre ? tarjeta('De qué se trata', sec.pre) : '')
-      + sec.list.filter(function (x) { return x !== dec; }).map(function (x) { return tarjeta(x.t, x.md); }).join('');
+      + sec.list.filter(function (x) { return x !== dec && x !== va; }).map(function (x) { return tarjeta(x.t, x.md); }).join('');
     $('pvolver').onclick = cierraPet;
+    var vv = $('pva-ir');
+    if (vv) vv.onclick = function () { irA(d.avance_liga); };
     if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: PCOLA, id: p.archivo, donde: $('pcab'), clase: 'btn chico', abre: function (x) { abrePet(x); } });
     var cp = $('copiar');
     if (cp) cp.onclick = function () {
@@ -609,6 +634,20 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       : (quienDecide() ? 'Ya la decidió H\u00e9ctor Daniel Nava.' : 'Ya la decidiste.');
     return '<div class="estado ' + (d.sentido === 'si' ? 'verde' : d.sentido === 'no' ? 'rojo' : '') + '" id="pestado"><div><b>' + t + '</b></div>'
       + (dec && dec.md ? '<div class="md" style="margin-top:8px">' + md(dec.md) + '</div>' : d.decision ? '<p style="margin:8px 0 0">' + esc(d.decision) + '</p>' : '') + '</div>';
+  }
+  // En qué va una petición autorizada: se está haciendo o ya quedó (con «Ir a verlo» si esa persona tiene la pantalla)
+  function estadoVa(d) {
+    if (d.avance === 'haciendo') {
+      return caja('', '<b>Se está haciendo' + (d.avance_en ? ' desde ' + esc(hora(d.avance_en)) : '') + '.</b> '
+        + (papel() === 'pide' ? 'El Claude de Héctor Daniel Nava la está construyendo. Cuando quede, te llega el aviso aquí y a la campanita.'
+          : 'Cuando quede, a Fernando Cadengo le llega el aviso a la campanita.'), []).replace('<div class="estado ">', '<div class="estado" id="pva">');
+    }
+    if (d.avance === 'quedo') {
+      var b = d.avance_liga && puedoIr(d.avance_liga) ? ['<button class="btn ok" type="button" id="pva-ir">Ir a verlo</button>'] : [];
+      return caja('verde', '<b>Ya quedó' + (d.avance_en ? ' · ' + esc(hora(d.avance_en)) : '') + '.</b>'
+        + (d.avance_donde ? ' Está en ' + esc(d.avance_donde) + '.' : ''), b).replace('<div class="estado verde">', '<div class="estado verde" id="pva">');
+    }
+    return '';
   }
   function tarjeta(t, m) {
     var vacia = /^\([\s\S]*\)$/.test(String(m || '').trim());
