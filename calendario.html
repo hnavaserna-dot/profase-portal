@@ -1917,8 +1917,10 @@ button.kpi:focus-visible{outline-offset:-3px}
   }
 
   async function arrancaAgenda(){
-    if(RHMODO||EVMODO) return;
-    try{ var r=await P.sb.rpc('agenda_estado'); if(r.error||!r.data) return; AG.est=r.data; AG.ok=true; }catch(e){ return; }
+    if(RHMODO||EVMODO){ AG.listo=true; return; }
+    try{ var r=await P.sb.rpc('agenda_estado'); if(!r.error&&r.data){ AG.est=r.data; AG.ok=true; } }catch(e){}
+    AG.listo=true;
+    if(!AG.ok){ renderKpis(); return; }
     renderVer(); render();
     await cargaAgenda(true);
     cargaOtros();
@@ -2109,6 +2111,7 @@ button.kpi:focus-visible{outline-offset:-3px}
   }
   function renderKpis(){
     if(EVMODO){ renderKpisEv(); return; }
+    if(KPI_ESQ&&!AG.listo) return;   // 12-nov-2026: el esqueleto se queda hasta que contesta la agenda (si no, se movía dos veces)
     var y=vista.y, m=vista.m, dias=new Date(y,m+1,0).getDate(), cu=0, cl=0, an=0, ev=0, fe=0;
     for(var d=1;d<=dias;d++) delDia(y,m,d).forEach(function(x){
       if(x.tipo==='cumple') cu++; else if(x.tipo==='cli') cl++; else if(x.tipo==='aniv') an++; else if(x.tipo==='evento') ev++;
@@ -3448,6 +3451,19 @@ button.kpi:focus-visible{outline-offset:-3px}
     try{ var rf=await P.sb.rpc('fuera_ciudad_lista',{p_desde:null,p_hasta:null}); if(!rf.error&&Array.isArray(rf.data)) fueraCd=rf.data.filter(function(f){ return f&&f.usuario&&/^\d{4}-\d{2}-\d{2}$/.test(f.desde)&&/^\d{4}-\d{2}-\d{2}$/.test(f.hasta); }); }catch(e){}   // sin 116: nada
   }
   try{ window.parent.addEventListener('profase:fuera', async function(){ if(!P||EVMODO) return; await cargaFuera(); try{ renderLegend(); render(); }catch(e){} }); }catch(e){}
+  /* 12-nov-2026 (Héctor Daniel Nava: «Y si le damos de una vez a lo que sigue lento?»): el resumen de arriba sale desde el
+     principio con sus mismas tarjetas, sin números («…»), y se llena cuando llegan los datos. Antes salía hasta que contestaba
+     la base y empujaba hacia abajo todo lo de la pantalla (en el celular, unos 275 px). En «Colaboradores» de RH sigue como
+     estaba (se enseña junto con todo cuando ya está). */
+  var KPI_ESQ=!RHMODO;
+  function kpiEsqueleto(){
+    // con la misma letra que tendrá cada número (los de texto, más chica) para que al llenarse no cambie de alto
+    var m=MESES[new Date().getMonth()], y=new Date().getFullYear();
+    var c=function(k,s,tx){ return '<div class="kpi"><div class="k">'+k+'</div><div class="v'+(tx?' txt':'')+'">…</div><div class="s">'+s+'</div></div>'; };
+    return EVMODO ? c('Próximos','eventos del despacho')+c('Por contestar','eventos te falta confirmar')+c('Siguiente evento','…',1)+c('En '+y,'eventos')
+      : c('Hoy','Sin fechas de entrega',1)+c('Vencido','pendientes por atender')+c('Próximos 7 días','entregas, límites y vencimientos')+c('Eventos en '+m,'del despacho')+c('Próximo cumpleaños','…',1);
+  }
+  if(KPI_ESQ){ try{ $('kpis').innerHTML=kpiEsqueleto(); $('kpis').hidden=false; }catch(e){} }
   async function arranca(){
     if(!(window.claude && window.PORTAL)){ sinAcceso('Sin conexión con la base','Recarga la página.'); return; }
     try{

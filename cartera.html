@@ -3980,9 +3980,44 @@ function aplIdx(){
   return APL_IDX;
 }
 // 2 o 3 anticipos o notas que juntos suman el saldo de la factura (al centavo); los 30 de fecha más cercana, hasta 2 sumas
+/* 12-nov-2026: lo que aplEmp prepara una vez por contraparte (sus anticipos y notas por monto, por fecha y por folio), lo
+   decidido por factura y la forma de antes por factura, para una fecha o un saldo raros (el mismo resultado de siempre) */
+let APL_DECF=null;
+function aplDecIdx(){
+  if(APL_DECF&&APL_DECF.src===APL.dec&&APL_DECF.n===APL.dec.size) return APL_DECF.m;
+  const m=new Map();
+  APL.dec.forEach((v,k)=>{ const i=k.lastIndexOf('|'), a=k.slice(0,i); let s=m.get(a); if(!s) m.set(a,s=new Set()); s.add(k.slice(i+1)); });
+  APL_DECF={src:APL.dec,n:APL.dec.size,m}; return m;
+}
+function aplPrepG(g){
+  if(g._P!==undefined) return g._P;
+  const D_=[];
+  try{ g.d.forEach((d,i)=>{ const v=-d.saldo, t=d.fecha?xd(d.fecha).getTime():null;
+    if(!Number.isFinite(v)||(t!=null&&!Number.isFinite(t))) throw 0; D_.push({d,i,v,t}); }); }catch(e){ return g._P=null; }
+  const porV=D_.slice().sort((a,b)=>a.v-b.v||a.i-b.i);
+  const conT=D_.filter(x=>x.t!=null).sort((a,b)=>a.t-b.t||a.i-b.i), sinT=D_.filter(x=>x.t==null);
+  const porU=new Map(); D_.forEach(x=>{ if(x.d.uuid){ const u=x.d.uuid.toUpperCase(); let a=porU.get(u); if(!a) porU.set(u,a=[]); a.push(x); } });
+  return g._P={D_,porV,conT,sinT,porU};
+}
+let APL_SOLO_LENTA=false;   // let: la prueba de pantallas lo prende para comparar con la forma de antes
+function aplRapidaF(f){
+  if(APL_SOLO_LENTA||!Number.isFinite(f.saldo)) return false;
+  try{ return !f.fecha||Number.isFinite(xd(f.fecha).getTime()); }catch(e){ return false; }
+}
+function aplLentaF(f,g,yaConf,nueva){
+  const c=g.d.filter(d=>!yaConf(f,d)).map(d=>({d,dif:Math.abs(-d.saldo-f.saldo),dias:diasEntre(f.fecha,d.fecha)}));
+  const ex=c.filter(x=>x.dif<=0.01).sort((a,b)=>a.dias-b.dias);
+  ex.forEach(x=>nueva(f,[x.d],'auto'));
+  const ot=c.filter(x=>x.dif>0.01).sort((a,b)=>a.dif-b.dif||a.dias-b.dias);
+  // las 5 más parecidas y, además, las que el contador ya decidió
+  ot.forEach((x,i)=>{ if(i<5||aplDec(f,x.d)) nueva(f,[x.d],'sug'); });
+  if(!ex.length) aplSumas(f,c).forEach(ds=>nueva(f,ds,'suma'));
+}
 function aplSumas(f,c){
+  return aplSumasDe(f,c.filter(x=>-x.d.saldo<f.saldo-0.01).sort((a,b)=>a.dias-b.dias).slice(0,30).map(x=>({d:x.d,v:Math.round(-x.d.saldo*100)})));
+}
+function aplSumasDe(f,ds){
   const obj=Math.round(f.saldo*100), out=[];
-  const ds=c.filter(x=>-x.d.saldo<f.saldo-0.01).sort((a,b)=>a.dias-b.dias).slice(0,30).map(x=>({d:x.d,v:Math.round(-x.d.saldo*100)}));
   const idx=new Map(); ds.forEach((x,i)=>{ const a=idx.get(x.v)||[]; a.push(i); idx.set(x.v,a); });
   const busca=(v,mayor)=>{ for(const w of [v,v-1,v+1]){ const a=idx.get(w); if(a){ const j=a.find(j=>j>mayor); if(j!=null) return j; } } return -1; };
   for(let i=0;i<ds.length&&out.length<2;i++){ const j=busca(obj-ds[i].v,i); if(j>=0) out.push([ds[i].d,ds[j].d]); }
@@ -4014,27 +4049,84 @@ function aplEmp(ci){
     rels.push(rl); R.fac.get(f).rels.push(rl); docs.forEach(d=>R.doc.get(d).rels.push(rl));
     return rl;
   };
-  // Confirmada (CFDI) (214, de Centauro): el XML de la nota de crédito o del anticipo relaciona esta factura (o al revés)
+  // Confirmada (CFDI) (214, de Centauro): el XML de la nota de crédito o del anticipo relaciona esta factura (o al revés).
+  // 12-nov-2026: cada factura va directo a los anticipos y notas con esos folios (antes recorría todos los de la empresa), en
+  // el mismo orden de siempre
   const conf=new Map(), relX=SAT.rel.get(D.cli[ci][2]), yaConf=(f,d)=>!!(conf.get(f)&&conf.get(f).has(d));
-  if(relX) R.fac.forEach((F2,f)=>{ const rs=f.uuid?relX.get(f.uuid.toUpperCase()):null; if(!rs) return;
+  if(relX&&APL_SOLO_LENTA) R.fac.forEach((F2,f)=>{ const rs=f.uuid?relX.get(f.uuid.toUpperCase()):null; if(!rs) return;
     R.doc.forEach((X,d)=>{ if(d.uuid&&ladoDoc(d)===ladoFac(f)&&rs.has(d.uuid.toUpperCase())){
       nueva(f,[d],'conf'); (conf.get(f)||conf.set(f,new Set()).get(f)).add(d); } }); });
+  else if(relX){
+    const ordD=new Map(), porUD=new Map(); let od=0;
+    R.doc.forEach((X,d)=>{ ordD.set(d,od++); if(d.uuid){ const u=d.uuid.toUpperCase(); let a=porUD.get(u); if(!a) porUD.set(u,a=[]); a.push(d); } });
+    R.fac.forEach((F2,f)=>{ const rs=f.uuid?relX.get(f.uuid.toUpperCase()):null; if(!rs) return;
+      const ds=[]; rs.forEach(u=>{ const a=porUD.get(String(u).toUpperCase()); if(a) a.forEach(d=>{ if(rs.has(d.uuid.toUpperCase())) ds.push(d); }); });
+      [...new Set(ds)].sort((a,b)=>ordD.get(a)-ordD.get(b)).forEach(d=>{ if(ladoDoc(d)===ladoFac(f)){
+        nueva(f,[d],'conf'); (conf.get(f)||conf.set(f,new Set()).get(f)).add(d); } }); });
+  }
+  /* 12-nov-2026 (Héctor Daniel Nava: «Y si le damos de una vez a lo que sigue lento?»): antes cada factura recorría y ordenaba
+     todos los anticipos y notas de su contraparte; en una empresa con miles de anticipos de un solo proveedor (los pagos
+     parciales del grupo MEGA) eran decenas de millones de pasos y la pantalla se trababa segundos al abrir y en el Excel.
+     Ahora cada contraparte se ordena una vez por monto y por fecha, y cada factura busca solo alrededor de su saldo (lo exacto
+     y las 5 más parecidas) y de su fecha (las 30 más cercanas para las sumas). Las mismas relaciones, en el mismo orden
+     (extra/cartera_apl_rapida.py de la prueba de pantallas lo compara con la forma de antes); con una fecha o un saldo raros
+     se usa la forma de antes. */
+  const dIdx=aplDecIdx(), rfcCli=D.cli[ci][2];
   G.forEach(g=>{
     if(!g.f.length||!g.d.length) return;
+    const P=aplPrepG(g);
     g.f.forEach(f=>{
-      const c=g.d.filter(d=>!yaConf(f,d)).map(d=>({d,dif:Math.abs(-d.saldo-f.saldo),dias:diasEntre(f.fecha,d.fecha)}));
-      const ex=c.filter(x=>x.dif<=0.01).sort((a,b)=>a.dias-b.dias);
-      ex.forEach(x=>nueva(f,[x.d],'auto'));
-      const ot=c.filter(x=>x.dif>0.01).sort((a,b)=>a.dif-b.dif||a.dias-b.dias);
-      // las 5 más parecidas y, además, las que el contador ya decidió
-      ot.forEach((x,i)=>{ if(i<5||aplDec(f,x.d)) nueva(f,[x.d],'sug'); });
-      if(!ex.length) aplSumas(f,c).forEach(ds=>nueva(f,ds,'suma'));
+      if(!P||!aplRapidaF(f)){ aplLentaF(f,g,yaConf,nueva); return; }
+      const ya=conf.get(f), libreDe=x=>!(ya&&ya.has(x.d)), s=f.saldo, tf=f.fecha?xd(f.fecha).getTime():null;
+      const dias=x=>(tf==null||x.t==null)?99999:Math.abs((tf-x.t)/864e5), dif=x=>Math.abs(x.v-s);
+      const pv=P.porV, n=pv.length;
+      // lo exacto (dif ≤ 0.01): un tramo seguido alrededor del saldo, en el orden de monto
+      let lo=0, hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(pv[m].v<s) lo=m+1; else hi=m; }
+      let L=lo-1, Rr=lo; const ex=[];
+      while(L>=0&&dif(pv[L])<=0.01){ if(libreDe(pv[L])) ex.push(pv[L]); L--; }
+      while(Rr<n&&dif(pv[Rr])<=0.01){ if(libreDe(pv[Rr])) ex.push(pv[Rr]); Rr++; }
+      ex.map(x=>({x,dias:dias(x)})).sort((a,b)=>a.dias-b.dias||a.x.i-b.x.i).forEach(o=>nueva(f,[o.x.d],'auto'));
+      // las 5 más parecidas (dif > 0.01), con sus empates, y además las que el contador ya decidió
+      const ot=new Map(); let acc=0, d5=null;
+      while(L>=0||Rr<n){
+        const dl=L>=0?dif(pv[L]):Infinity, dr=Rr<n?dif(pv[Rr]):Infinity, x=dl<=dr?pv[L--]:pv[Rr++], dx=dl<=dr?dl:dr;
+        if(d5!=null&&dx>d5) break;
+        if(!libreDe(x)) continue;
+        ot.set(x.i,x); acc++; if(acc===5) d5=dx;
+      }
+      const dec=f.uuid?dIdx.get(rfcCli+'|'+f.parte+'|'+f.uuid.toUpperCase()):null;
+      if(dec) dec.forEach(u=>{ const a=P.porU.get(u); if(a) a.forEach(x=>{ if(libreDe(x)&&dif(x)>0.01) ot.set(x.i,x); }); });
+      const ots=[...ot.values()].map(x=>({x,dif:dif(x),dias:dias(x)})).sort((a,b)=>a.dif-b.dif||a.dias-b.dias||a.x.i-b.x.i);
+      // el lugar de cada una entre todas las de dif > 0.01: las primeras 5 van siempre; las demás, solo si están decididas
+      ots.forEach((o,k)=>{ if(k<5||(dec&&o.x.d.uuid&&aplDec(f,o.x.d))) nueva(f,[o.x.d],'sug'); });
+      if(!ex.length){
+        // las 30 de fecha más cercana con un monto menor al saldo (para sumar 2 o 3), en el orden de siempre
+        const thr=s-0.01, ok=x=>x.v<thr&&libreDe(x), c30=[];
+        if(tf==null) P.D_.forEach(x=>{ if(c30.length<30&&ok(x)) c30.push(x); });
+        else {
+          const ct=P.conT, m=ct.length; let a=0, b=m; while(a<b){ const h=(a+b)>>1; if(ct[h].t<tf) a=h+1; else b=h; }
+          let l=a-1, r=a, k=0, d30=null; const cand=[];
+          while(l>=0||r<m){
+            const dl=l>=0?dias(ct[l]):Infinity, dr=r<m?dias(ct[r]):Infinity, x=dl<=dr?ct[l--]:ct[r++], dx=dl<=dr?dl:dr;
+            if(d30!=null&&dx>d30) break;
+            if(!ok(x)) continue;
+            cand.push(x); k++; if(k===30) d30=dx;
+          }
+          if(k<30||d30>=99999) P.sinT.forEach(x=>{ if(ok(x)) cand.push(x); });
+          cand.map(x=>({x,dias:dias(x)})).sort((p,q)=>p.dias-q.dias||p.x.i-q.x.i).slice(0,30).forEach(o=>c30.push(o.x));
+        }
+        aplSumasDe(f,c30.map(x=>({d:x.d,v:Math.round(-x.d.saldo*100)}))).forEach(ds=>nueva(f,ds,'suma'));
+      }
     });
   });
-  // otro nombre con el mismo RFC genérico: solo con importe exacto, para revisar
+  // otro nombre con el mismo RFC genérico: solo con importe exacto, para revisar (12-nov-2026: cada contraparte por monto)
   const gen=[...G.values()].filter(g=>RFC_GEN.has(g.rfc));
   gen.forEach(g=>g.f.forEach(f=>gen.forEach(h=>{ if(h===g||h.lado!==g.lado||h.rfc!==g.rfc) return;
-    h.d.forEach(d=>{ if(!yaConf(f,d)&&Math.abs(-d.saldo-f.saldo)<=0.01) nueva(f,[d],'rev'); }); })));
+    const P=aplPrepG(h);
+    if(!P||!aplRapidaF(f)){ h.d.forEach(d=>{ if(!yaConf(f,d)&&Math.abs(-d.saldo-f.saldo)<=0.01) nueva(f,[d],'rev'); }); return; }
+    const pv=P.porV, n=pv.length, s=f.saldo; let lo=0, hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(pv[m].v<s) lo=m+1; else hi=m; }
+    const xs=[]; for(let i=lo-1;i>=0&&Math.abs(pv[i].v-s)<=0.01;i--) xs.push(pv[i]); for(let i=lo;i<n&&Math.abs(pv[i].v-s)<=0.01;i++) xs.push(pv[i]);
+    xs.sort((a,b)=>a.i-b.i).forEach(x=>{ if(!yaConf(f,x.d)) nueva(f,[x.d],'rev'); }); })));
   // lo aceptado que ninguna de las de arriba trae (lo que repartió «Agotar» con su factura relacionada de otro nombre, o si
   // el XML todavía no llega): su propia relación, para que se vea y cuente igual que en la ventana de «Agotar»
   const yaAcep=APL.porRfc.get(D.cli[ci][2]);
