@@ -780,5 +780,24 @@
       dice: ['¡Uno de pastor!', '¡Con todo!', '¡Salsa, por favor!', '¡Con limoncito!'] });
   CSS_FECHAS += '.pt-taco-ojos{transform-box:fill-box;transform-origin:50% 50%;animation:pt-taco-ojos 3s ease-in-out infinite}'
     + '@keyframes pt-taco-ojos{0%,88%,100%{transform:scaleY(1)}93%{transform:scaleY(.1)}}';
+  // lo gracioso de cada día: lo cuenta el segundo de los dos adornos de junto a la campanita (js/temporada.js, CHISTES;
+  // Héctor Daniel Nava, 12-nov-2026: «al picarle diga algo gracioso corto en base al día que se festeja»)
+  if (T.chistes) T.chistes({
+    anio: ["Propósito de año nuevo: entregar todo antes de la fecha Profase.", "12 uvas, 12 meses… y 12 declaraciones mensuales a tiempo.", "Año nuevo, balanzas nuevas."],
+    reyes: ["Si te sale el muñeco, los tamales del 2 de febrero corren por tu cuenta.", "Oro, incienso y mirra… y nosotros, la balanza cuadrada.", "Rosca sí; rosca de pendientes, no."],
+    pizza: ["La pizza se reparte en partes iguales; las tareas del WorkFlow, también.", "¿Pizza con piña? Eso sí es materia de controversia.", "Una pizza bien repartida es una buena conciliación."],
+    palomitas: ["Palomitas listas para ver cómo cuadra la balanza.", "Lo único que debe tronar hoy son las palomitas, no el sistema.", "Palomita a cada tarea terminada del WorkFlow."],
+    abrazo: ["Un abrazo vale más que mil correos con copia.", "Dale un abrazo a quien te cubrió en vacaciones.", "Abrazo de oso al cliente que manda todo a tiempo."],
+    croissant: ["Croissant: capas y capas, como un buen papel de trabajo.", "Mantequilla en el croissant, no en el teclado.", "Hoy desayunamos en francés… y declaramos en español."],
+    candelaria: ["A los del muñeco: hoy es su fecha límite. Sin prórroga.", "Tamales pendientes: el único adeudo que sí se cobra hoy.", "Tamal de rajas, de verde o de dulce: lo importante es que llegue."],
+    constitucion: ["Hoy celebramos la Constitución… y su artículo 31, fracción IV.", "Contribuir es un deber constitucional; contribuir al buen ambiente, también.", "Si hay puente, que los pendientes no se queden del otro lado."],
+    bandera: ["Verde, blanco y rojo… y el semáforo de Centauro, mejor en verde.", "Honores a la bandera… y a quien ya terminó su cierre del mes.", "Bandera en alto y balanza cuadrada."],
+    pi: ["Pi no tiene fin; tus pendientes de hoy, sí.", "Hoy redondeamos a 3.14; en las declaraciones, nunca.", "Si pi fuera un saldo, nunca terminaríamos de conciliarlo."],
+    felicidad: ["Felicidad es una balanza que cuadra a la primera.", "La felicidad no se deduce, pero se contagia.", "Cero vencidas en el WorkFlow: eso también es felicidad."],
+    primavera: ["Llegó la primavera y con ella… la declaración anual.", "Que florezcan las ideas, no los pendientes.", "Primavera: buen momento para limpiar el escritorio… y el buzón."],
+    agua: ["Toma agua: la contabilidad cuadra mejor bien hidratado.", "Cuida el agua como cuidas un saldo a favor.", "Ni una gota de más… ni un peso de más en la declaración."],
+    waffle: ["Un waffle tiene cuadritos; tu balanza, que cuadre.", "Miel en el waffle, no en las excusas.", "Hoy todo cuadra… por lo menos el waffle."],
+    taco: ["31 de marzo: día del taco y de la anual de personas morales. ¡Con todo!", "Taco sin salsa es como factura sin XML.", "¿Con todo, joven? Sí… menos con pendientes."]
+  });
   return CSS_FECHAS;
 });

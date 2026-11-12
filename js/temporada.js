@@ -12,6 +12,11 @@
      20:56: «que le piquen a la animación para que les digas qué fecha es»; «da un mensajito ¡feliz día del…!»). El signo
      y «PROFASE · Asesoría…» siguen llevando al Inicio (js/portal.js); el adorno ya no.
    - Dos adornos chicos arriba a la derecha, junto a la campanita (propuesta #9); quietos, solo brincan si se pican.
+     El primero dice qué día es; el segundo, el que está junto al «?», cuenta algo corto y gracioso del día, otro en
+     cada clic (Héctor Daniel Nava, 12-nov-2026, 13:36 y 13:38: «uno de los 2 botones… al picarle diga algo gracioso
+     corto en base al día que se festeja»; «ándale! sí!»). Los de las cinco temporadas viven aquí, en CHISTES; los de
+     los días «chispa», en su archivo de js/fechas/ (T.chistes), y solo se bajan ese día. Una fecha nueva trae los suyos
+     (construir.py, exige_signo_inicio()).
      Solo en iPad, laptop y pantallas más grandes, y solo si caben: el encabezado va siempre en un solo renglón y lo
      animado gana a lo estático (Daniel, 31-oct-2026, 17:22 a 17:32: «prefiero ver la animación a lado de profase que esos
      2 estáticos»; «dale siempre preferencia a lo animado que a lo estático»; «y siempre en una línea en cualquier
@@ -294,6 +299,23 @@
     patrias: [BANDERITA, SOMBRERO],
     amor: [CORAZON(), CORAZON('#F07A1E')]
   };
+  // lo que cuenta el segundo de los dos chicos (el de junto al «?»): algo corto y gracioso del día, otro en cada clic.
+  // Tono de oficina, sin burlarse de nadie. Los de los días «chispa» los pone su archivo de js/fechas/ (T.chistes).
+  var CHISTES = {
+    amor: ['Eres como el IVA: estás en todo lo que compro.', '¿Me pasas tu RFC? Es para ponerte en mi lista de favoritos.', 'Te quiero más que a una declaración sin diferencias.'],
+    patrias: ['¡Viva México… y vivan las declaraciones presentadas a tiempo!', 'Hoy el único grito permitido en la oficina es el de Independencia.', 'Pozole sí; pendientes vencidos, no.'],
+    halloween: ['¿Más miedo que un fantasma? Un requerimiento del SAT un viernes en la tarde.', 'Dulce o truco… o declaración complementaria.', 'El verdadero susto: abrir el buzón tributario.'],
+    muertos: ['Pan de muerto y café: la mejor ofrenda para la oficina.', 'Calaverita del día: aquí yace un pendiente… que sí se terminó.', 'Hasta las calaveritas saben que los pendientes no se van solos.'],
+    navidad: ['Santa también revisa la lista dos veces… como buen contador.', 'Este año le pedimos a Santa: cero requerimientos.', 'Jo, jo, jo… ¿y el cierre del año cómo vamos?']
+  };
+  var CHISTE_I = {};
+  // el que sigue de la fecha k (empieza en uno al azar y luego va en orden, para no repetir seguido); null si no tiene
+  function chiste(k) {
+    var l = CHISTES[k]; if (!l || !l.length) return null;
+    if (!(k in CHISTE_I)) CHISTE_I[k] = Math.floor(Math.random() * l.length);
+    var t = l[CHISTE_I[k] % l.length]; CHISTE_I[k] = (CHISTE_I[k] + 1) % l.length;
+    return t;
+  }
 
   // junto al signo de cada menú (clases ptc-, para no chocar con las de la escena de la entrada)
   var JUNTO = { halloween: 'arana', muertos: 'veladora', navidad: 'santa', amor: 'corazon', patrias: 'banderita' };
@@ -351,8 +373,10 @@
     JUNTO[k] = k; JUNTO_ANCHO[k] = c.ja || Math.min(16, Math.round(19 * vb[2] / vb[3]));
     JUNTO_SVG[k] = svg(j, 'ptc-mov ptc-m-' + (c.jmov || mv));
   }
+  // los chistes de los días «chispa»: cada archivo de js/fechas/ pasa los suyos ({ clave: [...] })
+  function chistes(m) { for (var k in m) if (busca(k) && Array.isArray(m[k]) && m[k].length) CHISTES[k] = m[k].slice(); }
   var API = { alta: alta, svg: svg, FLOR: FLOR, PICADO: PICADO, COHETE: COHETE, CORAZON: CORAZON, BANDERA: BANDERA, BANDERITA: BANDERITA,
-    SOMBRERO: SOMBRERO, JUNTO: JUNTO };
+    SOMBRERO: SOMBRERO, JUNTO: JUNTO, chistes: chistes };
   var RUTA = (function () { var s = document.currentScript && document.currentScript.src; return s ? s.replace(/[^\/?#]*([?#].*)?$/, '') : 'js/'; })();
   var hechas = 0, esperan = {};
   function corre() {
@@ -492,6 +516,7 @@
     + 'border-radius:12px;padding:8px 12px;box-shadow:0 8px 24px rgba(10,18,34,.22);font:700 14px/1.25 Arial,sans-serif;text-align:left;pointer-events:none;'
     + 'opacity:0;transform:translateY(-4px);transition:opacity .2s,transform .2s}.ptc-globo.ver{opacity:1;transform:none}'
     + '.ptc-globo span{display:block;font-weight:400;font-size:12.5px;color:#5A6478;margin-top:2px}'
+    + '.ptc-globo.ptc-chiste{max-width:min(300px,calc(100vw - 16px))}.ptc-globo.ptc-chiste span{margin-top:4px}'
     + ':root[data-theme="dark"] .ptc-globo{background:#1C2A44;color:#fff;border-color:#2A3A58}:root[data-theme="dark"] .ptc-globo span{color:#AAB6CC}'
     // movimientos de las fechas «chispa» junto al signo (en porcentaje del dibujo, para que valgan a cualquier tamaño)
     + '.ptc-mov{transform-box:fill-box;transform-origin:50% 50%}'
@@ -625,19 +650,26 @@
       if (par.querySelector('.pt-chicos')) return;
       var c = document.createElement('span'); c.className = 'pt-chicos';
       c.innerHTML = dibujos.map(function (d) { return '<button type="button" tabindex="-1" aria-hidden="true">' + d + '</button>'; }).join('');
-      c.addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) { reacciona(b, 'pt-brinca'); felicita(b, x); } });
+      // el primero dice qué día es; el segundo (el de junto al «?») cuenta algo gracioso del día
+      c.addEventListener('click', function (ev) {
+        var b = ev.target.closest('button'); if (!b) return;
+        reacciona(b, 'pt-brinca');
+        var t = b === c.children[1] ? chiste(x.k) : null;
+        if (t) felicita(b, x, t); else felicita(b, x);
+      });
       par.insertBefore(c, par.firstChild);
     })();
   }
 
   /* Junto al signo de un menú: el adorno de la temporada a un lado, sin taparlo ni cambiarlo. La arañita cuelga de
      un hilo que sale de la orilla de arriba del encabezado (o del menú ☰), mida lo que mida en cada pantalla. */
-  // el globito de adentro: la felicitación y el día, debajo del adorno; se va solo
-  function felicita(el, x) {
+  // el globito de adentro: la felicitación y el día, debajo del adorno; se va solo. Con t (lo gracioso del día), arriba
+  // va t y abajo, en chico, la felicitación y el día; se queda un poco más, para alcanzar a leerlo.
+  function felicita(el, x, t) {
     var viejo = document.querySelector('.ptc-globo'); if (viejo) viejo.remove();
-    var g = document.createElement('div'); g.className = 'ptc-globo'; g.setAttribute('role', 'status');
+    var g = document.createElement('div'); g.className = 'ptc-globo' + (t ? ' ptc-chiste' : ''); g.setAttribute('role', 'status');
     var b = document.createElement('b'), s = document.createElement('span');
-    b.textContent = x.n; s.textContent = fecha(x); g.appendChild(b); g.appendChild(s);
+    b.textContent = t || x.n; s.textContent = t ? x.n + ' · ' + fecha(x) : fecha(x); g.appendChild(b); g.appendChild(s);
     document.body.appendChild(g);
     var r = el.getBoundingClientRect(), w = g.offsetWidth, vw = document.documentElement.clientWidth || innerWidth;
     g.style.left = Math.round(Math.max(8, Math.min(r.left + r.width / 2 - w / 2, vw - w - 8))) + 'px';
@@ -646,7 +678,7 @@
     g.style.top = Math.round(Math.min(abajo + 6, (innerHeight || 600) - g.offsetHeight - 8)) + 'px';
     requestAnimationFrame(function () { g.classList.add('ver'); });
     clearTimeout(felicita.t);
-    felicita.t = setTimeout(function () { g.classList.remove('ver'); setTimeout(function () { g.remove(); }, 250); }, 2800);
+    felicita.t = setTimeout(function () { g.classList.remove('ver'); setTimeout(function () { g.remove(); }, 250); }, t ? 5200 : 2800);
   }
   function junto(img, x, oscuro) {
     var k = x.k, cual = JUNTO[k];
@@ -692,5 +724,7 @@
     return x.k;
   }
   // en(a, m, d): qué fecha sale ese día (para el calendario de animaciones)
-  window.PROFASE_TEMPORADA = { actual: function () { return actual(hoyMty()); }, en: function (a, m, d) { return actual([a, m, d]); }, pon: pon, lista: TEMPORADAS, fecha: fecha };
+  // chiste(k): lo gracioso que sigue de la fecha k (el recorrido «chiste-del-dia-1» enseña uno; portal/lonuevo_rec_tab.js)
+  window.PROFASE_TEMPORADA = { actual: function () { return actual(hoyMty()); }, en: function (a, m, d) { return actual([a, m, d]); }, pon: pon, lista: TEMPORADAS, fecha: fecha,
+    chiste: chiste };
 })();

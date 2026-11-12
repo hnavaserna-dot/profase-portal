@@ -820,5 +820,24 @@
     + '@keyframes pt-aguacate-brazo{from{transform:rotate(-14deg)}to{transform:rotate(18deg)}}'
     + '.pt-aguacate-totopo{transform-box:fill-box;animation:pt-aguacate-totopo 1.8s ease-in-out infinite}'
     + '@keyframes pt-aguacate-totopo{0%,100%{transform:translate(0,0)}45%,60%{transform:translate(-8%,14%)}}';
+  // lo gracioso de cada día: lo cuenta el segundo de los dos adornos de junto a la campanita (js/temporada.js, CHISTES;
+  // Héctor Daniel Nava, 12-nov-2026: «al picarle diga algo gracioso corto en base al día que se festeja»)
+  if (T.chistes) T.chistes({
+    marina: ["Navegando entre facturas, siempre a buen puerto.", "Capitán, el WorkFlow está despejado.", "Mar en calma, buzón tributario también."],
+    churro: ["Que hoy todo te salga de churro… y bien.", "Churro con chocolate: la mejor conciliación.", "Lo único que se vale enrollar hoy es el churro."],
+    oceanos: ["Un océano de facturas, y aquí vamos nadando.", "Cuida los océanos y no ahogues tu escritorio en papeles.", "Ola tras ola, tarea tras tarea."],
+    sushi: ["Sushi: arroz, pescado y orden. Como un buen expediente.", "Los palillos y el debe y el haber: siempre en pareja.", "Hoy sí se vale ver todo crudo… pero solo en el sushi."],
+    padre: ["Hoy se festeja al que dice «apaga la luz, que no somos socios de la CFE».", "Papá: el primer asesor financiero de la casa.", "Feliz día a los papás que siempre tienen un dato para todo."],
+    verano: ["Llegó el verano: bloqueador, agua y declaraciones a tiempo.", "Calor afuera, cabeza fría para el cierre.", "Que el único que se derrita sea el hielo de la limonada."],
+    redes: ["¿Ya le diste «me gusta» a terminar tu cierre?", "La mejor red social: un equipo que se ayuda.", "Comparte lo bueno… y sube tus documentos al WorkFlow."],
+    ingeniero: ["Ingeniero: el que arma el puente; contador: el que lo deprecia.", "Si funciona, no lo toques: regla de oro de los ingenieros.", "Gracias a quien hace que todo sí abra."],
+    ovni: ["Objeto Volador No Identificado: igual que un depósito sin referencia.", "Ni los extraterrestres entienden la miscelánea fiscal.", "La verdad está ahí afuera… y en el estado de cuenta."],
+    chocolate: ["Un chocolate por cada pendiente terminado. Es la regla.", "Chocolate amargo, tareas dulces.", "El único saldo que nadie quiere conciliar: el de chocolates."],
+    abogado: ["Feliz día a quienes siempre tienen un «depende».", "Lo que no está en el contrato, no existe. ¡Feliz día, abogados!", "Hoy se celebra el arte de la fracción, el inciso y el numeral."],
+    papas: ["Papas a la francesa y facturas al día.", "Que lo único frito hoy sean las papas.", "Con sal, con limón y con todo terminado."],
+    emoji: ["😅: la cara oficial de cada día 17.", "Hoy todo se dice con caritas… menos las declaraciones.", "👍 para la balanza que cuadra."],
+    helado: ["Que lo único que se derrita hoy sea el helado.", "Una bola de helado por cada declaración a tiempo.", "Pendientes congelados, no: mejor terminados."],
+    aguacate: ["Guacamole sí; pendientes aguados, no.", "Vale más que el aguacate: un cliente que manda todo a tiempo.", "Hoy todo sabe mejor con aguacate."]
+  });
   return CSS_FECHAS;
 });

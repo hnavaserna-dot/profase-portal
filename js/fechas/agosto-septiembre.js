@@ -447,5 +447,19 @@
     + '@keyframes pt-maiz-halo{from{opacity:.35;transform:scale(.94)}to{opacity:1;transform:scale(1.06)}}'
     + '.pt-maiz-vapor{transform-box:fill-box;transform-origin:50% 100%;animation:pt-maiz-vapor 2.4s ease-in-out infinite}.pt-maiz-v2{animation-delay:-.8s}.pt-maiz-v3{animation-delay:-1.6s}'
     + '@keyframes pt-maiz-vapor{0%{opacity:0;transform:translateY(25%)}40%{opacity:.8}100%{opacity:0;transform:translateY(-30%)}}';
+  // lo gracioso de cada día: lo cuenta el segundo de los dos adornos de junto a la campanita (js/temporada.js, CHISTES;
+  // Héctor Daniel Nava, 12-nov-2026: «al picarle diga algo gracioso corto en base al día que se festeja»)
+  if (T.chistes) T.chistes({
+    sandia: ["Roja por dentro, verde por fuera… como el semáforo antes de cuadrar.", "Sandía fresca para un día sin vencidas.", "Lo único con semillas hoy: la sandía, no las dudas."],
+    galleta: ["Una galleta, un café y la balanza cuadrada: día perfecto.", "Cuidado con las migajas en el teclado.", "Galletas para el equipo; pendientes para nadie."],
+    gato: ["Los gatos siempre caen de pie… como un buen cierre de mes.", "Si un gato camina sobre tu teclado, ya tienes un pendiente nuevo.", "Curioso como gato: revisa dos veces antes de presentar."],
+    zurdos: ["A todos los zurdos: el mouse también puede ir del otro lado.", "Zurdos: los que siempre ven la tabla desde otro ángulo.", "Hoy nadie les gana el lugar de la izquierda en la mesa."],
+    foto: ["Sonríe: tu foto de perfil del CRM sale en todos lados.", "Una foto vale más que mil palabras; un XML, más que mil fotos.", "Captura de pantalla: la foto favorita de la oficina."],
+    perro: ["«El perro se comió la tarea»: excusa no válida en el WorkFlow.", "Leal como perro: así es un buen cliente.", "Hoy se festeja al mejor compañero de home office."],
+    abuelos: ["Los abuelos llevaban la contabilidad en una libreta… y cuadraba.", "Consejo de abuelo: no dejes para mañana lo que vence hoy.", "Gracias, abuelos, por los consejos y los tamales."],
+    paz: ["Paz interior: que la balanza cuadre a la primera.", "Hoy, paz en la bandeja de entrada.", "La paz empieza por un buzón tributario sin avisos nuevos."],
+    turismo: ["Viaja tranquilo: tu cobertura ya está bien armada.", "Destino favorito del contador: la balanza cuadrada.", "La mejor maleta: la que no lleva pendientes."],
+    maiz: ["Sin maíz no hay país… ni tortillas para los tacos de la oficina.", "Elote, esquite o tamal: hoy todo es de maíz.", "Los granos de maíz, como las facturas: uno por uno."]
+  });
   return CSS_FECHAS;
 });

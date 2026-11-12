@@ -541,5 +541,19 @@
     + '@keyframes pt-inocentes-cara{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(22%) rotate(-6deg)}}'
     + '.pt-inocentes-tapa{transform-box:fill-box;transform-origin:0 70%;animation:pt-inocentes-tapa 1.4s ease-in-out infinite}'
     + '@keyframes pt-inocentes-tapa{0%,100%{transform:rotate(0)}50%{transform:rotate(-14deg)}}';
+  // lo gracioso de cada día: lo cuenta el segundo de los dos adornos de junto a la campanita (js/temporada.js, CHISTES;
+  // Héctor Daniel Nava, 12-nov-2026: «al picarle diga algo gracioso corto en base al día que se festeja»)
+  if (T.chistes) T.chistes({
+    paella: ["En la paella, como en el despacho, todo se mezcla y queda rico.", "Arroz bien repartido, tareas bien repartidas.", "Hoy se vale echarle de todo… a la paella."],
+    quesadilla: ["¿Quesadilla con queso o sin queso? El eterno debate de la oficina.", "Bien doradita, como un expediente completo.", "Quesadilla y cierre del mes: los dos, calientitos."],
+    cafe: ["El café: combustible oficial del cierre de mes.", "Primero el café, luego la conciliación.", "¿Descafeinado? En temporada de anuales, jamás."],
+    dona: ["Dona: el único círculo vicioso que vale la pena.", "Que lo único con hoyo hoy sea la dona, no el presupuesto.", "Dona con café: la junta de equipo perfecta."],
+    nachos: ["Nachos con queso: compartir es vivir.", "Que lo único crujiente hoy sean los nachos, no los plazos.", "Nachos para todos, pendientes para nadie."],
+    cartero: ["¿Carta del SAT? Tranquilo, hoy solo llegan buenas noticias.", "El único que entrega a tiempo sin que el CRM le recuerde.", "Hoy hasta el buzón tributario merece un descanso."],
+    revolucion: ["La única revolución de hoy: un WorkFlow sin vencidas.", "Revolución, sí… pero en la productividad.", "Tierra, libertad… y puente largo."],
+    musico: ["La mejor música: el clic de «Terminar» en el WorkFlow.", "Que el único que desafine hoy sea el karaoke, no la balanza.", "Hoy todo suena mejor… hasta la impresora."],
+    pastel: ["Las calorías del pastel no son deducibles… todavía.", "Rebanada grande, como un saldo a favor.", "Hoy todos los pendientes se resuelven con pastel."],
+    inocentes: ["Inocente palomita: no hay requerimiento, era broma.", "Hoy no le prestes nada a nadie… ni la pluma.", "Inocente quien crea que diciembre es tranquilo para un contador."]
+  });
   return CSS_FECHAS;
 });

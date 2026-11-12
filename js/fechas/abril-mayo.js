@@ -761,5 +761,24 @@
       dice: ['¡Con todo, porfa!', '¡Doble queso!', '¡Más catsup!', '¡Ñam, qué rica!'] });
   CSS_FECHAS += '.pt-hamburguesa-tapa{transform-box:fill-box;transform-origin:50% 100%;animation:pt-hamburguesa-tapa 1.7s ease-in-out infinite}'
     + '@keyframes pt-hamburguesa-tapa{0%,100%{transform:none}24%{transform:translateY(-12%) rotate(-3deg)}40%{transform:none}50%{transform:translateY(-4%)}60%{transform:none}}';
+  // lo gracioso de cada día: lo cuenta el segundo de los dos adornos de junto a la campanita (js/temporada.js, CHISTES;
+  // Héctor Daniel Nava, 12-nov-2026: «al picarle diga algo gracioso corto en base al día que se festeja»)
+  if (T.chistes) T.chistes({
+    burrito: ["Un buen burrito, como un buen expediente: todo bien envuelto.", "Burrito grande para un abril de anuales.", "Que lo único envuelto hoy sea el burrito, no los pendientes."],
+    tierra: ["Salva el planeta: ¿de verdad necesitas imprimir ese PDF?", "Recicla el papel; los pendientes, mejor termínalos.", "Planeta limpio, escritorio limpio."],
+    libro: ["El libro más emocionante del despacho: el libro diario.", "Lectura recomendada para hoy: la Ley del ISR… con un café.", "Un buen libro y una balanza cuadrada: el plan perfecto."],
+    pinguino: ["Los pingüinos siempre van de traje… como en día de auditoría.", "Calma de pingüino ante cualquier requerimiento.", "Los pingüinos caminan juntos; el equipo PROFASE, también."],
+    nino: ["Hoy todos somos niños… menos para pagar impuestos.", "Feliz como niño con su primer saldo a favor.", "Hoy se vale jugar… cuando termines tu cierre."],
+    trabajo: ["Feliz Día del Trabajo, y gracias por todo lo que hacen.", "Hoy se descansa; los pendientes, que esperen a mañana.", "El trabajo en equipo hace que todo cuadre."],
+    albanil: ["Las cuentas se construyen ladrillo por ladrillo, como una buena obra.", "Cimientos fuertes, balanzas firmes.", "Que la única mezcla de hoy sea la del albañil, no la de los papeles."],
+    espacio: ["Houston, tenemos un pendiente.", "Misión del día: cero pendientes en órbita.", "Gravedad cero, vencidas cero."],
+    madres: ["Feliz día a todas las mamás que además cuadran balanzas.", "Mamá siempre sabe dónde está todo… como el CRM.", "Gracias, mamás: el verdadero equipo de soporte."],
+    maestro: ["Gracias a quien nos enseñó que debe y haber no son lo mismo.", "Maestro: el que explica la misma deducción por quinta vez, con paciencia.", "A todos los que nos enseñaron a cuadrar: ¡gracias!"],
+    internet: ["¿Ya probaste apagarlo y volverlo a prender?", "Sin internet no hay SAT; con internet, tampoco hay excusas.", "Hoy celebramos el wifi… y que el CRM viva en la nube."],
+    abejas: ["Las abejas no dejan pendientes para mañana.", "Equipo que trabaja como colmena, entrega a tiempo.", "Trabajadores como abejas, dulces como su miel."],
+    estudiante: ["A los que estudian y trabajan: ¡doble mérito!", "Nunca se deja de estudiar… sobre todo la miscelánea fiscal.", "Examen sorpresa: ¿cuánto vale la UMA este año?"],
+    contador: ["Feliz día a quienes hacen que todo cuadre.", "Un contador nunca pierde: solo concilia.", "Hoy se festeja al héroe sin capa… pero con calculadora."],
+    hamburguesa: ["Una hamburguesa bien armada es como una póliza: todo en su lugar.", "Doble carne, doble queso… cero pendientes.", "Hoy la única capa extra es la de queso."]
+  });
   return CSS_FECHAS;
 });
