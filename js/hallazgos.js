@@ -15,10 +15,28 @@
    y Gabo, las suyas; los gerentes, las suyas y las de su equipo; la dirección, la Gerencia Contable y Fernando Cadengo,
    todas; y encima la regla de cada reporte). Aquí solo se arma el archivo: la pieza no lee tablas ni pide otra cosa a la base
    (construir.py, exige_hallazgos_js). Los clientes ocultos de quien entró (js/ocultos.js) no salen, como en la lista, salvo
-   con «Verlos por ahora». El nombre de cada cuenta sale de los datos de Variaciones (la pantalla se los da, o se leen de
-   datos/var_0 solo al picar el botón y solo si hay casos de Variaciones o Movimientos).
+   con «Verlos por ahora».
 
-   var b = PROFASE_HALL.boton({clase: 'btn-2', cuentas: function () { return {lista: [[cta, nombre], …], anioBase: 2026}; }});
+   12-nov-2026 (Fernando Cadengo, con el Excel que armó Fernando Barbosa: «1 a, 2 a y b», «3 b, 4 b, sí así es»; 378): además
+   de la bitácora general, una hoja por reporte con las columnas de cada pantalla, y las hojas se llaman como las dejó
+   Barbosa: «Resumen», «Bitácora general», «Comentarios generales», «Aplicaciones CXP Y CXC», «Bitácora Variación»,
+   «Bitácora Movimientos» y «Bitácora Activo fijo». Los casos de Depuración CxC / CxP siguen en la general.
+     · Variación: las cifras de la pantalla de Variaciones (variación, mes anterior, mes evaluado y cambio), con su mismo
+       cálculo y sus criterios: js/variaciones-calculo.js (una sola versión). La pantalla de Variaciones le da lo que ya
+       calculó; desde las otras dos, se lee datos/var_0 y se calcula aquí, solo si hay casos de Variaciones o Movimientos.
+     · Movimientos: un renglón por mes revisado, con los 12 meses de esa cuenta en ese año (el movimiento del mes, como
+       «Movimiento del mes» de la pantalla) y el mes revisado resaltado.
+     · Activo fijo: estado, prioridad, tipo, mes, si es cliente o proveedor (venta o compra), nombre, monto y cuenta.
+     · Aplicaciones: solo las marcadas «Aplicada», con su lado, el saldo de la factura, la relación, su estado, el total del
+       anticipo o nota, cuánto se aplica, cómo quedaría la factura, lo que le queda al anticipo o nota (demostrativo) y el
+       último comentario de la factura en su seguimiento. Esas cifras las calcula la pantalla de Depuración de CxC / CxP
+       con el mismo cálculo de su pestaña Aplicaciones (window.__carHallApl de cartera.html): desde ahí se las da; desde
+       Variaciones o Activo fijo, la pieza abre esa pantalla por detrás (el marco de la vista, window.top.__carMarco de
+       cartera_tab.js; abierta sola, un marco escondido aquí) y le pregunta. Ya no lleva «Cómo se decidió».
+
+   var b = PROFASE_HALL.boton({clase: 'btn-2',
+     variaciones: function () { return {B: datos de datos/var_0, D: la bitácora ya calculada}; },   // (Variaciones)
+     aplicaciones: function (lista, avance) { return cifras; }});                                   // (Depuración CxC / CxP)
    MAS.pon([b]);   // en «Más ▾» de la pantalla */
 (function () {
   'use strict';
@@ -69,29 +87,75 @@
     return new Date().toLocaleString('es-MX', { timeZone: 'America/Monterrey', hourCycle: 'h23' });
   }
 
-  /* el nombre de cada cuenta: lo da la pantalla (Variaciones) o se lee de los datos de Variaciones al picar el botón */
-  async function desempaca(doc) {
-    if (!doc || !doc.b64 || typeof DecompressionStream === 'undefined') return null;
-    var bin = Uint8Array.from(atob(doc.b64), function (c) { return c.charCodeAt(0); });
-    var st = new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'));
-    return JSON.parse(await new Response(st).text());
-  }
-  async function cuentasDe(op) {
-    var r = null;
-    try { if (op.cuentas) r = op.cuentas(); } catch (e) { r = null; }
-    if (!r || !r.lista) {
+  /* los datos de Variaciones: la pantalla de Variaciones los da ya calculados; desde las otras dos se leen de datos/var_0 al
+     picar el botón (solo si hay casos de Variaciones o Movimientos) y se calcula la bitácora con la misma pieza que usa esa
+     pantalla (js/variaciones-calculo.js, con sus criterios). De ahí salen el nombre de cada cuenta, las cifras de la
+     «Bitácora Variación» y los movimientos de la «Bitácora Movimientos». */
+  async function datosVar(op) {
+    var VC = window.PROFASE_VARCALC, r = null;
+    try { if (op.variaciones) r = op.variaciones(); } catch (e) { r = null; }
+    if (!r || !r.B) {
       try {
         var db = window.claude && window.claude.use ? await window.claude.use('db') : null;
-        if (db) {
+        if (db && VC) {
+          var critP = VC.cargarCriterios();
           var d = await db.doc('datos/var_0').get();
-          var j = d && d.exists ? await desempaca(d.data()) : null;
-          if (j) r = { lista: j.cuentas || [], anioBase: j.anioBase };
+          var B = d && d.exists ? await VC.desempaca(d.data()) : null;
+          if (B) r = { B: B, D: B.mov ? VC.construir(B, await critP) : null };
         }
       } catch (e) { r = null; }
     }
-    var m = new Map();
-    ((r && r.lista) || []).forEach(function (c) { if (c && c[0]) m.set(String(c[0]), String(c[1] || '').trim()); });
-    return { nombres: m, anioBase: (r && r.anioBase) || 2026 };
+    var B2 = r && r.B, D2 = r && r.D, x = { nombres: new Map(), anioBase: (B2 && B2.anioBase) || 2026, filas: new Map(),
+      mov: null, cli: new Map(), cta: new Map(), vac: null };
+    if (!B2) return x;
+    (B2.cuentas || []).forEach(function (c, i) { if (c && c[0]) { x.nombres.set(String(c[0]), String(c[1] || '').trim()); x.cta.set(String(c[0]), i); } });
+    (B2.clientes || []).forEach(function (c, i) { if (c && c[1]) x.cli.set(String(c[1]).toUpperCase(), i); });
+    // las cifras de cada hallazgo de Variaciones, por su llave (la misma de su seguimiento)
+    if (D2 && D2.filas && VC) D2.filas.forEach(function (f) { x.filas.set(String(f[0]).toUpperCase(), VC.cifras(f)); });
+    // el movimiento de cada empresa, cuenta y mes, y los meses con balanza de cada empresa (los demás, en blanco)
+    if (B2.mov) {
+      x.mov = new Map();
+      B2.mov.forEach(function (m) { x.mov.set(m[0] + '|' + m[1] + '|' + m[2], m[3]); });
+      if (VC) x.vac = VC.mesesVacios(B2);
+    }
+    return x;
+  }
+
+  /* las cifras de las aplicaciones: las calcula la pantalla de Depuración de CxC / CxP con el mismo cálculo de su pestaña
+     Aplicaciones. Desde ahí la pantalla da su función; desde Variaciones o Activo fijo se abre esa pantalla por detrás (el
+     marco de la vista, que queda listo para cuando la abran; abierta sola, un marco escondido aquí) y se le pregunta. */
+  function espera(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function carteraPorDetras(aviso) {
+    var fr = null;
+    try { var T = window.top; if (T && T !== window && typeof T.__carMarco === 'function') fr = T.__carMarco(); } catch (e) { fr = null; }
+    if (!fr) {
+      fr = document.getElementById('hall-car');
+      if (!fr) {
+        fr = document.createElement('iframe'); fr.id = 'hall-car'; fr.title = 'Depuración de CxC / CxP (para el Excel de hallazgos)';
+        fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
+        fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:800px;border:0;opacity:0;pointer-events:none';
+        var v = (location.search.match(/[?&]v=([^&#]+)/) || [])[1];
+        fr.src = 'cartera.html' + (v ? '?v=' + v : '');
+        document.body.appendChild(fr);
+      }
+    }
+    aviso('Abriendo Depuración de CxC / CxP…');
+    for (var hasta = Date.now() + 240000; Date.now() < hasta; await espera(300)) {
+      try { var w = fr.contentWindow; if (w && typeof w.__carHallApl === 'function') return w.__carHallApl; } catch (e) { return null; }
+    }
+    return null;
+  }
+  async function cifrasApl(op, apls, aviso) {
+    if (!apls.length) return [];
+    try {
+      var f = op.aplicaciones || await carteraPorDetras(aviso);
+      if (!f) return null;
+      aviso('Calculando aplicaciones…');
+      var lista = apls.map(function (c) { return { rfc: c.rfc, uf: c.uf || '', ud: c.ud || '' }; });
+      var r = await Promise.race([f(lista, function (n, t) { aviso('Calculando aplicaciones… ' + num(n) + ' de ' + num(t)); }),
+        espera(300000).then(function () { return null; })]);
+      return r && r.length === apls.length ? r : null;
+    } catch (e) { return null; }
   }
 
   /* cada caso en palabras: qué es, su periodo (para leer y para ordenar) y su folio fiscal */
@@ -143,7 +207,9 @@
       return ocultos.size ? 'Tus empresas a la vista no tienen casos con estatus o comentario ni aplicaciones (hay ' + ocultos.size + ' clientes ocultos)'
                           : 'Tus empresas no tienen casos con estatus o comentario ni aplicaciones todavía';
     }
-    var CU = casos.some(function (c) { return c.r === 'var' || c.r === 'mov'; }) ? await cuentasDe(op) : { nombres: new Map(), anioBase: 2026 };
+    var aviso = function (t) { if (b) b.textContent = t; };
+    var CU = { nombres: new Map(), anioBase: 2026, filas: new Map(), mov: null, cli: new Map(), cta: new Map(), vac: null };
+    if (casos.some(function (c) { return c.r === 'var' || c.r === 'mov'; })) { aviso('Calculando Variaciones…'); CU = await datosVar(op); }
     var emp = function (rfc) { var e = E[rfc] || []; return { razon: e[0] || rfc, grupo: e[1] || '—', cont: e[2] || '' }; };
     casos.forEach(function (c) {
       c.d = describe(c, CU); c.e = emp(c.rfc);
@@ -159,6 +225,10 @@
         || String(a.cp || '').localeCompare(String(z.cp || ''), 'es') || String(a.ff || '').localeCompare(String(z.ff || ''), 'es', { numeric: true })
         || String(a.k).localeCompare(String(z.k));
     });
+
+    var CF = await cifrasApl(op, apls, aviso);
+    if (CF) apls.forEach(function (c, i) { c.x = CF[i] || {}; });
+    aviso('Armando el Excel…');
 
     var EX = await MK.excelJS();
     var wb = MK.libro(EX, 'Hallazgos de Reportes');
@@ -215,12 +285,12 @@
     MK.impresion(ws, { repetir: f0 });
 
     // 2. Bitácora: un renglón por caso, ordenada por empresa y con filtros
-    ws = wb.addWorksheet('Bitácora');
+    ws = wb.addWorksheet('Bitácora general');
     cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Contador asignado', 24], ['Reporte', 18], ['Qué es', 48], ['Periodo', 11],
       ['Folio fiscal (UUID)', 38], ['Estatus', 23], ['Pendiente / Resuelto', 13], ['Estatus puesto por', 24], ['Fecha del estatus', 17],
       ['Comentarios', 12], ['Último comentario', 56], ['Comentó', 24], ['Fecha del comentario', 17]];
     cols.forEach(function (c, i) { ws.getColumn(i + 1).width = c[1]; });
-    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Bitácora', lineas: [lin0, lin1, lin2] });
+    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Bitácora general', lineas: [lin0, lin1, lin2] });
     cols.forEach(function (c, i) { ws.getCell(f0, i + 1).value = c[0]; });
     MK.cabecera(ws, f0, 1, cols.length);
     casos.forEach(function (c, j) {
@@ -241,13 +311,13 @@
     MK.impresion(ws, { repetir: f0 });
 
     // 3. Comentarios: toda la plática, un renglón por comentario
-    ws = wb.addWorksheet('Comentarios');
+    ws = wb.addWorksheet('Comentarios generales');
     cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Reporte', 18], ['Qué es', 44], ['Periodo', 11], ['Estatus actual', 23],
       ['Fecha y hora', 17], ['Quién', 24], ['Comentario', 70], ['Cambio de estatus', 30]];
     cols.forEach(function (c, i) { ws.getColumn(i + 1).width = c[1]; });
     var coms = [];
     casos.forEach(function (c) { c.coms.forEach(function (m) { coms.push([c, m]); }); });
-    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Comentarios',
+    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Comentarios generales',
       lineas: [lin0, num(coms.length) + ' comentarios de ' + num(casos.filter(function (c) { return c.coms.length; }).length) + ' casos', lin2] });
     cols.forEach(function (c, i) { ws.getCell(f0, i + 1).value = c[0]; });
     MK.cabecera(ws, f0, 1, cols.length);
@@ -268,25 +338,35 @@
     ws.views = [{ state: 'frozen', ySplit: f0 }];
     MK.impresion(ws, { repetir: f0 });
 
-    // 4. Aplicaciones (367): las relaciones marcadas «Aplicada» en Depuración CxC / CxP, para hacerlas en QUO
-    ws = wb.addWorksheet('Aplicaciones');
-    cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Contador asignado', 24], ['Cliente o proveedor', 32], ['Factura', 14],
-      ['Folio fiscal de la factura', 38], ['Anticipo o nota de crédito', 16], ['Su folio fiscal (o número de QUO)', 38],
-      ['Monto a aplicar', 16], ['Cómo se decidió', 14], ['Lo decidió', 24], ['Fecha', 17]];
+    // 4. Aplicaciones (367; 378: con las columnas que dejó Barbosa): las relaciones marcadas «Aplicada» en Depuración CxC / CxP,
+    //    para hacerlas en QUO, con las cifras de la pestaña Aplicaciones (demostrativo) y el último comentario de su factura
+    ws = wb.addWorksheet('Aplicaciones CXP Y CXC');
+    cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Contador asignado', 24], ['Si es cliente o proveedor', 13],
+      ['Cliente o proveedor', 32], ['Factura', 14], ['Folio fiscal de la factura', 38], ['Saldo de la factura', 16],
+      ['Relación (Sugerida, Automática, Aceptada, Confirmada)', 20], ['Anticipo o nota de crédito', 16],
+      ['Su folio fiscal (o número de QUO)', 38], ['Monto a aplicar', 16], ['Lo decidió', 24], ['Comentario', 44], ['Fecha', 17],
+      ['Estado de la relación', 26], ['Total del CFDI (anticipo o nota)', 17], ['Se aplica', 15],
+      ['Saldo de la factura quedaría (demostrativo)', 18], ['Le queda al anticipo o nota', 17]];
+    var MON_A = [9, 13, 18, 19, 20, 21];
     cols.forEach(function (c, i) { ws.getColumn(i + 1).width = c[1]; });
-    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Aplicaciones',
+    f0 = MK.encabezado(wb, ws, cols.length, { titulo: 'Hallazgos de Reportes · Aplicaciones CXP Y CXC',
       lineas: [lin0, num(apls.length) + (apls.length === 1 ? ' aplicación marcada' : ' aplicaciones marcadas')
-        + ' «Aplicada» en Depuración CxC / CxP', 'El CRM no sabe si ya se hizo en QUO: solo guarda la decisión', lin2] });
+        + ' «Aplicada» en Depuración CxC / CxP', 'El CRM no sabe si ya se hizo en QUO: solo guarda la decisión',
+        CF ? 'Las cifras son de la cartera de hoy, como la pestaña Aplicaciones (demostrativo: no cambia saldos en QUO)'
+           : (apls.length ? 'Las cifras no se pudieron calcular esta vez: bájalo desde Depuración CxC / CxP' : ''), lin2]
+        .filter(Boolean) });
     cols.forEach(function (c, i) { ws.getCell(f0, i + 1).value = c[0]; });
     MK.cabecera(ws, f0, 1, cols.length);
+    var mon = function (v) { var n = v == null ? null : Number(v); return n != null && isFinite(n) ? n : null; };
     apls.forEach(function (c, j) {
-      var r = ws.getRow(f0 + 1 + j), m = c.m == null ? null : Number(c.m);
-      [c.e.grupo, c.e.razon, c.rfc, c.e.cont, c.cp || '', c.ff || '', c.uf || '', c.fd || '', c.ud || '',
-        m != null && isFinite(m) ? m : 'Lo que alcance', c.o === 'agotar' ? 'Agotar' : 'A mano', c.por || '', fecha(c.en)]
+      var r = ws.getRow(f0 + 1 + j), m = mon(c.m), x = c.x || {};
+      [c.e.grupo, c.e.razon, c.rfc, c.e.cont, x.lado || '', c.cp || '', c.ff || '', c.uf || '', mon(x.saldo),
+        x.rel || '', c.fd || '', c.ud || '', m != null ? m : 'Lo que alcance', c.por || '', c.com ? c.com.t || '' : '', fecha(c.en),
+        x.estado || '', mon(x.total), mon(x.se), mon(x.queda), mon(x.leq)]
         .forEach(function (v, i) { r.getCell(i + 1).value = v; });
-      r.getCell(10).numFmt = '$#,##0.00'; r.getCell(13).numFmt = 'dd/mm/yyyy hh:mm';
-      for (var k = 1; k <= cols.length; k++) if (k !== 10 && k !== 13) r.getCell(k).alignment = { wrapText: true, vertical: 'top' };
-      r.getCell(10).alignment = { vertical: 'top', horizontal: 'right' }; r.getCell(13).alignment = { vertical: 'top' };
+      MON_A.forEach(function (k) { r.getCell(k).numFmt = '$#,##0.00'; r.getCell(k).alignment = { vertical: 'top', horizontal: 'right' }; });
+      r.getCell(16).numFmt = 'dd/mm/yyyy hh:mm'; r.getCell(16).alignment = { vertical: 'top' };
+      for (var k = 1; k <= cols.length; k++) if (MON_A.indexOf(k) < 0 && k !== 16) r.getCell(k).alignment = { wrapText: true, vertical: 'top' };
     });
     ult = f0 + Math.max(apls.length, 1);
     if (!apls.length) ws.getCell(f0 + 1, 1).value = 'Sin aplicaciones marcadas «Aplicada»';
@@ -294,6 +374,76 @@
     if (apls.length) ws.autoFilter = { from: { row: f0, column: 1 }, to: { row: ult, column: cols.length } };
     ws.views = [{ state: 'frozen', ySplit: f0, xSplit: 2 }];
     MK.impresion(ws, { repetir: f0 });
+
+    // las hojas de cada reporte (378): los casos de la bitácora general de ese reporte, con las columnas de su pantalla
+    var deRep = function (k) { return casos.filter(function (c) { return c.r === k; }); };
+    var ultCom = function (c) { var u = c.coms.length ? c.coms[c.coms.length - 1] : null; return u ? u.t || '' : ''; };
+    var hoja = function (nombre, titulo, cols2, filas, vacio, pinta) {
+      var w = wb.addWorksheet(nombre);
+      cols2.forEach(function (c, i) { w.getColumn(i + 1).width = c[1]; });
+      var g0 = MK.encabezado(wb, w, cols2.length, { titulo: 'Hallazgos de Reportes · ' + titulo,
+        lineas: [lin0, num(filas.length) + (filas.length === 1 ? ' caso' : ' casos') + ' de ' + titulo.toLowerCase().replace(/^bitácora /, ''), lin2] });
+      cols2.forEach(function (c, i) { w.getCell(g0, i + 1).value = c[0]; });
+      MK.cabecera(w, g0, 1, cols2.length);
+      filas.forEach(function (c, j) {
+        var r = w.getRow(g0 + 1 + j);
+        pinta(c, r);
+        for (var k = 1; k <= cols2.length; k++) { var x = r.getCell(k); if (!x.alignment) x.alignment = { wrapText: true, vertical: 'top' }; }
+      });
+      var u2 = g0 + Math.max(filas.length, 1);
+      if (!filas.length) w.getCell(g0 + 1, 1).value = vacio;
+      MK.cuerpo(w, g0 + 1, u2, 1, cols2.length);
+      if (filas.length) w.autoFilter = { from: { row: g0, column: 1 }, to: { row: u2, column: cols2.length } };
+      w.views = [{ state: 'frozen', ySplit: g0, xSplit: 2 }];
+      MK.impresion(w, { repetir: g0 });
+      return w;
+    };
+    var pone = function (r, vals) { vals.forEach(function (v, i) { r.getCell(i + 1).value = v; }); };
+    var dinero2 = function (r, ks) { ks.forEach(function (k) { r.getCell(k).numFmt = '$#,##0.00'; r.getCell(k).alignment = { vertical: 'top', horizontal: 'right' }; }); };
+
+    // 5. Bitácora Variación: las cifras de la pantalla de Variaciones (la misma pieza de cálculo, con sus criterios)
+    hoja('Bitácora Variación', 'Bitácora Variación', [['Grupo', 20], ['Empresa', 34], ['Contador', 24], ['Cuenta', 13],
+      ['Nombre de cuenta', 32], ['Estatus actual', 23], ['Comentario', 50], ['Mes', 11], ['Variación', 12], ['Mes anterior', 16],
+      ['Mes evaluado', 16], ['Cambio', 16]], deRep('var'), 'Sin casos de Variaciones', function (c, r) {
+      var f = CU.filas.get(String(c.k || '').toUpperCase()) || null;
+      var nom = CU.nombres.get(String(c.cta || '')) || '';
+      var vari = !f ? 'Ya no sale en el reporte' : f.cero ? 'desde $0' : (f.v == null || !isFinite(f.v) ? '' : f.v);
+      pone(r, [c.e.grupo, c.e.razon, c.e.cont, c.cta || '', nom + (c.pago ? ' · pago de la provisión' : ''), estTxt(c.est), ultCom(c),
+        c.d.per, vari, f ? f.ap : null, f ? f.ac : null, f ? f.dif : null]);
+      if (typeof vari === 'number') { r.getCell(9).numFmt = '+0%;-0%;0%'; r.getCell(9).alignment = { vertical: 'top', horizontal: 'right' }; }
+      dinero2(r, [10, 11, 12]);
+    });
+
+    // 6. Bitácora Movimientos: un renglón por mes revisado y los 12 meses de esa cuenta en ese año, con el revisado resaltado
+    var MESES_L = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    var movDe = function (c, m) {
+      var ci = CU.cli.get(String(c.rfc || '').toUpperCase()), ct = CU.cta.get(String(c.cta || ''));
+      var y = c.anio || CU.anioBase, p = y + '-' + String(m).padStart(2, '0');
+      if (!CU.mov || ci == null || ct == null) return null;
+      if (CU.vac) { var a = CU.vac.primero.get(ci), z = CU.vac.hasta.get(ci); if (!a || p < a || p > z || CU.vac.es(ci, p)) return null; }
+      return CU.mov.get(ci + '|' + ct + '|' + p) || 0;
+    };
+    hoja('Bitácora Movimientos', 'Bitácora Movimientos', [['Grupo', 20], ['Empresa', 34], ['Contador', 24], ['Cuenta', 13],
+      ['Nombre de cuenta', 32], ['Mes revisado', 12], ['Estatus actual', 23], ['Comentario', 50]]
+      .concat(MESES_L.map(function (m) { return [m + ' (con el movimiento)', 15]; })), deRep('mov'), 'Sin casos de Movimientos', function (c, r) {
+      pone(r, [c.e.grupo, c.e.razon, c.e.cont, c.cta || '', CU.nombres.get(String(c.cta || '')) || '', c.d.per, estTxt(c.est), ultCom(c)]
+        .concat(MESES_L.map(function (_, i) { return movDe(c, i + 1); })));
+      dinero2(r, MESES_L.map(function (_, i) { return 9 + i; }));
+      if (c.mes >= 1 && c.mes <= 12) {
+        var x = r.getCell(8 + c.mes);
+        x.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE3CC' } };
+        x.font = { bold: true, color: { argb: 'FF14233F' } };
+      }
+    });
+
+    // 7. Bitácora Activo fijo: las columnas de su pantalla
+    hoja('Bitácora Activo fijo', 'Bitácora Activo fijo', [['Grupo', 20], ['Empresa', 34], ['Contador', 24], ['Comentario', 50],
+      ['Estado', 23], ['Prioridad', 10], ['Tipo de observación', 30], ['Mes', 11], ['Tipo cliente / proveedor', 13], ['Nombre', 32],
+      ['Monto MXN', 16], ['Cuenta donde se registró', 30]], deRep('af'), 'Sin casos de Activo fijo', function (c, r) {
+      pone(r, [c.e.grupo, c.e.razon, c.e.cont, ultCom(c), estTxt(c.est), c.pr || '', (c.tipo || 'Observación') + (c.gone ? ' (ya no sale en el reporte)' : ''),
+        c.d.per, c.lado === 'venta' ? 'Cliente' : c.lado === 'compra' ? 'Proveedor' : '', c.cp || '', mon(c.monto), c.cuenta || '']);
+      dinero2(r, [11]);
+    });
 
     await MK.guardar(wb, 'Hallazgos de Reportes ' + hoyArchivo() + '.xlsx');
     return null;
@@ -305,7 +455,7 @@
     b.type = 'button'; b.className = op.clase || 'btn'; b.textContent = TXT;
     b.setAttribute('data-excel', TXT);   // js/marca.js le pone al lado su «PDF de hallazgos»
     b.title = 'Los casos con estatus o comentario de Variaciones, Movimientos, Activo fijo y Depuración CxC / CxP de tus empresas, '
-      + 'en un solo archivo: resumen por empresa, bitácora, comentarios y las aplicaciones por hacer en QUO';
+      + 'en un solo archivo: resumen por empresa, bitácora general, comentarios, las aplicaciones por hacer en QUO y una bitácora de cada reporte';
     var ocupado = false;
     b.addEventListener('click', async function () {
       if (ocupado) return;
