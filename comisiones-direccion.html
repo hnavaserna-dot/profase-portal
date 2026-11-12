@@ -198,6 +198,8 @@ tfoot td{font-weight:700;background:var(--surface-2)}
 .chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
 .chip.ojo{background:var(--amber-soft);color:var(--amber)}
 .chip.az{background:var(--navy-soft);color:var(--ink)}
+/* 371: Sí / No de las devoluciones de ISR */
+.dlbtns{display:inline-flex;gap:6px;flex-wrap:wrap}
 .chip.ok{background:var(--ok-soft);color:var(--ok)}
 .chip.na{background:var(--accent-soft);color:var(--accent-ink)}
 .chip.grande{font-size:13px;padding:3px 10px;min-width:30px;text-align:center}
@@ -506,6 +508,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
           <button type="button" role="tab" aria-selected="false" data-dt="semanas">Pagos a SV<span class="cta" id="n-semanas">0</span></button>
           <button type="button" role="tab" aria-selected="false" data-dt="devs">Devoluciones<span class="cta" id="n-devs">0</span></button>
           <button type="button" role="tab" aria-selected="false" data-dt="porfac">Por facturar<span class="cta" id="n-porfac">0</span></button>
+          <!-- 371 (Héctor Daniel Nava, 11-nov-2026, 19:53: «yo te digo en todas las de isr»): si cada una de ISR lleva costo SV -->
+          <button type="button" role="tab" aria-selected="false" data-dt="isrsv" id="b-isrsv" hidden>De ISR: ¿lleva SV?<span class="cta" id="n-isrsv">0</span></button>
           <button type="button" role="tab" aria-selected="false" data-dt="cobra">Lo que se cobra de cada cliente<span class="cta" id="n-cobra">0</span></button>
         </div>
         <div class="acciones"><span class="estado" id="dev-estado" aria-live="polite"></span>
@@ -522,7 +526,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
         <span class="grupo"><label for="d-isr">% de las de ISR (sobre lo devuelto)</label><input class="pct" id="d-isr" inputmode="decimal" autocomplete="off"><button class="btn chico" type="button" id="d-isr-ok" hidden>Guardar %</button></span>
         <span class="mut" id="d-isr-n"></span></div>
       <div class="in filtros" id="d-lis-fila" hidden><span class="grupo"><label for="d-lis-cli">Cliente</label><select id="d-lis-cli"></select></span>
-        <span class="grupo"><label for="d-lis-est">Pago a SV</label><select id="d-lis-est"><option value="">Todas</option><option value="por_entregar">Por entregar</option><option value="pagado">Pagadas a SV</option><option value="sin_fecha">Sin fecha de pago</option><option value="no_lleva">No llevan SV</option></select></span>
+        <span class="grupo"><label for="d-lis-est">Pago a SV</label><select id="d-lis-est"><option value="">Todas</option><option value="por_entregar">Por entregar</option><option value="pagado">Pagadas a SV</option><option value="sin_fecha">Sin fecha de pago</option><option value="no_lleva">No llevan SV</option><option value="por_decidir">De ISR, por decidir si llevan SV</option></select></span>
         <span class="mut" id="d-lis-n"></span></div>
       <div class="in" style="padding-bottom:0"><h2 id="h-dev" style="font-size:16px">Devoluciones de IVA y su pago a SV</h2><div class="sub" id="dev-sub">&nbsp;</div></div>
       <!-- 269 y 282 (5-nov-2026): escoger cuáles se le pagan a SV, aquí y en «Pagos a SV» (lo mismo escogido en las dos) -->
@@ -539,6 +543,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       </div>
       <div class="tabla" data-dp="devs" hidden><table class="resp" id="t-ddev"><thead></thead><tbody></tbody></table></div>
       <div class="tabla" data-dp="porfac" hidden><table class="resp" id="t-dpor"><thead></thead><tbody></tbody></table></div>
+      <div class="tabla" data-dp="isrsv" hidden><table class="resp" id="t-disv"><thead></thead><tbody></tbody></table></div>
       <div class="tabla" data-dp="cobra" hidden><table class="resp" id="t-dcon"><thead></thead><tbody></tbody></table></div>
       <div class="vacio" id="dev-vacia" hidden></div>
     </section>
@@ -677,7 +682,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       var mi = /^com(?:-(\d{4})-(\d{2}))?$/.exec(ir);
       if (mi && mi[1] && +mi[2] >= 1 && +mi[2] <= 12) { PER.anio = +mi[1]; PER.mes = +mi[2]; periodos(); }
       if (ir === 'svp') muestra('dev', 'semanas');   // 269: el aviso de «Pagos a SV» (cdir_tab.js, PROFASE_ABRE: 'ver:pagos-sv')
-      else if (/^dev-(devs|cobra|porfac)$/.test(ir)) muestra('dev', ir.slice(4));   // 360: los avisos de una devolución (su lista o lo que se cobra)
+      else if (/^dev-(devs|cobra|porfac|isrsv)$/.test(ir)) muestra('dev', ir.slice(4));   // 360: los avisos de una devolución (su lista o lo que se cobra)
       else if (ir === 'reem' || ir === 'reemv') { muestra('uti', 'rdir'); if (ir === 'reemv') luzRdir(); }   // 288: la pila del Inicio y el aviso de lo nuevo
       else muestra(mi ? 'com' : 'res', mi ? 'pagar' : null);   // la pila del Inicio abre el pago de la comisión
     } catch (e) {
@@ -792,7 +797,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (RES.clave === perK() && RES.fac) nd = ((RES.fac.totales || {}).disponibles || {}).n || 0;
     else if (FAC.rango === 'mes' && FAC.clave) nd = FAC.filas.filter(function (f) { return f.estado === 'disponible'; }).length;
     $('b-fac').hidden = !nd; $('b-fac').textContent = nd || '';
-    var dd = DEV.d, nv = dd ? semanaToca(dd).length + (dd.por_facturar || []).length : 0;
+    var dd = DEV.d, nv = dd ? semanaToca(dd).length + (dd.por_facturar || []).length + isrPend(dd) : 0;
     $('b-dev').hidden = !nv; $('b-dev').textContent = nv || '';
   }
   function pintaFalta(nd, ru) {
@@ -809,6 +814,10 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       if (dd.sv_pct == null) L.push({ c: '%', t: 'Falta el % SV', s: 'Sin él no se calcula el costo SV.', b: CAPTURA ? 'Capturar' : 'Ver', ir: 'dev', sub: 'cobra' });
       if ('isr_pct' in dd && dd.isr_pct == null) L.push({ c: '%', t: 'Falta el % de las devoluciones de ISR', s: 'Sin él no sale cuánto facturar en las de ISR.', b: CAPTURA ? 'Capturar' : 'Ver', ir: 'dev', sub: 'cobra' });
       if (rev) L.push({ c: rev, t: (rev === 1 ? '1 devolución' : rev + ' devoluciones') + ' con nota de crédito por revisar', s: '', b: 'Ver', ir: 'dev', sub: 'devs' });
+      // 371: las de ISR sin decir si llevan costo SV
+      var ip = isrPend(dd);
+      if (ip) L.push({ c: ip, t: ip === 1 ? '1 devolución de ISR: ¿lleva costo SV?' : ip + ' devoluciones de ISR: ¿llevan costo SV?',
+        s: dd.isr_sv_decide ? 'Mientras no lo digas, no llevan costo SV ni entran a los pagos a SV.' : 'Lo decide H\u00e9ctor Daniel Nava.', b: dd.isr_sv_decide && !CONSULTA ? 'Decidir' : 'Ver', ir: 'dev', sub: 'isrsv' });
     }
     // 261: la Comisión HDN de meses ya cerrados que falta marcar pagada (de este año)
     if (PHDN.anio === PER.anio && PHDN.d) (PHDN.d.meses || []).filter(function (m) { return !m.en_curso && Number(m.por_pagar) > 0 && (m.estado === 'por_pagar' || m.estado === 'diferencia'); })
@@ -1781,6 +1790,11 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
      Todo lo calcula la base (cdir_dev); aquí solo se capturan el % de cada cliente, si lleva SV, el % SV y «Entregado». ---------- */
   function pctTxt(n) { return n == null ? '—' : Number(n).toLocaleString('es-MX', { maximumFractionDigits: 4 }) + ' %'; }
   var DEV_EST = { por_cobrar: ['Por cobrar', 'ojo'], pagada: ['Pagada', 'ok'], revisar: ['Revisar (nota de crédito)', 'ojo'] };
+  // 371: las de ISR que esperan que se diga si llevan costo SV (las rechazadas o desistidas ya no esperan nada)
+  var CASO_EST = { espera_sat: 'Esperando al SAT', requerimiento: 'Con requerimiento', autorizada: 'Autorizada', pagada: 'Depositada',
+    facturada: 'Facturada', rechazada: 'Rechazada', desistida: 'Desistida' };
+  function isrPorDecidir(x) { return x.lleva == null && !x.nueces && x.caso_estado !== 'rechazada' && x.caso_estado !== 'desistida'; }
+  function isrPend(d) { return ((d || {}).isr_sv || []).filter(isrPorDecidir).length; }
   async function cargaDev() {
     var n = ++DEV.pide;
     if (DEV.d) pintaDev();
@@ -1795,7 +1809,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     semanas: 'Escoge las devoluciones que se le pagan a SV y regístralas: «Ya se le pagó», con la fecha en que se le pagó, o «Programar pago», para el día que se le va a pagar. Abajo, cada pago con sus devoluciones: ábrelo para marcarlo pagado, cambiarlo o cancelarlo. Las del WorkFlow salen aquí cuando el cliente termina de pagar su factura.',
     devs: 'Cada devolución con su factura (la sube Elisa Mata y entra sola, incluida): el monto devuelto, si ya se pagó, el costo SV, la utilidad y la comisión.',
     porfac: 'Ya le depositaron al cliente y falta su factura; la sube Elisa Mata en el Panel de trabajo.',
-    cobra: 'Por cliente: si lleva factura, su porcentaje del monto devuelto (antes de IVA) y si lleva costo SV. Arriba, el % SV que se usa para todos y el % de las devoluciones de ISR (el mismo para todos los clientes). Las de ISR llevan el mismo % SV que las de IVA, en los clientes que lo llevan.'
+    isrsv: 'Cada devolución de ISR: H\u00e9ctor Daniel Nava dice si lleva costo SV (el mismo % SV de las de IVA, sobre lo devuelto), lleve o no SV el cliente en las de IVA. Mientras no lo diga, no lleva costo SV ni entra a los pagos a SV. Se puede cambiar mientras no vaya en un pago a SV. El Grupo Nueces nunca lleva SV.',
+    cobra: 'Por cliente: si lleva factura, su porcentaje del monto devuelto (antes de IVA) y si lleva costo SV. Arriba, el % SV que se usa para todos y el % de las devoluciones de ISR (el mismo para todos los clientes). Si cada devolución de ISR lleva costo SV lo dice H\u00e9ctor Daniel Nava en «De ISR: ¿lleva SV?» (con el mismo % SV, sobre lo devuelto).'
   };
   function pintaDev() {
     var d = DEV.d || {}, cap = !!d.captura && !CONSULTA, k = DEV.tab;
@@ -1806,6 +1821,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     // pestañas
     $('n-lista').textContent = (d.lista || []).length;
     $('n-semanas').textContent = (d.sv_resumen || {}).n_elegibles || 0; $('n-devs').textContent = L.length; $('n-porfac').textContent = F.length; $('n-cobra').textContent = C.length;
+    var I = d.isr_sv || [], porDec = isrPend(d);
+    $('b-isrsv').hidden = !I.length && k !== 'isrsv'; $('n-isrsv').textContent = porDec;
     document.querySelectorAll('[data-dt]').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-dt') === k)); });
     document.querySelectorAll('[data-dp]').forEach(function (x) { x.hidden = x.getAttribute('data-dp') !== k; });
     $('dev-ayuda').textContent = AYUDA_DEV[k];
@@ -1816,11 +1833,11 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('d-lis-fila').hidden = k !== 'lista';
     $('x-dev').hidden = k !== 'devs' && k !== 'lista' && k !== 'semanas';
     $('x-sv').hidden = k !== 'lista';
-    $('h-dev').textContent = { lista: 'Devoluciones de IVA y su pago a SV', semanas: 'Pagos a SV', devs: 'Devoluciones con su factura', porfac: 'Depositadas, por facturar', cobra: 'Lo que se cobra de cada cliente' }[k];
-    $('dev-sub').textContent = { lista: plural((d.lista || []).length, 'devolución', 'devoluciones') + ' · las de antes del WorkFlow y las nuevas', semanas: plural(+((d.sv_resumen || {}).n_elegibles) || 0, 'devolución por pagar', 'devoluciones por pagar') + ' · ' + plural((d.pagos || []).length, 'pago', 'pagos'), devs: plural(L.length, 'devolución', 'devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre', porfac: plural(F.length, 'devolución', 'devoluciones'), cobra: plural(C.length, 'cliente capturado', 'clientes capturados') }[k];
-    var cuantos = { lista: (d.lista || []).length, semanas: 1, devs: L.length, porfac: F.length, cobra: C.length }[k];
+    $('h-dev').textContent = { lista: 'Devoluciones de IVA y su pago a SV', semanas: 'Pagos a SV', devs: 'Devoluciones con su factura', porfac: 'Depositadas, por facturar', cobra: 'Lo que se cobra de cada cliente', isrsv: 'Devoluciones de ISR: ¿llevan costo SV?' }[k];
+    $('dev-sub').textContent = { lista: plural((d.lista || []).length, 'devolución', 'devoluciones') + ' · las de antes del WorkFlow y las nuevas', semanas: plural(+((d.sv_resumen || {}).n_elegibles) || 0, 'devolución por pagar', 'devoluciones por pagar') + ' · ' + plural((d.pagos || []).length, 'pago', 'pagos'), devs: plural(L.length, 'devolución', 'devoluciones') + ' · comisión con el ' + pct(d.porcentaje) + ' de siempre', porfac: plural(F.length, 'devolución', 'devoluciones'), cobra: plural(C.length, 'cliente capturado', 'clientes capturados'), isrsv: plural(porDec, 'por decidir', 'por decidir') + ' · ' + plural(I.length, 'devolución de ISR', 'devoluciones de ISR') }[k];
+    var cuantos = { lista: (d.lista || []).length, semanas: 1, devs: L.length, porfac: F.length, cobra: C.length, isrsv: I.length }[k];
     $('dev-vacia').hidden = cuantos > 0;
-    $('dev-vacia').textContent = { lista: 'Todavía no hay devoluciones.', semanas: 'Todavía no hay pagos SV.', devs: 'Todavía no hay devoluciones con su factura.', porfac: 'Ninguna por facturar.', cobra: 'Todavía no hay clientes capturados.' }[k];
+    $('dev-vacia').textContent = { lista: 'Todavía no hay devoluciones.', semanas: 'Todavía no hay pagos SV.', devs: 'Todavía no hay devoluciones con su factura.', porfac: 'Ninguna por facturar.', cobra: 'Todavía no hay clientes capturados.', isrsv: 'Todavía no hay devoluciones de ISR.' }[k];
     // % SV
     $('d-sv').value = d.sv_pct == null ? '' : Number(d.sv_pct).toLocaleString('es-MX', { maximumFractionDigits: 4 });
     $('d-sv').disabled = !cap; $('d-sv-ok').hidden = !cap;
@@ -1828,7 +1845,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     // 370: el % de las de ISR (el mismo para todos los clientes; su costo SV es el de las de IVA)
     $('d-isr').value = d.isr_pct == null ? '' : Number(d.isr_pct).toLocaleString('es-MX', { maximumFractionDigits: 4 });
     $('d-isr').disabled = !cap; $('d-isr-ok').hidden = !cap;
-    $('d-isr-n').textContent = d.isr_pct == null ? 'Falta capturarlo: sin él no se sabe cuánto facturar en las de ISR.' : 'El mismo para todos los clientes; el costo SV de las de ISR es el % SV de arriba, en los clientes que lo llevan.';
+    $('d-isr-n').textContent = d.isr_pct == null ? 'Falta capturarlo: sin él no se sabe cuánto facturar en las de ISR.' : 'El mismo para todos los clientes. Si cada una lleva costo SV (el % SV de arriba) lo dice H\u00e9ctor Daniel Nava en «De ISR: ¿lleva SV?».';
     // 260: todas las devoluciones con su pago a SV (la lista y su filtro)
     pintaListaDev();
     // 269: los pagos a SV (escoger cuáles, pagadas con su fecha, programar) y cada pago
@@ -1844,7 +1861,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
         + '<td data-l="Factura">' + (esc(x.folio) || 'Sin folio') + '<div class="mut">' + esc(fecha(x.fecha)) + '</div></td>'
         + '<td class="monto" data-l="Subtotal">' + esc(dinero(x.sub)) + '</td>'
         + '<td data-l="Pago"><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span>' + (x.pagada_el ? '<div class="mut">el ' + esc(fecha(x.pagada_el)) + '</div>' : Number(x.pagado) > 0 ? '<div class="mut">abonado ' + esc(dinero(x.pagado)) + '</div>' : '') + '</td>'
-        + '<td class="monto" data-l="Costo SV">' + (x.sv ? esc(dinero(x.costo)) : '<span class="mut">No lleva</span>') + '</td>'
+        + '<td class="monto" data-l="Costo SV">' + (x.sv ? esc(dinero(x.costo)) : x.isr_sv === 'por_decidir' ? '<span class="chip ojo">Por decidir</span>' : '<span class="mut">No lleva</span>') + '</td>'
         + '<td class="monto" data-l="Utilidad">' + dineroH(x.utilidad) + '</td>'
         + '<td class="monto" data-l="Comisión"><strong>' + dineroH(x.comision) + '</strong></td>'
         + '<td data-l="Pago SV">' + (!x.sv ? '' : x.entregado_el ? '<span class="chip ok">Entregado</span>' : x.paga_el ? esc(fecha(x.paga_el)) : '<span class="mut">Cuando se pague</span>') + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</td></tr>';
@@ -1856,6 +1873,26 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       return '<tr><td class="w" data-l="Cliente"><span class="rs">' + esc(x.rs) + '</span></td><td data-l="Devolución">' + esc(x.mes) + '</td><td data-l="Depositada">' + esc(fecha(x.pagado)) + '</td>'
         + '<td class="monto" data-l="Monto devuelto">' + (x.monto_devuelto != null ? esc(dinero(x.monto_devuelto)) : '<span class="mut">Falta</span>') + '</td>'
         + '<td class="monto" data-l="A facturar">' + (s.monto != null ? esc(dinero(s.monto)) + ' <span class="mut">más IVA</span>' : s.falta === 'cond' ? '<span class="chip ojo">Falta su %</span>' : '<span class="mut">Falta el monto</span>') + '</td></tr>';
+    }).join('');
+    // 371: las de ISR y si llevan costo SV (solo Héctor Daniel Nava contesta; Eva y Héctor Nava Ramos lo ven)
+    var dec = !!d.isr_sv_decide && !CONSULTA;
+    $('t-disv').tHead.innerHTML = '<tr><th>Cliente</th><th>Devolución</th><th class="monto">Lo devuelto</th><th>En las de IVA</th><th>¿Lleva costo SV?</th><th>' + (dec ? 'Decidir' : '') + '</th></tr>';
+    $('t-disv').tBodies[0].innerHTML = I.map(function (x) {
+      var st = x.nueces ? '<span class="mut">No lleva · su grupo nunca lleva SV</span>'
+        : x.lleva === true ? '<span class="chip az">Sí lleva</span>' : x.lleva === false ? '<span class="chip">No lleva</span>' : '<span class="chip ojo">Por decidir</span>';
+      var quien = x.lleva != null && !x.nueces && x.decidio ? '<div class="mut">' + esc(x.decidio) + (x.decidido ? ' · ' + esc(fechaHora(x.decidido)) : '') + '</div>' : '';
+      var bt = '';
+      if (x.nueces) bt = '';
+      else if (dec) bt = x.fijo ? '<span class="mut">Ya va en un pago a SV</span>'
+        : '<span class="dlbtns"><button class="btn chico' + (x.lleva === true ? ' acento' : '') + '" type="button" data-isrsv="' + esc(x.caso) + ':si" aria-pressed="' + (x.lleva === true) + '">Sí lleva</button> '
+          + '<button class="btn chico' + (x.lleva === false ? ' acento' : '') + '" type="button" data-isrsv="' + esc(x.caso) + ':no" aria-pressed="' + (x.lleva === false) + '">No lleva</button></span>';
+      else if (isrPorDecidir(x)) bt = '<span class="mut">Lo decide H\u00e9ctor Daniel Nava</span>';
+      return '<tr><td class="w" data-l="Cliente"><div class="rs">' + esc(x.rs) + '</div><div class="mut">' + esc(x.grupo) + '</div></td>'
+        + '<td data-l="Devolución">ISR · ejercicio ' + esc(x.ejercicio) + '<div class="mut">' + esc(CASO_EST[x.caso_estado] || x.caso_estado || '') + '</div></td>'
+        + '<td class="monto" data-l="Lo devuelto">' + (x.monto_devuelto != null ? esc(dinero(x.monto_devuelto)) : '<span class="mut">Todavía no</span>') + '</td>'
+        + '<td data-l="En las de IVA">' + (x.iva_sv ? 'Lleva SV' : '<span class="mut">No lleva SV</span>') + '</td>'
+        + '<td data-l="¿Lleva costo SV?">' + st + quien + '</td>'
+        + '<td data-l="' + (dec ? 'Decidir' : '') + '">' + bt + '</td></tr>';
     }).join('');
     // lo que se cobra de cada cliente
     $('t-dcon').tHead.innerHTML = '<tr><th>Cliente</th><th>Factura</th><th class="monto">%</th><th>Costo SV</th><th>Nota</th><th>Capturó</th></tr>';
@@ -1899,6 +1936,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     }
     if (x.estado === 'por_entregar' && x.pago_estado === 'programado') return '<span class="chip ojo">Programada</span><div class="mut">pago SV #' + esc(x.pago_id) + ' · el ' + esc(fecha(x.paga_el)) + '</div>';
     if (x.estado === 'por_entregar') return '<span class="chip ojo">Por entregar</span><div class="mut">toca el ' + esc(fecha(x.paga_el)) + '</div>';
+    if (x.estado === 'por_decidir') return '<span class="chip ojo">Por decidir si lleva SV</span>';   // 371
     return '<span class="mut">' + esc({ cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago') + '</span>';
   }
   // 282: cuándo pagó el cliente la factura de la devolución (la regla es de la base: cdir_fac_cobro)
@@ -1976,7 +2014,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function excelListaDev(b) {
     var L = listaDev(), est = $('d-lis-est'), filtro = (DLIS.cli || 'Todos los clientes') + ' · ' + est.options[est.selectedIndex].text;
-    var E = function (x) { return { pagado: 'Pagado a SV', por_entregar: 'Por entregar', cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV' }[x.estado] || 'Sin fecha de pago'; };
+    var E = function (x) { return { pagado: 'Pagado a SV', por_entregar: 'Por entregar', cuando_pague: 'Cuando el cliente pague', no_lleva: 'No lleva SV', por_decidir: 'Por decidir si lleva SV' }[x.estado] || 'Sin fecha de pago'; };
     excel(b, 'Devoluciones de IVA y pago a SV PROFASE', 'Devoluciones de IVA', ['Comisiones de dirección', filtro, L.length + ' devoluciones',
       'SV: lo que se le paga (en cada pago, cerrado a cientos; lo redondeado va en PROFASE)'],
       ['Cliente', 'Mes', 'El SAT dice', 'Devolvió el SAT', '% SV', 'SV', '% PROFASE', 'PROFASE', 'Total sin IVA', 'Factura con IVA', 'Factura ' + (T.b_facturas || ''), 'Fecha de la factura', 'Pagó el cliente', 'Pago a SV', 'Fecha', 'Se le pagó', 'Nota'],
@@ -2108,6 +2146,14 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     try { DEV.d = await rpc('cdir_dev_sv', { p_pct: v, p_que: 'isr' }); pintaDev(); avisa('Guardado: lo que no se ha entregado de las de ISR se volvió a calcular.'); }
     catch (e) { error(falla(e)); }
     b.disabled = false;
+  }
+  // 371: Héctor Daniel Nava dice si una devolución de ISR lleva costo SV
+  async function devIsrSv(b) {
+    var p = String(b.getAttribute('data-isrsv') || '').split(':'), caso = +p[0], si = p[1] === 'si';
+    if (!(caso > 0)) return;
+    b.disabled = true;
+    try { DEV.d = await rpc('cdir_dev_isr_sv', { p_caso: caso, p_lleva: si }); RES.clave = ''; pintaDev(); avisa(si ? 'Guardado: lleva costo SV.' : 'Guardado: no lleva costo SV.'); }
+    catch (e) { error(falla(e)); b.disabled = false; }
   }
   async function devSv(b) {
     var v = num($('d-sv').value); if (!(v > 0)) { error('Escribe el % SV (por ejemplo 9).'); return; }
@@ -2509,6 +2555,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var ct = t.closest('[data-ct]'); if (ct) { verPila('com', ct.getAttribute('data-ct')); return; }
     var ut = t.closest('[data-ut]'); if (ut) { verPila('uti', ut.getAttribute('data-ut')); return; }
     var dt = t.closest('[data-dt]'); if (dt) { DEV.tab = dt.getAttribute('data-dt'); pintaDev(); return; }
+    var isv = t.closest('[data-isrsv]'); if (isv) { if (!isv.disabled) devIsrSv(isv); return; }   // 371
     // 260: las pilas de las devoluciones filtran la lista de todas (la de los totales la deja completa)
     var dp = t.closest('[data-dpila]');
     if (dp) { var kp = dp.getAttribute('data-dpila'), filtra = kp === 'por_entregar' || kp === 'pagado' || kp === 'sin_fecha';
