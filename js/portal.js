@@ -230,6 +230,82 @@
     return el;
   };
 
+  /* ---- Confeti, una sola pieza (Héctor Daniel Nava, 12-nov-2026, 11:07: «hay manera que pongas confetti al aviso?», de la
+     ventana de cumpleaños de las 9:00). Nació en la bienvenida «¡Adiós Access, hola CRM!» (adios_access_tab.js, 31-oct-2026)
+     y desde ese día vive aquí: la usan esa bienvenida y la ventana de cumpleaños (cal_tab.js); lo nuevo que quiera confeti
+     la usa, no hace otro. P.confeti(capa, op) pone un lienzo de pantalla completa dentro de «capa» (no se puede picar:
+     pointer-events none) con los colores de PROFASE y regresa { estalla(x, y), fin(espera) }: estalla() lanza confeti
+     hacia arriba desde ese punto (sin punto, del centro un poco abajo) y fin() lo quita. op: cantidad (lo que cae al
+     abrir, 180), goteo (cuánto sigue cayendo de arriba, en ms; 25000), ritmo (qué tanto gotea, 0 a 1; .5), fuerza (qué
+     tan alto sale lo de estalla(); 7), dura (a los cuántos ms se desvanece, aunque algo siga cayendo; sin dura, hasta
+     que ya no cae nada), z (z-index del lienzo; 0 = detrás de lo que sigue en la capa), id, y solo (true: se quita solo
+     al terminar). Con «reducir movimiento» en el equipo no pone nada. Mientras la pestaña no se ve, el navegador lo
+     detiene solo. ---- */
+  var CONFETI_COL = ['#F07A1E', '#ffffff', '#9ec1ff', '#ffb46b', '#3f6fc7', '#ffd166'];
+  P.confeti = function (capa, op) {
+    op = op || {};
+    var nada = { estalla: function () {}, fin: function () {} };
+    try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return nada; } catch (e) { /* sin matchMedia */ }
+    if (!capa || !capa.appendChild) return nada;
+    var cv = document.createElement('canvas');
+    if (op.id) cv.id = op.id;
+    cv.setAttribute('aria-hidden', 'true');
+    cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:' + (+op.z || 0);
+    var cx = cv.getContext && cv.getContext('2d');
+    if (!cx) return nada;
+    capa.appendChild(cv);
+    var W = 0, H = 0, dpr = Math.min(2, window.devicePixelRatio || 1), ps = [], vivo = true, corre = false, t0 = 0;
+    var goteo = op.goteo == null ? 25000 : +op.goteo, ritmo = op.ritmo == null ? 0.5 : +op.ritmo;
+    var fuerza = op.fuerza == null ? 7 : +op.fuerza, dura = +op.dura || 0;
+    function mide() { W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+    mide(); addEventListener('resize', mide);
+    function uno(x, y, v) {
+      return { x: x, y: y, vx: (Math.random() - 0.5) * (v || 2), vy: v ? -(Math.random() * v * 2.2 + v) : Math.random() * 1.5 + 1,
+        r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.25, w: 6 + Math.random() * 7, h: 4 + Math.random() * 5,
+        c: CONFETI_COL[(Math.random() * CONFETI_COL.length) | 0], o: Math.random() * Math.PI * 2 };
+    }
+    function quita() { vivo = false; removeEventListener('resize', mide); if (cv.parentNode) cv.parentNode.removeChild(cv); }
+    function paso(t) {
+      if (!vivo) { corre = false; return; }
+      if (!t0) t0 = t;
+      cx.clearRect(0, 0, W, H);
+      if (dura && t - t0 > dura) {   // se acabó su tiempo: se desvanece en menos de un segundo
+        var a = 1 - (t - t0 - dura) / 900;
+        if (a <= 0) { ps = []; corre = false; cx.globalAlpha = 1; if (op.solo) quita(); return; }
+        cx.globalAlpha = a;
+      }
+      var gotea = t - t0 < goteo;
+      if (gotea && ps.length < 260 && Math.random() < ritmo) ps.push(uno(Math.random() * W, -12));
+      for (var i = 0; i < ps.length; i++) {
+        var p = ps[i];
+        p.vy += 0.035; p.vx *= 0.995; p.x += p.vx + Math.sin(p.o += 0.05) * 0.6; p.y += p.vy; p.r += p.vr;
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c;
+        cx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.o))); cx.restore();
+      }
+      ps = ps.filter(function (p) { return p.y < H + 30; });
+      if (!gotea && !ps.length) {   // ya no cae nada: se detiene (y, con «solo», se quita)
+        corre = false; cx.clearRect(0, 0, W, H);
+        if (op.solo) quita();
+        return;
+      }
+      requestAnimationFrame(paso);
+    }
+    function arranca() { if (vivo && !corre) { corre = true; requestAnimationFrame(paso); } }
+    var n = op.cantidad == null ? 180 : +op.cantidad;
+    for (var k = 0; k < n; k++) ps.push(uno(Math.random() * W, -20 - Math.random() * H * 0.6));
+    arranca();
+    return {
+      estalla: function (x, y) {
+        if (!vivo) return;
+        var ancho = x == null ? W * 0.3 : Math.min(W * 0.3, 160);   // del centro, a lo ancho; de un punto, más junto
+        x = x == null ? W / 2 : +x; y = y == null ? H * 0.62 : +y;
+        for (var j = 0; j < 220; j++) ps.push(uno(x + (Math.random() - 0.5) * ancho, y, fuerza));
+        arranca();
+      },
+      fin: function (espera) { setTimeout(quita, espera || 0); }
+    };
+  };
+
   /* ---- El signo PROFASE lleva al Inicio (regla de Daniel, 31-oct-2026, 16:18 y 16:23: «si desde ahí le pico al logo de
      profase; me mandes a home… ponlo para todo lo nuevo y todo lo viejo»; «y también en la ipad y laptop»). En cualquier
      pantalla (celular, iPad, computadora), picar el signo de arriba de una vista (o su «PROFASE · Asesoría Contable, Legal y
