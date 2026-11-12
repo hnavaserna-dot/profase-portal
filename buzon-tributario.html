@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=270fdf63ed"></script><script src="js/marca.js?v=fac9cf24a8"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/seguimiento.js?v=ef4a475307"></script><script src="js/paginas.js?v=6ea2a01361"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4e3576f5a5"></script><script src="js/marca.js?v=fac9cf24a8"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script><script src="js/paginas.js?v=6ea2a01361"></script>
 <style>
 /* Portal PROFASE · Clientes › Buzón tributario (3-nov-2026, pedido de Fernando Cadengo; portal/sql/195_buzon_tributario.sql).
    El concentrado de los avisos que manda el SAT a sat@profase.com.mx («Nuevo mensaje en el Buzón Tributario de <RFC>»):
@@ -185,10 +185,14 @@ tr.click:hover td{background:var(--navy-soft)}
 .msg.bien{background:var(--ok-soft);color:var(--ok)}
 .msg.ojo{background:var(--amber-soft);color:var(--amber)}
 .msg.nota{background:var(--navy-soft);margin-top:8px}
-.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:70;display:flex;align-items:center;justify-content:center;padding:16px}
-.pregunta>div{background:var(--surface);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.pregunta h2{font-size:20px;font-weight:750}
-.pregunta .pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+/* Las ventanas de «+ Subir aviso», «Cargar mi Excel», los de varios a la vez y los motivos van en la ventana común
+   (js/seguimiento.js; 11-nov-2026, pedido de Fernando Cadengo), encima de la ficha (#bzPregunta, z-index 70) */
+#bzPregunta{position:relative;z-index:70}
+.segv .bz-intro{margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--sg-ink2)}
+.segv .bz-cuerpo{display:grid;gap:12px;min-width:0}
+.segv .bz-cuerpo>.sg-campos{margin-top:0}
+.segv .sg-campo input[type=file]{font-size:13px;max-width:100%}
+.segv .bz-cuerpo .sg-fila{justify-content:flex-end;margin-top:0}
 .cuenta{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 .cuenta div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .cuenta b{display:block;font-family:var(--f-display);font-size:22px}
@@ -219,8 +223,8 @@ tr.click:hover td{background:var(--navy-soft)}
 .equipo li.vacio{color:var(--muted);font-size:13px}
 /* (202) el plazo y los dos caminos */
 .opciones{display:flex;flex-wrap:wrap;gap:6px 16px}
-.campo .opciones label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;color:var(--ink);cursor:pointer}
-.campo .opciones input{width:auto;padding:0;margin:0;accent-color:var(--navy)}
+.campo .opciones label,.sg-campo .opciones label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;color:var(--ink);cursor:pointer}
+.campo .opciones input,.sg-campo .opciones input{width:auto;padding:0;margin:0;accent-color:var(--navy)}
 .bloque{border-top:1px dashed var(--line);padding-top:10px;display:grid;gap:10px}
 .bloque:first-child{border-top:0;padding-top:0}
 .bloque>.t{font-weight:700;font-size:13.5px}
@@ -300,8 +304,6 @@ tr.click:hover td{background:var(--navy-soft)}
   </section>
 </div>
 
-<div class="pregunta" id="pregunta" hidden role="dialog" aria-modal="true" aria-labelledby="pq-t"><div id="pq"></div></div>
-
 <script>
 (function () {
   'use strict';
@@ -322,7 +324,7 @@ tr.click:hover td{background:var(--navy-soft)}
   // (293) lo que sale bien o mal se ve donde está la persona: dentro de la ventana abierta (junto al botón que picó, si se
   // sabe), no detrás de ella (así se quedaba escondido qué faltaba al asignar desde el panel, 5-nov-2026)
   function enVentana(t, clase, cerca) {
-    var caja = !$('pregunta').hidden ? $('pq') : $('v-cuerpo');   // la ficha abierta (su columna de «Qué sigue»)
+    var caja = PQ ? PQ.scrim.querySelector('.bz-cuerpo') : $('v-cuerpo');   // la ventana de encima o la ficha abierta (su «Qué sigue»)
     if (!caja || !t) return;
     var ref = cerca && caja.contains(cerca) ? (cerca.closest('.acciones') || cerca) : null, m = null;
     if (ref) { var sig = ref.nextElementSibling; if (sig && sig.classList.contains('msg-ventana')) m = sig; }
@@ -411,24 +413,46 @@ tr.click:hover td{background:var(--navy-soft)}
   var VB = null;
   function fichaFuera() { if (VB) { var v = VB; VB = null; try { v.cerrar(); } catch (e) {} } }
   function cierra() { if (VB) VB.cerrar(); else ABIERTO = null; }
-  function pregunta(html) { $('pq').innerHTML = html; $('pregunta').hidden = false; var f = $('pq').querySelector('select,input,textarea,button'); try { f && f.focus(); } catch (e) {} }
-  function noPregunta() { $('pregunta').hidden = true; $('pq').innerHTML = ''; }
+  /* Las demás ventanas (subir un aviso, cargar el Excel, los de varios a la vez y los motivos), en la ventana común
+     (js/seguimiento.js; 11-nov-2026, pedido de Fernando Cadengo: «1 b, 2 a»): miden lo que traen, el botón principal
+     azul en el pie (con el mismo id de siempre: la página le pone su onclick) y «Cerrar» en lugar de «Cancelar». Van en su
+     propio lugar (#bzPregunta, encima de la ficha) para que la ficha abierta se quede debajo. Mientras sube o carga
+     (fija), ni Esc, ni picar afuera, ni ✕ ni «Cerrar» la quitan. o = {kick, titulo, html, acciones, pie, sucio} */
+  var PQ = null, PQH = null, FIJA = false;
+  function pregunta(o) {
+    if (!PQH) { PQH = document.createElement('div'); PQH.id = 'bzPregunta'; }
+    document.body.appendChild(PQH);
+    FIJA = false;
+    var v = window.PROFASE_SEG.abre({ host: PQH, sinPlatica: true, kick: o.kick || 'Buzón tributario', titulo: o.titulo,
+      derecha: '<div class="bz-cuerpo">' + o.html + '</div>', acciones: o.acciones, pieTexto: o.pie || '', sucio: o.sucio,
+      // su Esc, si la lista del buscador está abierta (la cierra el buscador) o mientras sube
+      alEsc: function () { return FIJA || !!(v && v.scrim.querySelector('.pb-lst:not([hidden])')); },
+      alCerrar: function () { if (PQ === v) PQ = null; FIJA = false; },
+      enlaza: function (scrim) {
+        scrim.addEventListener('click', function (e) {
+          if (FIJA && (e.target === scrim || e.target.closest('[data-x],[data-cancelar]'))) { e.stopImmediatePropagation(); e.preventDefault(); }
+        }, true);
+      } });
+    PQ = v;
+    var f = v.scrim.querySelector('.bz-cuerpo select,.bz-cuerpo input,.bz-cuerpo textarea'); try { f && f.focus(); } catch (e) {}
+    return v;
+  }
+  function noPregunta() { if (PQ) { var v = PQ; PQ = null; FIJA = false; v.cerrar(); } }
+  // mientras sube o carga: no se cierra (como antes con «fija»)
+  function fija(si) {
+    FIJA = !!si;
+    if (PQ) [].forEach.call(PQ.scrim.querySelectorAll('[data-x],[data-cancelar]'), function (b) { b.disabled = FIJA; });
+  }
   // pide un motivo en una ventana (en lugar del cuadro del navegador)
   function motivo(titulo, texto, boton, hacer) {
-    pregunta('<h2 id="pq-t">' + esc(titulo) + '</h2><div>' + esc(texto) + '</div>'
-      + '<div class="campo"><label for="m-mot">Motivo</label><textarea id="m-mot" maxlength="300"></textarea></div>'
-      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">' + esc(boton) + '</button></div>');
-    $('m-no').onclick = noPregunta;
+    pregunta({ titulo: titulo, html: '<p class="bz-intro">' + esc(texto) + '</p>'
+      + '<div class="sg-campos"><div class="sg-campo ancho"><label for="m-mot">Motivo</label><textarea id="m-mot" maxlength="300"></textarea></div></div>',
+      acciones: [{ t: boton, tipo: 'b1', id: 'm-ok' }], sucio: function () { return !!($('m-mot') && $('m-mot').value.trim()); } });
     $('m-ok').onclick = async function () {
       this.disabled = true;
       try { await hacer($('m-mot').value); noPregunta(); } catch (e) { error(falla(e)); this.disabled = false; }
     };
   }
-  $('pregunta').addEventListener('click', function (e) { if (e.target === $('pregunta') && !$('pregunta').dataset.fija) noPregunta(); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    if (!$('pregunta').hidden) { if (!$('pregunta').dataset.fija) noPregunta(); }
-  });
 
   /* ---------- la lista ---------- */
   function opcionesFiltros() {
@@ -832,7 +856,7 @@ tr.click:hover td{background:var(--navy-soft)}
       alGuardar: function () { setTimeout(function () { var r = GUARDADA; GUARDADA = null; carga().catch(function () {}); if (!VB && ABIERTO == null && r) { ABIERTO = r.id || a.id; pintaFicha(r); avisa('Listo: se guardó la nota.'); } }, 0); },
       alCerrar: function () { if (VB !== inst) return; VB = null; ABIERTO = null; },
       alEsc: function () {
-        if (!$('pregunta').hidden) { if (!$('pregunta').dataset.fija) noPregunta(); return true; }   // su ventana, encima de la ficha
+        if (PQ) return true;   // su ventana, encima de la ficha (ella misma oye su Esc)
         return !!(V && V.abierta && V.abierta());
       },
       enlaza: function (scrim) {
@@ -992,20 +1016,19 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- varios a la vez (Liliana y Frank) ---------- */
   function ids() { return Object.keys(SEL).map(Number); }
+  function kSel() { var n = ids().length; return 'Buzón tributario · ' + (n === 1 ? '1 seleccionado' : n + ' seleccionados'); }
   $('sel-limpia').onclick = function () { SEL = {}; pinta(); };
   $('sel-asigna').onclick = function () {
     var n = ids().length;
-    pregunta('<h2 id="pq-t">Asignar ' + (n === 1 ? '1 aviso' : n + ' avisos') + '</h2>'
-      + '<div class="campo"><label for="m-quien">Asignar a</label><div id="m-equipo"></div></div>'
-      + '<div class="campo"><label for="m-con">Concepto (opcional)</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
-      + '<div class="campo"><label>Camino</label>' + opcionesCamino('m-cam', '', { opcional: true }) + '</div>'
-      + '<div class="mut">A cada persona le llega un solo aviso con todos.</div>'
-      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Asignar</button></div>');
+    pregunta({ kick: kSel(), titulo: 'Asignar ' + (n === 1 ? '1 aviso' : n + ' avisos'),
+      html: '<div class="sg-campos"><div class="sg-campo ancho"><label for="m-quien">Asignar a</label><div id="m-equipo"></div></div>'
+      + '<div class="sg-campo ancho"><label for="m-con">Concepto (opcional)</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
+      + '<div class="sg-campo ancho"><label>Camino</label>' + opcionesCamino('m-cam', '', { opcional: true }) + '</div></div>',
+      pie: 'A cada persona le llega un solo aviso con todos.', acciones: [{ t: 'Asignar', tipo: 'b1', id: 'm-ok' }] });
     // (296) el mismo «Asignar a» del aviso: el responsable de todos y, si se agregan, apoyos (se suman a los que ya tenga cada uno)
     var eq = equipoUI({ donde: $('m-equipo'), id: 'm-quien', equipo: [],
       nota: 'La primera persona es la responsable de todos; las demás, apoyo (se agregan a los apoyos que ya tenga cada aviso; quitar a alguien se hace en cada aviso).' });
     try { eq.foco(); } catch (e) {}
-    $('m-no').onclick = noPregunta;
     $('m-ok').onclick = async function () {
       var t = eq.lee(), w = eq.escrito();
       if (!t.resp) return error(w ? '«' + w + '» no es una persona de la lista: escribe más de su nombre y escógela de la lista' : 'Escoge a quién se los asignas');
@@ -1018,10 +1041,10 @@ tr.click:hover td{background:var(--navy-soft)}
   };
   $('sel-info').onclick = function () {
     var n = ids().length;
-    pregunta('<h2 id="pq-t">Solo informativo</h2><div>' + (n === 1 ? 'El aviso' : 'Los ' + n + ' avisos') + ' se cierran sin asignar a nadie. Solo cambian los nuevos o del histórico.</div>'
-      + '<div class="campo"><label for="m-nota">Nota (opcional)</label><input id="m-nota" maxlength="500" placeholder="Por ejemplo: comunicado general"></div>'
-      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Marcar informativo</button></div>');
-    $('m-no').onclick = noPregunta;
+    pregunta({ kick: kSel(), titulo: 'Solo informativo',
+      html: '<p class="bz-intro">' + (n === 1 ? 'El aviso' : 'Los ' + n + ' avisos') + ' se cierran sin asignar a nadie. Solo cambian los nuevos o del histórico.</p>'
+      + '<div class="sg-campos"><div class="sg-campo ancho"><label for="m-nota">Nota (opcional)</label><input id="m-nota" maxlength="500" placeholder="Por ejemplo: comunicado general"></div></div>',
+      acciones: [{ t: 'Marcar informativo', tipo: 'b1', id: 'm-ok' }] });
     $('m-ok').onclick = async function () {
       this.disabled = true;
       try { var r = await rpc('bzt_informativo', { p_ids: ids(), p_nota: $('m-nota').value }); noPregunta(); SEL = {}; avisa((r.marcados || 0) + ' marcados como informativos.'); await carga(); }
@@ -1031,10 +1054,10 @@ tr.click:hover td{background:var(--navy-soft)}
   // (362) varios a la vez como cancelación de factura (sin el UUID: ese se pega en la ficha de cada uno)
   $('sel-cancel').onclick = function () {
     var n = ids().length;
-    pregunta('<h2 id="pq-t">Es cancelación de factura</h2><div>' + (n === 1 ? 'El aviso queda' : 'Los ' + n + ' avisos quedan') + ' como cancelación de factura: «Informativo» y «Sin asignar», aquí y en «Cancelaciones de factura». Solo cambian los que no están asignados.</div>'
-      + '<div class="mut">El UUID se agrega en la ficha de cada uno, pegando el mensaje del SAT.</div>'
-      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Es cancelación</button></div>');
-    $('m-no').onclick = noPregunta;
+    pregunta({ kick: kSel(), titulo: 'Es cancelación de factura',
+      html: '<p class="bz-intro">' + (n === 1 ? 'El aviso queda' : 'Los ' + n + ' avisos quedan') + ' como cancelación de factura: «Informativo» y «Sin asignar», aquí y en «Cancelaciones de factura». Solo cambian los que no están asignados.</p>'
+      + '<div class="sg-aviso" style="margin-top:0"><b class="k">El UUID</b>Se agrega en la ficha de cada uno, pegando el mensaje del SAT.</div>',
+      acciones: [{ t: 'Es cancelación', tipo: 'b1', id: 'm-ok' }] });
     $('m-ok').onclick = async function () {
       this.disabled = true;
       try { var r = await rpc('bzt_es_cancelacion', { p_ids: ids(), p_texto: '' }); noPregunta(); SEL = {}; avisa((r.marcados || 0) + (r.marcados === 1 ? ' quedó' : ' quedaron') + ' como cancelación de factura.'); await carga(); }
@@ -1042,10 +1065,10 @@ tr.click:hover td{background:var(--navy-soft)}
     };
   };
   $('sel-concepto').onclick = function () {
-    pregunta('<h2 id="pq-t">Cambiar el concepto</h2><div class="campo"><label for="m-con">Concepto</label><select id="m-con">' + opcionesConcepto('', true) + '</select></div>'
-      + '<div class="mut">Si escoges «Cancelación de factura», quedan «Informativo» y salen también en su pestaña (las asignadas, solo en su pestaña).</div>'
-      + '<div class="pie"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn acento" type="button" id="m-ok">Guardar</button></div>');
-    $('m-no').onclick = noPregunta;
+    pregunta({ kick: kSel(), titulo: 'Cambiar el concepto',
+      html: '<div class="sg-campos"><div class="sg-campo ancho"><label for="m-con">Concepto</label><select id="m-con">' + opcionesConcepto('', true) + '</select>'
+      + '<span class="n">Si escoges «Cancelación de factura», quedan «Informativo» y salen también en su pestaña (las asignadas, solo en su pestaña).</span></div></div>',
+      acciones: [{ t: 'Guardar', tipo: 'b1', id: 'm-ok' }] });
     $('m-ok').onclick = async function () {
       if (!$('m-con').value) return error('Escoge el concepto');
       this.disabled = true;
@@ -1135,12 +1158,12 @@ tr.click:hover td{background:var(--navy-soft)}
     return '<div class="msg nota">De estos, ' + n + ' son <b>cancelaciones de factura</b>: no salen en «Avisos del SAT», están en la pestaña «Cancelaciones de factura», que abre con el último mes (cambia «Del» para ver más).</div>';
   }
   $('b-excel').onclick = function () {
-    $('pregunta').dataset.fija = '';
-    pregunta('<h2 id="pq-t">Cargar mi Excel</h2><div>Sube tu Excel del Buzón Tributario (el de siempre, con ÍNDICE, FECHA, ASUNTO, CONCEPTO, RFC…). Todo entra como «Histórico» y lo que ya estaba no se repite: si cambiaste un renglón, se pone al día.</div>'
-      + '<div class="campo"><label for="m-file">Archivo de Excel</label><input type="file" id="m-file" accept=".xlsx,.xls"></div>'
-      + '<div id="m-res"></div><div class="pie"><button class="btn" type="button" id="m-no">Cerrar</button><button class="btn acento" type="button" id="m-ok" disabled>Cargar</button></div>');
+    pregunta({ titulo: 'Cargar mi Excel',
+      html: '<p class="bz-intro">Sube tu Excel del Buzón Tributario (el de siempre, con ÍNDICE, FECHA, ASUNTO, CONCEPTO, RFC…). Todo entra como «Histórico» y lo que ya estaba no se repite: si cambiaste un renglón, se pone al día.</p>'
+      + '<div class="sg-campos"><div class="sg-campo ancho"><label for="m-file">Archivo de Excel</label><input type="file" id="m-file" accept=".xlsx,.xls"></div></div>'
+      + '<div id="m-res"></div>',
+      acciones: [{ t: 'Cargar', tipo: 'b1', id: 'm-ok', apagado: true }] });
     var FILAS_X = null;
-    $('m-no').onclick = function () { delete $('pregunta').dataset.fija; noPregunta(); };
     $('m-file').onchange = async function () {
       var f = this.files && this.files[0]; $('m-ok').disabled = true; FILAS_X = null; if (!f) return;
       $('m-res').innerHTML = '<div class="msg ojo">Revisando el archivo…</div>';
@@ -1157,13 +1180,13 @@ tr.click:hover td{background:var(--navy-soft)}
     };
     $('m-ok').onclick = async function () {
       if (!FILAS_X) return;
-      var b = this; b.disabled = true; $('pregunta').dataset.fija = '1'; $('m-no').disabled = true;
+      var b = this; b.disabled = true; fija(true);
       try {
         var t = await porPartes(FILAS_X, false, function (a, n) { $('m-res').innerHTML = '<div class="msg ojo">Cargando ' + a + ' de ' + n + '… no cierres esta ventana.</div>'; });
         $('m-res').innerHTML = '<div class="msg bien">Listo: ' + t.nuevos + ' nuevos, ' + t.cambian + ' puestos al día y ' + t.ligados + ' juntos con su correo.</div>' + notaCancel(FILAS_X);
         await carga();
       } catch (e) { $('m-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '. Lo que ya entró se queda; vuelve a cargar el archivo y solo entra lo que falta.</div>'; }
-      delete $('pregunta').dataset.fija; $('m-no').disabled = false;
+      fija(false);
     };
   };
 
@@ -1192,17 +1215,19 @@ tr.click:hover td{background:var(--navy-soft)}
     try { if (!CLIS) CLIS = await rpc('bzt_manual_clientes'); }
     catch (e) { error(falla(e)); b0.disabled = false; return; }
     b0.disabled = false;
-    delete $('pregunta').dataset.fija;
-    pregunta('<h2 id="pq-t">Subir un aviso del Buzón Tributario</h2>'
-      + '<div>Para los clientes que no tienen el correo de PROFASE en su buzón del SAT: baja el aviso (o el oficio) del buzón del cliente y súbelo aquí. Entra como si hubiera llegado por correo: le llega a quien asigna los avisos y el CRM propone cuándo queda notificado.</div>'
-      + '<div class="campo"><label for="u-emp">Razón social</label><div id="u-empBox"></div></div>'
-      + '<div class="campo"><label for="u-fec">Día en que llegó al buzón del SAT</label><input type="date" id="u-fec" max="' + HOY + '" value="' + HOY + '">'
-      + '<div class="mut">La fecha que trae el aviso en el buzón del cliente: con ella el CRM propone cuándo queda notificado.</div></div>'
-      + '<div class="campo"><label for="u-arc">Archivo del aviso</label><input type="file" id="u-arc" multiple accept=".pdf,.png,.jpg,.jpeg,.zip,.xml,.doc,.docx,.xls,.xlsx,application/pdf,image/*">'
-      + '<div class="mut" id="u-arcs">El PDF del aviso o del oficio (o una foto), hasta 25 MB cada uno. Puedes escoger varios.</div></div>'
-      + '<div class="campo"><label for="u-nota">Comentario (opcional)</label><textarea id="u-nota" maxlength="4000" placeholder="Por ejemplo: lo bajé del buzón del cliente con su e.firma"></textarea></div>'
-      + '<div id="u-res"></div>'
-      + '<div class="pie"><button class="btn" type="button" id="u-no">Cancelar</button><button class="btn acento" type="button" id="u-ok">Subir aviso</button></div>');
+    var hecho = false;   // el aviso ya quedó (si algún archivo no subió, cerrar ya no pregunta)
+    pregunta({ titulo: 'Subir un aviso del Buzón Tributario',
+      html: '<p class="bz-intro">Para los clientes que no tienen el correo de PROFASE en su buzón del SAT: baja el aviso (o el oficio) del buzón del cliente y súbelo aquí.</p>'
+      + '<div class="sg-campos"><div class="sg-campo ancho"><label for="u-emp">Razón social</label><div id="u-empBox"></div></div>'
+      + '<div class="sg-campo ancho"><label for="u-fec">Día en que llegó al buzón del SAT</label><input type="date" id="u-fec" max="' + HOY + '" value="' + HOY + '">'
+      + '<span class="n">La fecha que trae el aviso en el buzón del cliente: con ella el CRM propone cuándo queda notificado.</span></div>'
+      + '<div class="sg-campo ancho"><label for="u-arc">Archivo del aviso</label><input type="file" id="u-arc" multiple accept=".pdf,.png,.jpg,.jpeg,.zip,.xml,.doc,.docx,.xls,.xlsx,application/pdf,image/*">'
+      + '<span class="n" id="u-arcs">El PDF del aviso o del oficio (o una foto), hasta 25 MB cada uno. Puedes escoger varios.</span></div>'
+      + '<div class="sg-campo ancho"><label for="u-nota">Comentario (opcional)</label><textarea id="u-nota" maxlength="4000" placeholder="Por ejemplo: lo bajé del buzón del cliente con su e.firma"></textarea></div></div>'
+      + '<div class="sg-aviso" style="margin-top:0"><b class="k">Cómo entra</b>Como si hubiera llegado por correo: le llega a quien asigna los avisos y el CRM propone cuándo queda notificado.</div>'
+      + '<div id="u-res"></div>',
+      acciones: [{ t: 'Subir aviso', tipo: 'b1', id: 'u-ok' }],
+      sucio: function () { return !hecho && !!($('u-arc') && (($('u-arc').files || []).length || $('u-nota').value.trim())); } });
     var bq = window.PROFASE_BUSCA.crea({ donde: $('u-empBox'), id: 'u-emp', valor: [],
       opciones: (CLIS || []).map(function (c) { return { v: String(c.e), t: c.r || c.f, nota: (c.g ? c.g + ' · ' : '') + c.f + (c.a ? '' : ' · inactiva'), buscar: (c.g || '') + ' ' + c.f }; }),
       marcador: 'Nombre, grupo o RFC', vacio: 'Ninguna coincide', sinOpciones: 'No tienes clientes para subir avisos',
@@ -1219,8 +1244,7 @@ tr.click:hover td{background:var(--navy-soft)}
       $('u-arcs').textContent = fs.length ? fs.map(function (f) { return f.name + (f.size > 25 * MB ? ' (pesa más de 25 MB)' : ''); }).join(' · ')
         : 'El PDF del aviso o del oficio (o una foto), hasta 25 MB cada uno. Puedes escoger varios.';
     };
-    function bloquea(si) { if (si) $('pregunta').dataset.fija = '1'; else delete $('pregunta').dataset.fija; $('u-no').disabled = si; $('u-ok').disabled = si; }
-    $('u-no').onclick = function () { delete $('pregunta').dataset.fija; noPregunta(); };
+    function bloquea(si) { fija(si); $('u-ok').disabled = si; }
     async function manda(otro) {
       var emp = bq.valor()[0], fec = $('u-fec').value, fs = archivos();
       if (!emp) return mal('Escoge la razón social');
@@ -1239,25 +1263,25 @@ tr.click:hover td{background:var(--navy-soft)}
           $('u-res').innerHTML = '<div class="msg ojo"><b>Ya ' + (n === 1 ? 'hay un aviso' : 'hay ' + n + ' avisos') + ' de esta razón social del ' + esc(fecha(fec)) + ':</b> '
             + r.repetidos.map(function (d) { return esc((d.concepto_n || 'sin concepto') + ' · ' + ((ESTADOS[d.estado] || [d.estado])[0]).toLowerCase() + (d.origen === 'manual' ? ' · subido a mano' : d.origen === 'excel' ? ' · del Excel' : d.origen === 'sat' ? ' · del SAT (Centauro)' : ' · llegó por correo')); }).join('; ')
             + '. ¿El que vas a subir es otro?</div>'
-            + '<div class="acciones" style="justify-content:flex-end"><button class="btn" type="button" id="u-ver">Ver el que ya está</button><button class="btn acento" type="button" id="u-otro">Sí, es otro: súbelo</button></div>';
+            + '<div class="sg-fila"><button class="sg-b2" type="button" id="u-ver">Ver el que ya está</button><button class="sg-b1" type="button" id="u-otro">Sí, es otro: súbelo</button></div>';
           $('u-ok').hidden = true;   // aquí se decide con los dos botones de la pregunta
-          $('u-ver').onclick = function () { delete $('pregunta').dataset.fija; noPregunta(); ficha(r.repetidos[n - 1].id); };
+          $('u-ver').onclick = function () { noPregunta(); ficha(r.repetidos[n - 1].id); };
           $('u-otro').onclick = function () { $('u-ok').hidden = false; manda(true); };
           try { $('u-otro').scrollIntoView({ block: 'nearest' }); } catch (e) {}
           return;
         }
-        var id = r.id;
+        var id = r.id; hecho = true;
         var malos = await subeArchivos(id, fs, function (a, t, nom) { $('u-res').innerHTML = '<div class="msg ojo">Subiendo ' + (t > 1 ? 'el archivo ' + a + ' de ' + t : 'el archivo') + ' (' + esc(nom) + ')… no cierres esta ventana.</div>'; });
         carga().catch(function () {});
         if (malos.length) {   // el aviso ya quedó: no se vuelve a subir (se repetiría); sus archivos se suben en su ficha
-          bloquea(false); $('u-ok').hidden = true; $('u-no').textContent = 'Cerrar';
+          bloquea(false); $('u-ok').hidden = true;
           $('u-res').innerHTML = '<div class="msg mal">El aviso quedó, pero no se pudo subir ' + esc(malos.join('; ')) + '. Ábrelo y súbelo otra vez en «Documentos».</div>'
-            + '<div class="acciones" style="justify-content:flex-end"><button class="btn acento" type="button" id="u-abre">Abrir el aviso</button></div>';
+            + '<div class="sg-fila"><button class="sg-b1" type="button" id="u-abre">Abrir el aviso</button></div>';
           $('u-abre').onclick = function () { noPregunta(); ficha(id); };
           try { $('u-abre').scrollIntoView({ block: 'nearest' }); } catch (e) {}
           return;
         }
-        delete $('pregunta').dataset.fija; noPregunta();
+        noPregunta();
         avisa(r.estado === 'historico' ? 'Listo: el aviso quedó en el Buzón tributario como histórico (es de antes del 1 de noviembre).'
                                        : 'Listo: el aviso quedó como nuevo en el Buzón tributario, como si hubiera llegado por correo.');
         ficha(id);
@@ -1408,7 +1432,7 @@ tr.click:hover td{background:var(--navy-soft)}
   // al volver a la pestaña, lo último (bzt_tab.js manda el aviso; sin relojes)
   addEventListener('message', function (ev) {
     if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'bzt-refresca' || !EST || !EST.ve) return;
-    if (!$('pregunta').hidden) return;
+    if (PQ) return;
     carga().catch(function () {});
     if (ABIERTO && VB && !VB.sucio() && !document.activeElement.matches('textarea,input,select')) ficha(ABIERTO);
   });

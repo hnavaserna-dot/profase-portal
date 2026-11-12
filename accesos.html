@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=270fdf63ed"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4e3576f5a5"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script>
 <style>
 /* Portal PROFASE · Usuarios › Accesos: la bitácora de quién entra al portal (portal/sql/13_accesos.sql). La ve la
    dirección completa y Fernando Cadengo sin las entradas ni los movimientos de la dirección (Daniel, 30-oct-2026: «Cadengo
@@ -134,22 +134,9 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .ses .n{font-weight:600}
 .btn.sacar{border-color:var(--red);color:var(--red);background:transparent;padding:5px 10px;font-size:12.5px;white-space:nowrap}
 .btn.sacar:hover{background:var(--red-soft)}
-.dlg-ov{position:fixed;inset:0;z-index:50;background:rgba(10,18,32,.55);display:grid;place-items:center;padding:16px}
-.dlg{width:min(460px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;background:var(--surface);color:var(--ink);border-radius:14px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
-.dlg:focus{outline:none}
-.dlg h2{font-size:20px;font-weight:750;margin:0 0 8px}
-.dlg p{margin:0 0 10px}
-.dlg ul{margin:0 0 12px;padding:0;list-style:none;border:1px solid var(--line);border-radius:10px}
-.dlg li{padding:8px 12px;border-top:1px solid var(--line);font-size:13.5px;overflow-wrap:anywhere}
-.dlg li:first-child{border-top:0}
-.dlg li .rol{display:block}
-.dlg .acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px}
-.dlg .acts .btn{min-height:44px;padding:10px 14px;font-size:14px;flex:1 1 auto}
-.btn.rojo{background:var(--red);border-color:var(--red);color:#fff}
-.btn.rojo:hover{border-color:var(--red);filter:brightness(1.08)}
-:root[data-theme="dark"] .btn.rojo{color:#1A0E0C}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.rojo{color:#1A0E0C}}
-.dlg .err{background:var(--red-soft);border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 10px}
+/* «Sacar de todos sus equipos» va en la ventana común (js/seguimiento.js; 11-nov-2026, pedido de Fernando Cadengo) */
+.segv .acc-p{margin:0 0 12px;font-size:13.5px;line-height:1.5;color:var(--sg-ink2)}
+.segv .acc-err{margin:12px 0 0;border-radius:10px;padding:8px 12px;font-size:13px;background:var(--sg-rds);color:var(--sg-rd)}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;width:max-content;max-width:calc(100vw - 24px);background:var(--ink);color:var(--surface);border-radius:10px;padding:10px 14px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 /* En celular cada renglón se vuelve una tarjeta, para que «qué pasó» se vea sin desplazarse de lado */
 @media (max-width:640px){
@@ -414,7 +401,8 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
     return '<div class="ses">' + txt + '<button class="btn sacar" type="button" data-sacar="' + esc(p.usuario) + '">'
       + (mio ? 'Cerrar mis otras sesiones' : 'Sacar de todos sus equipos') + '</button></div>';
   }
-  function cierraDlg() { var o = $('dlg-ov'); if (o) o.remove(); }
+  var VS = null;
+  function cierraDlg() { if (VS) { var v = VS; VS = null; v.cerrar(); } }
   function toast(txt) {
     var t = $('toast'); if (t) t.remove();
     t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = txt;
@@ -427,22 +415,17 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
     var mio = P.perfil.usuario === usuario, si = mio ? 'Sí, cerrarlas' : 'Sí, sacarlo';
     var l = sesionesDe(usuario).filter(function (s) { return !(mio && s.esta); });
     cierraDlg();
-    var ov = document.createElement('div');
-    ov.className = 'dlg-ov'; ov.id = 'dlg-ov';
-    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-h" tabindex="-1">'
-      + '<h2 id="dlg-h">' + (mio ? 'Cerrar tus otras sesiones' : 'Sacar a ' + esc(p.nombre) + ' de todos sus equipos') + '</h2>'
-      + '<p>' + (mio ? 'Se cierra tu sesión en ' + esc(equipos(l.length)) + '; en este te quedas.'
+    // 11-nov-2026 (pedido de Fernando Cadengo): en la ventana común al centro; «Cerrar» (o Esc, o picar afuera) no saca a nadie
+    var v = VS = window.PROFASE_SEG.abre({ sinPlatica: true, kick: 'Accesos · sesiones abiertas',
+      titulo: mio ? 'Cerrar tus otras sesiones' : 'Sacar a ' + p.nombre + ' de todos sus equipos',
+      derecha: '<p class="acc-p">' + (mio ? 'Se cierra tu sesión en ' + esc(equipos(l.length)) + '; en este te quedas.'
         : 'Se cierra su sesión en ' + esc(equipos(l.length)) + '. Si tiene el portal abierto, en menos de un minuto le pide entrar otra vez con su usuario y contraseña. Su contraseña no cambia.') + '</p>'
-      + '<ul>' + l.map(function (s) {
-          return '<li>' + esc(equipo(s.equipo)) + (s.ip ? ' · ' + esc(s.ip) : '') + '<span class="rol">Entró ' + esc(hora(s.desde)) + ' · lo usó por última vez ' + esc(hace(s.ultima || s.desde)) + '</span></li>';
+        + '<ul class="sg-lista">' + l.map(function (s) {
+          return '<li><div class="x"><div class="t">' + esc(equipo(s.equipo)) + (s.ip ? ' · ' + esc(s.ip) : '') + '</div><div class="d">Entró ' + esc(hora(s.desde)) + ' · lo usó por última vez ' + esc(hace(s.ultima || s.desde)) + '</div></div></li>';
         }).join('') + '</ul>'
-      + '<div class="err" id="dlg-err" hidden></div>'
-      + '<div class="acts"><button class="btn" type="button" id="dlg-no">Cancelar</button>'
-      + '<button class="btn rojo" type="button" id="dlg-si">' + si + '</button></div></div>';
-    document.body.appendChild(ov);
-    ov.addEventListener('click', function (e) { if (e.target === ov) cierraDlg(); });
-    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') cierraDlg(); });
-    $('dlg-no').onclick = cierraDlg;
+        + '<div class="acc-err" id="dlg-err" role="alert" hidden></div>',
+      acciones: [{ t: si, tipo: 'peligro', id: 'dlg-si' }],
+      alCerrar: function () { if (VS === v) VS = null; } });
     $('dlg-si').onclick = async function () {
       var b = $('dlg-si'); b.disabled = true; b.textContent = 'Cerrando…';
       var r = await sb.rpc('cerrar_sesiones', { p_usuario: usuario });
@@ -460,7 +443,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
         : (n ? 'Listo: ' + p.nombre + ' ya no tiene sesión abierta (' + equipos(n) + ').' : p.nombre + ' ya no tenía sesión abierta.'));
       carga();
     };
-    try { ov.querySelector('.dlg').focus({ preventScroll: true }); } catch (e) { /* nada */ }
+    try { v.scrim.querySelector('[data-cancelar]').focus({ preventScroll: true }); } catch (e) { /* nada */ }
   }
   $('personas').addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-sacar]');

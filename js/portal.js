@@ -593,9 +593,25 @@
     c.style.bottom = '';
     if (!c.firstChild) return;
     var r = c.getBoundingClientRect(), alto = 0;
+    var cosas = [];
     ['.ll-pill', '.reu-c'].forEach(function (s) {
       var o = document.querySelector(s); if (!o || o.hidden) return;
-      var q = o.getBoundingClientRect();
+      cosas.push(o.getBoundingClientRect());
+    });
+    // ni con los botones de abajo de una ventana abierta (la ventana común de js/seguimiento.js), aquí o en una pantalla
+    // en su marco: en el celular el aviso tapaba «Guardar» (11-nov-2026, al pasar los paneles a la ventana común)
+    [].forEach.call(document.querySelectorAll('.segv .sg-foot'), function (x) { cosas.push(x.getBoundingClientRect()); });
+    [].forEach.call(document.querySelectorAll('iframe'), function (f) {
+      try {
+        if (!f.getClientRects().length || !f.contentDocument) return;
+        var fr = f.getBoundingClientRect();
+        [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot'), function (x) {
+          var q = x.getBoundingClientRect();
+          cosas.push({ top: fr.top + q.top, bottom: fr.top + q.bottom, left: fr.left + q.left, right: fr.left + q.right, height: q.height });
+        });
+      } catch (e) { /* otro sitio */ }
+    });
+    cosas.forEach(function (q) {
       if (!q.height || q.right <= r.left || q.left >= r.right || q.top >= r.bottom || q.bottom <= r.top) return;
       alto = Math.max(alto, innerHeight - q.top + 10);
     });
@@ -603,6 +619,8 @@
   }
   // salió o se quitó un aviso chico: quien deba hacerle lugar (SuperConta deja dónde escribir arriba de ellos) se entera
   var avN = 0;
+  // la ventana común avisa al abrirse y al cerrarse (js/seguimiento.js), aquí o desde una pantalla en su marco
+  document.addEventListener('profase-ventana', function () { setTimeout(avAcomoda, 60); });
   function avCambio() { var k = document.getElementById('pa-avisos'); avN = k ? k.children.length : 0; avAcomoda(); try { document.dispatchEvent(new CustomEvent('profase-avisos')); } catch (e) { /* nada */ } }
   var avTic = 0;
   P.avisoChico = function (o) {

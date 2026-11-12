@@ -56,7 +56,21 @@
                                      // los pasos (o los meses, los años) en una línea; los que no son «aqui» llevan
                                      // data-paso="id" para que la página los abra
      PROFASE_SEG.falta(titulo, [['si'|'no'|'va', '<html>'], …])   // «Qué falta…» en palabras, con ✓ ✕ →
-     en el resumen, '<div class="r2"><span>Etiqueta <b>valor</b></span>…</div>' y '<span class="tg">…</span>'. */
+     en el resumen, '<div class="r2"><span>Etiqueta <b>valor</b></span>…</div>' y '<span class="tg">…</span>'.
+
+   Las demás ventanas del portal, con la misma pieza (11-nov-2026, pedido de Fernando Cadengo: «quiero mejorar esas pantallas…
+   con un estilo como el que le acabamos de poner a la ficha de workflow»; «1. b 2. a, sí así es»): los paneles que salían
+   de la derecha (Facturación, Pagos, Recordatorios de pago, Expedientes, RH, Usuarios…) son esta ventana al centro. Todo
+   opcional y sin cambiar lo de arriba:
+     sinPlatica: true y sin estatus: una ventana de lo que sea (una ficha de consulta, un formulario, una herramienta);
+     resumen: si no viene, no sale el recuadro de arriba;
+     derecha: '<html>' o nodo,       // lo de la columna derecha (con ancho y sin pestañas) o, en una sola columna, lo
+                                     // que va después del resumen (el formulario, las secciones)
+     acciones: [{t: 'Guardar', tipo: 'b1'|'b2'|'peligro', apagado, accion: function ({cerrar, pie, boton}) {…}}],
+                                     // los botones del pie en lugar de Guardar / Guardar y siguiente (el principal, azul)
+     pieTexto: 'texto',              // lo que dice el pie a la izquierda cuando hay acciones
+     sucio: function () { return true si la página tiene algo sin guardar }   // pregunta antes de cerrar
+   Solo las que tienen pestañas son de alto fijo (sg-fijo); las demás miden lo que traen (Fernando: «1. b»). */
 (function () {
   'use strict';
   if (window.PROFASE_SEG) return;
@@ -200,7 +214,9 @@
     + '.sg-b1:hover{filter:brightness(1.1)}'
     + '.sg-b2{border:1px solid var(--sg-ln2);background:var(--sg-sf);color:var(--sg-ink2)}'
     + '.sg-b2:hover{background:var(--sg-sf3);color:var(--sg-ink)}'
-    + '.sg-b1[disabled],.sg-b2[disabled]{opacity:.45;cursor:not-allowed;filter:none}'
+    + '.sg-b3{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:9px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:38px;border:1px solid var(--sg-rd);background:var(--sg-sf);color:var(--sg-rd)}'
+    + '.sg-b3:hover{background:var(--sg-rds)}'
+    + '.sg-b1[disabled],.sg-b2[disabled],.sg-b3[disabled]{opacity:.45;cursor:not-allowed;filter:none}'
     + '.segv .seg-pie{font-size:11.5px;color:var(--sg-ink3);flex:1;min-width:0}'
     + '.segv .sg-hint{font-size:12px;color:var(--sg-ink3);margin:0}'
     + '.segv .lnk{border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:var(--sg-ac2);cursor:pointer;padding:0}'
@@ -296,12 +312,13 @@
     + '.segv .sg-tab i:empty{display:none}'
     + '.segv .sg-pan{padding-top:14px}'
     + '.segv .sg-pan>.seg-sec:first-child{margin-top:0}'
-    + '@media (min-width:900px){.sg-modal.sg-ancho{height:min(90vh,880px)}'
+    + '@media (min-width:900px){.sg-modal.sg-ancho.sg-fijo{height:min(90vh,880px)}'
     + '.sg-modal.sg-ancho .sg-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);padding:0;overflow:hidden;flex:1 1 auto;min-height:0}'
     + '.segv .sg-col{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 22px}'
     + '.segv .sg-col.sg-der{display:flex;flex-direction:column;padding:0;border-left:1px solid var(--sg-ln);overflow:hidden}'
     + '.segv .sg-der .sg-tabs{padding:4px 22px 0}'
-    + '.segv .sg-der .sg-pans{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 18px}}'
+    + '.segv .sg-der .sg-pans{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 18px}'
+    + '.segv .sg-der .sg-pans.sg-sola{padding-top:18px}}'
     + '@media (max-width:899px){.segv .sg-col.sg-der{margin-top:18px}.segv .sg-der .sg-tabs{position:sticky;top:-20px;z-index:1;background:var(--sg-sf)}}'
     // los pasos en una línea y «Qué falta» (11-nov-2026: eran del Panel de trabajo; una sola versión para todas las fichas)
     + '.segv .sg-pasos{margin:16px 0 0}'
@@ -336,6 +353,59 @@
     + '.segv .seg-res .r2 .mal{color:var(--sg-rd);font-weight:700}'
     + '.segv .seg-res .tg{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:600;background:var(--sg-sf3);color:var(--sg-ink3)}'
     + '.segv .sg-fila{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}'
+    /* lo de adentro de las demás ventanas (formularios, listas, totales; 11-nov-2026): una sola versión para todas */
+    + '.segv [hidden]{display:none!important}'
+    + '.segv .sg-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px;margin-top:4px}'
+    + '.segv .sg-campos.tres{grid-template-columns:repeat(3,minmax(0,1fr))}'
+    + '.segv .sg-campo{display:flex;flex-direction:column;gap:5px;min-width:0}'
+    + '.segv .sg-campo.ancho,.segv .sg-campos>.ancho{grid-column:1/-1}'
+    + '.segv .sg-l,.segv .sg-campo>label,.segv .sg-campo>.l{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-ink3)}'
+    + '.segv .sg-campo input:not([type=checkbox]):not([type=radio]):not([type=file]),.segv .sg-campo select,.segv .sg-campo textarea,.segv .sg-ctl{display:block;box-sizing:border-box;border:1px solid var(--sg-ln2);background:var(--sg-sf);color:var(--sg-ink);border-radius:10px;padding:9px 12px;font:inherit;font-size:13.5px;min-height:40px;width:100%;max-width:100%}'
+    + '.segv .sg-campo textarea{min-height:70px;resize:vertical}'
+    + '.segv .sg-campo input:focus,.segv .sg-campo select:focus,.segv .sg-campo textarea:focus,.segv .sg-ctl:focus{outline:none;border-color:var(--sg-ac);box-shadow:0 0 0 3px var(--sg-acs)}'
+    + '.segv .sg-campo input[disabled],.segv .sg-campo select[disabled],.segv .sg-campo input[readonly]{background:var(--sg-sf3);color:var(--sg-ink2)}'
+    + '.segv .sg-campo .n,.segv .sg-nota{font-size:11.5px;color:var(--sg-ink4);line-height:1.4}'
+    + '.segv .sg-chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sg-ink);min-height:36px;cursor:pointer}'
+    + '.segv .sg-chk input{width:18px;height:18px;accent-color:var(--sg-ac);flex:none;margin:0}'
+    + '.segv .sg-lista{list-style:none;margin:0;padding:0;border:1px solid var(--sg-ln);border-radius:12px;overflow:hidden;background:var(--sg-sf)}'
+    + '.segv .sg-lista>li{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;padding:10px 14px;border-top:1px solid var(--sg-ln);font-size:13px;color:var(--sg-ink2)}'
+    + '.segv .sg-lista>li:first-child{border-top:0}'
+    + '.segv .sg-lista>li.off{opacity:.55}'
+    + '.segv .sg-lista .x{flex:1;min-width:0}'
+    + '.segv .sg-lista .t{font-weight:600;color:var(--sg-ink);overflow-wrap:anywhere}'
+    + '.segv .sg-lista .d{font-size:12px;color:var(--sg-ink3);margin-top:2px;overflow-wrap:anywhere}'
+    + '.segv .sg-lista .vacio{color:var(--sg-ink4);justify-content:center}'
+    + '.segv .sg-monto{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600;color:var(--sg-ink)}'
+    + '.segv .sg-tot{display:grid;grid-template-columns:1fr auto;gap:6px 16px;margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--sg-sf2);border:1px solid var(--sg-ln);font-size:13px;color:var(--sg-ink2)}'
+    + '.segv .sg-tot .r{text-align:right;font-variant-numeric:tabular-nums;color:var(--sg-ink)}'
+    + '.segv .sg-tot .f{font-weight:700;font-size:15px;color:var(--sg-ink)}'
+    + '.segv .sg-tot .na{color:var(--sg-na2);font-weight:700}'
+    + '.segv .sg-fila .sg-b1,.segv .sg-fila .sg-b2,.segv .sg-fila .sg-b3{min-height:34px;padding:7px 12px}'
+    + '.segv .sg-ren{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px;border:1px solid var(--sg-ln);border-radius:12px;background:var(--sg-sf2);margin-bottom:8px}'
+    + '.segv .sg-ren>*{min-width:0}.segv .sg-ren .ancho{grid-column:1/-1}'
+    + '.segv .sg-tres{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}'
+    + '.segv .sg-kpi{border:1px solid var(--sg-ln);border-radius:10px;padding:8px 10px;background:var(--sg-sf);min-width:0}'
+    + '.segv .sg-kpi b{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-ink3)}'
+    + '.segv .sg-kpi span{display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--sg-ink);overflow-wrap:anywhere}'
+    + '.segv .sg-kpi.na{border-color:var(--sg-nab);background:var(--sg-nas)}.segv .sg-kpi.na span{color:var(--sg-na2)}'
+    + '.segv .sg-kpi.ok span{color:var(--sg-ok)}.segv .sg-kpi.mal span{color:var(--sg-rd)}'
+    + '.segv .sg-aviso{border-radius:12px;border:1px solid var(--sg-nab);border-left:4px solid #F07A1E;background:var(--sg-nas);padding:10px 14px;font-size:12.5px;line-height:1.5;margin-top:14px;color:var(--sg-ink)}'
+    + '.segv .sg-aviso.mal{border-color:var(--sg-rd);border-left-color:var(--sg-rd);background:var(--sg-rds)}'
+    + '.segv .sg-aviso b.k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-na2);margin-bottom:3px}'
+    + '.segv .sg-tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:600;background:var(--sg-sf3);color:var(--sg-ink3);border:1px solid var(--sg-ln);margin-left:6px;vertical-align:1px}'
+    + '.segv .sg-chico{display:inline-flex;align-items:center;border-radius:8px;border:1px solid var(--sg-ln2);background:var(--sg-sf);color:var(--sg-ink2);font:inherit;font-size:12px;font-weight:600;padding:4px 10px;flex:none;cursor:pointer}'
+    + '.segv .sg-chico:hover{border-color:var(--sg-ac);color:var(--sg-ac)}'
+    + '.segv .sg-chico.mal{color:var(--sg-rd)}'
+    + '.segv .sg-zona{margin-top:12px;padding:12px 14px;border:1px solid var(--sg-ln);border-radius:12px;background:var(--sg-sf2)}'
+    + '.segv .sg-zona:empty{display:none}'
+    + '.segv .sg-tabla{overflow-x:auto;border:1px solid var(--sg-ln);border-radius:12px;background:var(--sg-sf)}'
+    + '.segv .sg-tabla table{width:100%;border-collapse:collapse;font-size:12.5px}'
+    + '.segv .sg-tabla th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--sg-ink3);padding:8px 10px;background:var(--sg-sf2);border-bottom:1px solid var(--sg-ln);white-space:nowrap}'
+    + '.segv .sg-tabla td{padding:8px 10px;border-top:1px solid var(--sg-ln);color:var(--sg-ink2);vertical-align:top}'
+    + '.segv .sg-tabla td.r,.segv .sg-tabla th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    + '.segv .sg-col>.seg-sec:first-child,.segv .sg-sola>.seg-sec:first-child,.segv [data-derecha]>.seg-sec:first-child{margin-top:0}'
+    + '@media (max-width:560px){.segv .sg-campos,.segv .sg-campos.tres,.segv .sg-ren{grid-template-columns:minmax(0,1fr)}'
+    + '.segv .sg-campo input:not([type=checkbox]):not([type=radio]),.segv .sg-campo select,.segv .sg-campo textarea,.segv .sg-ctl{font-size:16px}.segv .sg-kpi span{font-size:14px}}'
     + '@media (max-width:560px){.segv{padding:8px;align-items:flex-end}.sg-modal{max-height:94vh}.sg-head,.sg-body,.sg-foot{padding-left:16px;padding-right:16px}'
     + '.sg-x.seg-fl{width:32px;height:32px}.segv .seg-pie{flex-basis:100%}}';
 
@@ -345,6 +415,10 @@
     var st = document.createElement('style'); st.id = 'segv-css'; st.textContent = CSS; document.head.appendChild(st);
   }
 
+  // a la página de arriba: que los avisos chicos de abajo no tapen los botones de la ventana (js/portal.js, avAcomoda)
+  function ventanaAvisa() {
+    try { var d = (window.top || window).document; d.dispatchEvent(new CustomEvent('profase-ventana')); } catch (e) { /* otro sitio */ }
+  }
   function abre(o) {
     cssUnaVez();
     o = o || {};
@@ -355,7 +429,9 @@
     }
     var est = o.estatus || null, LST = est && est.lista ? est.lista : null;
     var actual = est ? (LST ? String(est.actual) : (est.actual || 'sin_respuesta')) : null, elegido = actual;
+    var ACC = (o.acciones || []).filter(Boolean); if (!ACC.length) ACC = null;
     var pl = o.platica || {}, hilo = (pl.hilo || []).slice();
+    if (host.__segFin) host.__segFin();   // si la página la vuelve a abrir encima, la de antes se va sin avisar
     var ancho = !!o.ancho, TABS = o.pestanas && o.pestanas.length ? o.pestanas : null;
     // estatus propios de la pantalla (lista) o los 5 de Reportes
     var clsE = function (id) {
@@ -403,7 +479,7 @@
     var todos = false;
     var izqHTML = (o.nota ? '<p class="seg-nuevo">' + esc(o.nota) + '</p>' : '')
       + (o.antes || '')
-      + '<div class="seg-res">' + (o.resumen || '') + '</div>'
+      + (o.resumen ? '<div class="seg-res">' + o.resumen + '</div>' : '')
       + (o.bajoResumen || '')
       + (o.queHacer ? '<div class="seg-que"><b>Qué hacer</b><div>' + o.queHacer + '</div></div>' : '')
       + estHTML
@@ -413,7 +489,8 @@
     var sinPl = !!o.sinPlatica;
     var TODAS = TABS ? (sinPl ? [] : [{id: 'com', t: pl.titulo || 'Comentarios', com: true}]).concat(TABS) : null;
     var tab0 = TODAS ? (TODAS.some(function (x) { return x.id === o.pestana; }) ? o.pestana : TODAS[0].id) : null;
-    var derHTML = !TODAS ? (sinPl ? '' : platHTML)
+    var DER = o.derecha && typeof o.derecha === 'string' ? o.derecha : '';
+    var derHTML = !TODAS ? (sinPl ? DER : platHTML)
       : '<div class="sg-tabs" role="tablist" aria-label="Lo que se trabaja">' + TODAS.map(function (x) {
           return '<button type="button" class="sg-tab" role="tab" id="sgt-' + esc(x.id) + '" data-tab="' + esc(x.id) + '" aria-controls="sgp-' + esc(x.id) + '" aria-selected="' + (x.id === tab0) + '">'
             + esc(x.t) + (x.com ? '<i data-ncom>' + (hilo.length ? NUM.format(hilo.length) : '') + '</i>' : '<i' + (x.nid ? ' id="' + esc(x.nid) + '"' : '') + '>' + (x.n ? NUM.format(x.n) : '') + '</i>') + '</button>';
@@ -422,10 +499,11 @@
             + (x.com ? '<div data-hilo>' + hiloDentro() + '</div><div data-escribe>' + escribeHTML() + '</div>' : typeof x.html === 'string' ? x.html : '') + '</div>';
         }).join('') + '</div>';
     var cuerpoHTML = ancho
-      ? '<div class="sg-body"><div class="sg-col">' + izqHTML + (o.detalles || '') + '</div><div class="sg-col sg-der">' + (TODAS ? derHTML : '<div class="sg-pans">' + derHTML + '</div>') + '</div></div>'
-      : TODAS ? '<div class="sg-body">' + izqHTML + '<div class="sg-der">' + derHTML + '</div>' + (o.detalles || '') + '</div>' : null;
+      ? '<div class="sg-body"><div class="sg-col">' + izqHTML + (o.detalles || '') + '</div><div class="sg-col sg-der">' + (TODAS ? derHTML : '<div class="sg-pans' + (sinPl ? ' sg-sola' : '') + '" data-derecha>' + derHTML + '</div>') + '</div></div>'
+      : TODAS ? '<div class="sg-body">' + izqHTML + '<div class="sg-der">' + derHTML + '</div>' + (o.detalles || '') + '</div>'
+      : sinPl ? '<div class="sg-body">' + izqHTML + '<div data-derecha>' + DER + '</div>' + (o.detalles || '') + '</div>' : null;
     var html = '<div class="segv" role="dialog" aria-modal="true" aria-label="' + esc(o.titulo || 'Seguimiento') + '">'
-      + '<div class="sg-modal' + (ancho ? ' sg-ancho' : '') + '">'
+      + '<div class="sg-modal' + (ancho ? ' sg-ancho' : '') + (TODAS ? ' sg-fijo' : '') + '">'
       + '<div class="sg-head"><div><p class="kick">' + esc((o.kick || '') + nCuantos) + '</p><h2>' + esc(o.titulo || 'Seguimiento de revisión') + '</h2></div>'
       + '<div class="sg-nav">'
       + (hayNav ? '<button type="button" class="sg-x seg-fl" data-nav="-1" title="Anterior" aria-label="Anterior"' + (nav.ant ? '' : ' disabled') + '>‹</button>'
@@ -434,7 +512,7 @@
       + (cuerpoHTML !== null ? cuerpoHTML : '<div class="sg-body">'
       + (o.nota ? '<p class="seg-nuevo">' + esc(o.nota) + '</p>' : '')
       + (o.antes || '')
-      + '<div class="seg-res">' + (o.resumen || '') + '</div>'
+      + (o.resumen ? '<div class="seg-res">' + o.resumen + '</div>' : '')
       + (o.queHacer ? '<div class="seg-que"><b>Qué hacer</b><div>' + o.queHacer + '</div></div>' : '')
       + estHTML
       + '<div data-despues></div>'
@@ -447,10 +525,11 @@
           + ' A quienes ya comentaron les llega el aviso.' + (conTecla ? ' Ctrl+Enter guarda.' : '') + '</p>')
       + (o.detalles || '')
       + '</div>')
-      + '<div class="sg-foot"><span class="seg-pie" id="sSaved">' + esc(o.sinGuardar ? o.sinGuardar : soloVer ? '' : 'Nada que guardar todavía') + '</span>'
+      + '<div class="sg-foot"><span class="seg-pie" id="sSaved">' + esc(ACC ? (o.pieTexto || '') : o.sinGuardar ? o.sinGuardar : soloVer ? '' : 'Nada que guardar todavía') + '</span>'
       + '<div class="sg-acts"><button type="button" class="sg-b2" data-cancelar>Cerrar</button>'
-      + (soloVer ? '' : '<button type="button" class="sg-b2" id="sOk" disabled>Guardar</button>')
-      + (hayNav && nav.sig ? '<button type="button" class="sg-b1" id="sSig">' + (soloVer ? 'Siguiente ›' : 'Guardar y siguiente ›') + '</button>' : '')
+      + (ACC ? ACC.map(function (b, i) { return '<button type="button" class="' + (b.tipo === 'peligro' ? 'sg-b3' : b.tipo === 'b2' ? 'sg-b2' : 'sg-b1') + '" data-acc="' + i + '"' + (b.id ? ' id="' + esc(b.id) + '"' : '') + (b.apagado ? ' disabled' : '') + '>' + esc(b.t) + '</button>'; }).join('')
+        : (soloVer ? '' : '<button type="button" class="sg-b2" id="sOk" disabled>Guardar</button>')
+      + (hayNav && nav.sig ? '<button type="button" class="sg-b1" id="sSig">' + (soloVer ? 'Siguiente ›' : 'Guardar y siguiente ›') + '</button>' : ''))
       + '</div></div></div></div>';
     host.innerHTML = html;
     var scrim = host.querySelector('.segv');
@@ -458,6 +537,7 @@
     var despues = q('[data-despues]');
     if (o.despues) { if (typeof o.despues === 'string') despues.innerHTML = o.despues; else despues.appendChild(o.despues); }
     else despues.remove();
+    if (o.derecha && typeof o.derecha !== 'string') { var dd = q('[data-derecha]'); if (dd) dd.appendChild(o.derecha); }
     // las pestañas que la página da como nodo
     if (TODAS) TODAS.forEach(function (x) { if (x.html && typeof x.html !== 'string') q('[data-pan="' + x.id + '"]').appendChild(x.html); });
 
@@ -468,7 +548,7 @@
       if (ocupado) return;
       var s = sucio();
       if (ok) ok.disabled = !s || !!o.sinGuardar;
-      if (av && !o.sinGuardar && !soloVer) av.textContent = !s ? 'Nada que guardar todavía'
+      if (av && !o.sinGuardar && !soloVer && !ACC) av.textContent = !s ? 'Nada que guardar todavía'
         : (est && elegido !== actual) && txt && txt.value.trim() ? 'Se guardará el estatus y tu comentario'
         : (est && elegido !== actual) ? 'Se guardará el estatus' : 'Se guardará tu comentario';
       avisado = false;
@@ -501,11 +581,13 @@
       if (o.alPestana) o.alPestana(id);
     }
     function cual() { var b = q('[data-tab][aria-selected="true"]'); return b ? b.getAttribute('data-tab') : ''; }
+    host.__segFin = function () { cerrado = true; if (tic) clearInterval(tic); document.removeEventListener('keydown', alTeclado, true); host.__segFin = null; };
     function cerrar() {
-      if (cerrado) return; cerrado = true;
+      if (cerrado) return; cerrado = true; host.__segFin = null;
       if (tic) clearInterval(tic);
       document.removeEventListener('keydown', alTeclado, true);
       host.innerHTML = '';
+      ventanaAvisa();
       if (o.alCerrar) o.alCerrar();
     }
     /* Que no se pierda lo escrito (5-nov-2026, pedido de Gabriel Cavazos: a Sebastián Sánchez se le cerraba la ventana al
@@ -513,7 +595,7 @@
        arrastrar la barra o seleccionar texto y soltar afuera la cerraba), y si hay algo sin guardar (estatus, comentario o
        una corrección abierta) primero pregunta: «Seguir escribiendo» o «Cerrar sin guardar». */
     var conf = null, abajoFuera = false;
-    function pendiente() { return sucio() || !!hiloBox.querySelector('[data-edtx]'); }
+    function pendiente() { return sucio() || !!(o.sucio && o.sucio()) || !!hiloBox.querySelector('[data-edtx]'); }
     function quitaConf() { if (conf) { conf.remove(); conf = null; } }
     function pideCerrar() {
       if (ocupado) return;
@@ -625,13 +707,20 @@
         [ok, sg].forEach(function (b) { if (b) b.disabled = false; });
       });
     }
+    var acc = {cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; }};
+    if (ACC) [].forEach.call(scrim.querySelectorAll('[data-acc]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = ACC[+b.getAttribute('data-acc')]; if (!a || !a.accion || b.disabled) return;
+        a.accion({cerrar: cerrar, pie: acc.pie, boton: b});
+      });
+    });
     if (ok) ok.addEventListener('click', function () { corre(false); });
     if (sg) sg.addEventListener('click', function () { corre(true); });
     // las flechas: si dejaste algo sin guardar, la primera vez avisa y la segunda pasa sin guardarlo
     [].forEach.call(scrim.querySelectorAll('[data-nav]'), function (b) {
       b.addEventListener('click', function () {
         if (b.disabled || !nav || !nav.ir) return;
-        if (sucio() && !avisado) { avisado = true;
+        if ((sucio() || (o.sucio && o.sucio())) && !avisado) { avisado = true;
           av.textContent = 'Tienes cambios sin guardar: pica otra vez la flecha para dejarlos, o usa «Guardar y siguiente ›».'; return; }
         var dir = +b.getAttribute('data-nav'); cerrar(); nav.ir(dir);
       });
@@ -639,6 +728,7 @@
     if (o.enlaza) o.enlaza(scrim, {cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; }});
     repinta();
     var f = scrim.querySelector('.sg-body'); if (f) f.scrollTop = 0;
+    ventanaAvisa();
     return {scrim: scrim, cerrar: cerrar, pie: function (s) { if (av) av.textContent = s; },
       platica: ponPlatica, pestana: pestana, cual: cual, sucio: pendiente};
   }

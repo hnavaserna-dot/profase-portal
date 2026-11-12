@@ -60,7 +60,12 @@
     + '.cqo-n{font-size:12px;color:var(--muted,#5A6577);overflow-wrap:anywhere}'
     + '@media (max-width:700px){.cqo-fc input{font-size:16px}}'
     + '@media (max-width:640px){.cqo-gs,.cqo-fc{grid-template-columns:minmax(0,1fr)}}'
-    + '@media (max-width:420px){.cqo-r{grid-template-columns:minmax(0,1fr) auto}.cqo-l{grid-column:1/-1}}';
+    + '@media (max-width:420px){.cqo-r{grid-template-columns:minmax(0,1fr) auto}.cqo-l{grid-column:1/-1}}'
+    // por el ancho de donde vive, no solo de la pantalla: en la columna de una ventana común (js/seguimiento.js) el
+    // recuadro es más angosto que la pantalla y «Copiar» se salía (11-nov-2026, al pasar los paneles a la ventana común)
+    + '.cqo{container-type:inline-size}'
+    + '@container (max-width:560px){.cqo-gs,.cqo-fc{grid-template-columns:minmax(0,1fr)}}'
+    + '@container (max-width:340px){.cqo-r{grid-template-columns:minmax(0,1fr) auto}.cqo-l{grid-column:1/-1}}';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function pone() {
@@ -84,6 +89,7 @@
 
     function pinta() {
       if (!vivo(S)) return;
+      S.donde.classList.add('cqo');
       if (S.R === undefined) { S.donde.innerHTML = '<div class="cqo-n">Revisando…</div>'; return; }
       if (!S.R) { S.donde.innerHTML = '<div class="cqo-n">Los usuarios y contraseñas de QUO los ven la dirección, los gerentes y el contador de este cliente (responsable, quien autoriza o contador asignado en el WorkFlow).</div>'; return; }
       var hay = !!S.R.quo, h = '<div class="cqo-gs">';
