@@ -110,8 +110,211 @@
     return lista;
   }
   function ciasDe(fac) { var c = []; fac.forEach(function (o) { if (c.indexOf(o.cia) < 0) c.push(o.cia); }); return c.sort(); }
+  // la llave de una razón social en FILTROS (el nombre y su RFC: dos razones sociales con el mismo nombre no se juntan)
+  function rsK(o) { return (o.rs || '') + '|' + (o.rfc || ''); }
   function claseViejo(meses) { return meses >= 3 ? 'rj' : meses === 2 ? 'am' : 'az'; }
   function desde(G) { return G.ymv < 999999 ? 'desde ' + ymTxt(G.ymv) : ''; }
+
+  /* ---------------- el estado de cuenta en PDF ----------------
+     Héctor Daniel Nava, 12-nov-2026, 12:41 a 12:48, con la captura del estado de cuenta de Multinacional que mandó a Juárez:
+     «me gustó mucho el PDF; me lo puedes cambiar en tesorería - cobranza pdf? pero este sí ya con branding profase»; a la
+     explicación, «así es; quita o modifica esa columna para que no venga vacía» (el folio fiscal: el CRM no lo guarda en las
+     facturas de Tesorería, así que no va). Es el botón «PDF» de al lado del Excel (js/marca.js, guardar(…, {pdf})): sale de
+     lo que está en pantalla (compañía, FILTROS, la búsqueda y la pila), siempre con IVA, porque es lo que paga el cliente.
+     Un solo grupo: su estado de cuenta, listo para mandárselo. Varios: una hoja de resumen y, después, el de cada grupo en su
+     propia hoja. Con la marca PROFASE (el signo oficial, azul y naranja); con «Original (sin marca)», sin ella. Solo lee lo
+     que la pantalla ya tiene: quién ve qué compañía lo sigue decidiendo la base. */
+  var PF = { az: [31, 56, 100], na: [240, 122, 30], tin: [19, 32, 54], gris: [90, 101, 119], lin: [220, 226, 235], azc: [230, 236, 246], cab: [31, 56, 100], cabT: 255, rj: [180, 35, 24], ab: [64, 76, 96] };
+  var PF_PLANO = { az: [0, 0, 0], na: [120, 120, 120], tin: [0, 0, 0], gris: [90, 90, 90], lin: [191, 191, 191], azc: [235, 235, 235], cab: [217, 217, 217], cabT: 0, rj: [150, 0, 0], ab: [90, 90, 90] };
+  function hoyISO() {
+    try {
+      var p = {}; new Intl.DateTimeFormat('en-US', { timeZone: 'America/Monterrey', year: 'numeric', month: '2-digit', day: '2-digit' })
+        .formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+      return p.year + '-' + p.month + '-' + p.day;
+    } catch (e) { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  }
+  function fLarga(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length < 3 ? String(s || '') : (+p[2]) + ' de ' + MESL[+p[1] - 1] + ' de ' + p[0]; }
+  function fCorta(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length < 3 ? String(s || '') : (+p[2]) + ' ' + MES[+p[1] - 1] + ' ' + p[0]; }
+  function diasDe(f, hoy) {
+    var a = String(f || '').slice(0, 10).split('-'), b = String(hoy).split('-');
+    if (a.length < 3) return 0;
+    return Math.max(0, Math.round((Date.UTC(+b[0], +b[1] - 1, +b[2]) - Date.UTC(+a[0], +a[1] - 1, +a[2])) / 864e5));
+  }
+  function diasTxt(d) { return d <= 0 ? 'De hoy' : d + (d === 1 ? ' día' : ' días'); }
+  function tramo(d) { return d <= 30 ? 0 : d <= 60 ? 1 : d <= 90 ? 2 : 3; }
+  function nomArchivo(s) { return String(s || '').replace(/[\\/:*?"<>|#]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  // por grupo: sus facturas (la más vieja arriba), sus razones sociales y sus totales
+  function porGrupo(rows, afavor) {
+    var g = {}, lista = [];
+    rows.forEach(function (o) {
+      var G = g[o.grp]; if (!G) { G = g[o.grp] = { n: o.grp, fac: [], rs: {}, nrs: 0, cias: {}, tot: 0, ab: 0, sal: 0, vieja: '', af: [] }; lista.push(G); }
+      G.fac.push(o); G.cias[o.cia] = 1; G.tot += +o.tot || 0; G.ab += +o.pago || 0; G.sal += o.saldo;
+      var k = rsK(o); if (!G.rs[k]) { G.rs[k] = { n: o.rs, rfc: o.rfc || '' }; G.nrs++; }
+      if (!G.vieja || String(o.fecha) < G.vieja) G.vieja = String(o.fecha).slice(0, 10);
+    });
+    (afavor || []).forEach(function (o) { if (g[o.grp]) g[o.grp].af.push(o); });
+    lista.forEach(function (G) { G.fac.sort(function (a, b) { return String(a.fecha).localeCompare(String(b.fecha)) || String(a.folio).localeCompare(String(b.folio), 'es', { numeric: true }); }); });
+    return lista.sort(function (a, b) { return b.sal - a.sal; });
+  }
+  async function estadoPDF(rows, afavor, ctx) {
+    var MK = window.PROFASE_MARCA;
+    var plano = !!(MK.sinMarca && MK.sinMarca()), K = plano ? PF_PLANO : PF, hoy = hoyISO();
+    var J = await MK.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' });
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40, A = W - 2 * M, y = 86;
+    function color(f, c) { doc[f].apply(doc, c); }
+    // el encabezado: el signo oficial, «PROFASE» y su subtítulo; a la derecha qué es y la fecha; abajo, la línea azul y la naranja
+    function enc() {
+      var x = M;
+      if (!plano) {
+        var h = 36, w = h * 96 / 107;
+        doc.addImage(MK.logo, 'PNG', M, 20, w, h); x = M + w + 10;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(14); color('setTextColor', K.az); doc.text('PROFASE', x, 37, { charSpace: 1.6 });
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(136, 136, 136); doc.text(MK.subtitulo || 'Asesoría Contable, Legal y Fiscal', x, 49);
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); color('setTextColor', K.az); doc.text('ESTADO DE CUENTA', W - M, 34, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); color('setTextColor', K.gris); doc.text('Fecha: ' + fCorta(hoy), W - M, 46, { align: 'right' });
+      color('setDrawColor', K.az); doc.setLineWidth(1.4); doc.line(M, 64, W - M, 64);
+      if (!plano) { color('setDrawColor', K.na); doc.setLineWidth(1.1); doc.line(M, 66.6, W - M, 66.6); }
+      doc.setFont('helvetica', 'normal'); color('setTextColor', K.tin);
+    }
+    function agua() { if (!plano && MK.marcaAguaPDF) MK.marcaAguaPDF(doc); }
+    agua(); enc();
+    var agrega = doc.addPage.bind(doc);
+    doc.addPage = function () { var r = agrega.apply(doc, arguments); agua(); enc(); return r; };
+    function cabe(alto) { if (y + alto > H - 44) { doc.addPage(); y = 92; } }
+    function titulo(tx) { cabe(44); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); color('setTextColor', K.az); doc.text(tx, M, y); y += 8; }
+    function tabla(o) {
+      var der = o.derecha || []; delete o.derecha;
+      var antes = o.didParseCell;
+      o.didParseCell = function (h) { if (h.section !== 'body' && der.indexOf(h.column.index) >= 0) h.cell.styles.halign = 'right'; if (antes) antes(h); };
+      doc.autoTable(Object.assign({ theme: 'grid', margin: { left: M, right: M, top: 80, bottom: 40 },
+        styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, overflow: 'linebreak', lineColor: K.lin, lineWidth: 0.4, textColor: K.tin },
+        bodyStyles: { fillColor: false }, headStyles: { fillColor: K.cab, textColor: K.cabT, fontStyle: 'bold', lineColor: K.cab },
+        footStyles: { fillColor: K.azc, textColor: K.az, fontStyle: 'bold', lineColor: K.lin, halign: 'right' }, showFoot: 'lastPage', startY: y }, o));
+      y = doc.lastAutoTable.finalY + 22;
+    }
+    // las pilas: cuántas, lo facturado, lo abonado y el saldo (con su franja de color arriba, como en el portal)
+    function pilas(n, tot, ab, sal) {
+      cabe(70);
+      var P4 = [['Facturas pendientes', ni(n), K.az], ['Total facturado', fm2(tot), K.az], ['Abonado', fm2(ab), K.ab], ['Saldo por pagar', fm2(sal), K.na]];
+      var bw = (A - 3 * 8) / 4;
+      P4.forEach(function (x, i) {
+        var bx = M + i * (bw + 8);
+        color('setDrawColor', K.lin); doc.setFillColor(255, 255, 255); doc.setLineWidth(0.6); doc.roundedRect(bx, y, bw, 48, 4, 4, 'FD');
+        color('setFillColor', x[2]); doc.rect(bx + 0.5, y + 0.5, bw - 1, 3, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7); color('setTextColor', K.gris); doc.text(x[0].toUpperCase(), bx + 9, y + 17, { charSpace: 0.5 });
+        doc.setFontSize(i === 3 ? 13 : 12); color('setTextColor', i === 3 ? K.az : K.tin); doc.text(x[1], bx + 9, y + 37);
+      });
+      y += 66;
+    }
+    function antiguedad(fac) {
+      var t = [[0, 0], [0, 0], [0, 0], [0, 0]], sal = 0;
+      fac.forEach(function (o) { var k = tramo(diasDe(o.fecha, hoy)); t[k][0] += o.saldo; t[k][1]++; sal += o.saldo; });
+      titulo('Antigüedad del saldo');
+      tabla({ head: [['', 'De 0 a 30 días', 'De 31 a 60 días', 'De 61 a 90 días', 'Más de 90 días', 'Total']],
+        body: [['Saldo'].concat(t.map(function (a) { return fm2(a[0]); })).concat([fm2(sal)]),
+               ['Facturas'].concat(t.map(function (a) { return String(a[1]); })).concat([String(fac.length)])],
+        derecha: [1, 2, 3, 4, 5], columnStyles: { 0: { fontStyle: 'bold', cellWidth: 62 }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } } });
+      return t;
+    }
+    // qué deja fuera lo que se escogió en pantalla (para que el cliente no crea que es todo)
+    function soloTxt() {
+      var t = [];
+      if (ctx.pila === 'ven') t.push('solo las de meses anteriores'); else if (ctx.pila === 'curso') t.push('solo las de este mes');
+      if (ctx.anio && ctx.anio.length) t.push('del año ' + ctx.anio.join(', '));
+      if (ctx.mes && ctx.mes.length) t.push('de ' + ctx.mes.map(function (m) { return MESL[+m - 1]; }).join(', '));
+      return t.length ? 'Facturas ' + t.join(', ') + '.' : '';
+    }
+    function encabezaHoja(sub) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); color('setTextColor', K.tin);
+      doc.text('Facturas pendientes de pago al ' + fLarga(hoy), M, y); y += 14;
+      var s = [sub, soloTxt()].filter(Boolean).join(' · ');
+      if (s) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); color('setTextColor', K.gris); doc.splitTextToSize(s, A).forEach(function (l) { doc.text(l, M, y); y += 11; }); }
+      y += 8;
+    }
+    // el estado de cuenta de un grupo
+    function cliente(G) {
+      encabezaHoja('');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); color('setTextColor', K.gris); doc.text('CLIENTE', M, y + 4, { charSpace: 0.8 });
+      doc.setFontSize(11.5); color('setTextColor', K.tin); var cl = doc.splitTextToSize(G.n, A); doc.text(cl, M, y + 18); y += 18 + (cl.length - 1) * 14;
+      var rs = Object.keys(G.rs).map(function (k) { return G.rs[k]; }).sort(function (a, b) { return a.n.localeCompare(b.n, 'es'); });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); color('setTextColor', K.gris);
+      if (rs.length === 1) {
+        var l1 = (norm(rs[0].n) !== norm(G.n) ? rs[0].n + (rs[0].rfc ? ' · ' : '') : '') + (rs[0].rfc ? 'RFC ' + rs[0].rfc : '');
+        if (l1) doc.splitTextToSize(l1, A).forEach(function (l) { y += 12; doc.text(l, M, y); });
+      } else {
+        rs.slice(0, 8).forEach(function (r) { doc.splitTextToSize(r.n + (r.rfc ? ' · RFC ' + r.rfc : ''), A).forEach(function (l) { y += 11; doc.text(l, M, y); }); });
+        if (rs.length > 8) { y += 11; doc.text('y ' + (rs.length - 8) + ' razones sociales más', M, y); }
+      }
+      y += 16;
+      pilas(G.fac.length, G.tot, G.ab, G.sal);
+      var varias = rs.length > 1, dosCia = Object.keys(G.cias).length > 1, hayAb = G.fac.some(function (o) { return (+o.pago || 0) > 0.005; });
+      titulo('Detalle de las facturas');
+      var cab = ['#', 'Fecha', 'Folio'].concat(varias ? ['Razón social'] : []).concat(dosCia ? ['Compañía'] : []).concat(['Antigüedad', 'Total']).concat(hayAb ? ['Abonado'] : []).concat(['Saldo']);
+      var iAnt = cab.indexOf('Antigüedad'), iTot = cab.indexOf('Total');
+      // con la razón social, ella toma lo que sobra; sin ella, las columnas se reparten el ancho: la tabla siempre va de orilla a orilla
+      var cs = { 0: { cellWidth: 20, halign: 'right' } }, der = [0];
+      if (varias) { cs[1] = { cellWidth: 58 }; cs[2] = { cellWidth: 48 }; cs[iAnt] = { cellWidth: 60 }; }
+      if (dosCia) cs[cab.indexOf('Compañía')] = { cellWidth: 70 };
+      for (var k = iTot; k < cab.length; k++) { cs[k] = varias ? { halign: 'right', cellWidth: 72 } : { halign: 'right' }; der.push(k); }
+      var dd = G.fac.map(function (o) { return diasDe(o.fecha, hoy); });
+      tabla({ head: [cab],
+        body: G.fac.map(function (o, i) {
+          return [String(i + 1), fCorta(o.fecha), String(o.folio == null ? '' : o.folio)].concat(varias ? [o.rs] : []).concat(dosCia ? [o.cia] : [])
+            .concat([diasTxt(dd[i]), fm2(+o.tot || 0)]).concat(hayAb ? [fm2(+o.pago || 0)] : []).concat([fm2(o.saldo)]);
+        }),
+        foot: [[{ content: 'Total', colSpan: iTot, styles: { halign: 'right' } }, fm2(G.tot)].concat(hayAb ? [fm2(G.ab)] : []).concat([fm2(G.sal)])],
+        columnStyles: cs, derecha: der,
+        didParseCell: function (h) { if (h.section === 'body' && h.column.index === iAnt && dd[h.row.index] > 30) h.cell.styles.textColor = K.rj; } });
+      var t = antiguedad(G.fac);
+      // lo que el cliente pagó de más (saldo a favor), si tiene
+      var af = 0; G.af.forEach(function (o) { af -= o.saldo; });
+      if (G.af.length) {
+        titulo('Saldo a favor del cliente');
+        tabla({ head: [['Fecha', 'Folio'].concat(varias ? ['Razón social'] : []).concat(['Total factura', 'Pagado', 'A favor'])],
+          body: G.af.map(function (o) { return [fCorta(o.fecha), String(o.folio == null ? '' : o.folio)].concat(varias ? [o.rs] : []).concat([fm2(+o.tot || 0), fm2(+o.pago || 0), fm2(-o.saldo)]); }),
+          foot: [[{ content: 'Total a favor', colSpan: varias ? 5 : 4, styles: { halign: 'right' } }, fm2(af)]],
+          derecha: varias ? [3, 4, 5] : [2, 3, 4], columnStyles: varias ? { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } } : { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } } });
+      }
+      // el mensaje para el cliente, en prosa
+      var m30 = t[1][0] + t[2][0] + t[3][0];
+      var tx = 'Les compartimos la relación de las facturas que, al ' + fLarga(hoy) + ', siguen pendientes de pago. El saldo por pagar es de ' + fm2(G.sal)
+        + (m30 > 0.005 ? ', del que ' + fm2(m30) + ' corresponde a facturas con más de 30 días' : '') + '.'
+        + (G.af.length ? ' Además, tienen ' + fm2(af) + ' a su favor por ' + (G.af.length === 1 ? 'un pago de más' : 'pagos de más en ' + G.af.length + ' facturas')
+          + '; con eso aplicado, el saldo queda en ' + fm2(Math.max(G.sal - af, 0)) + '.' : '')
+        + ' Mucho agradeceremos su apoyo para programar el pago. Si alguna de estas facturas ya se pagó, por favor compártannos el comprobante para aplicarlo; para cualquier aclaración, quedamos a sus órdenes.';
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); color('setTextColor', K.tin);
+      doc.splitTextToSize(tx, A).forEach(function (l) { cabe(14); doc.text(l, M, y); y += 13.5; });
+    }
+    var gs = porGrupo(rows, afavor);
+    if (gs.length === 1) cliente(gs[0]);
+    else {
+      // la hoja de resumen y, después, cada grupo en su propia hoja
+      encabezaHoja(ctx.filtro || '');
+      var tot = 0, ab = 0, sal = 0; gs.forEach(function (G) { tot += G.tot; ab += G.ab; sal += G.sal; });
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); color('setTextColor', K.gris); doc.text('RESUMEN', M, y + 4, { charSpace: 0.8 });
+      doc.setFontSize(11.5); color('setTextColor', K.tin); doc.text(gs.length ? ni(gs.length) + (gs.length === 1 ? ' cliente' : ' clientes') : 'Sin facturas con saldo', M, y + 18); y += 34;
+      pilas(rows.length, tot, ab, sal);
+      if (gs.length) {
+        titulo('Por cliente');
+        tabla({ head: [['#', 'Grupo', 'Facturas', 'La más vieja', 'Total', 'Abonado', 'Saldo']],
+          body: gs.map(function (G, i) { return [String(i + 1), G.n + (G.nrs > 1 ? ' (' + G.nrs + ' razones sociales)' : ''), ni(G.fac.length), fCorta(G.vieja), fm2(G.tot), fm2(G.ab), fm2(G.sal)]; }),
+          foot: [[{ content: 'Total', colSpan: 2, styles: { halign: 'right' } }, ni(rows.length), '', fm2(tot), fm2(ab), fm2(sal)]],
+          derecha: [0, 2, 4, 5, 6], columnStyles: { 0: { cellWidth: 22, halign: 'right' }, 2: { cellWidth: 46, halign: 'right' }, 3: { cellWidth: 62 }, 4: { cellWidth: 72, halign: 'right' }, 5: { cellWidth: 72, halign: 'right' }, 6: { cellWidth: 72, halign: 'right' } } });
+        antiguedad(rows);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); color('setTextColor', K.tin);
+        doc.splitTextToSize('En las hojas siguientes va el estado de cuenta de cada cliente, cada uno en su propia hoja, para mandárselo.', A).forEach(function (l) { cabe(14); doc.text(l, M, y); y += 13.5; });
+        gs.forEach(function (G) { doc.addPage(); y = 86; cliente(G); });
+      }
+    }
+    // el pie de cada hoja
+    var n = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= n; p++) {
+      doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(122, 133, 151);
+      doc.text((plano ? '' : 'PROFASE · ' + (MK.subtitulo || 'Asesoría Contable, Legal y Fiscal') + ' · ') + 'Página ' + p + ' de ' + n, W / 2, H - 20, { align: 'center' });
+    }
+    return { doc: doc, nombre: gs.length === 1 ? 'Estado de cuenta ' + nomArchivo(gs[0].n) + ' ' + hoy : 'Estados de cuenta' + (ctx.cia ? ' ' + nomArchivo(ctx.cia) : '') + ' ' + hoy };
+  }
 
   /* ---------------- estilos ---------------- */
   var CSS = ''
@@ -264,7 +467,7 @@
     var CL = 'cx.' + (cfg.clave || 'cxc') + '.';
     var P = null;
     var S = { cia: '', pila: 'tot', iva: store.get(CL + 'iva') === 'sin' ? 'sin' : 'con', vista: store.get(CL + 'vista') === 'mes' ? 'mes' : 'edad',
-              q: '', anio: [], mes: [], grp: [], sort: { k: 'tot', dir: -1 }, abiertos: {}, rsAbiertos: {}, todos: false };
+              q: '', anio: [], mes: [], grp: [], rs: [], sort: { k: 'tot', dir: -1 }, abiertos: {}, rsAbiertos: {}, todos: false };
     raiz.classList.add('cx');
     /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026, 23:08: «que todos los menús y sub menús tengan el UX profase»): la barra
        común de js/pilas.js (buscar, la compañía, con o sin IVA, FILTROS, cómo se ve, Excel y «Más ▾» con «Abrir todos») y,
@@ -293,9 +496,13 @@
               valor: function () { return S.mes; }, pon: function (v) { S.mes = v; } }] },
           { t: 'Cliente', campos: [
             { k: 'grp', t: 'Grupo', tipo: 'varios', buscar: true,
-              opciones: function () { return gruposLista(); }, valor: function () { return S.grp; }, pon: function (v) { S.grp = v; } }] }],
-        cambio: function () { pinta(); },
-        limpiar: function () { S.anio = []; S.mes = []; S.grp = []; },
+              opciones: function () { return gruposLista(); }, valor: function () { return S.grp; }, pon: function (v) { S.grp = v; } },
+            // la razón social (Héctor Daniel Nava, 12-nov-2026, 12:41: «y en filtros; agrega el poder filtrar por razón
+            // social»): las que tienen saldo, de la compañía escogida y, si escogiste grupo, solo las de ese grupo
+            { k: 'rs', t: 'Razón social', tipo: 'varios', buscar: true,
+              opciones: function () { return rsLista(); }, valor: function () { return S.rs; }, pon: function (v) { S.rs = v; } }] }],
+        cambio: function () { podaRs(); pinta(); },
+        limpiar: function () { S.anio = []; S.mes = []; S.grp = []; S.rs = []; },
         resultados: function () { if (!P) return 'Ver'; var n = arbol(filas(), 'saldo', function () { return 0; }).length; return 'Ver ' + n + (n === 1 ? ' grupo' : ' grupos'); }
       };
       if (window.PROFASE_PILAS && PROFASE_PILAS.barra) {
@@ -313,10 +520,22 @@
       var g = {}; P.INV.forEach(function (o) { if (o.saldo > 0 && (!S.cia || o.cia === S.cia)) g[o.grp] = (g[o.grp] || 0) + 1; });
       return Object.keys(g).sort(function (a, b) { return a.localeCompare(b, 'es'); }).map(function (k) { return { v: k, t: k, n: g[k] }; });
     }
+    function rsLista() {
+      if (!P) return [];
+      var r = {};
+      P.INV.forEach(function (o) {
+        if (!(o.saldo > 0) || (S.cia && o.cia !== S.cia) || (S.grp.length && S.grp.indexOf(o.grp) < 0)) return;
+        var k = rsK(o); if (!r[k]) r[k] = { v: k, t: o.rs + (o.rfc ? ' · ' + o.rfc : ''), n: 0 }; r[k].n++;
+      });
+      return Object.keys(r).map(function (k) { return r[k]; }).sort(function (a, b) { return a.t.localeCompare(b.t, 'es'); });
+    }
+    // si cambia el grupo, la razón social que ya no es de él se quita (si no, no saldría nada)
+    function podaRs() { if (!S.rs.length) return; var ok = {}; rsLista().forEach(function (x) { ok[x.v] = 1; }); S.rs = S.rs.filter(function (k) { return ok[k]; }); }
     // lo que pasa los filtros (compañía, año, mes, grupo y lo que se busca); sin la pila
     function pasa(o, conFecha) {
       if (S.cia && o.cia !== S.cia) return false;
       if (S.grp.length && S.grp.indexOf(o.grp) < 0) return false;
+      if (S.rs.length && S.rs.indexOf(rsK(o)) < 0) return false;
       if (conFecha && S.anio.length && S.anio.indexOf(String(o.y)) < 0) return false;
       if (conFecha && S.mes.length && S.mes.indexOf(String(o.m)) < 0) return false;
       if (S.q) { var t = norm(o.grp + ' ' + o.rs + ' ' + o.rfc + ' ' + o.folio); if (!S.q.split(/\s+/).every(function (w) { return t.indexOf(w) >= 0; })) return false; }
@@ -499,7 +718,17 @@
       if (S.anio.length) t.push('año ' + S.anio.join(', '));
       if (S.mes.length) t.push('mes ' + S.mes.map(function (m) { return MES[+m - 1]; }).join(', '));
       if (S.grp.length) t.push(S.grp.length === 1 ? 'grupo ' + S.grp[0] : S.grp.length + ' grupos');
+      if (S.rs.length) t.push(S.rs.length === 1 ? 'razón social ' + S.rs[0].split('|')[0] : S.rs.length + ' razones sociales');
       var q = $('.cx-q input'); if (q && q.value.trim()) t.push('buscando «' + q.value.trim() + '»');
+      return t.filter(Boolean).join(' · ');
+    }
+    // lo que se escogió, para la hoja de resumen del estado de cuenta (sin «con IVA» ni la vista: el PDF siempre va con IVA)
+    function filtroPDF() {
+      var t = [S.cia || (P.cias.length > 1 ? 'Todas las compañías' : '')];
+      if (S.grp.length) t.push(S.grp.length === 1 ? 'grupo ' + S.grp[0] : S.grp.length + ' grupos');
+      if (S.rs.length) t.push(S.rs.length === 1 ? 'razón social ' + S.rs[0].split('|')[0] : S.rs.length + ' razones sociales');
+      var q = $('.cx-q input'); if (q && q.value.trim()) t.push('buscando «' + q.value.trim() + '»');
+      t.push('saldos con IVA');
       return t.filter(Boolean).join(' · ');
     }
     async function excel(btn) {
@@ -532,7 +761,7 @@
           ws.views = [{ state: 'frozen', ySplit: g, showGridLines: false }];
           MK.impresion(ws, { repetir: g });
         };
-        var dos = P.cias.length > 1 && !S.cia, suma = function (lista, k) { return lista.reduce(function (a, x) { return a + (+x[k] || 0); }, 0); };
+        var opPdf = null, dos = P.cias.length > 1 && !S.cia, suma = function (lista, k) { return lista.reduce(function (a, x) { return a + (+x[k] || 0); }, 0); };
         if (S.pila === 'cob') {
           var ps = P.PAG.filter(function (p) { return p.fechaPago && String(p.fechaPago).slice(0, 7) === P.mes && pasa(p, false); })
             .sort(function (a, b) { return String(a.fechaPago).localeCompare(String(b.fechaPago)) || a.grp.localeCompare(b.grp, 'es'); });
@@ -573,9 +802,13 @@
               { h: 'Pagado', w: 15, f: PESOS, k: 'pago', v: function (o) { return +o.pago || 0; } }, { h: 'Saldo con IVA', w: 15, f: PESOS, k: 'saldo', v: function (o) { return o.saldo; } },
               { h: 'Saldo sin IVA', w: 15, f: PESOS, k: 'ssi', v: function (o) { return o.ssi; } }]);
           hoja('Facturas', cf, fs, function (c, i) { return i === 0 ? 'TOTAL · ' + fs.length + (fs.length === 1 ? ' factura' : ' facturas') : c.k ? suma(fs, c.k) : null; });
+          // su PDF es el estado de cuenta (arriba, estadoPDF): lo mismo que se ve, siempre con IVA
+          var af = P.afavor.filter(function (o) { return pasa(o, false); });
+          var ctx = { cia: S.cia, pila: S.pila, anio: S.anio.slice(), mes: S.mes.slice(), filtro: filtroPDF() };
+          opPdf = { pdf: function () { return estadoPDF(rows, af, ctx); } };
         }
         var p2 = function (n) { return String(n).padStart(2, '0'); };
-        await MK.guardar(wb, 'Cobranza' + (S.cia ? ' ' + S.cia : '') + ' ' + hoy.getFullYear() + '-' + p2(hoy.getMonth() + 1) + '-' + p2(hoy.getDate()) + '.xlsx');
+        await MK.guardar(wb, 'Cobranza' + (S.cia ? ' ' + S.cia : '') + ' ' + hoy.getFullYear() + '-' + p2(hoy.getMonth() + 1) + '-' + p2(hoy.getDate()) + '.xlsx', opPdf);
       } catch (err) {
         try { if (window.PORTAL && window.PORTAL.toast) window.PORTAL.toast('No se pudo bajar el archivo. Vuelve a intentarlo.'); } catch (e) { /* nada */ }
       } finally { btn.disabled = false; }
@@ -585,7 +818,7 @@
     raiz.addEventListener('click', function (e) {
       var b;
       if ((b = e.target.closest('.cx-xl:not([data-pdf-de])'))) { excel(b); return; }
-      if ((b = e.target.closest('[data-cia]'))) { S.cia = b.getAttribute('data-cia'); S.grp = []; pinta(); return; }
+      if ((b = e.target.closest('[data-cia]'))) { S.cia = b.getAttribute('data-cia'); S.grp = []; S.rs = []; pinta(); return; }
       if ((b = e.target.closest('[data-iva]'))) { S.iva = b.getAttribute('data-iva'); store.set(CL + 'iva', S.iva); pinta(); return; }
       if ((b = e.target.closest('[data-vista]'))) { S.vista = b.getAttribute('data-vista'); store.set(CL + 'vista', S.vista); if (typeof S.sort.k === 'number') S.sort = { k: 'tot', dir: -1 }; pinta(); return; }
       if ((b = e.target.closest('.cx-todos'))) { S.todos = !S.todos; if (!S.todos) S.abiertos = {}; pinta(); return; }
@@ -618,7 +851,7 @@
         if (o.cia != null) S.cia = o.cia;
         if (o.pila && PILAS[o.pila]) S.pila = o.pila;
         S.anio = []; S.mes = []; S.q = ''; var qi = $('.cx-q input'); if (qi) qi.value = '';
-        S.grp = o.grp ? [o.grp] : []; S.abiertos = {}; if (o.grp) S.abiertos[o.grp] = true;
+        S.grp = o.grp ? [o.grp] : []; S.rs = []; S.abiertos = {}; if (o.grp) S.abiertos[o.grp] = true;
         pinta(); return true;
       }
     };

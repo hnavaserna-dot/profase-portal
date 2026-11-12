@@ -361,13 +361,25 @@
   }
 
   /* Guarda el libro: con la descarga del portal si existe, si no con una liga directa. Si se picó el botón «PDF»
-     gemelo (abajo), sale el PDF del mismo libro, con la marca PROFASE, en lugar del Excel. */
-  async function guardar(wb, nombre) {
+     gemelo (abajo), sale el PDF del mismo libro, con la marca PROFASE, en lugar del Excel.
+     Si la pantalla arma su propio PDF de lo mismo (op.pdf: una función que regresa el documento de jsPDF, o
+     {doc, nombre}), el botón «PDF» de al lado baja ese en lugar del libro pasado a PDF: así el par Excel y PDF sigue siendo
+     uno solo (Tesorería › Cobranza, su estado de cuenta: Héctor Daniel Nava, 12-nov-2026, 12:48). Se arma aquí adentro,
+     con «Original (sin marca)» ya escogido (sinMarca()). */
+  async function guardar(wb, nombre, op) {
     try {
       if (PIDE_PDF && Date.now() - PIDE_PDF < 180000) {
         PIDE_PDF = 0;
+        var base = String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '');
+        if (op && typeof op.pdf === 'function') {
+          var r = await op.pdf();
+          if (r) {
+            var d = r.doc || r;
+            return await bajar(d.output('blob'), String((r.doc && r.nombre) || base).replace(/\.pdf$/i, '') + '.pdf');
+          }
+        }
         var doc = await pdfDeLibro(wb);
-        return await bajar(doc.output('blob'), String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '') + '.pdf');
+        return await bajar(doc.output('blob'), base + '.pdf');
       }
       PIDE_PDF = 0;
       var datos = await escribeXlsx(wb);
