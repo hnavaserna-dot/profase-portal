@@ -1227,9 +1227,11 @@ function construir(B, C){
 
 (async function(){
 "use strict";
+// Revisión nocturna 12-nov-2026: los criterios se piden al mismo tiempo que las balanzas (antes, uno después del otro)
+const CRIT_P = cargarCriterios();
 const BASE = await cargarDatos();
 if(!BASE) return;
-const CRIT = await cargarCriterios();
+const CRIT = await CRIT_P;
 const D = construir(BASE, CRIT);
 const VAC_PAG = mesesVacios(BASE);
 const ES_ACR = acreedoraDe(CRIT, BASE);
@@ -2032,8 +2034,19 @@ const fotoDe = rid => (REV[rid] && REV[rid].foto) || (()=>{ const f = PORRID.get
   // un mes de Movimientos (292): de su llave
   if(!f && esMov(rid)){ const i = movInfo(rid); return {celda:true, mov:true, mes:i.mes, anio:i.anio, cliente:i.cliente, rfc:i.rfc, cta:i.cta, nombre:i.nombre}; }
   return f ? {v:f.v, ap:f.ap, ac:f.ac, mes:f.mes, anio:f.anio, cliente:f.cliente, rfc:f.rfc, cta:f.cta, nombre:f.nombre, detectado:new Date().toISOString()} : null; })();
+/* Revisión nocturna 12-nov-2026: «Resueltas» buscaba el cliente y la cuenta de cada renglón recorriendo las listas
+   completas (una y otra vez); ahora con un índice que se arma una sola vez (BASE no cambia mientras la página vive). Mismo
+   resultado: el primero que coincide, como find(). */
+let IDX_BASE = null;
+function idxBase(){
+  if(IDX_BASE) return IDX_BASE;
+  const cli = new Map(), cta = new Map();
+  BASE.clientes.forEach((c,i)=>{ if(!cli.has(c[1])) cli.set(c[1], i); });
+  BASE.cuentas.forEach(c=>{ if(!cta.has(c[0])) cta.set(c[0], c); });
+  return IDX_BASE = {cli, cta};
+}
 function resueltasDe(y){
-  const out = [];
+  const out = [], IX = idxBase();
   for(const rid of Object.keys(REV)){
     const g = RID_RE.exec(rid); if(!g) continue;
     const anio = g[5] ? +g[5] : BASE.anioBase; if(anio!==y) continue;
@@ -2041,7 +2054,7 @@ function resueltasDe(y){
     if(f && !cerrado(e)) continue;
     if(!f && !EST[rid] && foto && foto.celda) continue;   // comentarios de un mes que no es hallazgo (Movimientos)
     const rfc = g[1], mes = +g[2], cta = g[3];
-    const cl = BASE.clientes.find(c=>c[1]===rfc), cu = BASE.cuentas.find(c=>c[0]===cta);
+    const ci0 = IX.cli.get(rfc), cl = ci0===undefined ? undefined : BASE.clientes[ci0], cu = IX.cta.get(cta);
     out.push({rid, rfc, mes, anio, cta, e,
       cliente: f ? f.cliente : (foto && foto.cliente) || (cl ? cl[0] : rfc),
       nombre: f ? f.nombre : (foto && foto.nombre) || (cu ? cu[1] : ""),
@@ -2053,7 +2066,8 @@ function resueltasDe(y){
   return out.sort((a,b)=>(b.e.iso||"").localeCompare(a.e.iso||"") || a.cliente.localeCompare(b.cliente,"es"));
 }
 function pintarResueltas(){
-  const todas = resueltasDe(S.anio).filter(r=>{ const ci = BASE.clientes.findIndex(c=>c[1]===r.rfc); return ci >= 0 && empPasa(ci) && !ctaFuera(r.cta); });   // un cliente que ya no sale en las balanzas no detiene la vista
+  const IX = idxBase();
+  const todas = resueltasDe(S.anio).filter(r=>{ const ci = IX.cli.has(r.rfc) ? IX.cli.get(r.rfc) : -1; return ci >= 0 && empPasa(ci) && !ctaFuera(r.cta); });   // un cliente que ya no sale en las balanzas no detiene la vista
   const lista = todas.filter(r=>RS.filtro==="todas" || r.estado===RS.filtro);
   document.querySelectorAll("#rFiltro button").forEach(b=>{ const on = b.dataset.v===RS.filtro; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
   const nj = todas.filter(r=>r.estado==="just").length, nc = todas.length-nj;
@@ -2624,8 +2638,12 @@ function mostrarVista(v){
     document.getElementById(b).setAttribute("aria-selected", String(v===k));
     document.getElementById(s).hidden = v!==k;
   });
-  if(v==="cta") pintarCuentas();
-  if(v==="res") pintarResueltas();
+  /* Revisión nocturna 12-nov-2026: al cambiar a «Cuentas» o «Resueltas» se pintaba esa pestaña y, en el cuadro
+     siguiente, pintar() volvía a armar toda la tabla de Movimientos (escondida) y otra vez la misma pestaña: la pantalla
+     se trababa 0.8 y 1.4 s. Lo de arriba de la tabla no depende de la pestaña (solo la gráfica, que se pinta aquí), así
+     que ahora se pinta una sola vez la pestaña que se abre. Al regresar a Movimientos, como antes. */
+  if(v==="cta"){ pintarCuentas(); return; }
+  if(v==="res"){ pintarResueltas(); pintarGrafica(); return; }
   if(v==="bit"){ abreBitacora(); return; }
   pintarLuego();
 }

@@ -446,8 +446,11 @@
       try {
         var P = window.PORTAL; if (!P) return;
         var p = await P.listo; if (!p) return;
-        if (!(await o.laVe(P, p))) return;
+        // Revisión nocturna 12-nov-2026: primero «¿ya lo vio?» (una sola pregunta para toda la página, guardada 5 s en
+        // js/portal.js) y luego laVe(), que a veces le pregunta algo más a la base (rh_sol_mias, ~0.3 s): antes se
+        // preguntaba laVe() de cada recorrido en cada entrada aunque ya lo hubiera visto. Sale el mismo recorrido.
         var v = await vistos(); if (!v || v.indexOf(o.id) >= 0 || vistoLocal()) return;
+        if (!(await o.laVe(P, p))) return;
         if (!desdeAviso) await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
         // espera a que no haya ventanas ni otro recorrido; un respiro (distinto para cada uno, para no encimarse) y otra vez
         for (var n = 0; n < 6; n++) {
