@@ -9,6 +9,20 @@
 (function () {
   'use strict';
   if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  // Nadie de fuera mete el CRM dentro de su página (auditoría externa del 11-nov-2026, H-04; Héctor Daniel Nava: «3 A»).
+  // GitHub Pages no deja poner la protección del navegador (X-Frame-Options / frame-ancestors), así que se hace aquí,
+  // antes que todo: si la página va en un marco de otro sitio, no se enseña ni se carga nada más. Los marcos del mismo
+  // portal (las pantallas dentro de su vista) sí. Única excepción: la llamada del soporte de Quo (sala.html?marca=quo),
+  // que va dentro de la burbuja de los sistemas Quo.
+  if (window.top !== window.self && !(/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search))) {
+    var mismo = false;
+    try { mismo = window.top.location.host === location.host; } catch (e) { mismo = false; }
+    if (!mismo) {
+      try { var st = document.createElement('style'); st.textContent = 'html{display:none!important}'; (document.head || document.documentElement).appendChild(st); } catch (e) { /* nada */ }
+      try { window.stop(); } catch (e) { /* navegador viejo */ }
+      return;
+    }
+  }
   if (/\/cerrado\.html$/.test(location.pathname)) return;
   // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
   // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
@@ -36,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=001f58e6e8"></script><script src="js/cobranza.js?v=306aff7833"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=8cfee4dd20"></script><script src="js/cobranza.js?v=306aff7833"></script>
 <style>
 /* Portal PROFASE · Inicio (30-oct-2026, pedido de Daniel). Una sola página de tarjetas que contesta «¿qué necesita mi
    atención hoy?» y cambia según quién entra:
@@ -158,6 +172,14 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 .falla{color:var(--muted);font-size:13px}
 .carga .esq{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--surface-2),var(--line),var(--surface-2));background-size:200% 100%;animation:brilla 1.2s infinite;margin:8px 0}
 .carga .esq.g{height:52px}
+/* Que no se mueva al cargar (auditoría externa del 11-nov-2026, H-02: CLS 1.09). Las tarjetas salen en orden: lo de
+   arriba (la franja de «fuera de la ciudad» y «Tu agenda») primero y luego cada tarjeta hasta la primera que sigue
+   cargando, que se ve con su esqueleto; las de después esperan sin verse (ocupan su lugar, así nada brinca cuando la de
+   arriba crece). revela() de abajo. */
+.card.espera{visibility:hidden}
+/* mientras lo de arriba no llega, tampoco se ven «Tu agenda» ni la franja de fuera de la ciudad: así, si una llega antes que
+   la otra, la que ya se veía no brinca (H-02; el 11-nov-2026 la franja llegaba después de la agenda y la bajaba 234 px) */
+.ini-arriba #fdc,.ini-arriba #agenda,.ini-arriba #grid{visibility:hidden}
 @keyframes brilla{0%{background-position:100% 0}100%{background-position:-100% 0}}
 @media (prefers-reduced-motion:reduce){.carga .esq{animation:none}}
 /* Equipo conectado */
@@ -205,7 +227,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 .pi-cab h3{flex:1;min-width:0;font-size:15px;font-weight:740;overflow-wrap:break-word}
 .pi-n{flex:none;min-width:24px;height:22px;padding:0 7px;border-radius:999px;display:inline-grid;place-items:center;font-family:var(--f-display);font-weight:760;font-size:13px;line-height:1;background:var(--surface-2);color:var(--ink)}
 .pi-n.mal{background:var(--red);color:#fff}
-.pi-n.na{background:var(--accent);color:#fff}
+.pi-n.na{background:var(--accent);color:#14233F}
 :root[data-theme="dark"] .pi-n.mal,:root[data-theme="dark"] .pi-n.na{color:#0D1320}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pi-n.mal,:root:not([data-theme="light"]) .pi-n.na{color:#0D1320}}
 .pi-va{flex:none;color:var(--muted);font-size:16px;line-height:1}
@@ -561,7 +583,20 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       + (c.s ? '<p class="sub">' + esc(c.s) + '</p>' : '') + '</div>' + (c.liga && ve(c.liga) ? '<button type="button" class="ir" data-liga="' + esc(c.liga) + '"' + (c.wf ? ' data-wf="' + esc(c.wf) + '"' : '') + '>' + esc(c.ligaTxt || 'Ver todo') + ' ›</button>' : '')
       + '</header><div class="cuerpo"><div class="esq g"></div><div class="esq"></div><div class="esq"></div></div></section>';
   }
-  function pintaCascarones() { $('grid').innerHTML = TARJETAS.map(cascaron).join(''); }
+  function pintaCascarones() { $('grid').innerHTML = TARJETAS.map(cascaron).join(''); ARRIBA_LISTO = false; revela(); }
+  // Las tarjetas salen en orden (auditoría externa, 11-nov-2026, H-02): mientras lo de arriba (fuera de la ciudad y «Tu
+  // agenda») no llega, no se ve nada de abajo del saludo (ni la agenda ni la franja: salen juntas); luego, cada tarjeta
+  // hasta la primera que sigue cargando (con su esqueleto). Lo que espera ocupa su lugar sin verse: así, si lo de arriba
+  // crece o se quita, nada de lo que ya se ve brinca.
+  var ARRIBA_LISTO = true;
+  function revela() {
+    document.documentElement.classList.toggle('ini-arriba', !ARRIBA_LISTO);
+    var l = $('grid').querySelectorAll('.card'), corta = !ARRIBA_LISTO;
+    for (var i = 0; i < l.length; i++) {
+      l[i].classList.toggle('espera', corta);
+      if (!corta && l[i].classList.contains('carga')) corta = true;
+    }
+  }
   // quieto: al volver al Inicio se ponen al día sin parpadear (cada tarjeta se queda como estaba hasta tener lo nuevo; si
   // no se pudo leer, se queda lo de antes)
   async function llena(c, corrida, quieto) {
@@ -573,7 +608,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
         : '<p class="falla">No se pudo leer esta parte. Vuelve a cargar en un momento.</p>';
     }
     if (corrida !== CORRIDA || html === undefined) return;
-    if (html == null) { if (el) el.remove(); return; }
+    if (html == null) { if (el) el.remove(); revela(); return; }
     if (!el) {   // una tarjeta que antes no salía y ahora sí: en su lugar
       if (!quieto) return;
       var t = document.createElement('div'); t.innerHTML = cascaron(c); el = t.firstChild;
@@ -585,6 +620,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     el.classList.remove('carga'); el.removeAttribute('aria-busy');
     el.querySelector('.cuerpo').innerHTML = html;
     ponIr(el, c);
+    revela();
   }
   // «Ver todo» / «Ver todos»: si al dibujar la tarjeta su pantalla todavía no estaba en el menú (el Chat entra al menú
   // hasta que contesta la base), se pone en cuanto ya está; así nunca falta el botón (Héctor Daniel, 1-nov-2026, 10:00:
@@ -612,9 +648,17 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     $('fecha').textContent = (TITULO[PERFIL] || 'Inicio') + ' · ' + DIAS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESL[d.getUTCMonth()];
     $('hola').textContent = saludo() + (NOM ? ', ' + NOM : '');
     var agenda = cargaAgenda();   // «Tu agenda»: una sola llamada y aparte, para que no espere a las tarjetas
-    cargaFuera();
+    var fuera = cargaFuera();
     quieto = !!quieto && !!$('grid').querySelector('.card[id^="c-"]:not(#c-nada)');
-    if (!quieto) pintaCascarones();
+    if (!quieto) {
+      pintaCascarones();
+      // lo de arriba primero (hasta 2 s): así, al llegar, no empuja las tarjetas que ya se ven
+      var tope = new Promise(function (r) { setTimeout(r, 2000); });
+      Promise.race([Promise.all([agenda, fuera]).catch(function () {}), tope]).then(function () {
+        if (mia !== CORRIDA) return;
+        ARRIBA_LISTO = true; revela();
+      });
+    }
     await Promise.all(TARJETAS.map(function (c) { return llena(c, mia, quieto); }));
     if (mia !== CORRIDA) return;
     try { await agenda; } catch (e) { /* nada */ }

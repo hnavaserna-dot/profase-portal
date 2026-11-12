@@ -315,7 +315,7 @@
     + '.segv .sg-pasos b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:12.5px;font-weight:700;background:var(--sg-sf3);color:var(--sg-ink3);border:2px solid var(--sg-sf)}'
     + '.segv .sg-pasos li.ok b{background:var(--sg-ok);color:#fff}'
     + '.segv .sg-pasos li.mal b{background:var(--sg-rd);color:#fff}'
-    + '.segv .sg-pasos li.na b{background:#F07A1E;color:#fff}'
+    + '.segv .sg-pasos li.na b{background:#F07A1E;color:#14233F}'
     + '.segv .sg-pasos li.am b{background:#E0A800;color:#1d1d1d}'
     + '.segv .sg-pasos li.az b{background:var(--sg-ac);color:#fff}'
     + '.segv .sg-pasos li.off b{background:var(--sg-sf3);color:var(--sg-ink4);text-decoration:line-through}'
