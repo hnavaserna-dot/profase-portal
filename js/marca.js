@@ -116,11 +116,12 @@
   }
   document.addEventListener('click', interceptaDescargas, true);
 
+  var EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
   function excelJS() {
     if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
     if (!EXJS) EXJS = new Promise(function (ok, ko) {
       var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+      s.src = EXCELJS_URL;
       s.onload = function () { window.ExcelJS ? ok(window.ExcelJS) : ko(new Error('sin generador de Excel')); };
       s.onerror = function () { EXJS = null; ko(new Error('no cargó el generador de Excel')); };
       document.head.appendChild(s);
@@ -232,6 +233,133 @@
     ws.headerFooter = { oddFooter: pie, evenFooter: pie };
   }
 
+  /* ---------- Ceder el paso y escribir el .xlsx sin trabar la pantalla (12-nov-2026; Héctor Daniel Nava, a lo que no
+     quedó de la revisión nocturna: «a hacer lo que no quedó!») ----------
+     cede(): deja que el navegador pinte y atienda los clics a media tarea larga; con MessageChannel, que no se frena con
+     la pestaña escondida (setTimeout sí: en segundo plano, hasta una vuelta por minuto). rebanadas(ms): una función que
+     cede solo si ya pasaron ms desde la última vez. Una sola versión para todo el portal. */
+  var cede = (function () {
+    var ch = null, q = [];
+    return function () {
+      return new Promise(function (r) {
+        if (!ch) { ch = new MessageChannel(); ch.port1.onmessage = function () { var f = q.shift(); if (f) f(); }; }
+        q.push(r); ch.port2.postMessage(0);
+      });
+    };
+  })();
+  function rebanadas(ms) {
+    var t = performance.now();
+    return async function () { if (performance.now() - t >= ms) { await cede(); t = performance.now(); } };
+  }
+  /* Renglones de datos de una tabla grande (12-nov-2026). pintaRenglones() escribe cada celda como lo haría la página
+     (valor y luego letra, formato de número y alineación de su columna; b = {r0, filas, estilos}); renglones() lo hace
+     aquí mismo si son pocos y, si son DIFERIR o más (el Excel general de la Cartera: ~180 mil), los deja anotados en la
+     hoja sin armar sus celdas, para que al guardar los arme y escriba el trabajador aparte (abajo). Antes de leer el libro
+     aquí (el PDF, o escribir aquí mismo) se arman con materializa(). Una sola versión: el trabajador usa esta misma
+     función (su texto). Solo se anotan renglones que la hoja todavía no tiene. */
+  var DIFERIR = 5000;
+  function pintaRenglones(ws, b) {
+    var e = b.estilos || [];
+    for (var k = 0; k < b.filas.length; k++) {
+      var f = b.filas[k], row = ws.getRow(b.r0 + k);
+      for (var i = 0; i < f.length; i++) {
+        var x = row.getCell(i + 1), s = e[i] || {};
+        x.value = f[i];
+        if (s.font) x.font = Object.assign({}, s.font);
+        if (s.numFmt) x.numFmt = s.numFmt;
+        if (s.alignment) x.alignment = Object.assign({}, s.alignment);
+      }
+    }
+  }
+  function renglones(ws, b) {
+    var libre = b.filas.length >= DIFERIR;
+    for (var k = 0; libre && k < b.filas.length; k++) if (ws.findRow(b.r0 + k)) libre = false;
+    if (!libre) return pintaRenglones(ws, b);
+    (ws.__renglones || (ws.__renglones = [])).push(b);
+  }
+  function materializa(wb) {
+    wb.worksheets.forEach(function (ws) {
+      var l = ws.__renglones; if (!l) return;
+      delete ws.__renglones; l.forEach(function (b) { pintaRenglones(ws, b); });
+    });
+  }
+  /* ExcelJS arma el XML de cada hoja de un jalón: con un libro grande (el Excel general de la Cartera, ~180 mil
+     renglones) la pantalla se quedaba sin responder ~30 s mientras escribía. Un libro de XLSX_APARTE renglones o más se
+     escribe en un trabajador aparte: se le pasa el modelo del libro (lo mismo que ExcelJS lee para escribir: wb.model),
+     sin renglones; luego los renglones ya armados (row.model) y los anotados con renglones(), por partes, cediendo el
+     paso; el trabajador arma los anotados con pintaRenglones() y escribe con el mismo escritor de ExcelJS 4.4.0: el
+     mismo archivo, hoja por hoja. Un libro chico, aquí mismo, como siempre; y si el trabajador no puede (sin red para su
+     ExcelJS, un navegador sin trabajadores, algo que no se pudo pasar), aquí mismo, como siempre. op.aparte = true lo
+     manda al trabajador aunque sea chico y op.sinRespaldo = true no lo escribe aquí si falla (las pruebas). */
+  var XLSX_APARTE = 5000;
+  var TRABAJO_XLSX = "importScripts(" + JSON.stringify(EXCELJS_URL) + ");" + pintaRenglones.toString() + ";var M=null;"
+    + "onmessage=async function(e){var d=e.data;try{"
+    + "if(d.t==='base'){M=d.m;M.worksheets.forEach(function(w){w.rows=[];w.__b=[];w.__x=[];});return;}"
+    + "if(d.t==='filas'){var a=M.worksheets[d.h].rows,f=d.f;for(var i=0;i<f.length;i++)a.push(f[i]);return;}"
+    // los anotados: se arman en una hoja aparte, igual que aquí, y se toma su row.model
+    + "if(d.t==='bloque'){var T=new ExcelJS.Workbook().addWorksheet('t'),w=M.worksheets[d.h];pintaRenglones(T,d);"
+    + "w.__b.push([d.r0,d.r0+d.filas.length-1]);for(var k=0;k<d.filas.length;k++){var r=T.findRow(d.r0+k),rm=r&&r.model;if(rm)w.__x.push(rm);}return;}"
+    + "var W=new ExcelJS.Workbook(),Rg=Object.getPrototypeOf(W.addWorksheet('x').dimensions).constructor;"
+    + "M.worksheets.forEach(function(w){if(w.__x.length){w.rows=w.rows.concat(w.__x).sort(function(a,b){return a.number-b.number;});}"
+    + "delete w.__b;delete w.__x;"
+    // las dimensiones de cada hoja, como las saca ExcelJS (Range.expand renglón por renglón)
+    + "var r=new Rg();w.rows.forEach(function(x){r.expand(x.number,x.min,x.number,x.max);});w.dimensions=r;});"
+    + "var X=Object.getPrototypeOf(W.xlsx).constructor,b=await new X({model:M}).writeBuffer();M=null;"
+    + "var ab=b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength);postMessage({ok:ab},[ab]);"
+    + "}catch(x){postMessage({err:String(x&&x.message||x)});}};";
+  function xlsxAparte(wb) {
+    return new Promise(function (ok, ko) {
+      var w = null, url = null, fin = false;
+      function cierra() { fin = true; try { w.terminate(); } catch (e) {} try { URL.revokeObjectURL(url); } catch (e) {} }
+      try { url = URL.createObjectURL(new Blob([TRABAJO_XLSX], { type: 'text/javascript' })); w = new Worker(url); }
+      catch (e) { cierra(); return ko(e); }
+      w.onmessage = function (e) { cierra(); if (e.data && e.data.ok) ok(e.data.ok); else ko(new Error(e.data && e.data.err || 'sin archivo')); };
+      w.onerror = function (e) { try { e.preventDefault(); } catch (x) {} cierra(); ko(new Error('el trabajador no arrancó')); };
+      (async function () {
+        // el modelo sin renglones: se le quitan un momento a cada hoja (y a sus tablas, que el escritor no los usa)
+        var hojas = wb.worksheets, guard = hojas.map(function (ws) { return ws._rows; }), base;
+        hojas.forEach(function (ws) { ws._rows = []; });
+        try { base = wb.model; } finally { hojas.forEach(function (ws, i) { ws._rows = guard[i]; }); }
+        delete base.sheets;
+        base.worksheets.forEach(function (m) {
+          m.dimensions = null;
+          m.tables = m.tables.map(function (t) { return Object.assign({}, t, { rows: [] }); });
+        });
+        w.postMessage({ t: 'base', m: base });
+        var t = performance.now();
+        for (var h = 0; h < hojas.length && !fin; h++) {
+          // los renglones ya armados, como los junta ExcelJS (row.model de cada uno que tenga algo), por partes
+          var ws = hojas[h], n = ws.rowCount, f = [];
+          for (var k = 1; k <= n && !fin; k++) {
+            var row = ws.findRow(k), rm = row && row.model;
+            if (rm) f.push(rm);
+            if (performance.now() - t >= 25) { if (f.length) w.postMessage({ t: 'filas', h: h, f: f }); f = []; await cede(); t = performance.now(); }
+          }
+          if (f.length && !fin) w.postMessage({ t: 'filas', h: h, f: f });
+          // los anotados con renglones(), de mil en mil
+          var bl = ws.__renglones || [];
+          for (var j = 0; j < bl.length && !fin; j++) {
+            for (var k0 = 0; k0 < bl[j].filas.length && !fin; k0 += 1000) {
+              w.postMessage({ t: 'bloque', h: h, r0: bl[j].r0 + k0, filas: bl[j].filas.slice(k0, k0 + 1000), estilos: bl[j].estilos });
+              await cede();
+            }
+          }
+        }
+        if (!fin) w.postMessage({ t: 'fin' });
+      })().catch(function (e) { cierra(); ko(e); });
+    });
+  }
+  async function escribeXlsx(wb, op) {
+    var n = 0;
+    wb.worksheets.forEach(function (ws) { n += ws.rowCount; (ws.__renglones || []).forEach(function (b) { n += b.filas.length; }); });
+    if (((op && op.aparte) || n >= XLSX_APARTE) && typeof Worker !== 'undefined' && typeof MessageChannel !== 'undefined') {
+      try { return await xlsxAparte(wb); }
+      catch (e) { if (op && op.sinRespaldo) throw e; }
+    }
+    materializa(wb);
+    return wb.xlsx.writeBuffer();
+  }
+
   /* Guarda el libro: con la descarga del portal si existe, si no con una liga directa. Si se picó el botón «PDF»
      gemelo (abajo), sale el PDF del mismo libro, con la marca PROFASE, en lugar del Excel. */
   async function guardar(wb, nombre) {
@@ -242,7 +370,7 @@
         return await bajar(doc.output('blob'), String(nombre || 'PROFASE').replace(/\.xls[xm]?$/i, '') + '.pdf');
       }
       PIDE_PDF = 0;
-      var datos = await wb.xlsx.writeBuffer();
+      var datos = await escribeXlsx(wb);
       return await bajar(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre);
     } finally { ORIGINAL = 0; }
   }
@@ -458,6 +586,7 @@
   }
   /* El PDF de un libro de Excel ya armado (todas sus hojas visibles), con la marca PROFASE */
   async function pdfDeLibro(wb) {
+    materializa(wb);   // los renglones anotados con renglones() (12-nov-2026), antes de leer el libro
     var jsPDF = await pdfJS();
     var hojas = wb.worksheets.filter(function (ws) { return ws.state !== 'hidden' && ws.state !== 'veryHidden' && !(ws.__pdf && ws.__pdf.omitir); }).map(bloquesDe);
     var anchas = hojas.some(function (h) { return h.bloques.some(function (b) { return b.head && b.head.length > 6; }); });
@@ -553,7 +682,8 @@
 
   window.PROFASE_MARCA = { logo: LOGO, marcaAgua: MARCA_AGUA, tablaPDF: tablaPDF, colores: C, fuente: FUENTE, subtitulo: SUB,
     excelJS: excelJS, libro: libro, encabezado: encabezado, cabecera: cabecera, cuerpo: cuerpo, borde: borde,
-    impresion: impresion, guardar: guardar,
+    impresion: impresion, guardar: guardar, escribeXlsx: escribeXlsx, cede: cede, rebanadas: rebanadas,
+    renglones: renglones, materializa: materializa,
     pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF,
     precargaSello: precargaSello, pdfDeLibro: pdfDeLibro, empareja: empareja,
     sinMarca: sinMarca, ofreceOriginal: ofreceOriginal, eligeMarca: eligeMarca };
