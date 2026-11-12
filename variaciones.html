@@ -938,6 +938,25 @@ async function cargarDatos(silencioso){
     return j;
   }catch(e){ return falla("No se pudieron cargar los hallazgos ("+((e && (e.code||e.message))||"error")+"). Recarga la página en unos minutos."); }
 }
+/* Las empresas de Reportes de quien entró (12-nov-2026; petición de Fernando Cadengo 20261112-1215-reportes-solo-lo-suyo,
+   autorizada por Héctor Daniel Nava; portal/sql/382_reportes_solo_suyas.sql): la base dice cuáles son (rep_mis_empresas) y
+   si esa persona está en «solo sus empresas en Reportes» (solo las de su «Cálculo de impuestos»). A ella la página solo le
+   carga las suyas; a los demás, igual que siempre. */
+async function misEmpresas(){
+  try{
+    if(!window.claude) return null;
+    await claude.use("db");
+    const P = window.PORTAL||{}; if(!P.sb) return null;
+    const r = await P.sb.rpc("rep_mis_empresas");
+    return r && !r.error && r.data && Array.isArray(r.data.rfcs) ? r.data : null;
+  }catch(e){ return null; }
+}
+function soloMias(B, mias){
+  if(!B || !B.mov) return B;   // un archivo de antes, ya calculado: se deja igual
+  const ok = new Set(); (B.clientes||[]).forEach((c,i)=>{ if(mias.has(String(c[1]||"").toUpperCase())) ok.add(i); });
+  const f = a => Array.isArray(a) ? a.filter(x=>ok.has(x[0])) : a;
+  return Object.assign({}, B, {mov:f(B.mov), sal:f(B.sal), ca:f(B.ca), totalClientes:ok.size});
+}
 
 
 /* ---------- tema ---------- */
@@ -957,8 +976,12 @@ async function cargarDatos(silencioso){
 "use strict";
 // Revisión nocturna 12-nov-2026: los criterios se piden al mismo tiempo que las balanzas (antes, uno después del otro)
 const CRIT_P = cargarCriterios();
-const BASE = await cargarDatos();
-if(!BASE) return;
+const MIAS_P = misEmpresas();
+const BASE0 = await cargarDatos();
+if(!BASE0) return;
+const MIAS = await MIAS_P;
+const SOLO_MIAS = !!(MIAS && MIAS.solo);
+const BASE = SOLO_MIAS ? soloMias(BASE0, new Set(MIAS.rfcs.map(r=>String(r).toUpperCase()))) : BASE0;
 const CRIT = await CRIT_P;
 const D = construir(BASE, CRIT);
 const VAC_PAG = mesesVacios(BASE);
@@ -4056,7 +4079,7 @@ function pintarLead(extra){
   const act = D.generado ? " · datos de la base al "+fHora(D.generado) : "";
   const viejo = horasDe(D.generado) > AVISO_HORAS ? " · tienen más de "+AVISO_HORAS+" horas; se actualizan solos cada 3 horas" : "";
   document.getElementById("lead").textContent =
-    `${D.periodo} · ${fNum.format(new Set(FILAS.map(f=>f.rfc)).size)} de ${D.totalClientes} clientes con hallazgos · ${fNum.format(FILAS.length)} variaciones (${textoCrit(CRIT)})${act}${viejo}${extra||""}`;
+    `${D.periodo} · ${fNum.format(new Set(FILAS.map(f=>f.rfc)).size)} de ${D.totalClientes} ${SOLO_MIAS?"empresas tuyas (las de tu Cálculo de impuestos)":"clientes"} con hallazgos · ${fNum.format(FILAS.length)} variaciones (${textoCrit(CRIT)})${act}${viejo}${extra||""}`;
 }
 const btnR = document.getElementById("recargar");
 btnR.addEventListener("click", ()=>{ btnR.disabled = true; location.reload(); });
@@ -4088,10 +4111,13 @@ else { const h1 = document.querySelector("main .titlebar h1"); if(h1) h1.hidden 
   MI_USUARIO = (P.perfil && P.perfil.usuario) || ""; MI_ROL = (P.perfil && P.perfil.rol) || ""; MI_NOMBRE = (P.perfil && P.perfil.nombre) || "";
   if(userId && MI_NOMBRE) NOMBRES[userId] = MI_NOMBRE;
   try{ const r = await P.sb.rpc("es_gerencia_contable"); PUEDE_EST = r.data===true; }catch(e){ PUEDE_EST = false; }
-  try{ const d = await db.doc("datos/var_permisos").get(); const pr = d.exists ? (d.data().porRfc||{}) : {};
+  // sus empresas de Reportes (382); si la base todavía no las da, las de siempre (datos/var_permisos)
+  if(MIAS) MIS_RFC = new Set(MIAS.rfcs);
+  else try{ const d = await db.doc("datos/var_permisos").get(); const pr = d.exists ? (d.data().porRfc||{}) : {};
        MIS_RFC = new Set(Object.keys(pr).filter(r=>(pr[r]||[]).includes(MI_USUARIO))); }catch(e){}
   if(window.PROFASE_OCULTOS){ await window.PROFASE_OCULTOS.carga(); window.PROFASE_OCULTOS.alCambiar(()=>{ S.clientes.forEach(r=>{ if(OCU(r)) S.clientes.delete(r); }); pintar(); }); }
-  // los contadores abren con sus clientes; «Limpiar filtros» muestra todos
+  // los contadores abren con sus clientes; «Limpiar filtros» muestra todos (a quien está en «solo sus empresas en Reportes»,
+  // todas son las suyas: la página solo le cargó esas)
   if(MI_ROL==="contador" && !S.clientes.size){
     const mios = CLIENTES.filter(c=>MIS_RFC.has(c.rfc)&&!OCU(c.rfc)).map(c=>c.rfc);
     if(mios.length) S.clientes = new Set(mios);
