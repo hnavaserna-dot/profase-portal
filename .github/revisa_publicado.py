@@ -34,7 +34,7 @@ ESPERA_MAX = int(os.environ.get("ESPERA_MAX", "900"))
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NO_SE_SIRVEN = {"CNAME", "README.md"}
 # Lo que una página pide y todavía no existe a propósito (no es falla: sale como nota, para que no se olvide)
-ESPERADOS = {"/img/multinacional.png": "el logo de Multinacional, que se pone cuando Héctor Daniel lo mande"}
+ESPERADOS = {}   # (el logo de Multinacional ya está desde el 12-nov-2026: img/multinacional.png)
 VISTAS_LAPTOP = ["index.html", "inicio.html", "director.html", "gerentes.html", "contadores.html"]
 UA = "PROFASE-revisa-publicado/1.0"
 SELLO = os.environ.get("GITHUB_RUN_ID", "") + "-" + str(int(time.time()))

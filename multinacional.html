@@ -70,6 +70,10 @@
    que pone solo Héctor Daniel Nava) y los totales; la utilidad solo la ve la dirección; Eva no ve cotizaciones. La
    cotización del cliente y la nota de recibido salen en PDF con la marca de Multinacional (js/marca.js solo carga la
    librería del PDF: PROFASE_MARCA.pdfJS).
+   Facturas › «Estado de cuenta (PDF)» (12-nov-2026, Héctor Daniel Nava: «agrégame un botón para que pueda descargar el
+   pdf para mandarlo a juarez para que nos paguen»): lo que un cliente tiene por cobrar, para mandárselo; lo bajan quienes
+   ven los pagos. Todos los PDF de Multinacional llevan la marca Multinacional: el estilo PROFASE con el logo y los datos
+   de Multinacional, nunca el signo ni el nombre PROFASE («branding profase pero logo multi solamente»; marcaMul()).
    ?s=pagos  Pagos (9-nov-2026, Héctor Daniel Nava, con la captura de Tesorería › Pagos: «Queremos ver esto en el menú
    multinacional»; portal/sql/332_multinacional_pagos.sql): como Tesorería › Pagos. «Facturas disponibles» (total, abonado
    y saldo; «Liquidar» con la fecha de arriba) y «Registro de pagos» (cada pago con su reparto; cambiar, aplicar lo que
@@ -312,7 +316,7 @@ td.sel input{width:18px;height:18px}
       <button type="button" role="tab" data-ft="can" aria-selected="false">Canceladas</button>
       <button type="button" role="tab" data-ft="tod" aria-selected="false">Todas</button>
     </div>
-    <div class="mul-bar" id="fac-bar"><input type="search" id="q" placeholder="Buscar folio, cliente o RFC" aria-label="Buscar folio, cliente o RFC"><span id="rango" class="mul-fe" hidden><label class="mut" for="f-desde">Del</label> <input type="date" id="f-desde"> <label class="mut" for="f-hasta">al</label> <input type="date" id="f-hasta"></span></div>
+    <div class="mul-bar" id="fac-bar"><input type="search" id="q" placeholder="Buscar folio, cliente o RFC" aria-label="Buscar folio, cliente o RFC"><button class="btn" type="button" id="b-edo" hidden title="Lo que un cliente tiene por cobrar, en PDF con la marca Multinacional, para mandárselo">Estado de cuenta (PDF)</button><span id="rango" class="mul-fe" hidden><label class="mut" for="f-desde">Del</label> <input type="date" id="f-desde"> <label class="mut" for="f-hasta">al</label> <input type="date" id="f-hasta"></span></div>
     <div id="kpis"></div>
     <div class="card">
       <header><div><h2 id="h-lista">Por cobrar</h2><div class="sub" id="lista-sub"></div></div></header>
@@ -540,7 +544,7 @@ td.sel input{width:18px;height:18px}
   var NAV = null, CUR = null, PGF = null, PGC = null, PGB = null, FIRF = '', FIRC = '', FIRB = '', MAS30 = false, SINFAC = false;
   function barras() {
     if (PGF || !window.PROFASE_PILAS) return;
-    PROFASE_PILAS.barra($('fac-bar'), { caja: true, buscar: $('q'), periodo: [$('rango')] });
+    PROFASE_PILAS.barra($('fac-bar'), { caja: true, buscar: $('q'), periodo: [$('rango')], botones: [$('b-edo')] });
     PROFASE_PILAS.barra($('cot-bar'), { caja: true, buscar: $('c-q') });
     PROFASE_PILAS.barra($('ban-bar'), { caja: true, buscar: $('b-q'), periodo: [$('b-mes'), $('b-solo').parentNode] });
     if (window.PROFASE_PAGINAS) {
@@ -1080,64 +1084,245 @@ td.sel input{width:18px;height:18px}
     b.disabled = false;
   };
 
-  /* ---------- la cotización y la nota de recibido en PDF, con la marca de Multinacional ---------- */
-  // Nunca la marca PROFASE (Daniel, 2-nov-2026: «ahí nunca llevaría branding profase… en todo caso sería branding
-  // multinacional»): su logo (img/multinacional.png, cuando esté), su nombre, su RFC y su lema.
+  /* ---------- La marca Multinacional en sus PDF (una sola versión para todos: cotización, nota de recibido, comisiones y
+     estado de cuenta) ---------- */
+  // Héctor Daniel Nava, 12-nov-2026, 11:25: «quita el de profase… solo multinacional pero con el branding profase; en este
+  // caso a crear branding multinacional; branding profase pero logo multi solamente». La marca Multinacional es el estilo
+  // PROFASE (la misma letra y el mismo acomodo: logo, nombre con su subtítulo y la línea de abajo, la marca de agua y el pie
+  // con las páginas) con la identidad de Multinacional: su logo (img/multinacional.png, el carrito con las dos flechas que
+  // mandó Héctor Daniel Nava a las 11:34), sus colores (abajo), su lema, su razón social y su RFC. Nunca el signo ni el
+  // nombre PROFASE (antes, 2-nov-2026: «ahí nunca llevaría branding profase… en todo caso sería branding
+  // multinacional»; arma_multinacional() de construir.py solo deja usar PROFASE_MARCA.pdfJS).
+  // Los colores salen del logo de Multinacional (12-nov-2026, 11:34: «hazlo pero con esos colores; en vez de azul y naranja;
+  // verde con amarillo»): el verde de su flecha (#427355) donde PROFASE lleva el azul, el amarillo de su otra flecha
+  // (#E2862F) donde lleva el naranja, y el gris de su carrito (#424947) para lo de abajo.
+  var VD = [66, 115, 85], AM = [226, 134, 47], CAR = [66, 73, 71], TIN = [33, 40, 38], GRIS = [95, 104, 101], LIN = [221, 229, 223], VDC = [233, 242, 236];
   var LOGO = null;
   async function logoMul() {
     if (LOGO !== null) return LOGO;
     try {
       var r = await fetch('img/multinacional.png', { cache: 'force-cache' }); if (!r.ok) throw new Error('sin logo');
       var bl = await r.blob();
-      LOGO = await new Promise(function (ok) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result || '')); }; fr.onerror = function () { ok(''); }; fr.readAsDataURL(bl); });
+      var src = await new Promise(function (ok) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result || '')); }; fr.onerror = function () { ok(''); }; fr.readAsDataURL(bl); });
+      var dim = await new Promise(function (ok) { var im = new Image(); im.onload = function () { ok([im.naturalWidth, im.naturalHeight]); }; im.onerror = function () { ok(null); }; im.src = src; });
+      LOGO = src && dim && dim[0] && dim[1] ? { src: src, w: dim[0], h: dim[1] } : '';
     } catch (e) { LOGO = ''; }
     return LOGO;
   }
-  var GRIS = [60, 60, 60], NAR = [232, 121, 43], VER = [62, 125, 79];
+  function empMul() { return { nombre: (EST && EST.nombre) || '', rfc: (EST && EST.rfc) || '', lema: (EST && EST.lema) || '' }; }
+  function frase(s) { s = String(s || '').trim().toLowerCase(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+  // la marca de agua: el logo de Multinacional muy tenue, centrado y detrás (solo si ya está su logo)
+  function aguaMul(doc, lg) {
+    if (!lg) return;
+    try {
+      var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), w = 300, h = w * lg.h / lg.w;
+      if (h > 340) { h = 340; w = h * lg.w / lg.h; }
+      doc.setGState(new doc.GState({ opacity: 0.07 })); doc.addImage(lg.src, 'PNG', (W - w) / 2, (H - h) / 2 + 10, w, h);
+      doc.setGState(new doc.GState({ opacity: 1 }));
+    } catch (e) { /* sin marca de agua, nunca sin PDF */ }
+  }
+  // el encabezado, como el de los PDF del portal: logo, «MULTINACIONAL» en verde con su lema abajo, la razón social y el RFC;
+  // a la derecha qué documento es y su fecha; abajo, la línea verde con la amarilla (como la franja del portal)
+  function encMul(doc, lg, titulo, c) {
+    var W = doc.internal.pageSize.getWidth(), M = 40, x = M, emp = c.empresa || empMul();
+    if (lg) { var h = 36, w = h * lg.w / lg.h; if (w > 110) { w = 110; h = w * lg.h / lg.w; } doc.addImage(lg.src, 'PNG', M, 20 + (36 - h) / 2, w, h); x = M + w + 10; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor.apply(doc, VD); doc.text('MULTINACIONAL', x, 34, { charSpace: 1.6 });
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(136, 136, 136); doc.text(frase(emp.lema), x, 45);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); doc.setTextColor.apply(doc, GRIS);
+    doc.text(doc.splitTextToSize(String(emp.nombre || '') + (emp.rfc ? ' · RFC ' + emp.rfc : ''), W - x - M - 170)[0] || '', x, 56);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor.apply(doc, VD); doc.text(titulo, W - M, 34, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GRIS);
+    doc.text('Fecha: ' + fecha(c.fecha), W - M, 46, { align: 'right' });
+    if (c.numero) doc.text('Núm. ' + c.numero, W - M, 57, { align: 'right' });
+    doc.setDrawColor.apply(doc, VD); doc.setLineWidth(1.4); doc.line(M, 64, W - M, 64);
+    doc.setDrawColor.apply(doc, AM); doc.setLineWidth(1.1); doc.line(M, 66.6, W - M, 66.6);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor.apply(doc, TIN);
+  }
+  // pone la marca en la hoja y en cada hoja nueva (también las que agrega autoTable); regresa dónde ya se puede escribir
   async function marcaMul(doc, titulo, c) {
-    var W = doc.internal.pageSize.getWidth(), lg = await logoMul(), x = 40, emp = c.empresa || {};
-    if (lg) { try { doc.addImage(lg, 'PNG', 40, 28, 54, 48); x = 106; } catch (e) { x = 40; } }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor.apply(doc, GRIS);
-    doc.text(doc.splitTextToSize(emp.nombre || 'MULTINACIONAL', W - x - 190), x, 42);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(110, 110, 110); doc.text('RFC ' + (emp.rfc || ''), x, 70);
-    doc.setTextColor.apply(doc, NAR); doc.text(emp.lema || '', x, 82);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor.apply(doc, VER); doc.text(titulo, W - 40, 42, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, GRIS);
-    doc.text('Fecha: ' + fecha(c.fecha), W - 40, 58, { align: 'right' });
-    if (c.numero) doc.text('Núm. ' + c.numero, W - 40, 70, { align: 'right' });
-    doc.setDrawColor.apply(doc, NAR); doc.setLineWidth(1.5); doc.line(40, 92, W - 40, 92);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, GRIS); doc.text(doc.splitTextToSize(c.nombre, W - 80), 40, 110);
+    var lg = await logoMul(), W = doc.internal.pageSize.getWidth();
+    aguaMul(doc, lg); encMul(doc, lg, titulo, c);
+    var agrega = doc.addPage.bind(doc);
+    doc.addPage = function () { var r = agrega.apply(doc, arguments); aguaMul(doc, lg); encMul(doc, lg, titulo, c); return r; };
+    var y = 86;
+    if (c.nombre) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, TIN);
+      var ls = doc.splitTextToSize(String(c.nombre), W - 80); doc.text(ls, 40, y); y += ls.length * 13 + 4;
+    }
+    return y;
+  }
+  // el estilo de las tablas, como el de los PDF del portal: encabezado verde y celdas sin relleno (se ve la marca de agua)
+  function tablaMul(o) {
+    // «derecha»: las columnas de montos, también con su encabezado y su total a la derecha
+    var der = o && o.derecha;
+    if (der) {
+      var antes = o.didParseCell; delete o.derecha;
+      o.didParseCell = function (h) { if (h.section !== 'body' && der.indexOf(h.column.index) >= 0) h.cell.styles.halign = 'right'; if (antes) antes(h); };
+    }
+    return Object.assign({ theme: 'grid', margin: { left: 40, right: 40, top: 80, bottom: 40 },
+      styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, overflow: 'linebreak', lineColor: LIN, lineWidth: 0.4, textColor: TIN },
+      bodyStyles: { fillColor: false }, headStyles: { fillColor: VD, textColor: 255, fontStyle: 'bold', lineColor: VD },
+      footStyles: { fillColor: VDC, textColor: VD, fontStyle: 'bold', lineColor: LIN } }, o || {});
+  }
+  // el pie de cada hoja: «Multinacional · su lema · Página N de M»
+  function pieMul(doc) {
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), n = doc.internal.getNumberOfPages(), lema = frase(empMul().lema);
+    for (var p = 1; p <= n; p++) {
+      doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(122, 133, 151);
+      doc.text('Multinacional' + (lema ? ' · ' + lema : '') + ' · Página ' + p + ' de ' + n, W / 2, H - 20, { align: 'center' });
+    }
   }
   async function pdfCot(c, precios, b) {
     var t = b.textContent; b.disabled = true; b.textContent = 'Armando…';
     try {
-      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth();
-      await marcaMul(doc, precios ? 'COTIZACIÓN' : 'NOTA DE RECIBIDO', c);
+      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+      var y0 = await marcaMul(doc, precios ? 'COTIZACIÓN' : 'NOTA DE RECIBIDO', c);
       var cab = precios ? ['#', 'Unidad', 'Cantidad', 'Producto', 'Descripción adicional', 'Precio unitario', 'Precio total'] : ['#', 'Unidad', 'Cantidad', 'Producto', 'Descripción adicional'];
       var cuerpo = (c.renglones || []).map(function (r) {
         var f = [r.orden, r.unidad, String(Number(r.cantidad)), r.producto, r.especificacion || ''];
         return precios ? f.concat([dinero(r.precio_unit), dinero(r.precio_total)]) : f;
       });
-      doc.autoTable({ head: [cab], body: cuerpo, startY: 124, margin: { left: 40, right: 40 }, styles: { fontSize: 8.5, cellPadding: 4, textColor: GRIS },
-        headStyles: { fillColor: VER, textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [246, 246, 246] },
-        columnStyles: precios ? { 0: { cellWidth: 22 }, 2: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } } : { 0: { cellWidth: 22 }, 2: { halign: 'right' } } });
+      doc.autoTable(tablaMul({ head: [cab], body: cuerpo, startY: y0,
+        derecha: precios ? [2, 5, 6] : [2],
+        columnStyles: precios ? { 0: { cellWidth: 22 }, 2: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } } : { 0: { cellWidth: 22 }, 2: { halign: 'right' } } }));
       var y = doc.lastAutoTable.finalY + 14;
       if (precios) {
+        if (y + 50 > H - 40) { doc.addPage(); y = 96; }
         [['Subtotal', c.subtotal], ['IVA', c.iva], ['Total', c.total]].forEach(function (x, i) {
-          doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); doc.setFontSize(i === 2 ? 11 : 9.5); doc.setTextColor.apply(doc, GRIS);
+          doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); doc.setFontSize(i === 2 ? 11 : 9.5); doc.setTextColor.apply(doc, i === 2 ? VD : TIN);
           doc.text(x[0], W - 150, y, { align: 'right' }); doc.text(dinero(x[1]), W - 40, y, { align: 'right' }); y += 15;
         });
       } else {
-        y = Math.max(y + 40, 600); doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.6); doc.line(W / 2 - 130, y, W / 2 + 130, y);
-        doc.setFontSize(9); doc.setTextColor.apply(doc, GRIS); doc.text('Nombre y firma de recibido', W / 2, y + 12, { align: 'center' });
+        y = Math.max(y + 40, 600); if (y + 70 > H - 40) { doc.addPage(); y = 160; }
+        doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.6); doc.line(W / 2 - 130, y, W / 2 + 130, y);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, TIN); doc.text('Nombre y firma de recibido', W / 2, y + 12, { align: 'center' });
         y += 40; if (c.solicita) { doc.text('Solicita: ' + c.solicita, 40, y); y += 13; } if (c.entregar_en) doc.text('Entregar en: ' + c.entregar_en, 40, y);
       }
+      pieMul(doc);
       doc.save((precios ? 'Cotizacion ' : 'Nota de recibido ') + String(c.nombre).replace(/[\\/:*?"<>|#]+/g, ' ').trim() + '.pdf');
       b.textContent = 'Listo';
     } catch (e) { b.textContent = 'No se pudo'; error(falla(e)); }
     setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
   }
 
+
+  /* ---------- Facturas › «Estado de cuenta (PDF)»: lo que un cliente tiene por cobrar, para mandárselo y que pague ----------
+     Héctor Daniel Nava, 12-nov-2026, 11:24, con la captura de Facturas › Por cobrar de Municipio de Juárez: «agrégame un
+     botón para que pueda descargar el pdf para mandarlo a juarez para que nos paguen»; 11:25: con la marca Multinacional
+     (el estilo PROFASE con la identidad de Multinacional, sin el logo PROFASE). Lo bajan quienes ven los pagos (la
+     dirección y Eva Rangel; Héctor Nava Ramos también, porque solo lee): el documento trae lo abonado y el saldo, que Mónica
+     Pedraza no ve. Sale con los mismos números de la pantalla (mul_facturas_lista: la misma regla de la diferencia menor) y
+     las notas de crédito por aplicar del cliente (mul_pago_facturas). No guarda nada. */
+  function fechaLarga(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length < 3 ? String(s || '') : (+p[2]) + ' de ' + MESL[+p[1] - 1] + ' de ' + p[0]; }
+  function porCobrarDe(rfc) {
+    return FAC.filter(function (f) { return f.estatus === 'por_cobrar' && f.tipo === 'I' && (rfc == null || f.rfc === rfc); })
+      .sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.id - b.id; });
+  }
+  function clientesPorCobrar() {
+    var M = {};
+    porCobrarDe(null).forEach(function (f) {
+      var c = M[f.rfc] || (M[f.rfc] = { rfc: f.rfc, cliente: f.cliente, n: 0, saldo: 0 });
+      c.n++; c.cliente = f.cliente; if (f.moneda === 'MXN') c.saldo += +f.saldo;
+    });
+    return Object.keys(M).map(function (k) { return M[k]; }).sort(function (a, b) { return b.saldo - a.saldo; });
+  }
+  $('b-edo').onclick = function () {
+    var C = clientesPorCobrar(), q = norm($('q').value);
+    if (!C.length) { error('No hay facturas por cobrar.'); return; }
+    var F = q ? C.filter(function (c) { return norm(c.cliente + ' ' + c.rfc).indexOf(q) >= 0; }) : C;
+    if (C.length === 1 || F.length === 1) { pdfEdo((F.length === 1 ? F : C)[0].rfc, this); return; }
+    CUR = null; NAV = null;
+    abre('Estado de cuenta', 'Escoge el cliente: sale en PDF lo que tiene por cobrar, con la marca Multinacional',
+      '<div class="sec"><h3>Clientes con facturas por cobrar</h3><div class="in"><ul class="bit">' + C.map(function (c) {
+        return '<li><div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between">'
+          + '<div style="min-width:0"><b class="rs">' + esc(c.cliente) + '</b><div class="mut">' + esc(c.rfc) + ' · ' + c.n + (c.n === 1 ? ' factura' : ' facturas') + ' · ' + esc(dinero(c.saldo)) + '</div></div>'
+          + '<button class="btn chico" type="button" data-edo="' + esc(c.rfc) + '">Bajar PDF</button></div></li>';
+      }).join('') + '</ul></div></div>');
+    $('v-cuerpo').querySelectorAll('[data-edo]').forEach(function (x) { x.onclick = function () { pdfEdo(x.getAttribute('data-edo'), x); }; });
+  };
+  async function pdfEdo(rfc, b) {
+    var t = b.textContent; b.disabled = true; b.textContent = 'Armando…';
+    try {
+      var L = porCobrarDe(rfc);
+      if (!L.length) throw new Error('Ese cliente ya no tiene facturas por cobrar.');
+      var pf = await rpc('mul_pago_facturas', { p_rfc: rfc }), N = ((pf && pf.notas) || []).filter(function (x) { return Number(x.disponible || 0) > 0.005; });
+      var cli = L[L.length - 1].cliente, mx = L.filter(function (f) { return f.moneda === 'MXN'; }), otra = L.length - mx.length;
+      var tot = 0, ab = 0, sal = 0, ant = [[0, 0], [0, 0], [0, 0], [0, 0]];
+      mx.forEach(function (f) {
+        tot += +f.total; ab += +f.abonado; sal += +f.saldo;
+        var d = +f.dias || 0, k = d <= 30 ? 0 : d <= 60 ? 1 : d <= 90 ? 2 : 3; ant[k][0] += +f.saldo; ant[k][1]++;
+      });
+      var nc = 0; N.forEach(function (x) { nc += +x.disponible; });
+      var hayAb = L.some(function (f) { return Number(f.abonado || 0) > 0.005; });
+      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' });
+      var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40, A = W - 2 * M;
+      var y = await marcaMul(doc, 'ESTADO DE CUENTA', { empresa: empMul(), fecha: HOY, nombre: 'Facturas pendientes de pago al ' + fechaLarga(HOY) });
+      function cabe(alto) { if (y + alto > H - 44) { doc.addPage(); y = 92; } }
+      function titulo(tx) { cabe(40); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor.apply(doc, VD); doc.text(tx, M, y); y += 8; }
+      // el cliente
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, GRIS); doc.text('CLIENTE', M, y + 4, { charSpace: 0.8 });
+      doc.setFontSize(11.5); doc.setTextColor.apply(doc, TIN); var cl = doc.splitTextToSize(cli, A); doc.text(cl, M, y + 18);
+      y += 18 + (cl.length - 1) * 14;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GRIS); doc.text('RFC ' + rfc, M, y + 12); y += 26;
+      // las pilas: cuántas, lo facturado, lo abonado y el saldo (con la franja de color de arriba, como en el portal)
+      var P4 = [['Facturas pendientes', String(mx.length), VD], ['Total facturado', dinero(tot), VD], ['Abonado', dinero(ab), CAR], ['Saldo por pagar', dinero(sal), AM]];
+      var bw = (A - 3 * 8) / 4;
+      P4.forEach(function (x, i) {
+        var bx = M + i * (bw + 8);
+        doc.setDrawColor.apply(doc, LIN); doc.setFillColor(255, 255, 255); doc.setLineWidth(0.6); doc.roundedRect(bx, y, bw, 48, 4, 4, 'FD');
+        doc.setFillColor.apply(doc, x[2]); doc.rect(bx + 0.5, y + 0.5, bw - 1, 3, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor.apply(doc, GRIS); doc.text(x[0].toUpperCase(), bx + 9, y + 17, { charSpace: 0.5 });
+        doc.setFontSize(i === 3 ? 13 : 12); doc.setTextColor.apply(doc, i === 3 ? VD : TIN); doc.text(x[1], bx + 9, y + 37);
+      });
+      y += 66;
+      // el detalle, la más vieja arriba
+      titulo('Detalle de las facturas');
+      var cab = ['#', 'Fecha', 'Folio', 'Folio fiscal', 'Antigüedad', 'Total'].concat(hayAb ? ['Abonado'] : []).concat(['Saldo']);
+      var cuerpo = L.map(function (f, i) {
+        var d = +f.dias || 0;
+        return [String(i + 1), fecha(f.fecha), folio(f), String(f.uuid || '').toUpperCase(), d <= 0 ? 'De hoy' : d + (d === 1 ? ' día' : ' días'), dinero(f.total, f.moneda)]
+          .concat(hayAb ? [dinero(f.abonado, f.moneda)] : []).concat([dinero(f.saldo, f.moneda)]);
+      });
+      var nCol = cab.length, cs = { 0: { cellWidth: 18, halign: 'right' }, 1: { cellWidth: 56 }, 2: { cellWidth: 46 }, 3: { fontSize: 6.8 }, 4: { cellWidth: 60 } }, der = [0];
+      for (var k = 5; k < nCol; k++) { cs[k] = { halign: 'right', cellWidth: hayAb ? 66 : 74 }; der.push(k); }
+      doc.autoTable(tablaMul({ head: [cab], body: cuerpo, startY: y, columnStyles: cs, derecha: der,
+        foot: [[{ content: 'Total' + (otra ? ' en pesos' : ''), colSpan: 5, styles: { halign: 'right' } }, dinero(tot)].concat(hayAb ? [dinero(ab)] : []).concat([dinero(sal)])],
+        footStyles: { fillColor: VDC, textColor: VD, fontStyle: 'bold', lineColor: LIN, halign: 'right' }, showFoot: 'lastPage',
+        didParseCell: function (h) { if (h.section === 'body' && h.column.index === 4 && (+L[h.row.index].dias || 0) > 30) h.cell.styles.textColor = [180, 35, 24]; } }));
+      y = doc.lastAutoTable.finalY + 22;
+      // antigüedad del saldo
+      titulo('Antigüedad del saldo');
+      doc.autoTable(tablaMul({ head: [['', 'De 0 a 30 días', 'De 31 a 60 días', 'De 61 a 90 días', 'Más de 90 días', 'Total']],
+        body: [['Saldo'].concat(ant.map(function (a) { return dinero(a[0]); })).concat([dinero(sal)]),
+               ['Facturas'].concat(ant.map(function (a) { return String(a[1]); })).concat([String(mx.length)])],
+        startY: y, derecha: [1, 2, 3, 4, 5], columnStyles: { 0: { fontStyle: 'bold', cellWidth: 62 }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } } }));
+      y = doc.lastAutoTable.finalY + 22;
+      // las notas de crédito por aplicar del cliente (si tiene)
+      if (N.length) {
+        titulo('Notas de crédito por aplicar');
+        doc.autoTable(tablaMul({ head: [['Fecha', 'Folio', 'Total', 'Por aplicar']],
+          body: N.map(function (x) { return [fecha(x.fecha), x.folio || '', dinero(x.total), dinero(x.disponible)]; }),
+          foot: [[{ content: 'Total por aplicar', colSpan: 3, styles: { halign: 'right' } }, dinero(nc)]],
+          footStyles: { fillColor: VDC, textColor: VD, fontStyle: 'bold', lineColor: LIN, halign: 'right' }, showFoot: 'lastPage',
+          startY: y, derecha: [2, 3], columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } } }));
+        y = doc.lastAutoTable.finalY + 22;
+      }
+      // el mensaje para el cliente, en prosa
+      var m30 = ant[1][0] + ant[2][0] + ant[3][0];
+      var tx = 'Les compartimos la relación de las facturas que, al ' + fechaLarga(HOY) + ', siguen pendientes de pago. El saldo por pagar es de '
+        + dinero(sal) + (m30 > 0.005 ? ', del que ' + dinero(m30) + ' corresponde a facturas con más de 30 días' : '') + '.'
+        + (N.length ? ' Además, ' + (N.length === 1 ? 'hay una nota de crédito por aplicar' : 'hay ' + N.length + ' notas de crédito por aplicar') + ' por ' + dinero(nc)
+          + '; con ' + (N.length === 1 ? 'ella' : 'ellas') + ' aplicada' + (N.length === 1 ? '' : 's') + ', el saldo queda en ' + dinero(Math.max(sal - nc, 0)) + '.' : '')
+        + (otra ? ' Las facturas en otra moneda van aparte del total.' : '')
+        + ' Mucho agradeceremos su apoyo para programar el pago. Si alguna de estas facturas ya se pagó, por favor compártannos el comprobante para aplicarlo; para cualquier aclaración, quedamos a sus órdenes.';
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, TIN);
+      doc.splitTextToSize(tx, A).forEach(function (l) { cabe(14); doc.text(l, M, y); y += 13.5; });
+      pieMul(doc);
+      doc.save('Estado de cuenta ' + String(cli).replace(/[\\/:*?"<>|#]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ' + HOY + '.pdf');
+      b.textContent = 'Listo';
+    } catch (e) { b.textContent = 'No se pudo'; error(falla(e)); }
+    setTimeout(function () { b.textContent = t; b.disabled = false; }, 2000);
+  }
 
   /* =============================== Estado de cuenta (148) =============================== */
   var BAN = null, CON = null, BT = 'mov';
@@ -1555,19 +1740,18 @@ td.sel input{width:18px;height:18px}
     try {
       var X = (COM.comisiones || []).filter(function (c) { return c.mes === m; }), dep = 0, com = 0, ent = 0;
       X.forEach(function (c) { dep += +c.deposito; com += +c.comision; if (c.estatus === 'entregado') ent += +c.comision; });
-      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth();
+      var J = await window.PROFASE_MARCA.pdfJS(), doc = new J({ unit: 'pt', format: 'letter' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
       var Mn = nomMes(m).replace(/^./, function (x) { return x.toUpperCase(); });
-      await marcaMul(doc, 'COMISIONES', { empresa: { nombre: EST.nombre, rfc: EST.rfc, lema: EST.lema }, fecha: HOY, nombre: 'Comisiones de ' + Mn + ' · ' + COM.pct + '% de lo que pagó Juárez, a «' + COM.para + '»' });
-      doc.autoTable({ head: [['Depósito', 'Folio', 'Monto (con IVA)', '%', 'Comisión', 'Para', 'Estatus', 'Fecha Amazon']],
+      var y0 = await marcaMul(doc, 'COMISIONES', { empresa: empMul(), fecha: HOY, nombre: 'Comisiones de ' + Mn + ' · ' + COM.pct + '% de lo que pagó Juárez, a «' + COM.para + '»' });
+      doc.autoTable(tablaMul({ head: [['Depósito', 'Folio', 'Monto (con IVA)', '%', 'Comisión', 'Para', 'Estatus', 'Fecha Amazon']],
         body: X.map(function (c) { return [fecha(c.fecha), c.folio || '', dinero(c.deposito), String(+c.pct) + '%', dinero(c.comision), c.para, c.estatus === 'entregado' ? 'Entregado' : 'Por entregar', c.amazon ? fecha(c.amazon) : '']; }),
-        startY: 124, margin: { left: 40, right: 40 }, styles: { fontSize: 8.5, cellPadding: 4, textColor: GRIS },
-        headStyles: { fillColor: VER, textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [246, 246, 246] },
-        columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } } });
-      var y = doc.lastAutoTable.finalY + 14;
+        startY: y0, derecha: [2, 3, 4], columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } } }));
+      var y = doc.lastAutoTable.finalY + 14; if (y + 66 > H - 40) { doc.addPage(); y = 96; }
       [['Pagó Juárez', dep], ['Comisión', com], ['Entregado', ent], ['Por entregar', com - ent]].forEach(function (x, i) {
-        doc.setFont('helvetica', i === 3 ? 'bold' : 'normal'); doc.setFontSize(i === 3 ? 11 : 9.5); doc.setTextColor.apply(doc, GRIS);
+        doc.setFont('helvetica', i === 3 ? 'bold' : 'normal'); doc.setFontSize(i === 3 ? 11 : 9.5); doc.setTextColor.apply(doc, i === 3 ? VD : TIN);
         doc.text(x[0], W - 150, y, { align: 'right' }); doc.text(dinero(x[1]), W - 40, y, { align: 'right' }); y += 15;
       });
+      pieMul(doc);
       doc.save('Comisiones Multinacional ' + Mn + '.pdf');
       b.textContent = 'Listo';
     } catch (e) { b.textContent = 'No se pudo'; error(falla(e)); }
@@ -1944,6 +2128,7 @@ td.sel input{width:18px;height:18px}
     ['fac', 'cot', 'ed', 'ban', 'com', 'pag'].forEach(function (k) { $('s-' + k).hidden = k !== s; });
     $('titulo').textContent = TIT[s][0]; $('subt').textContent = TIT[s][1];
     $('b-subir').hidden = s !== 'fac' || !EST.sube || CONSULTA;
+    $('b-edo').hidden = s !== 'fac' || !EST.pagos;   // el estado de cuenta para el cliente: quien ve los pagos (también solo consulta: solo baja)
     $('b-nueva').hidden = s !== 'cot' || !EST.cotiza || CONSULTA;
     $('b-pago').hidden = s !== 'pag' || !EST.cobra || CONSULTA;
     try { scrollTo(0, 0); } catch (e) {}
