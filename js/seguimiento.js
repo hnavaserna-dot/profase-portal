@@ -758,9 +758,34 @@
     if (!l || !l.length) return '';
     return '<div class="sg-falta"><b>' + esc(titulo || 'Qué falta') + '</b><ul>' + l.map(function (x) { return '<li class="' + esc(x[0] || 'va') + '"><span>' + x[1] + '</span></li>'; }).join('') + '</ul></div>';
   }
+  /* La ficha ancha en Reportes (13-nov-2026, Héctor Daniel Nava: «Dejémosle 1 a cadengo; sólo revisa que si para el viernes
+     no te lo ha pedido, le damos nosotros»): Variaciones / Movimientos, Reclasificación de activo fijo y Depuración de CxC /
+     CxP pintan sus pasos y su «Qué falta» con los mismos cinco estatus; una sola versión de cómo se ve cada estatus en la
+     línea y de qué le falta en palabras. pasoEst(id) = {est, marca} para PROFASE_SEG.pasos(); faltaRev(actual, comentarios,
+     {dias}) = los renglones para PROFASE_SEG.falta() (la página agrega los suyos). */
+  function pasoEst(id) {
+    id = id || 'sin_respuesta';
+    return cierra(id) ? {est: 'ok', marca: '✓'} : id === 'modif_quo' ? {est: 'az', marca: 'Q'}
+      : id === 'sin_respuesta' ? {est: 'na', marca: '!'} : {est: 'am', marca: '?'};
+  }
+  function faltaRev(actual, n, op) {
+    op = op || {};
+    actual = actual || 'sin_respuesta';
+    n = +n || 0;
+    var l = [], d = +op.dias || 0;
+    if (cierra(actual)) l.push(['si', 'Ya está revisado: «' + esc(t(actual)) + '».']);
+    else if (actual === 'sin_respuesta') l.push(['no', 'Ponerle su estatus: nadie lo ha revisado' + (d ? ' (desde hace ' + NUM.format(d) + (d === 1 ? ' día' : ' días') + ')' : '') + '.']);
+    else if (actual === 'modif_quo') l.push(['va', 'Se está corrigiendo en QUO: ya corregido, «Modificación Exitosa».']);
+    else if (actual === 'consulta') l.push(['va', 'Espera la respuesta del cliente («Consulta con el Cliente»).']);
+    else l.push(['va', 'Espera a la Gerencia Contable («Consulta con Gerencia»).']);
+    if (n) l.push(['si', NUM.format(n) + (n === 1 ? ' comentario' : ' comentarios') + ' en «Comentarios».']);
+    else if (!cierra(actual)) l.push(['no', 'Escribir en «Comentarios» qué se revisó y a qué conclusión se llegó.']);
+    return l;
+  }
 
   window.PROFASE_SEG = {
     pasos: pasos, falta: falta,
+    pasoEst: pasoEst, faltaRev: faltaRev,
     abre: abre, ESTATUS: ESTATUS, AYUDA: AYUDA, MSJ: MSJ, MIN: MIN,
     t: t, cls: cls, cierra: cierra, regla: regla, opciones: opciones,
     chip: chip, pill: pill, esc: esc, iniciales: iniciales, ponFotos: ponFotos, quedaMin: quedaMin
