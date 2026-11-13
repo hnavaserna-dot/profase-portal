@@ -1079,6 +1079,18 @@
       return null;
     }
     var OP = null;
+    // ¿la opción todavía no se sabe porque el menú de afuera no está listo? (13-nov-2026) Mientras, el renglón chico de arriba
+    // (el módulo) se aparta sin texto: así la franja no crece cuando llega y no empuja la pantalla, que ya abre antes
+    // (el Panel de trabajo, desde que pide todo a la vez, se movía al cargar). Con el menú listo, como siempre.
+    var ESPERA = false;
+    function menuSinListo() {
+      try {
+        var fe = window.parent !== window ? window.frameElement : null;
+        if (!fe || !fe.closest('[id^="v-"]')) return false;
+        var pm = window.parent.PORTAL_MENU;
+        return !pm || typeof pm.modulos !== 'function' || !(pm.modulos() || []).length;
+      } catch (e) { return false; }
+    }
     function texto(el) { return el ? String(el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
     function explicacion() {
       var t = orig.ps.map(texto).filter(Boolean).join(' ');
@@ -1086,9 +1098,10 @@
     }
     function pinta() {
       if (!tit) return;
-      var m = OP ? OP.m : texto(orig.eti), t = OP ? OP.t : texto(orig.h1);
-      if (eti.textContent !== m) eti.textContent = m;
-      eti.hidden = !m;
+      var m = OP ? OP.m : texto(orig.eti), t = OP ? OP.t : texto(orig.h1), aparta = !m && ESPERA, mt = m || (aparta ? '\u00a0' : '');
+      if (eti.textContent !== mt) eti.textContent = mt;
+      eti.hidden = !m && !aparta;
+      eti.style.visibility = aparta ? 'hidden' : '';
       if (h1.textContent !== t) h1.textContent = t;
       q.hidden = !explicacion();
       if (q.hidden) cierra();
@@ -1170,10 +1183,18 @@
     }
     function arranca() {
       if (!arma()) return;
-      OP = miOpcion(); pinta();
+      OP = miOpcion(); ESPERA = !OP && menuSinListo(); pinta();
       // el menú de afuera puede tardar en saber las opciones de quien entró: se vuelve a preguntar un rato
       var n = 0;
-      (function otra() { if (OP || ++n > 24) return; setTimeout(function () { OP = miOpcion(); if (OP) pinta(); else otra(); }, 500); })();
+      (function otra() {
+        if (OP || ++n > 24) { if (ESPERA) { ESPERA = false; pinta(); } return; }
+        setTimeout(function () {
+          OP = miOpcion();
+          if (OP) { ESPERA = false; pinta(); return; }
+          if (ESPERA && !menuSinListo()) { ESPERA = false; pinta(); }
+          otra();
+        }, 500);
+      })();
     }
     // la pantalla cambió de opción (Q Chat, al picar su pestaña): la franja dice la nueva
     P.franjaAlDia = function () { if (!tit) return; OP = miOpcion() || OP; pinta(); };

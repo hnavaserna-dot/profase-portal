@@ -96,6 +96,7 @@
   try { canal = new BroadcastChannel('profase-ocultos'); } catch (e) { canal = null; }
 
   function ponLista(arr) {
+    MEMO = new Map();
     LISTA = new Set((Array.isArray(arr) ? arr : []).map(function (r) { return String(r || '').toUpperCase().trim(); }).filter(Boolean));
   }
   function avisa() {
@@ -109,7 +110,7 @@
   };
 
   function ponAuto(arr) {
-    AUTO = new Map();
+    AUTO = new Map(); MEMO = new Map();
     (Array.isArray(arr) ? arr : []).forEach(function (a) {
       var r = String((a && a.rfc) || '').toUpperCase().trim(); if (r) AUTO.set(r, String((a && a.por) || 'pausa'));
     });
@@ -122,10 +123,19 @@
     ]).then(function () { return LISTA; });
     return CARGA;
   }
+  // lo ya contestado de cada RFC (13-nov-2026: las pantallas preguntan por cada documento, decenas de miles de veces; se
+  // vuelve a contestar en cuanto cambia la lista o los que se ocultan solos). El mismo resultado.
+  var MEMO = new Map();
   function es(rfc) {
     if (VER || (!LISTA.size && !AUTO.size)) return false;
-    var r = String(rfc || '').toUpperCase().trim();
-    return LISTA.has(r) || AUTO.has(r);
+    var k = rfc == null ? '' : rfc, v = MEMO.get(k);
+    if (v === undefined) {
+      var r = String(rfc || '').toUpperCase().trim();
+      v = LISTA.has(r) || AUTO.has(r);
+      if (MEMO.size > 50000) MEMO = new Map();
+      MEMO.set(k, v);
+    }
+    return v;
   }
   function alCambiar(fn) { if (typeof fn === 'function') OYEN.push(fn); }
 

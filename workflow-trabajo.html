@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=6aec68166a"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=95e13ec8d8"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2038df6148"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=95e13ec8d8"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -548,28 +548,43 @@ tr.fila:hover td{background:var(--navy-soft)}
       var p = await P.listo; if (!p) return;
       ROL = p.rol; YO = p.usuario; CONSULTA = !!P.consulta; RREAL = p.rolReal || p.rol;
       vistaLee(); [].forEach.call(document.querySelectorAll('[data-ver]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-ver') === VISTA)); });
-      var m = await P.sb.from('wf_config').select('valor').eq('clave', 'modo').maybeSingle();
-      MODO = m.data && m.data.valor ? m.data.valor : 'practica';
-      $('practica').hidden = MODO !== 'practica';
-      try { var v = await P.sb.rpc('veo_reservado'); VEO_RES = v.data === true; } catch (e) { VEO_RES = false; }
-      try { var es = await P.sb.rpc('env_estado'); if (!es.error && es.data) ENV = es.data; } catch (e) { ENV = { visible: false, modo: 'apagado' }; }
-      try { var ce = await P.sb.rpc('wf_conf_estado'); if (!ce.error && ce.data) CONF = ce.data; } catch (e) { CONF = { edita: false, a_tiempo: false }; }
-      try { var cm = await P.sb.rpc('cob_mias'); CUB = {}; if (!cm.error && Array.isArray(cm.data)) cm.data.forEach(function (x) { CUB[x.id] = x; }); } catch (e) { CUB = {}; }
-      try { var de = await P.sb.rpc('wf_dev_estado'); if (!de.error && de.data) DEV = de.data; } catch (e) { DEV = { crea: false, factura: false }; }
-      try { var pe = await P.sb.rpc('wf_proy_estado'); if (!pe.error && pe.data) PROY = pe.data; } catch (e) { PROY = { crea: false }; }
-      var ra = await P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999);
+      // Todo lo que pide al abrir va a la vez (13-nov-2026, de día; Héctor Daniel Nava, 07:01: «Si a todo»): antes eran
+      // ocho preguntas una tras otra y luego las actividades (2.8 s en «Comprobar real» como la dirección). El periodo solo
+      // depende de hoy y de lo que dejó escogido quien entró, así que las actividades se piden junto con lo demás. Mismas
+      // preguntas, mismas respuestas y lo mismo si una falla.
+      periodos(); fijoPeriodo();
+      var filasP = unaLlamada(+$('f-anio').value, +$('f-mes').value || 0);
+      var nada = function (e) { return { error: e || true }; };
+      // el modo, en cuanto llega (como antes, primero que lo demás): su aviso de arriba no mueve la lista ya pintada
+      var pModo = P.sb.from('wf_config').select('valor').eq('clave', 'modo').maybeSingle().then(null, nada);
+      pModo.then(function (m) { MODO = m.data && m.data.valor ? m.data.valor : 'practica'; $('practica').hidden = MODO !== 'practica'; });
+      var R0 = await Promise.all([
+        pModo,
+        P.sb.rpc('veo_reservado').then(null, nada),
+        P.sb.rpc('env_estado').then(null, nada),
+        P.sb.rpc('wf_conf_estado').then(null, nada),
+        P.sb.rpc('cob_mias').then(null, nada),
+        P.sb.rpc('wf_dev_estado').then(null, nada),
+        P.sb.rpc('wf_proy_estado').then(null, nada),
+        P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999).then(null, nada)]);
+      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7];
+      VEO_RES = !v.error && v.data === true;
+      if (!es.error && es.data) ENV = es.data;
+      if (!ce.error && ce.data) CONF = ce.data;
+      CUB = {}; if (!cm.error && Array.isArray(cm.data)) cm.data.forEach(function (x) { CUB[x.id] = x; });
+      if (!de.error && de.data) DEV = de.data;
+      if (!pe.error && pe.data) PROY = pe.data;
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.';
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
-      periodos(); fijoPeriodo();
       $('gen-abre').hidden = !genero();
       $('dev-abre').hidden = !(DEV.crea && !CONSULTA);
       $('proy-abre').hidden = !(PROY.crea && !CONSULTA);
       $('env-abre').hidden = !(ENV.visible && !CONSULTA);
       $('agr-abre').hidden = $('mes-abre').hidden = !(CONF.edita && !CONSULTA);
       $('at-abre').hidden = !(CONF.a_tiempo && !CONSULTA);
-      await cargaPeriodo();
+      await cargaPeriodo(filasP);
       if (!FIJO_OK) { fijoResto(); mostrar = PAGINA; pinta(); }
       $('cargando').hidden = true; $('p-lista').hidden = false; armaBarra();
       var hv = /^#ver-([a-z-]{1,40})$/.exec(location.hash || ''); if (hv) verNuevo(hv[1]);
@@ -651,10 +666,11 @@ tr.fila:hover td{background:var(--navy-soft)}
     } catch (e) { return null; }
   }
 
-  async function cargaPeriodo() {
+  // «pre»: la llamada del periodo que se pidió al abrir, junto con lo demás (la misma unaLlamada del mismo periodo)
+  async function cargaPeriodo(pre) {
     var y = +$('f-anio').value, m = +$('f-mes').value || 0, filas;
     $('lista-sub').textContent = 'Cargando…';
-    filas = await unaLlamada(y, m);
+    filas = await (pre && typeof pre.then === 'function' ? pre : unaLlamada(y, m));
     if (filas) {
       // listo: la base ya juntó el mes con las anuales (o todo el año)
     } else if (m) {

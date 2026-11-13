@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Depuración de CxC / CxP</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=6aec68166a"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6fbbeb4ec0"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=58e7d432bf"></script><script src="js/hallazgos.js?v=8df4fce408"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/cartera-datos.js?v=8bc48cd41e"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Depuración de CxC / CxP</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2038df6148"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6293bc1355"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=58e7d432bf"></script><script src="js/hallazgos.js?v=8df4fce408"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/cartera-datos.js?v=b38829b9c7"></script></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1266,11 +1266,16 @@ async function cargaCartera(avance,pre){
     hechos+=lote.length; avance&&avance(hechos,ids.length);
   });
   if(pu) await pu;
+  // 13-nov-2026, de día (Héctor Daniel Nava, 07:01: «Si a todo», a lo que dejó la revisión nocturna: «Comprobar real» midió
+  // 9.6 s para abrir y la pantalla sin contestar 5.2 s seguidos): juntar a todas las empresas cede el paso cada 40 ms
+  // (antes era un solo bloque con todo lo que sigue), cada empresa llega por columnas (js/cartera-datos.js: pesa menos al
+  // pasar del trabajador aparte) y lo de cada quien se pone al final, de una vez. Mismo resultado, renglón por renglón.
+  const cede=(window.PROFASE_MARCA&&window.PROFASE_MARCA.rebanadas)?window.PROFASE_MARCA.rebanadas(40):()=>Promise.resolve();
   const cont=[], ixC={}, gx=(arr,ix,v)=>{ if(v==null) return null; if(!(v in ix)){ ix[v]=arr.length; arr.push(v);} return ix[v]; };
   const regs=META.regimenes.slice(), procs=META.procesos.slice(), ixR={}, ixP={};
   regs.forEach((r,i)=>ixR[r]=i); procs.forEach((p,i)=>ixP[p]=i);
   const dic={}, ixD={}; DIC_K.forEach(k=>{ dic[k]=[]; ixD[k]={}; }); dic.mon.push('MXN'); ixD.mon.MXN=0;
-  const cli=[], cp=[], f=[], parte=[]; RANGO={}; UUID_OK=new Set(); K_FIRMA={};
+  const cli=[], cp=[], f=[], parte=[], rango={}, kFirma={};
   const ci={}; COLS_K.forEach((c,i)=>ci[c]=i);
   const cliIx={};
   for(const id of ids){
@@ -1282,18 +1287,37 @@ async function cargaCartera(avance,pre){
     for(const x of o.cp) cp.push(x);
     const loc={}; DIC_K.forEach(k=>{ loc[k]=(o.dic[k]||[]).map(v=>gx(dic[k],ixD[k],v)); });
     const ini=f.length;
-    for(const r of o.f){
+    if(o.c){
+      // por columnas (desde el 13-nov-2026): lo mismo que el renglón de abajo, columna por columna
+      const C=o.c, nn=o.n!=null?o.n:(C.length?C[0].length:0), col=k=>C[ci[k]]||[];
+      const dc=k=>{ const a=col(k), L=loc[k], out=new Array(nn); for(let j=0;j<nn;j++){ const v=a[j]; out[j]=v==null?null:L[v]; } return out; };
+      const xMod=col('mod'), xCp=col('cp'), xSal=col('saldo'), xTot=col('total'), xFec=col('fecha'), xMp=col('mp'), xEst=col('est'),
+        xTipo=col('tipo'), xQuo=col('quo'), xTc=col('tc'), xTme=col('tme'), xRegf=col('regf'), xFol=col('folio'), xSub=col('sub'),
+        xIva=col('iva'), xIvr=col('ivaret'), xIsr=col('isrret'), xTer=col('ter'), xMif=col('mif'), xCon=col('conta'), xCic=col('cic'),
+        xIeps=col('ieps'), xDsc=col('dsc');
+      const dMon=dc('mon'), dCta=dc('cta'), dCl=dc('cl'), dFp=dc('fp'), dSer=dc('ser'), dPl=dc('pl'), dVer=dc('ver'), dRol=dc('rol'),
+        dCc=dc('cc'), dProy=dc('proy'), pt=id[0]==='p'?'p':'k';
+      for(let j=0;j<nn;j++){
+        f.push([n,xMod[j],off+xCp[j],xSal[j],xTot[j],xFec[j],xMp[j],xEst[j],xTipo[j],'',xQuo[j],dMon[j],xTc[j],xTme[j],
+          dCta[j],dCl[j],dFp[j],xRegf[j],dSer[j],xFol[j],dPl[j],dVer[j],xSub[j],xIva[j],xIvr[j],xIsr[j],xTer[j],xMif[j],dRol[j],
+          dCc[j],dProy[j],xCon[j],xCic[j],xIeps[j],xDsc[j]]);
+        parte.push(pt);
+        if((j&4095)===4095) await cede();
+      }
+    } else for(const r of o.f){
       const d=k=>{ const v=r[ci[k]]; return v==null?null:loc[k][v]; };
       f.push([n,r[ci.mod],off+r[ci.cp],r[ci.saldo],r[ci.total],r[ci.fecha],r[ci.mp],r[ci.est],r[ci.tipo],'',r[ci.quo],d('mon'),r[ci.tc],r[ci.tme],
         d('cta'),d('cl'),d('fp'),r[ci.regf],d('ser'),r[ci.folio],d('pl'),d('ver'),r[ci.sub],r[ci.iva],r[ci.ivaret],r[ci.isrret],r[ci.ter],r[ci.mif],d('rol'),
         d('cc'),d('proy'),r[ci.conta],r[ci.cic],r[ci.ieps],r[ci.dsc]]);
       parte.push(id[0]==='p'?'p':'k');
     }
-    RANGO[id]=[ini,f.length]; K_FIRMA[id]=fs[id];
+    rango[id]=[ini,f.length]; kFirma[id]=fs[id];
+    await cede();
   }
   const meta={generado:META.generado,hora:META.hora,fuente:META.fuente,modLab:META.modLab,refreshedAt:META.refreshedAt,
     id:META.refreshedAt+'|'+ids.map(i=>fs[i]).join(','),contadores:cont,regimenes:regs,procesos:procs};
-  return {meta,filas:f,extra:{cli,cp,dic,mp:META.mp,est:META.est,tipo:META.tipo,parte}};
+  // RANGO, K_FIRMA y UUID_OK se ponen junto con los renglones nuevos (arrancaYa), para que nada lea unos con los otros de antes
+  return {meta,filas:f,extra:{cli,cp,dic,mp:META.mp,est:META.est,tipo:META.tipo,parte},rango,kFirma};
 }
 /* los UUID de un cliente (o de todos) se bajan la primera vez que hacen falta; van en u|RFC (y q|RFC para p|RFC) */
 async function cargaUuids(rfcs){
@@ -1347,10 +1371,13 @@ async function arrancaYa(recarga){
   const r=await cargaCartera(avance,pre);
   if(!r){ v.innerHTML='<div class="empty">Todavía no hay datos de la cartera. Llegan con la próxima actualización del portal.</div>'; carListo(false); return; }
   if(recarga&&CARGADA===r.meta.id) return;
-  const abierto=S.cliente!=null?D.cli[S.cliente][2]:null;
   // entre paso y paso se le deja respirar al navegador (todo ya llegó: sin esto, todo el armado era un solo bloque largo)
   const respira=()=>new Promise(res=>setTimeout(res,0));
-  aplica(r.meta,r.filas,r.extra); prep(!!recarga); CARGADA=r.meta.id; TODOS_UUID=null;
+  // los renglones se arman por partes, sin tocar lo que ya está en pantalla; luego todo se cambia de una vez (13-nov-2026)
+  const filas=await armaFilas(r.meta,r.filas,r.extra);
+  const abierto=S.cliente!=null?D.cli[S.cliente][2]:null;
+  RANGO=r.rango; K_FIRMA=r.kFirma; UUID_OK=new Set();
+  aplica(r.meta,r.filas,r.extra); prep(!!recarga,filas); CARGADA=r.meta.id; TODOS_UUID=null;
   await respira(); await cargaMarcas(pre.marcas); aplicaMarcas();
   await respira(); await cargaApl(pre.apl);
   await cargaSat(pre.sat);
@@ -1359,6 +1386,7 @@ async function arrancaYa(recarga){
   // con datos nuevos cambian los números de las contrapartes: el filtro de cliente o proveedor de la ventana se quita
   if(abierto){ const i=D.cli.findIndex(c=>c[2]===abierto); S.cliente=i>=0?i:null; S.doc=null; if(S.mf) S.mf.cps=new Set(); quitaVF();
     if(i<0) cierraOv(); else cargaUuids([abierto]).then(()=>pintaModal()); }
+  await aplCalienta();
   render();
   precargaApl();
   if(recarga) avisaArriba('Llegaron datos nuevos de la cartera ('+fmtD(M.generado)+' '+M.hora+').');
@@ -1407,26 +1435,41 @@ document.getElementById('z-menos').onclick=()=>zoomA(-0.1);
 document.getElementById('z-mas').onclick=()=>zoomA(0.1);
 aplicaVista();
 
-function prep(conserva){
+/* un renglón de la pantalla por documento (13-nov-2026: antes en prep, de un jalón con lo demás; ahora por partes, cediendo
+   el paso cada 40 ms, y sin repetir lo que es igual para muchos: los días de cada fecha y lo de cada empresa —sus
+   contadores, régimen y procesos, que nadie cambia— se calculan una vez). El mismo objeto, campo por campo y en el mismo
+   orden. No toca nada de lo que está en pantalla: lo pone arrancaYa, de una vez. */
+async function armaFilas(meta,filas,extra){
   const t=new Date(); TODAY=new Date(t.getFullYear(),t.getMonth(),t.getDate());
-  ROWS=D.f.map((r,ix)=>{
-    const dd=days(r[5]), c=D.cli[r[0]];
+  const cede=(window.PROFASE_MARCA&&window.PROFASE_MARCA.rebanadas)?window.PROFASE_MARCA.rebanadas(40):()=>Promise.resolve();
+  const dx=(k,i)=>(i==null||!extra.dic[k])?null:(extra.dic[k][i]||null);
+  const porFecha=new Map(), fechaDe=iso=>{ let x=porFecha.get(iso); if(!x){ const dd=days(iso); x=[dd,ageKey(dd)]; porFecha.set(iso,x); } return x; };
+  const porCli=extra.cli.map(c=>({grupo:c[3],cliNom:c[1],rfcCli:c[2]||'',cont:(c[4]||[]).map(i=>meta.contadores[i]),
+    reg:(c[5]==null?null:meta.regimenes[c[5]]),proc:(c[6]||[]).map(i=>meta.procesos[i])}));
+  const out=new Array(filas.length);
+  for(let ix=0;ix<filas.length;ix++){
+    const r=filas[ix], fd=fechaDe(r[5]), c=porCli[r[0]];
     const alerta=!!(r[4]&&Math.abs(r[3])>Math.abs(r[4])+0.02);
-    return {cli:r[0],mod:r[1],cp:r[2],saldo:r[3],total:r[4],fecha:r[5],alerta,
-      mp:D.mp[r[6]],est:D.est[r[7]],tipo:D.tipo[r[8]],uuid:r[9]||'',quo:String(r[10]||''),
-      dias:dd,age:ageKey(dd),grupo:c[3],cliNom:c[1],rfcCli:c[2]||'',
-      cont:(c[4]||[]).map(i=>M.contadores[i]),
-      reg:(c[5]==null?null:M.regimenes[c[5]]),
-      proc:(c[6]||[]).map(i=>M.procesos[i]),
-      mon:dic('mon',r[11])||'MXN',tc:r[12],tme:r[13],
-      cta:dic('cta',r[14]),cl:dic('cl',r[15]),fp:dic('fp',r[16]),regf:r[17],
-      serie:dic('ser',r[18]),folio:r[19]||'',pl:dic('pl',r[20]),ver:dic('ver',r[21]),
+    out[ix]={cli:r[0],mod:r[1],cp:r[2],saldo:r[3],total:r[4],fecha:r[5],alerta,
+      mp:extra.mp[r[6]],est:extra.est[r[7]],tipo:extra.tipo[r[8]],uuid:r[9]||'',quo:String(r[10]||''),
+      dias:fd[0],age:fd[1],grupo:c.grupo,cliNom:c.cliNom,rfcCli:c.rfcCli,
+      cont:c.cont,
+      reg:c.reg,
+      proc:c.proc,
+      mon:dx('mon',r[11])||'MXN',tc:r[12],tme:r[13],
+      cta:dx('cta',r[14]),cl:dx('cl',r[15]),fp:dx('fp',r[16]),regf:r[17],
+      serie:dx('ser',r[18]),folio:r[19]||'',pl:dx('pl',r[20]),ver:dx('ver',r[21]),
       sub:r[22],iva:r[23],ivaret:r[24],isrret:r[25],ter:r[26]===1,
-      mif:r[27]||null,rol:dic('rol',r[28]),
+      mif:r[27]||null,rol:dx('rol',r[28]),
       // lo que antes se subía con el Excel del Tablero QUO y ya viene de la base
-      cc:dic('cc',r[29]),proy:dic('proy',r[30]),conta:r[31]===1,cic:r[32]||null,ieps:r[33],dsc:r[34],
-      parte:(D.parte&&D.parte[ix])||'k',st:'normal',mk:null,rg:null,por:null,mot:null,satCan:null};
-  });
+      cc:dx('cc',r[29]),proy:dx('proy',r[30]),conta:r[31]===1,cic:r[32]||null,ieps:r[33],dsc:r[34],
+      parte:(extra.parte&&extra.parte[ix])||'k',st:'normal',mk:null,rg:null,por:null,mot:null,satCan:null};
+    if((ix&4095)===4095) await cede();
+  }
+  return out;
+}
+function prep(conserva,filas){
+  ROWS=filas;
   S.sel=new Set(); aplicaMarcas();
   document.getElementById('m-corte').textContent=fmtD(M.generado)+' · '+M.hora;
 }
@@ -1471,7 +1514,12 @@ function sheet(titulo,sub,cuerpo,pie){
    escoge se recuerda en este navegador (por usuario). Todo sale de lo que la página ya recibe para cada quien. ── */
 const AGE4=[{k:'0-30',lab:'0–30 días',ks:['0-30'],c:'--ok'},{k:'31-60',lab:'31–60',ks:['31-60'],c:'--cli'},
   {k:'61-90',lab:'61–90',ks:['61-90'],c:'--warn'},{k:'90+',lab:'Más de 90',ks:['91-180','181-365','>365'],c:'--crit'}];
-const age4De=r=>r.age==null?null:(AGE4.find(a=>a.ks.includes(r.age))||AGE4[3]).k;
+// cada antigüedad a su grupo de una vez (13-nov-2026; antes se buscaba en AGE4 por cada documento): el mismo resultado
+const AGE4K=(()=>{ const m={}; AGE4.forEach(a=>a.ks.forEach(k=>{ if(!(k in m)) m[k]=a.k; })); return m; })();
+const age4De=r=>r.age==null?null:(Object.prototype.hasOwnProperty.call(AGE4K,r.age)?AGE4K[r.age]:AGE4[3].k);
+// y su lugar en AGE4 (lo que daba AGE4.findIndex con age4De, sin buscarlo por cada documento)
+const AGE4IX=(()=>{ const m={}; AGE4.forEach((a,i)=>{ if(!(a.k in m)) m[a.k]=i; }); return m; })();
+const age4Ix=r=>{ const k=age4De(r); return k!=null&&Object.prototype.hasOwnProperty.call(AGE4IX,k)?AGE4IX[k]:-1; };
 /* el estatus de cada documento en el resumen: dentro del reporte, revisar en el origen (su saldo pasa del total de su
    CFDI), fuera del reporte (el estatus de la cartera) o cancelado. Por omisión se ven y suman los dos primeros, como
    antes. En la ventana de cada empresa lo cancelado lo decide su propio filtro (Plantilla › Estatus). */
@@ -1688,7 +1736,7 @@ function resumenArriba(base,rows){
   const c=el('section','card rtop'); c.id='car-res';
   const top=modulos(base,['cxc','cxp'],false); top.classList.add('rtop3');
   const ar=ROWS.filter(r=>pasa(r,{sinAge:true}));
-  const tot=AGE4.map(()=>0); ar.forEach(r=>{ const i=AGE4.findIndex(a=>a.k===age4De(r)); if(i>=0) tot[i]+=Math.abs(r.saldo); });
+  const tot=AGE4.map(()=>0); ar.forEach(r=>{ const i=age4Ix(r); if(i>=0) tot[i]+=Math.abs(r.saldo); });
   const suma=tot.reduce((a,x)=>a+x,0), v90=tot[3], pct=suma?Math.round(v90/suma*100):0, on=S.age4.size===1&&S.age4.has('90+');
   const b=el('button','mod m90'); b.type='button'; b.dataset.age='90+'; b.setAttribute('aria-pressed',on);
   const k=el('div','k'); const d=el('span','dot'); d.style.background='var(--crit)'; k.appendChild(d); k.appendChild(document.createTextNode('Con más de 90 días')); b.appendChild(k);
@@ -1752,16 +1800,20 @@ function cajaIsr(o){
 /* tarjetas por rubro: su total y cuántos hay; al picar una, se filtra ese rubro (otra vez, regresa a todos) */
 function modulos(base,cuales,conApl){
   const box=el('div','mods');
-  RUBROS.filter(ru=>!cuales||cuales.includes(ru.k)).forEach(ru=>{
-    const de=base.filter(r=>ru.mods.includes(r.mod)), sola=mismoSet(S.mod,new Set(ru.mods));
+  // lo de cada rubro en una sola pasada (13-nov-2026; antes una por rubro): cada suma en el mismo orden, el mismo resultado
+  const rus=RUBROS.filter(ru=>!cuales||cuales.includes(ru.k)), sumas=rus.map(()=>({s:0,n:0})), deMod=new Map();
+  rus.forEach((ru,i)=>ru.mods.forEach(m=>{ let a=deMod.get(m); if(!a) deMod.set(m,a=[]); if(!a.includes(i)) a.push(i); }));
+  for(const r of base){ const a=deMod.get(r.mod); if(a) for(const i of a){ sumas[i].s=sumas[i].s+r.saldo; sumas[i].n++; } }
+  rus.forEach((ru,iRu)=>{
+    const de=sumas[iRu], sola=mismoSet(S.mod,new Set(ru.mods));
     const b=el('button','mod'); b.type='button'; b.dataset.rubro=ru.k;
     b.setAttribute('aria-pressed',sola);
     if(ru.k==='ter') b.classList.add('ter');
     if(!ru.mods.some(m=>S.mod.has(m))) b.classList.add('fuera');
     const k=el('div','k'); const d=el('span','dot'); d.style.background=`var(${ru.dot})`;
     k.appendChild(d); k.appendChild(document.createTextNode(ru.lab)); b.appendChild(k);
-    b.appendChild(el('div','v',F.mxn.format(de.reduce((a,r)=>a+r.saldo,0))));
-    b.appendChild(el('div','n',plural(de.length,'documento','documentos')));
+    b.appendChild(el('div','v',F.mxn.format(de.s)));
+    b.appendChild(el('div','n',plural(de.n,'documento','documentos')));
     b.onclick=()=>{ S.mod=sola?new Set(MODS_BASE):new Set(ru.mods); S.doc=null; guardaFiltros(); render(); };
     box.appendChild(b);
   });
@@ -1785,7 +1837,7 @@ function modulos(base,cuales,conApl){
 function antig(rows){
   const c=el('div','card'); c.id='car-antig';
   const h=el('div','card-h'); h.appendChild(el('h2','tt','Antigüedad del saldo')); c.appendChild(h);
-  const tot=AGE4.map(()=>0); rows.forEach(r=>{ const i=AGE4.findIndex(a=>a.k===age4De(r)); if(i>=0) tot[i]+=Math.abs(r.saldo); });
+  const tot=AGE4.map(()=>0); rows.forEach(r=>{ const i=age4Ix(r); if(i>=0) tot[i]+=Math.abs(r.saldo); });
   const suma=tot.reduce((a,x)=>a+x,0)||1;
   const g=el('div','agg');
   AGE4.forEach((a,i)=>{
@@ -1808,7 +1860,7 @@ const ivaNeto=r=>r.mod===0?ivaSaldo(r)-retSaldo(r):r.mod===1?-(ivaSaldo(r)-retSa
 const COLS_EMP=[['nom','Empresa',1],['pc','Por cobrar'],['pp','Por pagar'],['iva','IVA del saldo',0,1],['apl','Por aplicar',0,1],['n','Docs.',0,1],['vieja','Antigüedad']];
 function sumaEmp(o,r){
   if(r.mod!==TER){ if(ES_CLI[r.mod]) o.pc+=r.saldo; else o.pp+=r.saldo; }
-  const ia=AGE4.findIndex(a=>a.k===age4De(r)); if(ia>=0) o.ag[ia]+=Math.abs(r.saldo);   // la barrita de antigüedad de la empresa
+  const ia=age4Ix(r); if(ia>=0) o.ag[ia]+=Math.abs(r.saldo);   // la barrita de antigüedad de la empresa
   o.iva+=ivaNeto(r); o.n++; if(r.dias!=null&&(o.vieja==null||r.dias>o.vieja)) o.vieja=r.dias;
   if(r.mod===0||r.mod===1){ const F2=aplF(r); if(F2) o.apl+=F2.aplicado; }   // lo que se puede aplicar (demostrativo)
 }
@@ -3537,7 +3589,7 @@ function precargaApl(){
   if(grande){ APL_AV={n:0,tot:cis.length}; pintaAplAv(); }
   const av=grande?(n,t)=>{ APL_AV={n,tot:t}; pintaAplAv(); }:null;
   const p=APL_PRE=cargaRelApl(cis,av,grande?2:4)
-    .then(c=>{ if(APL_PRE===p){ const ya=!!APL_AV; APL_AV=null; if((c||ya)&&S.vista==='res') render(); } return c; })
+    .then(async c=>{ if(APL_PRE===p){ const ya=!!APL_AV; APL_AV=null; if((c||ya)&&S.vista==='res'){ await aplCalienta(); if(S.vista==='res') render(); } } return c; })
     .catch(()=>{ if(APL_PRE===p&&APL_AV){ APL_AV=null; if(S.vista==='res') render(); } return false; });
   return p;
 }
@@ -3979,6 +4031,13 @@ function aplDec(f,d){
   return APL.dec.get(rfcDe(f)+'|'+f.parte+'|'+f.uuid.toUpperCase()+'|'+d.uuid.toUpperCase())||null;
 }
 function aplLimpia(){ APL.cache=new Map(); APL_IDX=null; }
+/* las relaciones de todas las empresas, antes de pintar y por partes (13-nov-2026: render() las armaba de un jalón la primera
+   vez, con «Por depurar», y la pantalla se quedaba sin contestar). Solo llena lo mismo que render() pediría (APL.cache, de
+   aplEmp): si algo cambia mientras, aplLimpia() lo vuelve a vaciar como siempre y render() lo arma. */
+async function aplCalienta(){
+  const cede=(window.PROFASE_MARCA&&window.PROFASE_MARCA.rebanadas)?window.PROFASE_MARCA.rebanadas(40):()=>Promise.resolve();
+  for(const ci of [...aplIdx().keys()]){ if(!APL.cache.has(ci)) aplEmp(ci); await cede(); }
+}
 function aplIdx(){
   if(APL_IDX) return APL_IDX;
   APL_IDX=new Map();

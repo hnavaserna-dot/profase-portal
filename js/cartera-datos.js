@@ -4,8 +4,10 @@
    06:51, al plan: «Si asi es y agrega ambas»):
    · se pide en tandas parejas por tamaño, varias a la vez (antes de 12 en 12 por orden alfabético, 4 a la vez);
    · descomprimir y leer cada empresa lo hace un trabajador aparte del navegador (la pantalla no se traba);
-   · cada empresa viene por columnas (nube/cartera_nube.py, desde ese día): pesa menos; aquí se regresa a renglones,
-     así la pantalla recibe lo mismo de siempre;
+   · cada empresa viene por columnas (nube/cartera_nube.py, desde ese día): pesa menos. Desde el 13-nov-2026 (Héctor
+     Daniel Nava, 07:01: «Si a todo», a lo que dejó la revisión nocturna) también pasa del trabajador aparte por columnas
+     (antes se volvía renglones allá: pasar de un lado al otro decenas de miles de listas trababa la pantalla) y la pantalla
+     la junta columna por columna (cartera.html, cargaCartera); lo guardado de antes, por renglones, se sigue leyendo igual;
    · lo bajado se guarda en este navegador con su firma en la llave (saber qué falta no obliga a leerlo todo) y se escribe
      después de pintar;
    · la precarga: al entrar al portal en la computadora (o el iPad; en el celular no), lo que cambió se baja solo, de
@@ -15,7 +17,8 @@
   'use strict';
   if (window.PROFASE_CARTERA) return;
 
-  /* un paquete de empresa por columnas ({c:[col0, col1, …], n}) → por renglones ({f:[[…], …]}); el de antes ya trae «f» */
+  /* un paquete de empresa por columnas ({c:[col0, col1, …], n}) → por renglones ({f:[[…], …]}); el de antes ya trae «f».
+     Desde el 13-nov-2026 la pantalla lee las columnas directo; esta se queda para quien necesite los renglones. */
   function deColumnas(o){
     if (!o || typeof o !== 'object' || Array.isArray(o) || !o.c || o.f) return o;
     var c = o.c, n = o.n != null ? o.n : (c.length ? c[0].length : 0), m = c.length, f = new Array(n);
@@ -27,7 +30,7 @@
   async function desb64Aqui(b64){
     var r = await fetch('data:application/octet-stream;base64,' + b64);
     var s = r.body.pipeThrough(new DecompressionStream('gzip'));
-    return deColumnas(JSON.parse(await new Response(s).text()));
+    return JSON.parse(await new Response(s).text());
   }
   /* el trabajador aparte, que nace la primera vez que hace falta (si el navegador no deja, aquí mismo, como antes) */
   var desb64 = (function(){
@@ -35,10 +38,10 @@
     function arma(){
       listo = true;
       try {
-        var cod = deColumnas.toString() + ";onmessage=async function(e){var i=e.data.i,b=e.data.b;try{"
+        var cod = "onmessage=async function(e){var i=e.data.i,b=e.data.b;try{"
           + "var r=await fetch('data:application/octet-stream;base64,'+b);"
           + "var s=r.body.pipeThrough(new DecompressionStream('gzip'));"
-          + "postMessage({i:i,o:deColumnas(JSON.parse(await new Response(s).text()))});}"
+          + "postMessage({i:i,o:JSON.parse(await new Response(s).text())});}"
           + "catch(x){postMessage({i:i,err:String(x&&x.message||x)});}};";
         w = new Worker(URL.createObjectURL(new Blob([cod], { type: 'text/javascript' })));
         w.onmessage = function(e){ var x = esp.get(e.data.i); if (!x) return; esp.delete(e.data.i); e.data.err ? x[1](new Error(e.data.err)) : x[0](e.data.o); };
