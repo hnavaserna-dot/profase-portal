@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4e3576f5a5"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=e2d7e88527"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=c452ccd4ca"></script>
 <style>
 /* Portal PROFASE · Usuarios › Accesos: la bitácora de quién entra al portal (portal/sql/13_accesos.sql). La ve la
    dirección completa y Fernando Cadengo sin las entradas ni los movimientos de la dirección (Daniel, 30-oct-2026: «Cadengo
@@ -213,6 +213,14 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
   var TIPO = { entrada: 'Entrada', salida: 'Salida', inactividad: 'Cierre por inactividad', fallo: 'Intento fallido', descarga: 'Descarga', clave: 'Cambio de contraseña', credencial: 'Contraseña o archivo SAT de cliente', cerrada: 'Sacado de sus equipos' };
   var ROL = { director: 'Dirección', gerente: 'Gerente', contador: 'Contador' };
   var filas = [], perfiles = [], pendientes = [], sesiones = null, mostrar = PAGINA, cargando = false, EST = null;
+  // Que no se mueva al cargar (revisión de la noche del 13-nov-2026; como RH › Colaboradores el 12-nov): las pilas, los
+  // avisos y las dos tablas llegan juntas con la bitácora y, al salir, empujaban todo hacia abajo (0.94 con la base lenta de
+  // la prueba; el límite es 0.1). Mientras llega la primera vez, lo de abajo de la franja espera sin verse (su lugar se
+  // queda) y la franja dice «Cargando…»; sale todo de una vez (como mucho a los 5 s, aunque no haya llegado).
+  var CONT = document.getElementById('kpis') && document.getElementById('kpis').parentNode, VISTO = false;
+  function muestra() { if (VISTO) return; VISTO = true; if (CONT) CONT.style.visibility = ''; }
+  if (CONT) { CONT.style.visibility = 'hidden'; setTimeout(muestra, 5000); }
+  if ($('hora')) $('hora').textContent = 'Cargando…';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var fHora = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -250,12 +258,19 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       }
       if (!EST.accesos) { $('error').hidden = false; $('error').textContent = 'Esta pantalla es para la dirección y Fernando Cadengo.'; return; }
       var desde = new Date(Date.now() - 90 * DIA).toISOString();
-      // de mil en mil, hasta 20 mil renglones (90 días); cinco páginas a la vez y juntas en su orden (revisión de la noche
-      // del 10-nov-2026: una tras otra eran ~20 vueltas a la base y la pantalla tardaba 5 a 6 s en abrir)
+      // lo de al lado (las personas, lo pendiente y las sesiones abiertas) se pide al mismo tiempo que la bitácora (revisión
+      // de la noche del 13-nov-2026: antes iban después, una tras otra)
+      // (Promise.resolve: las consultas de supabase-js no salen hasta que alguien las espera)
+      var pP = Promise.resolve(sb.from('perfiles').select('usuario,nombre,rol').order('nombre'));
+      var pQ = Promise.resolve(sb.rpc('accesos_pendientes'));
+      var pS = Promise.resolve(sb.rpc('sesiones_abiertas'));   // null si la base todavía no tiene 28_sesiones.sql
+      // de mil en mil, hasta 20 mil renglones (90 días); diez páginas a la vez y juntas en su orden (revisión de la noche
+      // del 10-nov-2026: una tras otra eran ~20 vueltas a la base y la pantalla tardaba 5 a 6 s en abrir; el 13-nov, de cinco
+      // a diez: con ~13 mil renglones, dos vueltas en lugar de tres)
       var todos = [], i = 0, fin = false;
       while (!fin && todos.length < 20000) {
         var pags = [];
-        for (var k = 0; k < 5 && i + k * 1000 < 20000; k++) {
+        for (var k = 0; k < 10 && i + k * 1000 < 20000; k++) {
           pags.push(sb.from('accesos').select('*').gte('at', desde).order('at', { ascending: false }).range(i + k * 1000, i + k * 1000 + 999));
         }
         var rs = await Promise.all(pags);
@@ -268,12 +283,12 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
         i += pags.length * 1000;
       }
       filas = todos;
-      var p = await sb.from('perfiles').select('usuario,nombre,rol').order('nombre');
+      var p = await pP;
       perfiles = p.error ? [] : (p.data || []);
       if (!EST.todo) perfiles = perfiles.filter(function (x) { return x.rol !== 'director'; });
-      var q = await sb.rpc('accesos_pendientes');
+      var q = await pQ;
       pendientes = q.error ? [] : (q.data || []);
-      var se = await sb.rpc('sesiones_abiertas');   // null si la base todavía no tiene 28_sesiones.sql
+      var se = await pS;
       sesiones = se.error ? null : (se.data || []);
       $('sin-tabla').hidden = true; $('error').hidden = true;
       pinta();
@@ -282,7 +297,7 @@ td.ip{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
       var m = (e && (e.message || e.code)) || String(e);
       if (/accesos|does not exist|PGRST205|42P01/i.test(m)) $('sin-tabla').hidden = false;
       else { $('error').hidden = false; $('error').textContent = 'No se pudo leer la bitácora. Vuelve a intentar en un momento.'; }
-    } finally { cargando = false; $('recargar').disabled = false; }
+    } finally { cargando = false; $('recargar').disabled = false; muestra(); }
   }
 
   /* UX PROFASE: las pilas de lo que hay que vigilar (al picarlas, Movimientos queda con ese tipo y su periodo) y la barra de

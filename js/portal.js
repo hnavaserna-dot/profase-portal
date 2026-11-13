@@ -1927,6 +1927,27 @@
   }
 
   /* ---- Sesión: las páginas de rol exigen sesión y el rol correcto ---- */
+  /* Lo de quien entró, sin vueltas de más (revisión de la noche del 13-nov-2026). Cada pantalla, en su marco, preguntaba
+     una tras otra su perfil, si es de solo consulta y si baja el «Original» (tres vueltas a la base, ~0.4 s antes de poder
+     pintar nada; «Comprobar real» las veía en casi todas las pantallas). Ahora las tres van al mismo tiempo y, en una
+     pantalla dentro de la vista, si es de solo consulta y si baja el «Original» se toman de lo que la vista ya preguntó
+     (la misma persona, hasta 10 minutos). El perfil se sigue pidiendo en cada pantalla: es lo que dice si la base contesta
+     (el seguro de arranque se fija en eso). Son los mismos datos de la base; lo que cada pantalla cambia después (la vista
+     del equipo) se sigue haciendo aquí. */
+  var YO_TTL = 600000;
+  function yoCasa() { try { if (window.top && window.top !== window && window.top.location.origin === location.origin) return window.top; } catch (e) {} return window; }
+  function yoGuardado(uid) {
+    try { var c = yoCasa().__profaseYo; if (c && c.uid === uid && Date.now() - c.t < YO_TTL) return c; } catch (e) {}
+    return null;
+  }
+  function yoGuarda(uid, que, v) {
+    try {
+      var casa = yoCasa(), c = casa.__profaseYo;
+      if (!c || c.uid !== uid || Date.now() - c.t >= YO_TTL) c = casa.__profaseYo = { uid: uid, t: Date.now() };
+      c[que] = v;
+    } catch (e) {}
+  }
+  function pideYo(f) { try { return Promise.resolve(f()).catch(function (e) { return { error: e }; }); } catch (e) { return Promise.resolve({ error: e }); } }
   P.listo = (async function () {
     if (!ROL) return null;
     var gs;
@@ -1934,6 +1955,9 @@
     var s = gs && gs.data ? gs.data.session : null;
     if (!s && gs && gs.error && deRed(gs.error)) throw noCarga('sesión');
     if (!s) { location.replace('./'); throw new Error('sin sesión'); }
+    var yo = yoGuardado(s.user.id);
+    var pCons = yo && typeof yo.consulta === 'boolean' ? Promise.resolve({ data: yo.consulta }) : pideYo(function () { return sb.rpc('es_solo_consulta'); });
+    var pOrig = yo && typeof yo.orig === 'boolean' ? Promise.resolve({ data: yo.orig }) : pideYo(function () { return sb.rpc('puedo_bajar_original'); });
     var p = null;
     try { p = await P.perfilDe(s.user.id); } catch (e) { throw noCarga('perfil'); }
     if (!p) { await sb.auth.signOut(); location.replace('./?e=perfil'); throw new Error('sin perfil'); }
@@ -1954,10 +1978,16 @@
     P.creado = Date.parse(s.user.created_at || '') || 0;   // cuándo creó su acceso (ventana «Pon tu foto de perfil»)
     P.sesionId = sesionDe(s);                                // este inicio de sesión (el mismo al recargar o cambiar de vista)
     // ¿Solo consulta? (tabla solo_consulta de la base). Si la base no contesta, la base igual lo detiene al guardar.
-    try { var c = await sb.rpc('es_solo_consulta'); P.consulta = !c.error && c.data === true; } catch (e) { P.consulta = false; }
+    try {
+      var c = await pCons; P.consulta = !c.error && c.data === true;
+      if (!c.error && typeof c.data === 'boolean') yoGuarda(s.user.id, 'consulta', c.data);
+    } catch (e) { P.consulta = false; }
     // ¿Se le ofrece bajar el «Original» (sin la marca PROFASE)? Decisión de Daniel, 30-oct-2026: hoy solo el equipo
     // VAX (tabla marca_original, portal/sql/62_marca_original.sql). Lo usan js/marca.js y js/visor.js al bajar.
-    try { var mo = await sb.rpc('puedo_bajar_original'); P.originales = !mo.error && mo.data === true; } catch (e) { P.originales = false; }
+    try {
+      var mo = await pOrig; P.originales = !mo.error && mo.data === true;
+      if (!mo.error && typeof mo.data === 'boolean') yoGuarda(s.user.id, 'orig', mo.data);
+    } catch (e) { P.originales = false; }
     // Vista del equipo como gerente (29-oct-2026, pedido de Fernando; portal/sql/42_equipo_gerente.sql): quien está en
     // equipo_gerente ve la página de los gerentes y sus pestañas como gerente, con los mismos botones; lo que puede
     // guardar lo dice la base (sigue siendo contador; ahí tiene permisos de gerente en lo que pidió Fernando, nunca
