@@ -401,9 +401,36 @@
     /* «¿Qué recorridos ya vi?» lo preguntan una docena de partes de la página al mismo tiempo al abrirla; se pregunta una
        vez y la respuesta sirve 5 segundos (anotar uno lo vuelve a preguntar). Revisión de eficiencia del 31-oct-2026. */
     var GUARDA = { recorridos_mios: 5000 }, CACHE = {};
+    /* Lo que la base dice que ve cada quien (rh_estado, cob_estado…) lo piden varias partes de la página al mismo tiempo
+       al entrar («Comprobar real» del 13-nov-2026: 97 llamadas al entrar; rh_estado tres veces en la vista, ~1.1 s cada
+       una porque salían todas juntas). Mientras una pregunta igual va en camino, las demás esperan esa misma respuesta,
+       cada una con su propia copia (así nadie le cambia a otro lo que recibió); en cuanto llega, la siguiente vuelve a
+       preguntar a la base. Solo en los primeros 30 s de la página, para que lo que se pida después de guardar algo nunca
+       tome una respuesta de antes. Revisión nocturna del 13-nov-2026. */
+    var JUNTA = { rh_estado: 1, cob_estado: 1, fac_estado: 1, cdir_estado: 1, exp_estado: 1, agenda_cierre_mias: 1 }, VAN = {};
+    function alEntrar() { try { return performance.now() < 30000; } catch (e) { return false; } }
+    function sinArgs(a) {   // sin nada o con {} (los ayudantes «rpc» de las páginas mandan {}): es la misma pregunta
+      if (a === undefined || a === null) return true;
+      if (typeof a !== 'object' || Array.isArray(a)) return false;
+      for (var k in a) if (Object.prototype.hasOwnProperty.call(a, k)) return false;
+      return true;
+    }
+    function suCopia(r) {
+      if (!r || r.data == null || typeof r.data !== 'object') return r;
+      try { return Object.assign({}, r, { data: JSON.parse(JSON.stringify(r.data)) }); } catch (e) { return r; }
+    }
     sb.rpc = function (fn, args) {
       if (P.consulta && ESCRIBEN[fn]) return rechazo();
       if (fn === 'recorrido_visto') CACHE = {};
+      if (JUNTA[fn] && sinArgs(args) && alEntrar()) {
+        var v = VAN[fn];
+        if (!v) {
+          v = VAN[fn] = Promise.resolve(rpc.apply(null, arguments));
+          var suelta = function () { if (VAN[fn] === v) delete VAN[fn]; };
+          v.then(suelta, suelta);
+        }
+        return v.then(suCopia);
+      }
       if (GUARDA[fn] && args === undefined) {
         var c = CACHE[fn];
         if (c && Date.now() - c.t < GUARDA[fn]) return c.p;
