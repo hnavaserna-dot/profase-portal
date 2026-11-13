@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="1719e532897b"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="6e86189548bd"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Mi WorkFlow</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 .jcom{display:grid;gap:6px;margin-top:12px}
 .jcom textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);resize:vertical;min-height:72px}
 .jcom textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -12851,7 +12851,7 @@ initDB=async function(){await initDB0();oirJust()};
      cuente (80 letras reales; 113_minuta_obligatoria.sql) le vuelve a salir en segundos. Nunca encima de la minuta abierta
      (PORTAL.estaEscribiendo) ni de otra ventana o recorrido. */
   const CLAVE='profase-minuta-luego';
-  let OV=null,abierta=false,reloj=null,esperando=false,ATRASO=false;
+  let OV=null,abierta=false,reloj=null,esperando=false,ATRASO=false,MIN_IDS='';
   const hoyMty=()=>{try{return window.PROFASE_HORA.dia(new Date())}catch(e){return new Date().toISOString().slice(0,10)}};
   const escribe=()=>{try{const P=window.PORTAL;return !!(P&&P.estaEscribiendo&&P.estaEscribiendo())}catch(e){return false}};
   const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -12874,8 +12874,9 @@ initDB=async function(){await initDB0();oirJust()};
     document.body.appendChild(OV);
   }
   function cierra(){if(OV)OV.hidden=true;abierta=false}
+  const ids=L=>L.map(r=>String(r.id)).sort().join();
   async function abre(L){
-    arma();
+    arma();MIN_IDS=ids(L);
     // las atrasadas (de antes de hoy) primero y sin salida; las de hoy, como antes
     const hoy=hoyMty(),atr=L.filter(r=>String(r.fecha||'').slice(0,10)<hoy);
     if(atr.length)L=atr;
@@ -12894,12 +12895,26 @@ initDB=async function(){await initDB0();oirJust()};
   }
   // Esc no la cierra: es obligatoria
   document.addEventListener('keydown',ev=>{if(abierta&&ev.key==='Escape'){ev.preventDefault();ev.stopPropagation()}},true);
+  /* Ya abierta, se vuelve a preguntar (Héctor Daniel Nava, 13-nov-2026, 07:19: «ya que lo marques ahora sí ya quítamelo»):
+     si la reunión ya no le toca (Héctor Daniel la marcó «No lleva minuta», se cerró como «No se realizó», ya lo escribió
+     en otro equipo o se le quitó la palomita), la ventana se quita sola; si cambió cuáles faltan, se vuelve a pintar. */
+  async function revisaAbierta(){
+    const r=await window.PORTAL.sb.rpc('exp_reuniones',{p:{vista:'sin_minuta'}});
+    if(!abierta||r.error||!Array.isArray(r.data))return;
+    if(!r.data.length){cierra();ATRASO=false;MIN_IDS='';return}
+    if(ids(r.data)!==MIN_IDS){cierra();abre(r.data)}
+  }
   async function vigila(){
     clearTimeout(reloj);
     // se vuelve a revisar cada 10 minutos; con una atrasada, cada 20 segundos (si cerró la minuta sin que contara, vuelve)
     reloj=setTimeout(vigila,ATRASO?20000:10*60000);
-    if(esperando||abierta||document.hidden||(enPausa()&&!ATRASO))return;
     if(navigator.webdriver&&!window.__PRUEBA_MINUTA)return;   // las pruebas automáticas de los demás no la ven
+    if(abierta){
+      if(esperando||document.hidden)return;
+      esperando=true;try{await revisaAbierta()}catch(e){}finally{esperando=false}
+      return;
+    }
+    if(esperando||document.hidden||(enPausa()&&!ATRASO))return;
     if(ATRASO&&escribe())return;   // está escribiendo la minuta: no se le tapa
     await estado();
     if(!EST||!EST.sin_minuta||EST.consulta){ATRASO=false;return}
@@ -12916,10 +12931,11 @@ initDB=async function(){await initDB0();oirJust()};
       if(ATRASO){clearTimeout(reloj);reloj=setTimeout(vigila,20000)}
     }catch(e){}finally{esperando=false}
   }
-  addEventListener('visibilitychange',()=>{if(!document.hidden&&!abierta)vigila()});
+  addEventListener('visibilitychange',()=>{if(!document.hidden)vigila()});
   // el cierre de la Agenda (reunion_tab.js): en cuanto el de mayor rango dice «Se hizo», a los demás asistentes se les
   // revisa de una vez (sin esperar los 10 minutos) y les sale esta ventana, sin sacarlos de donde están
-  window.__minuta.revisa=()=>{if(!abierta)vigila()};
+  // (abierta, también: si ya no le toca, se quita)
+  window.__minuta.revisa=()=>vigila();
 })();
 
 /* ---- Pendientes, Expedientes y la minuta de las reuniones: recorrido de lo nuevo («expedientes-1») ----
