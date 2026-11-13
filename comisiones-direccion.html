@@ -96,6 +96,12 @@ button,select,input,textarea{font:inherit;color:inherit}
 .band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
 .band .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .band .acts .btn{background:transparent;color:var(--navy-ink);border-color:rgba(255,255,255,.35)}
+/* 13-nov-2026: el botón de la franja aparta su lugar desde que la franja queda armada (js/portal.js le pone fr-lista); no se
+   ve ni se puede picar hasta saber quién entró. Antes salía después y la franja crecía y empujaba toda la pantalla */
+.band .acts .btn.espera{visibility:hidden}
+.band:not(.fr-lista) .acts .btn.espera{display:none}
+/* las notas de arriba traen su margen: que no se salga de su recuadro (al salir la primera, el recuadro entero se recorría) */
+body>.wrap{display:flow-root}
 .btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
 .btn:hover{border-color:var(--navy)}
 .btn[disabled]{opacity:.6;cursor:default}
@@ -126,12 +132,16 @@ button,select,input,textarea{font:inherit;color:inherit}
 @media (min-width:701px){.barra{position:sticky;top:0;z-index:15;background:var(--bg);border-bottom:1px solid var(--line);margin-bottom:16px}}
 .secs{display:flex;flex-wrap:wrap;gap:8px}
 .secs button{flex:1 1 150px;min-width:0;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px 9px;cursor:pointer;color:var(--ink)}
+.secs button{position:relative}
 .secs button:hover{border-color:var(--navy)}
 .secs button b{display:block;font-family:var(--f-display);font-stretch:85%;font-size:16px;font-weight:750;line-height:1.2;overflow-wrap:anywhere}
 .secs button small{display:block;font-size:12px;color:var(--muted);margin-top:2px;line-height:1.3}
 .secs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink);box-shadow:inset 0 -3px 0 var(--accent)}
 .secs button[aria-selected="true"] small{color:var(--band-dim)}
 .secs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--accent);color:#14233F;font-family:var(--f-body);font-stretch:100%;font-size:11.5px;font-weight:700;line-height:18px;text-align:center;vertical-align:2px}
+/* 13-nov-2026: el numerito va en la esquina de su pestaña: al llegar (o cambiar) ya no le hace otro renglón al nombre ni
+   hace crecer la barra, que empujaba todo lo de abajo */
+.secs .cta{position:absolute;top:-7px;right:-5px;margin:0;box-shadow:0 0 0 2px var(--bg)}
 .periodo{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
 .periodo .flecha{width:36px;height:34px;padding:0;display:inline-grid;place-items:center;font-size:18px;line-height:1}
 .periodo select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-weight:700;font-size:15px;min-width:0}
@@ -366,7 +376,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     <h1 id="titulo">Comisiones de dirección</h1>
     <p id="subt">El mes de un vistazo: la comisión, las facturas por decidir, la utilidad y las devoluciones de IVA, y lo que falta por hacer. Los cálculos los hace el sistema.</p>
   </div>
-  <div class="acts"><button class="btn" type="button" id="b-ajustes" hidden>Ajustes y catálogos</button></div>
+  <div class="acts"><button class="btn espera" type="button" id="b-ajustes" tabindex="-1" aria-hidden="true">Ajustes y catálogos</button></div>
 </div></div>
 
 <div class="wrap">
@@ -398,12 +408,17 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   <!-- Resumen -->
   <section id="s-res" hidden aria-labelledby="h-res">
     <h2 class="sr" id="h-res" hidden>Resumen del mes</h2>
+    <!-- 13-nov-2026: el Resumen sale completo, de una vez (antes salían las pilas vacías y «Lo que falta», y al llegar los
+         datos todo se recorría): mientras llega dice «Cargando…» -->
+    <div class="cargando" id="res-carga">Cargando…</div>
+    <div id="res-cont" hidden>
     <div class="pilas" id="r-pilas"></div>
     <section class="card" aria-labelledby="h-falta">
       <header><div><h2 id="h-falta">Lo que falta</h2><div class="sub" id="falta-sub">&nbsp;</div></div>
         <span class="estado" id="res-estado" aria-live="polite"></span></header>
       <ul class="falta" id="r-falta"></ul>
     </section>
+    </div>
   </section>
 
   <!-- Facturas (las de la otra compañía: cuáles llevan comisión) -->
@@ -671,15 +686,17 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       CONSULTA = !!P.consulta || !!EST.consulta; CAPTURA = !!EST.captura && !CONSULTA; AJUSTES = !!EST.ajustes && !CONSULTA;
       T = EST.textos || {};
       if (EST.hoy) { A0 = +String(EST.hoy).slice(0, 4); M0 = +String(EST.hoy).slice(5, 7); PER.anio = A0; PER.mes = M0; }
-      $('practica').hidden = EST.modo !== 'practica';
-      $('consulta').hidden = !CONSULTA;
-      $('b-ajustes').hidden = false;
-      $('b-ajustes').textContent = CONSULTA ? 'Catálogos' : 'Ajustes y catálogos';
+      var ba = $('b-ajustes');
+      ba.textContent = CONSULTA ? 'Catálogos' : 'Ajustes y catálogos';
+      ba.classList.remove('espera'); ba.removeAttribute('tabindex'); ba.removeAttribute('aria-hidden');
       nombres();
       periodos();
       pilasRecuerda();
       pintaPct();
       await catalogos();
+      // 13-nov-2026: las notas de arriba salen en el mismo momento que las pestañas (antes salían primero y empujaban)
+      $('practica').hidden = EST.modo !== 'practica';
+      $('consulta').hidden = !CONSULTA;
       $('cargando').hidden = true;
       $('barra').hidden = false;
       // desde la pila «Comisión HDN por pagar» del Inicio: ?ir=com o ?ir=com-AAAA-MM; desde el aviso de los pagos a SV, ?ir=svp (cdir_tab.js, PROFASE_ABRE)
@@ -736,17 +753,19 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   /* ---------- Resumen: las cuatro pilas y «Lo que falta» ---------- */
   async function cargaRes() {
     var n = ++RES.pide, k = perK();
-    if (RES.clave === k && RES.fac) pintaRes();       // lo que ya se tenía sale de una vez y se pone al día atrás
+    if (RES.clave === k && RES.fac) { pintaRes(); resListo(); }       // lo que ya se tenía sale de una vez y se pone al día atrás
     estado('res-estado', 'Poniendo al día…');
-    cargaPHdn();   // 261: si ya se pagó la comisión (se pinta sola al llegar)
+    var ph = cargaPHdn();   // 261: si ya se pagó la comisión (13-nov-2026: se espera con lo demás, para que el Resumen salga completo)
     var d1 = PER.anio + '-' + dos(PER.mes) + '-01', d2 = PER.anio + '-' + dos(PER.mes) + '-' + dos(ultimo(PER.anio, PER.mes));
     var r = await Promise.allSettled([
       rpc('cdir_mod_comisiones', { p_anio: PER.anio, p_mes: PER.mes }),
       rpc('cdir_mod_utilidad', { p_anio: PER.anio, p_mes: PER.mes }),
       rpc('cdir_facturas', { p: { desde: d1, hasta: d2 } }),
-      rpc('cdir_dev', { p: {} })
+      rpc('cdir_dev', { p: {} }),
+      ph
     ]);
     if (n !== RES.pide) return;
+    r.pop();   // el pago de la comisión avisa de su falla en su pestaña; aquí solo se esperó
     if (r[0].status === 'fulfilled') { COM.d = r[0].value; COM.clave = k; }
     if (r[1].status === 'fulfilled') { UTI.d = r[1].value; UTI.clave = k; }
     if (r[2].status === 'fulfilled') { RES.fac = r[2].value || {}; RES.clave = k; }
@@ -756,7 +775,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     estado('res-estado', mal.length ? 'Parte no se pudo leer' : '', mal.length ? 'mal' : '');
     if (mal.length) error('No se pudo leer todo el resumen: ' + falla(mal[0].reason));
     pintaRes();
+    resListo();
   }
+  function resListo() { $('res-carga').hidden = true; $('res-cont').hidden = false; }
   function semanaToca(d) { return ((d && d.semanas) || []).filter(function (x) { return x.toca && !x.entregado_el; }); }
   function semanaProx(d) { return ((d && d.semanas) || []).filter(function (x) { return !x.toca && !x.entregado_el; }).sort(function (a, b) { return String(a.paga_el).localeCompare(String(b.paga_el)); })[0]; }
   function pila(o) {
