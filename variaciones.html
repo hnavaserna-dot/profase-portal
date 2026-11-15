@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2038df6148"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=015948266c"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6293bc1355"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=58e7d432bf"></script><script src="js/hallazgos.js?v=8df4fce408"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2e05c64ace"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=015948266c"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6293bc1355"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=58e7d432bf"></script><script src="js/hallazgos.js?v=8df4fce408"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -974,6 +974,20 @@ function soloMias(B, mias){
   bt.addEventListener("click", ()=>P.cambiaTema(P.tema()==="dark" ? "light" : "dark"));
 })();
 
+/* Que no se mueva al cargar (revisión de la noche del 15-nov-2026; como Accesos y la Caja chica): la barra, las pilas, las
+   pestañas y la tabla llegaban por partes (las balanzas, luego los estatus, los comentarios y las empresas de quien entró) y
+   cada una empujaba lo de abajo (0.84 con la base lenta de la prueba en la laptop; el límite es 0.1). Mientras llega la
+   primera vez, lo de abajo del título espera sin verse (su lugar se queda) y el título dice «cargando…»; sale todo de una
+   vez, ya con los filtros de quien entró, como mucho a los 5 s aunque algo no haya llegado. Mismo contenido, en el mismo lugar. */
+const VAR_MUESTRA = (()=>{
+  const xs = [...document.querySelectorAll("main > *")].filter(x=>!x.classList.contains("titlebar"));
+  let visto = false;
+  const muestra = () => { if(visto) return; visto = true; clearTimeout(t); xs.forEach(x=>{ x.style.visibility = ""; }); };
+  xs.forEach(x=>{ x.style.visibility = "hidden"; });
+  const t = setTimeout(muestra, 5000);
+  return muestra;
+})();
+
 (async function(){
 "use strict";
 // Revisión nocturna 12-nov-2026: los criterios se piden al mismo tiempo que las balanzas (antes, uno después del otro)
@@ -993,7 +1007,7 @@ const PRE_P = (async()=>{
   }catch(e){ return null; }
 })();
 const BASE0 = await cargarDatos();
-if(!BASE0) return;
+if(!BASE0){ VAR_MUESTRA(); return; }
 const MIAS = await MIAS_P;
 const SOLO_MIAS = !!(MIAS && MIAS.solo);
 const BASE = SOLO_MIAS ? soloMias(BASE0, new Set(MIAS.rfcs.map(r=>String(r).toUpperCase()))) : BASE0;
@@ -1771,7 +1785,15 @@ const idxR = () => {
   const cli = new Map(BASE.clientes.map((c,i)=>[c[1],i])), cta = new Map(BASE.cuentas.map((c,i)=>[c[0],i])), mov = new Map(), sal = new Map();
   for(const [ci,ct,p,v] of (BASE.mov||[])) mov.set(ci+"|"+ct+"|"+p, v);
   for(const [ci,ct,p,v] of (BASE.sal||[])) sal.set(ci+"|"+ct+"|"+p, v);
-  return IDX_R = {cli, cta, mov, sal};
+  return IDX_R = {cli, cta, mov, sal, ca:null};
+};
+// los cargos y abonos de cada cliente, cuenta y mes (revisión de la noche del 15-nov-2026): pagoActual() recorría BASE.ca
+// completo por cada provisión revisada de «Resueltas» (la pestaña se trababa 1.8 s en «Comprobar real»); ahora se arma una
+// vez. Mismo resultado: si hay dos renglones del mismo mes, el último, como el recorrido de antes.
+const idxCa = () => {
+  const I = idxR(); if(I.ca) return I.ca;
+  const ca = new Map(); for(const [c,t2,p,car,abo] of (BASE.ca||[])) ca.set(c+"|"+t2+"|"+p, [car,abo]);
+  return I.ca = ca;
 };
 // variación con los datos de hoy: mes evaluado contra el mes anterior (o el último con movimiento)
 function datosActuales(rfc, cta, y, m){
@@ -1793,8 +1815,8 @@ function pagoActual(rfc, cta, y, m){
   const {cli, cta:ix} = idxR(), ci = cli.get(rfc), ct = ix.get(cta);
   if(ci===undefined || ct===undefined) return null;
   const per = (yy,mm)=>{ while(mm<1){ mm+=12; yy--; } return yy+"-"+String(mm).padStart(2,"0"); };
-  let prov = 0, pago = 0;
-  for(const [c,t2,p,car,abo] of (BASE.ca||[])){ if(c!==ci || t2!==ct) continue; if(p===per(y,m-1)) prov = abo; if(p===per(y,m)) pago = car; }
+  const CA = idxCa(), a = CA.get(ci+"|"+ct+"|"+per(y,m-1)), b = CA.get(ci+"|"+ct+"|"+per(y,m));
+  const prov = a ? a[1] : 0, pago = b ? b[0] : 0;
   return {ap:prov, ac:pago, v: prov ? (pago-prov)/Math.abs(prov) : null};
 }
 const fotoDe = rid => (REV[rid] && REV[rid].foto) || (()=>{ const f = PORRID.get(rid);
@@ -2916,7 +2938,9 @@ let NAV = [];
 // para la prueba de pantallas (herramientas/pruebas/pantallas/extra/variaciones_platica.py): una plática inventada en
 // memoria, solo fuera de crmprofase.com.mx; nunca guarda nada
 if(!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname))
-  window.__varPrueba = {pon:(rid, d)=>{ COMS[rid] = d; juntaRev(); }, yo:()=>userId, vfLimpia:()=>VF.clear()};
+  window.__varPrueba = {pon:(rid, d)=>{ COMS[rid] = d; juntaRev(); }, yo:()=>userId, vfLimpia:()=>VF.clear(),
+    // (15-nov-2026) para variaciones_resueltas.py: «Resueltas» con el índice de los cargos y abonos contra la forma de antes
+    pagoActual:(rfc, cta, y, m)=>pagoActual(rfc, cta, y, m), base:()=>BASE, idxR:()=>idxR()};
 
 /* ---------- Facturas del mes (268; chat de Fernando Cadengo, 4-nov-2026) ----------
    En la ventana de seguimiento, las facturas que forman el movimiento de esa cuenta en ese mes: de «Productos y Servicios»
@@ -4166,11 +4190,11 @@ function abrirHash(){
 if(window.top===window) document.getElementById("alPortal").hidden = false;   // abierta sola, fuera de la pestaña
 else { const h1 = document.querySelector("main .titlebar h1"); if(h1) h1.hidden = true; }   // en la pestaña el título ya está arriba
 (async ()=>{
-  if(!window.claude){ abrirHash(); return; }
+  if(!window.claude){ VAR_MUESTRA(); abrirHash(); return; }
   userNS = await claude.use("user").catch(()=>null);
   if(userNS){ try{ userId = await userNS.id(); }catch(e){} }
   const db = await claude.use("db").catch(()=>null);
-  if(!db){ abrirHash(); return; }
+  if(!db){ VAR_MUESTRA(); abrirHash(); return; }
   dbNS = db;
   const P = window.PORTAL || {};
   MI_USUARIO = (P.perfil && P.perfil.usuario) || ""; MI_ROL = (P.perfil && P.perfil.rol) || ""; MI_NOMBRE = (P.perfil && P.perfil.nombre) || "";
@@ -4212,6 +4236,7 @@ else { const h1 = document.querySelector("main .titlebar h1"); if(h1) h1.hidden 
     pintarCampana();
   }, ()=>{});
   pintar(); pintarCampana();
+  VAR_MUESTRA();
   abrirHash();
 })();
 })();

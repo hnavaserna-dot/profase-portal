@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2038df6148"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=015948266c"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2e05c64ace"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=015948266c"></script>
 <style>
 /* Portal PROFASE · menú RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna). Tres pantallas en esta misma página
    (?s=vac, ?s=pre, ?s=mov): Vacaciones y permisos, Préstamos, y Altas y bajas. Las ven solo Alex Luna, HNR (solo
@@ -84,6 +84,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
 button,select,input,textarea{font:inherit;color:inherit}
 .wrap{margin:0 auto;padding:0 16px}
+/* el margen de lo de arriba no recorre su recuadro (15-nov-2026, revisión nocturna: al salir la primera nota o barra, todo bajaba 14 a 16 px) */
+body>.wrap{display:flow-root}
 [hidden]{display:none!important}
 .band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
 .band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
@@ -1323,8 +1325,7 @@ tr.click:hover td{background:var(--navy-soft)}
       var p = await P.listo; if (!p) return;
       if (window.top === window.self) $('logo').hidden = false;
       EST = await rpc('rh_estado');
-      $('cargando').hidden = true;
-      if (!EST || !EST.ve) { error('RH solo lo ven quienes la dirección decidió.'); clearTimeout(error.t); return; }
+      if (!EST || !EST.ve) { $('cargando').hidden = true; error('RH solo lo ven quienes la dirección decidió.'); clearTimeout(error.t); return; }
       CONSULTA = !!P.consulta || !!EST.consulta; CAPTURA = !!EST.captura && !CONSULTA; AUTORIZA = !!EST.autoriza; CORRIGE = !!EST.corrige && !CONSULTA;
       $('consulta').hidden = !CONSULTA;
       $('titulo').textContent = { vac: 'Vacaciones y permisos', pre: 'Préstamos', mov: 'Altas y bajas', exp: 'Expedientes del personal' }[SEC];
@@ -1333,7 +1334,11 @@ tr.click:hover td{background:var(--navy-soft)}
         mov: 'Los ingresos y las salidas del personal.', exp: 'Los documentos de cada colaborador (solo los ve RH).' }[SEC];
       document.title = 'Portal PROFASE · ' + $('titulo').textContent;
       botones();
-      $('s-' + SEC).hidden = false;
+      // lo de la sección sale de una vez, cuando ya llegó lo suyo (15-nov-2026, revisión nocturna: las pilas llegaban después
+      // y empujaban la tabla; como mucho 5 s); mientras, «Cargando…»
+      var SECC = $('s-' + SEC); SECC.style.visibility = 'hidden'; SECC.hidden = false;
+      var muestra = function () { if (muestra.ya) return; muestra.ya = true; clearTimeout(muestra.t); $('cargando').hidden = true; SECC.style.visibility = ''; };
+      muestra.t = setTimeout(muestra, 5000);
       var dS = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
       if (SEC === 'vac') {
         $('f-tipo').innerHTML += Object.keys(TIPOS).map(function (k) { return '<option value="' + k + '">' + TIPOS[k] + '</option>'; }).join('');
@@ -1366,7 +1371,8 @@ tr.click:hover td{background:var(--navy-soft)}
         await cargaMov();
         abreMov(new URLSearchParams(location.search));   // 360: desde la campanita
       }
-    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+      muestra();
+    } catch (e) { $('cargando').hidden = true; if (SECC) SECC.style.visibility = ''; error(falla(e)); }
   }
   document.addEventListener('click', async function (ev) {
     var t = ev.target.closest('button,tr.click'); if (!t) return;

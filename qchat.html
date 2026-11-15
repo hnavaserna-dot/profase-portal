@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2038df6148"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/texto-ia.js?v=0de9a10fcf"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2e05c64ace"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/texto-ia.js?v=0de9a10fcf"></script>
 <style>
 /* Portal PROFASE · QUO › Q Chat (Conversaciones, Tickets a desarrollo y Eficiencia del soporte; en QUO desde el 8-nov-2026, 15:46; antes en Chat) (Héctor Daniel Nava, 8-nov-2026: «el soporte o los chats nos deben de llegar a CRM… desde
    ahí Gabo en el ejemplo los atienda y Cadengo y yo»; «una tercera opción llamada Q Chat y ahí tú me filtres qué fue lo que
@@ -571,21 +571,25 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   }
 
   /* ---------- traer (cada pocos segundos a la vista) ---------- */
-  async function carga() {
+  // pre (15-nov-2026, revisión nocturna): la lista que ya se pidió al abrir, al mismo tiempo que qchat_estado
+  async function carga(pre) {
     // la firma: si nada cambió, Quo no vuelve a armar la lista (solo dice «sin cambio»)
     var f = { dias: Number($('f-dias').value) || 30 };
     if (DATOS && DATOS.firma && DATOS.dias === f.dias) f.firma = DATOS.firma;
-    var d = await qc('lista', { f: f });
+    // las llamadas de quien entró se piden al mismo tiempo que la lista (antes, después de ella): la misma respuesta
+    var pSalas = rpc('qchat_salas_mias').then(function (x) { return x || []; }, function () { return []; });
+    var d;
+    try { d = await (pre && !DATOS ? pre : qc('lista', { f: f })); } catch (e) { pSalas.catch(function () {}); throw e; }
     if (d.sin_cambio && DATOS) {
       DATOS.ahora = d.ahora; YO = d.agente || YO;
       if (d.tk) cuentaTk(d.tk);
-      try { SALAS = await rpc('qchat_salas_mias') || []; } catch (e) { SALAS = []; }
+      SALAS = await pSalas;
       await llamadasAuto();
       return;
     }
     d.dias = f.dias;
     DATOS = d; YO = d.agente || YO;
-    try { SALAS = await rpc('qchat_salas_mias') || []; } catch (e) { SALAS = []; }
+    SALAS = await pSalas;
     if (d.tk) cuentaTk(d.tk);
     avisaNuevo();
     await llamadasAuto();
@@ -1391,13 +1395,17 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       if (!P) { $('cargando').textContent = 'Sin conexión con la base: recarga la página.'; return; }
       var u = await P.listo; if (!u) return;
       if (window.top === window.self) $('logo').hidden = false;
+      // la lista de Quo se pide al mismo tiempo que el papel de quien entró (15-nov-2026; antes, una tras otra): si no le
+      // toca, la función de Quo tampoco le da nada y se dice lo mismo de siempre
+      var preLista = qc('lista', { f: { dias: Number($('f-dias').value) || 30 } });
+      preLista.catch(function () {});
       var est = await rpc('qchat_estado');
       if (!est || !est.ve) throw new Error('Q Chat es para quien atiende el soporte de Quo.');
       CONSULTA = !!P.consulta || est.papel === 'consulta'; $('consulta').hidden = !CONSULTA;
       YO = { papel: est.papel };
       PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'qchat.conversaciones', nombre: 'Conversaciones', arriba: $('caja-lista'), cambio: function () { pinta(); } });
       TPAG = window.PROFASE_PAGINAS.crea({ donde: $('tk-pag'), clave: 'qchat.tickets', nombre: 'Tickets', arriba: $('caja-tk'), cambio: function () { pintaTk(); } });
-      await carga();
+      await carga(preLista);
       // quien se dejó «Disponible» en este equipo y no lo está en Quo (la página se recargó): se vuelve a poner
       try { if (puede() && localStorage.getItem('profase-qch-disp') === '1' && DATOS.yo && !DATOS.yo.disponible) await disponible(true); } catch (e) {}
       $('cargando').hidden = true;

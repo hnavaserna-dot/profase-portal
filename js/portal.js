@@ -1053,7 +1053,7 @@
       + '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .band.fr-propia{--band-dim:#8FA3C4;background:#16284A;color:#E5EAF2}}'
       + '.band.fr-propia>.fr-wrap{padding:8px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px}'
       + '@media (max-width:600px){.band .fr-tit h1.fr-h1{font-size:18px}.band .fr-q{width:26px;height:26px}.band.fr-propia>.fr-wrap{padding:8px 16px}}';
-    var band = null, tit = null, eti = null, h1 = null, q = null, glo = null, orig = null, fijo = false, quita = null;
+    var band = null, tit = null, eti = null, h1 = null, q = null, glo = null, orig = null, fijo = false, quita = null, pe = null;
     var MENU = 'franja';
     // la opción del menú por la que se entró: el marco vive en <main id="v-<vista>"> de la vista
     function miOpcion() {
@@ -1092,7 +1092,15 @@
       } catch (e) { return false; }
     }
     function texto(el) { return el ? String(el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+    // los párrafos de la explicación se vuelven a leer cada vez (15-nov-2026): la franja ya se arma en cuanto se termina de
+    // leer, antes de que corran los scripts de la página, y uno de ellos puede agregar o cambiar un párrafo
+    function parrafos() {
+      var ps = [].filter.call(pe.children, function (x) { return x.tagName === 'P'; });
+      ps.forEach(function (x) { if (!x.classList.contains('fr-oculto')) x.classList.add('fr-oculto'); });
+      return ps;
+    }
     function explicacion() {
+      orig.ps = parrafos();
       var t = orig.ps.map(texto).filter(Boolean).join(' ');
       return t || (OP && OP.d) || '';
     }
@@ -1150,7 +1158,7 @@
       var h = band && band.querySelector('h1');
       if (!h) return false;
       var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-      var pe = h.parentNode;
+      pe = h.parentNode;
       orig = {
         h1: h,
         eti: band.querySelector('.eti') || band.querySelector('.mark'),
@@ -1159,7 +1167,9 @@
       tit = document.createElement('div'); tit.className = 'fr-tit';
       tit.innerHTML = '<div class="eti fr-eti"></div><div class="fr-fila"><h1 class="fr-h1"></h1>'
         + '<button type="button" class="fr-q" aria-label="¿Qué es esta pantalla?" aria-expanded="false" aria-controls="fr-g">?</button></div>';
-      pe.insertBefore(tit, h);
+      // después del título de siempre (15-nov-2026; antes, delante): así lo que la página escribe con
+      // document.querySelector('header h1') sigue cayendo en su título de siempre (escondido), que es de donde la franja lo lee
+      pe.insertBefore(tit, h.nextSibling);
       eti = tit.querySelector('.fr-eti'); h1 = tit.querySelector('.fr-h1'); q = tit.querySelector('.fr-q');
       [orig.h1, orig.eti].concat(orig.ps).forEach(function (x) { if (x) x.classList.add('fr-oculto'); });
       glo = document.createElement('div'); glo.id = 'fr-g'; glo.className = 'fr-g'; glo.setAttribute('role', 'tooltip'); glo.hidden = true;
@@ -1198,7 +1208,35 @@
     }
     // la pantalla cambió de opción (Q Chat, al picar su pestaña): la franja dice la nueva
     P.franjaAlDia = function () { if (!tit) return; OP = miOpcion() || OP; pinta(); };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arranca); else arranca();
+    // Se arma en cuanto se termina de leer la franja (15-nov-2026; antes, al terminar de leer toda la página): el navegador
+    // pinta la página por partes mientras la lee y, si la franja se armaba hasta el final, a los ~100 ms se achicaba y todo lo
+    // de abajo subía. Un MutationObserver desde el <head> ve cuando el parser ya pasó de la franja (ya tiene algo después) y la
+    // arma antes del siguiente cuadro; si no, como siempre, al terminar de leer la página.
+    var yaArmada = false;
+    function armaUna() { if (yaArmada) return; yaArmada = true; arranca(); }
+    function completa(x) { return !!(x && x.nextSibling); }
+    function franjaLeida() {
+      if (!document.body) return false;
+      var bs = document.body.querySelectorAll('.band');
+      for (var i = 0; i < bs.length; i++) {
+        if (bs[i].querySelector('.brandtxt') || !bs[i].querySelector('h1')) continue;
+        return completa(bs[i]);
+      }
+      if (bs.length) return false;
+      var v = document.querySelector('[data-franja-oculta]');
+      return completa(v);
+    }
+    if (document.readyState === 'loading') {
+      var mo = null;
+      if (window.MutationObserver) {
+        mo = new MutationObserver(function () {
+          if (yaArmada) { mo.disconnect(); return; }
+          try { if (franjaLeida()) { mo.disconnect(); armaUna(); } } catch (e) { /* al terminar de leer la página */ }
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+      }
+      document.addEventListener('DOMContentLoaded', function () { if (mo) mo.disconnect(); armaUna(); });
+    } else armaUna();
   })();
 
   P.usuarioLimpio = function (u) {
