@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=2e05c64ace"></script><script src="js/cobranza.js?v=8ac5ecf9db"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ca3bac5751"></script><script src="js/cobranza.js?v=8ac5ecf9db"></script>
 <style>
 /* Portal PROFASE · Inicio (30-oct-2026, pedido de Daniel). Una sola página de tarjetas que contesta «¿qué necesita mi
    atención hoy?» y cambia según quién entra:
@@ -360,6 +360,9 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     return out;
   }
   async function leeDoc(col, id) {
+    // 16-nov-2026 (revisión nocturna): por la pieza común (P.leeDoc de js/portal.js), que toma lo que la vista acaba de
+    // bajar de ese mismo documento (la Cobranza: ~420 KB que se pedían dos veces al entrar); la misma regla de la base
+    if (P.leeDoc) { var f = await P.leeDoc(col, id); return f ? f.data : null; }
     var q = await P.sb.from('docs').select('data').eq('col', col).eq('id', id).maybeSingle();
     if (q.error) throw q.error;
     return q.data ? q.data.data : null;
@@ -641,9 +644,20 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     })();
   }
   var CARGADO = 0;
+  function fechasHoy() { HOY = fDia.format(new Date()); HOYN = iso2n(HOY); EN7 = masDias(HOY, 7); EN7N = iso2n(EN7); EN90 = masDias(HOY, 91); }
+  /* Lo que van a pedir las tarjetas, desde que se sabe quién entró (revisión nocturna del 16-nov-2026): antes se esperaba a
+     saber si sale «Equipo conectado» (una vuelta a la base) y luego cada tarjeta pedía lo suyo. Son las mismas lecturas, en
+     el mismo memo que usan las tarjetas (una()); la primera corrida las aprovecha (ADELANTO) y lo que no se use no estorba. */
+  var ADELANTO = false;
+  function adelanta() {
+    fechasHoy(); MEMO = {}; ADELANTO = true;
+    cargaWF().catch(function () { return null; });
+    if (PERFIL === 'direccion' || PERFIL === 'cadengo' || PERFIL === 'gerente') cargaCXC().catch(function () { return null; });
+    if (PERFIL === 'direccion' || PERFIL === 'gerente' || PERFIL === 'contador') { docFirmas().catch(function () { return null; }); renFirmas().catch(function () { return null; }); }
+  }
   async function corre(quieto) {
-    CORRIDA++; var mia = CORRIDA; MEMO = {}; CARGADO = Date.now();
-    HOY = fDia.format(new Date()); HOYN = iso2n(HOY); EN7 = masDias(HOY, 7); EN7N = iso2n(EN7); EN90 = masDias(HOY, 91);
+    CORRIDA++; var mia = CORRIDA; if (!ADELANTO) MEMO = {}; ADELANTO = false; CARGADO = Date.now();
+    fechasHoy();
     var d = new Date(HOY + 'T12:00:00Z');
     $('fecha').textContent = (TITULO[PERFIL] || 'Inicio') + ' · ' + DIAS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' de ' + MESL[d.getUTCMonth()];
     $('hola').textContent = saludo() + (NOM ? ', ' + NOM : '');
@@ -897,9 +911,13 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     return o;
   }
   async function propuestasPorAutorizar() {
+    // 16-nov-2026 (revisión nocturna): las dos preguntas al mismo tiempo (antes, una tras otra); lo de la lista solo se usa
+    // si su papel lo deja, como antes
+    var pr = P.sb.from('propuestas').select('id,titulo,estado,semaforo,actualizada').eq('estado', 'por_autorizar').order('actualizada', { ascending: false }).limit(20)
+      .then(function (r) { return r; }, function (e) { return { error: e }; });   // .then: que salga ya (la consulta no sale hasta pedirle el resultado)
     var rol = await rpc('cambios_rol').catch(function () { return null; });
     if (!rol || rol === 'propone') return null;
-    var r = await P.sb.from('propuestas').select('id,titulo,estado,semaforo,actualizada').eq('estado', 'por_autorizar').order('actualizada', { ascending: false }).limit(20);
+    var r = await pr;
     if (r.error) return null;
     return r.data || [];
   }
@@ -1036,10 +1054,23 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   }
 
   // --- e.firma y sellos de los clientes (paquete de Access › Clientes) ---
+  /* 16-nov-2026 (revisión nocturna): de su paquete (1.6 MB: domicilios, servicios, contactos, plantillas…) la tarjeta solo usa
+     seis datos de cada razón social; ini_firmas() (portal/sql/397_noche_inicio_firmas.sql) lee el mismo documento, con la
+     misma regla de la base, y regresa solo esos, en el mismo orden. Si no contesta (o el documento viene comprimido de
+     antes), se baja completo, como antes. En qué paso va cada renovación se pide al mismo tiempo (antes, después). */
+  function docFirmas() {
+    var col = ROL === 'director' ? 'director' : 'access', id = ROL === 'director' ? 'acc_cli' : ROL === 'gerente' ? 'cli_equipo' : 'cli_' + YO;
+    return una('firmas', async function () {
+      var d = null;
+      try { d = await rpc('ini_firmas', { p_col: col, p_id: id }); } catch (e) { d = null; }
+      return d && d.json ? d : leeDoc(col, id);
+    });
+  }
+  function renFirmas() { return una('firmas-ren', function () { return rpc('ren_lista', { p_cerrados: false }); }); }
   function tFirmas(t, s, soloEquipo) {
     return { id: 'firmas', t: t, s: s, liga: 'renovaciones', arma: async function () {
-      var col = ROL === 'director' ? 'director' : 'access', id = ROL === 'director' ? 'acc_cli' : ROL === 'gerente' ? 'cli_equipo' : 'cli_' + YO;
-      var doc = await leeDoc(col, id); if (!doc || !(doc.json || doc.b64)) return null;
+      var pRen = renFirmas().catch(function () { return null; });
+      var doc = await docFirmas(); if (!doc || !(doc.json || doc.b64)) return null;
       var D = doc.json || await gunzip(doc.b64), E = (D.empresas || []).filter(function (e) { return e.est !== 'Inactivo'; });
       if (soloEquipo != null) {
         var nombres = {}; Object.keys(DEP_DE).forEach(function (n) { if (DEP_DE[n] === soloEquipo) nombres[n] = 1; });
@@ -1061,7 +1092,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       // en qué paso va su renovación (portal/sql/71_renovaciones.sql: la base decide qué seguimiento ve cada quien)
       var PASO = { cotizar: 'por cotizar', cotizado: 'cotizado', facturado: 'falta el pago', tramite: 'en trámite', cargar: 'cargar el nuevo',
                    vencimiento: 'falta el vencimiento nuevo', baja: 'ya no es cliente' }, ren = {};
-      try { (await rpc('ren_lista', { p_cerrados: false }) || []).forEach(function (x) { ren[x.empresa_id] = PASO[x.etapa] || ''; }); } catch (er) { ren = {}; }
+      try { ((await pRen) || []).forEach(function (x) { ren[x.empresa_id] = PASO[x.etapa] || ''; }); } catch (er) { ren = {}; }
       var h = '<div class="chips">' + (c.fm ? chip(c.fm, c.fm === 1 ? ' e.firma vencida' : ' e.firmas vencidas', 'mal') : '') + (c.fo ? chip(c.fo, c.fo === 1 ? ' e.firma por vencer' : ' e.firmas por vencer', 'ojo') : '')
         + (c.sm ? chip(c.sm, c.sm === 1 ? ' sello vencido' : ' sellos vencidos', 'mal') : '') + (c.so ? chip(c.so, c.so === 1 ? ' sello por vencer' : ' sellos por vencer', 'ojo') : '') + '</div>';
       h += lista(l.slice(0, 5).map(function (x) {
@@ -1643,6 +1674,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       else PERFIL = 'contador';
       DEP = depDe(YO, NOMWF);
       if (PERFIL === 'gerente' && DEP < 0) PERFIL = 'contador';
+      try { adelanta(); } catch (e) { ADELANTO = false; }   // si algo falla aquí, cada tarjeta lo pide sola, como antes
       try { VEO_EQ = (await rpc('chat_veo_conectados')) === true; } catch (e) { VEO_EQ = false; }   // sin 65: no sale
       $('que').textContent = TITULO[PERFIL];
       document.title = TITULO[PERFIL] + ' · Portal PROFASE';

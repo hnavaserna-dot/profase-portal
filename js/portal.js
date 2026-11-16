@@ -2222,23 +2222,84 @@
   async function guardar(col, id, data) {
     if (P.consulta) throw errConsulta();
     var r = await sb.from('docs').upsert({ col: col, id: id, data: data }, { onConflict: 'col,id' });
+    docOlvida(col, id);
     if (r.error) throw error(r.error);
     pronto();
   }
+
+  /* Lo que ya bajó otra pantalla de la misma vista, sin volverlo a pedir (revisión de la noche del 16-nov-2026). Al entrar, la
+     vista de la dirección baja el paquete de la Cobranza (director/cxc_0, ~420 KB) y, medio segundo después, el Inicio lo
+     volvía a pedir completo para su tarjeta («Comprobar real»: de 0.55 a 0.73 s). Ahora la lectura de un documento
+     (docRef.get() y P.leeDoc()) se apunta en la página de arriba, en texto tal cual llegó (cada quien lo vuelve a leer: cada
+     pantalla recibe sus propios objetos), y si otra pantalla de la misma persona pide el mismo documento en los siguientes
+     10 s, o mientras la página de arriba lo está bajando, lo toma de ahí. Es lo que la base ya le dio a esa misma persona:
+     las reglas no cambian. Nunca para guardar ni para la vigilancia (esas siempre van a la base), y lo que esta página
+     guarda o borra se olvida al momento. Lo apuntado se crea con los objetos de la página de arriba (y solo texto), para
+     que no dependa de que siga abierta la pantalla que lo bajó. */
+  var DOC_JUNTO_MS = 10000;
+  function docsCasa() {
+    try { var c = yoCasa(); if (!c.__profaseDocs) c.__profaseDocs = new c.Object(); return c.__profaseDocs; } catch (e) { return null; }
+  }
+  function docOlvida(col, id) { try { var m = docsCasa(); if (m) delete m[col + '/' + id]; } catch (e) {} }
+  function deTexto(txt, ver) { return { data: txt == null ? null : JSON.parse(txt), version: ver }; }
+  async function leeTexto(col, id) {
+    if (CON_TEXTO) {
+      try {
+        var r = await sb.from('docs').select('version,txt:data::text').eq('col', col).eq('id', id).maybeSingle();
+        if (r.error) throw error(r.error);
+        return r.data ? { hay: true, version: r.data.version, txt: r.data.txt } : { hay: false };
+      } catch (e) { if (e && e.code === 'unavailable') throw e; CON_TEXTO = false; }
+    }
+    var f = await leer(col, id);
+    return f ? { hay: true, version: f.version, txt: f.data === undefined ? null : JSON.stringify(f.data) } : { hay: false };
+  }
+  P.leeDoc = async function (col, id) {
+    var m = docsCasa(), k = col + '/' + id, uid = P.uid || '', g = null;
+    try { g = m && m[k]; if (g && (g.uid !== uid || (!g.vuelo && !(g.listo && Date.now() - g.t < DOC_JUNTO_MS)))) g = null; } catch (e) { g = null; }
+    if (g) {
+      try {
+        if (g.vuelo) await g.vuelo;
+        if (g.listo && g.uid === uid) return g.hay ? deTexto(g.txt, g.ver) : null;
+      } catch (e) { /* abajo, a la base */ }
+    }
+    var arriba = !!m && yoCasa() === window, e = null;
+    var q = leeTexto(col, id);
+    if (m) {
+      try {
+        e = new (yoCasa().Object)(); e.uid = uid; e.t = Date.now(); e.listo = false;
+        if (arriba) e.vuelo = q.then(function () {}, function () {});   // solo la página de arriba deja su espera (vive más)
+        m[k] = e;
+      } catch (er) { e = null; }
+    }
+    var f;
+    try { f = await q; } catch (er) { try { if (e && m[k] === e) delete m[k]; } catch (x) {} throw er; }
+    if (e) { try { if (m[k] === e) { e.hay = f.hay; e.ver = f.version; e.txt = f.txt; e.t = Date.now(); e.listo = true; e.vuelo = null; } } catch (er) {} }
+    return f.hay ? deTexto(f.txt, f.version) : null;
+  };
 
   /* Una colección completa, de 1,000 en 1,000 (5-nov-2026, pedido de Gabriel Cavazos): la base entrega máximo 1,000
      renglones por pedido y antes se pedía de una sola vez. En Variaciones (var_est, var_com) ya pasan de 1,000: lo que
      quedaba después del renglón 1,000 (por id) se guardaba bien, pero al ponerse al día la página dejaba de verlo y
      regresaba a «Sin revisión». Mismo orden por id que docs_firmas() (85_docs_firmas.sql), para que la firma coincida. */
-  var TANDA_COL = 1000;
+  var TANDA_COL = 1000, TANDAS_JUNTAS = 4;
   async function todaLaCol(col, campos) {
-    var todas = [];
-    for (var de = 0; ; de += TANDA_COL) {
-      var t = await sb.from('docs').select(campos).eq('col', col).order('id').range(de, de + TANDA_COL - 1);
-      if (t.error) throw error(t.error);
-      var filas = t.data || [];
-      todas = todas.concat(filas);
-      if (filas.length < TANDA_COL) return todas;
+    function tanda(de) {
+      return sb.from('docs').select(campos).eq('col', col).order('id').range(de, de + TANDA_COL - 1)
+        .then(function (t) { if (t.error) throw error(t.error); return t.data || []; });
+    }
+    var todas = await tanda(0);
+    if (todas.length < TANDA_COL) return todas;
+    /* Las que siguen, de 4 en 4 al mismo tiempo (revisión de la noche del 16-nov-2026): antes cada tanda esperaba a la
+       anterior y Variaciones bajaba sus comentarios y sus estatus (más de 6,700 cada uno) en 7 tandas una tras otra cada
+       uno. Mismo orden por id y las mismas filas: se juntan en orden y se para en la primera que llega incompleta. */
+    for (var de = TANDA_COL; ; de += TANDAS_JUNTAS * TANDA_COL) {
+      var pide = [];
+      for (var i = 0; i < TANDAS_JUNTAS; i++) pide.push(tanda(de + i * TANDA_COL));
+      var rs = await Promise.all(pide);
+      for (var j = 0; j < rs.length; j++) {
+        todas = todas.concat(rs[j]);
+        if (rs[j].length < TANDA_COL) return todas;
+      }
     }
   }
 
@@ -2321,6 +2382,15 @@
   async function revisa(w) {
     try {
       if (w.doc) {
+        // la primera vez, la versión y el documento de una sola vez (revisión de la noche del 16-nov-2026: antes eran dos
+        // vueltas a la base por cada documento vigilado al abrir; la vista de la dirección vigila 7 al entrar)
+        if (w.firma === null) {
+          var r0 = await sb.from('docs').select('data,version,updated_at').eq('col', w.col).eq('id', w.id).maybeSingle();
+          if (r0.error) throw r0.error;
+          w.firma = r0.data ? r0.data.version + '|' + r0.data.updated_at : '-';
+          w.cb(foto(w.id, r0.data ? { data: r0.data.data, version: r0.data.version } : null));
+          return;
+        }
         var r = await sb.from('docs').select('version,updated_at').eq('col', w.col).eq('id', w.id).maybeSingle();
         if (r.error) throw r.error;
         var f = r.data ? r.data.version + '|' + r.data.updated_at : '-';
@@ -2396,10 +2466,10 @@
     if (col === 'virtual') return pausasVirtual();
     return {
       id: id, path: col + '/' + id,
-      get: async function () { return foto(id, await leer(col, id)); },
+      get: async function () { return foto(id, await P.leeDoc(col, id)); },
       set: async function (data) { await guardar(col, id, data); },
       update: async function (cambios) { var f = await leer(col, id); await guardar(col, id, mezcla(f ? f.data : {}, cambios)); },
-      delete: async function () { if (P.consulta) throw errConsulta(); var r = await sb.from('docs').delete().eq('col', col).eq('id', id); if (r.error) throw error(r.error); pronto(); },
+      delete: async function () { if (P.consulta) throw errConsulta(); var r = await sb.from('docs').delete().eq('col', col).eq('id', id); docOlvida(col, id); if (r.error) throw error(r.error); pronto(); },
       onSnapshot: function (cb, err) { return vigila({ doc: true, col: col, id: id, cb: cb, err: err, firma: null }); }
     };
   }
