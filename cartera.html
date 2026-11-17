@@ -1740,7 +1740,7 @@ function menuMas(){
 }
 
 /* ── vista resumen ── */
-function render(){
+function render(o){
   if(S.vista!=='res') return;
   armaBarra();
   const P3=pasa3(), base=P3.sinMod;
@@ -1761,7 +1761,7 @@ function render(){
   const pl=el('section'); pl.id='car-pend'; v.appendChild(pl); pintaPend(pl);
   v.appendChild(resumenArriba(base,rows,P3.sinAge));
   v.appendChild(tablaEmpresas(S.pend&&S.pend!=='pap'?rows.filter(r=>((PEND.emp.get(r.cli)||{})[S.pend]||0)>0):rows));
-  if(S.cliente!=null && !document.getElementById('ov').hidden) pintaModal();
+  if(!(o&&o.sinModal) && S.cliente!=null && !document.getElementById('ov').hidden) pintaModal();
   pintaAplAv(); aplPideSiHace();   // con muchas empresas, lo «Confirmado (CFDI)» se trae cuando algo de la pantalla ya lo usa (10-nov-2026)
 }
 /* lo de arriba (5-nov-2026, nueva vista que pidió Fernando: «ver tantos datos en una pantalla»): tres cifras (cuentas por
@@ -4106,7 +4106,28 @@ function aplDec(f,d){
   if(!f.uuid||!d.uuid) return null;
   return APL.dec.get(rfcDe(f)+'|'+f.parte+'|'+f.uuid.toUpperCase()+'|'+d.uuid.toUpperCase())||null;
 }
-function aplLimpia(){ APL.cache=new Map(); APL_IDX=null; }
+function aplLimpia(){ APL.cache=new Map(); APL_IDX=null; APL.rows=ROWS; }
+/* 17-nov-2026 (Fernando Cadengo: «los contadores se están quejando de que al guardar las sugerencias de aplicaciones, y
+   quitarlo tardan»): cada «✓ Aplicar», «✕ Quitar», «Solo esta» o «Regresar a lo sugerido», y cada minuto que alguien más
+   guardaba algo, borraba lo calculado de TODAS las empresas y la pantalla lo volvía a armar de un jalón (con una cartera
+   grande, segundos sin contestar). Lo de cada empresa solo depende de lo decidido en esa empresa (APL.dec, APL.porRfc y
+   APL.pp van por su RFC), así que solo se vuelven a calcular las empresas cuya huella cambió. Si cambiaron los renglones
+   (llegaron datos nuevos de la cartera) o es la primera vez, todo, como siempre. El mismo resultado. */
+function aplHuellas(rel,pp){
+  const h=new Map();
+  (rel||[]).forEach(x=>{ const k=String(x.rfc).toUpperCase();
+    h.set(k,(h.get(k)||'')+[x.parte,x.f,x.d,x.e,x.por,x.en,x.m,x.o].join('|')+';'); });
+  (pp||new Set()).forEach(r=>{ const k=String(r).toUpperCase(); h.set(k,(h.get(k)||'')+'#pp'); });
+  return h;
+}
+function aplLimpiaRfc(antes,ahora){
+  if(!antes||APL.rows!==ROWS){ aplLimpia(); return; }
+  const cambio=new Set();
+  antes.forEach((v,k)=>{ if(ahora.get(k)!==v) cambio.add(k); });
+  ahora.forEach((v,k)=>{ if(antes.get(k)!==v) cambio.add(k); });
+  if(!cambio.size) return;
+  [...APL.cache.keys()].forEach(ci=>{ const c=D.cli[ci]; if(!c||cambio.has(String(c[2]).toUpperCase())) APL.cache.delete(ci); });
+}
 /* las relaciones de todas las empresas, antes de pintar y por partes (13-nov-2026: render() las armaba de un jalón la primera
    vez, con «Por depurar», y la pantalla se quedaba sin contestar). Solo llena lo mismo que render() pediría (APL.cache, de
    aplEmp): si algo cambia mientras, aplLimpia() lo vuelve a vaciar como siempre y render() lo arma. */
@@ -4359,7 +4380,7 @@ const yoApl=()=>APL.ok&&!!APL.puede.cambiar&&!(window.PORTAL&&window.PORTAL.cons
 async function cargaApl(pq){
   let q; try{ q=await (pq||SB.rpc('cartera_apl')); }catch(e){ q={error:e}; }
   if(!q||q.error||!q.data){ APL.ok=false; APL.dec=new Map(); APL.pp=new Set(); APL.porRfc=new Map(); aplLimpia(); return false; }
-  const d=q.data; APL.ok=true; APL.puede=d.puede||{}; APL.firma=d.firma||null; APL.dec=new Map(); APL.porRfc=new Map();
+  const d=q.data, hAntes=APL.ok?APL.huella:null; APL.ok=true; APL.puede=d.puede||{}; APL.firma=d.firma||null; APL.dec=new Map(); APL.porRfc=new Map();
   // 263: m = cuánto se aplica en esa relación (lo guardó «Agotar»; sin m, lo que alcance) y o = 'agotar'; pp = las empresas
   // de los grupos cuyos anticipos son pagos parciales (sin regla de fecha)
   APL.pp=new Set((d.pp||[]).map(x=>String(x).toUpperCase()));
@@ -4371,22 +4392,43 @@ async function cargaApl(pq){
     const rs=[...new Set((d.rel||[]).map(x=>x.rfc))].filter(r=>!UUID_OK.has(r)&&(RANGO['k|'+r]||RANGO['p|'+r]));
     if(rs.length){ try{ await cargaUuids(rs); }catch(e){} }
   }
-  aplLimpia();
+  APL.huella=aplHuellas(d.rel,APL.pp);
+  aplLimpiaRfc(hAntes,APL.huella);
   return true;
 }
-/* guarda lo que decide el contador. items: [{rl, d, accion}] (d: el anticipo o nota de esa relación) */
+/* después de guardar: primero lo que se está viendo (la ventana de la empresa) y luego, ya pintado, lo de atrás (las
+   pilas «Por depurar», la tarjeta y la columna «Por aplicar»). La ventana se pinta una sola vez (antes, dos: render()
+   también la pintaba). Sin la ventana, render() como siempre. */
+function aplRepinta(){
+  if(S.cliente==null||!document.getElementById('modal')){ render(); return Promise.resolve(); }
+  pintaModal();
+  return new Promise(res=>{ let hecho=false;
+    const va=()=>{ if(hecho) return; hecho=true; setTimeout(()=>{ try{ render({sinModal:true}); }finally{ res(); } },0); };
+    try{ requestAnimationFrame(va); }catch(e){} setTimeout(va,120); });
+}
+/* guarda lo que decide el contador. items: [{rl, d, accion}] (d: el anticipo o nota de esa relación)
+   17-nov-2026: mientras guarda, el botón picado dice «Guardando…» y los demás de las relaciones esperan (un segundo clic ya
+   no manda otro guardado). */
+let APL_BTN=null, APL_GUARDA=false;
 async function aplPon(items,txt){
-  if(!yoApl()) return;
-  const f=items[0].rl.fac;
+  const btn=APL_BTN; APL_BTN=null;
+  if(!yoApl()||APL_GUARDA) return;
   const falta=items.some(x=>!x.rl.fac.uuid||!x.d.uuid);
   if(falta){ avisaArriba('Espera a que carguen los folios fiscales y vuelve a intentar.'); return; }
+  APL_GUARDA=true;
+  document.querySelectorAll('.aplr .acts button').forEach(b=>{ b.disabled=true; });
+  if(btn){ btn.textContent='Guardando…'; btn.setAttribute('aria-busy','true'); }
+  try{ await aplPonYa(items,txt); }finally{ APL_GUARDA=false; }
+}
+async function aplPonYa(items,txt){
+  const f=items[0].rl.fac;
   const p={rfc:rfcDe(f),items:items.map(x=>{ const cp=D.cp[x.rl.fac.cp]||['',''];
     return {parte:x.rl.fac.parte,tipo:x.rl.fac.tipo,rfc_cp:cp[0],contraparte:cp[1],
       fac:x.rl.fac.uuid,doc:x.d.uuid,folio_fac:folioDe(x.rl.fac),folio_doc:folioDe(x.d),accion:x.accion,
       monto:x.accion==='aplicar'&&x.monto>0.005?x.monto:undefined}; })};
   let q; try{ q=await SB.rpc('cartera_apl_pon',{p}); }catch(e){ q={error:e}; }
-  if(q.error){ avisaArriba('No se pudo guardar: '+msgErr(q.error)); return; }
-  await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+  if(q.error){ if(S.cliente!=null) pintaModal(); avisaArriba('No se pudo guardar: '+msgErr(q.error)); return; }
+  await cargaApl(); await aplRepinta();
   if(txt) avisaArriba(txt);
 }
 // la tarjeta de una relación (en el detalle de una factura, de un anticipo o de una nota)
@@ -4451,7 +4493,7 @@ function tarjetaRel(rl,desde){
   if(yoApl()){
     const a=el('div','acts');
     const listo=rl.fac.uuid&&rl.docs.every(d=>d.uuid);
-    const b=(txt,cls,fn,tit)=>{ const x=boton(txt,cls,fn); if(tit) x.title=tit; if(!listo){ x.disabled=true; x.title='Cargando los folios fiscales…'; } a.appendChild(x); };
+    const b=(txt,cls,fn,tit)=>{ const x=boton(txt,cls,()=>{ APL_BTN=x; fn(); }); if(tit) x.title=tit; if(!listo){ x.disabled=true; x.title='Cargando los folios fiscales…'; } a.appendChild(x); };
     const todos=acc=>rl.docs.map(d=>({rl,d,accion:acc,monto:acc==='aplicar'?reparto.get(d):undefined}));
     const sinLugar=rl.dec!=='aplicada'&&!rl.on&&si<=0.005;   // ni a la factura ni al anticipo o nota les queda algo libre
     // «Solo esta»: desde la factura, esta relación y las demás de la factura quitadas; desde un anticipo o nota, esta
@@ -4794,13 +4836,13 @@ async function guardaAgotar(ci,P,b,body,pie){
   }
   if(!err){
     cierraOv2();
-    await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+    await cargaApl(); await aplRepinta();
     avisaArriba('Listo: '+plural(items.length,'relación aceptada','relaciones aceptadas')+' (demostrativo). Se deshace con «Deshacer lo de Agotar».');
     return;
   }
   // si algo no se pudo, la ventana se queda abierta y lo dice arriba (cerrada, el mensaje quedaba atrás de la ventana de la
   // empresa y parecía que «no pasó nada»); el reparto se vuelve a calcular con lo que sí se guardó, para volver a intentar
-  await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+  await cargaApl(); await aplRepinta();
   const txt=(hechos?'Se guardaron '+F.int.format(hechos)+' de '+F.int.format(items.length)+' relaciones; lo demás no se pudo'
     :'No se guardó ninguna relación')+': '+msgErr(err)+'.';
   if(body&&pie&&document.getElementById('ov2box').contains(body)){
@@ -4819,7 +4861,7 @@ function ventanaDeshaz(ci,n){
   const b=boton('Deshacer','',async()=>{ b.disabled=true; b.textContent='Deshaciendo…';
     let q; try{ q=await SB.rpc('cartera_apl_deshaz_agotar',{p:{rfc}}); }catch(e){ q={error:e}; }
     if(q.error){ b.disabled=false; b.textContent='Deshacer'; avisaArriba('No se pudo deshacer: '+msgErr(q.error)); return; }
-    cierraOv2(); await cargaApl(); render(); if(S.cliente!=null) pintaModal();
+    cierraOv2(); await cargaApl(); await aplRepinta();
     const k=(q.data&&q.data.cambios)||0;
     avisaArriba('Listo: '+plural(k,'relación regresó','relaciones regresaron')+' a lo sugerido.'); });
   b.id='ago-deshaz'; pie.appendChild(b);
