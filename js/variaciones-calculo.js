@@ -16,7 +16,11 @@ if (window.PROFASE_VARCALC) return;
 async function desempaca(doc){
   if(!doc || !doc.b64) return null;
   if(typeof DecompressionStream==="undefined") throw new Error("este navegador no puede abrir los datos; actualízalo");
-  const bin = Uint8Array.from(atob(doc.b64), c=>c.charCodeAt(0));
+  /* Revisión nocturna del 17-nov-2026: los bytes con un ciclo simple (como las demás pantallas); antes
+     Uint8Array.from(atob(…), c=>…) llamaba una función por cada letra del paquete (megas) y trababa la pantalla al abrir.
+     Mismos bytes, mismo resultado. */
+  const s = atob(doc.b64), bin = new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++) bin[i] = s.charCodeAt(i);
   const st = new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"));
   return JSON.parse(await new Response(st).text());
 }
@@ -125,7 +129,10 @@ function construir(B, C){
   const ca = new Map(); for(const [ci,ct,p,c,a] of (B.ca||[])) ca.set(ci+"|"+ct+"|"+p, [c,a]);
   const sal = new Map(); for(const [ci,ct,p,v] of (B.sal||[])) sal.set(ci+"|"+ct+"|"+p, v);
   const esAcr = acreedoraDe(C, B);
-  const fmtP = v => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(v);
+  // el formato de pesos, hecho una sola vez (revisión nocturna del 17-nov-2026: antes se creaba uno nuevo en cada hallazgo, y
+  // con los datos de verdad eso solo era ~0.3 s de la traba al abrir Variaciones); mismo texto
+  const NF_P = new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0});
+  const fmtP = v => NF_P.format(v);
   const esNomina = cta => enRango(rangos, cta);
   const per = (y,m) => y+"-"+String(m).padStart(2,"0");
   const atras = (y,m,k) => { m -= k; while(m<1){ m += 12; y--; } return per(y,m); };

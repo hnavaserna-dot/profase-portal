@@ -431,6 +431,7 @@
     }).join('') + (!conocido && it.servicio ? '<option value="_fuera">' + esc(it.servicio) + ' (fuera de catálogo)</option>' : '');
   }
   function renderItems() {
+    $('#items').removeAttribute('data-reserva');   // el lugar apartado del primer servicio (cotizador.html), ya no hace falta
     $('#items').innerHTML = draft.items.map(function (it, i) {
       var s = S.servicios.find(function (x) { return x.id === it.sid; });
       var lista = s && cents(s.precio) !== cents(it.precio) ? '<div class="hint">Precio de lista: ' + money(s.precio) + '</div>' : '';

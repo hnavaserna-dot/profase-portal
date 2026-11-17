@@ -34,11 +34,32 @@
     if (!n.timeZone) n.timeZone = ZONA;
     return n;
   }
-  function DTF(locales, o) { return new Orig(locales, ajusta(o, false)); }
-  DTF.prototype = Orig.prototype;
-  DTF.supportedLocalesOf = Orig.supportedLocalesOf;
+  /* Un formato con las mismas opciones se hace una sola vez y se vuelve a usar (revisión de la noche del 17-nov-2026): muchas
+     pantallas hacían «new Intl.DateTimeFormat(…)» (o NumberFormat) en cada renglón de sus listas (fechas, horas, pesos), y
+     armar un formato cuesta mucho más que usarlo; con los datos de verdad, en Variaciones solo eso era ~0.3 s de la traba al
+     abrir. Un formato no cambia después de hecho, así que el mismo sirve para todos: el mismo texto, menos trabajo. */
+  function memoIntl(Base, ajustar) {
+    var CACHE = new Map(), MAX = 300;
+    function F(locales, o) {
+      var op = ajustar ? ajustar(o) : o, k = null;
+      try { k = JSON.stringify([locales === undefined ? null : locales, op === undefined ? null : op]); } catch (e) { k = null; }
+      if (k !== null) { var c = CACHE.get(k); if (c) return c; }
+      var f = new Base(locales, op);
+      if (k !== null && CACHE.size < MAX) CACHE.set(k, f);
+      return f;
+    }
+    F.prototype = Base.prototype;
+    F.supportedLocalesOf = Base.supportedLocalesOf;
+    return F;
+  }
+  var DTF = memoIntl(Orig, function (o) { return ajusta(o, false); });
   try { Object.defineProperty(DTF, '__h24', { value: true }); } catch (e) { DTF.__h24 = true; }
   try { Object.defineProperty(I, 'DateTimeFormat', { value: DTF, writable: true, configurable: true }); } catch (e) { I.DateTimeFormat = DTF; }
+  if (I.NumberFormat && !I.NumberFormat.__memo) {
+    var NF = memoIntl(I.NumberFormat, null);
+    try { Object.defineProperty(NF, '__memo', { value: true }); } catch (e) { NF.__memo = true; }
+    try { Object.defineProperty(I, 'NumberFormat', { value: NF, writable: true, configurable: true }); } catch (e) { I.NumberFormat = NF; }
+  }
   var D = Date.prototype;
   [['toLocaleString', true], ['toLocaleTimeString', true], ['toLocaleDateString', false]].forEach(function (m) {
     var f = D[m[0]];
@@ -50,7 +71,7 @@
   function fecha(d) { d = d instanceof Date ? d : new Date(d); return isNaN(d) ? null : d; }
   function partes(d) {
     var p = {};
-    new Orig('en-US', { timeZone: ZONA, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    DTF('en-US', { timeZone: ZONA, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
       .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
     return { anio: +p.year, mes: +p.month, dia: +p.day, hora: +p.hour % 24, min: +p.minute, seg: +p.second };
   }
@@ -2338,15 +2359,132 @@
     }
     return out;
   }
+  /* Lo que ya bajó una colección grande, guardado en este navegador (revisión de la noche del 17-nov-2026; lo mismo que
+     la Cartera del 11-nov-2026, ahora en la pieza común de `docs`). Variaciones / Movimientos bajaba completos cada vez
+     que se abría sus comentarios (var_com, 7.7 MB) y sus estatus (var_est, 2.8 MB), aunque nada hubiera cambiado. Ahora
+     lo que la base ya le entregó a esta persona se guarda aquí (IndexedDB, por persona: si entra otra en este navegador,
+     lo de antes se borra) con su huella; al abrir se le pregunta a la base la huella de la colección (docs_firmas con
+     p_corta, 402: unas letras) y, si es la misma, se usa lo guardado sin bajar nada; si no, se pide la lista de versiones
+     y se baja solo lo que cambió. Las reglas de la base siguen decidiendo qué ve cada quien: lo guardado es solo lo que la
+     base ya le dio y la huella la calcula la base con su sesión. Solo las colecciones de GUARDA_COLS. */
+  var GUARDA_COLS = { var_com: 1, var_est: 1 };
+  var SUBTLE = null;
+  try { if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') SUBTLE = crypto.subtle; } catch (e) { SUBTLE = null; }
+  async function huella(txt) {
+    var b = new Uint8Array(await SUBTLE.digest('SHA-256', new TextEncoder().encode(txt))), h = '';
+    for (var i = 0; i < b.length; i++) h += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return h;
+  }
+  /* la misma cadena que arma docs_firmas(…, p_corta) en la base: «id:versión:hora» en orden de id */
+  function firmaLarga(filas) { return filas.map(function (x) { return x.id + ':' + x.version + ':' + x.updated_at; }).join(','); }
+  var ALMACEN_COLS = (function () {
+    var BD = 'portal-cols-1', p = null;
+    function abre() {
+      if (!p) {
+        p = new Promise(function (res, rej) {
+          try {
+            if (typeof indexedDB === 'undefined') return rej(new Error('sin indexedDB'));
+            var r = indexedDB.open(BD, 1);
+            r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains('cols')) r.result.createObjectStore('cols'); };
+            r.onsuccess = function () { res(r.result); };
+            r.onerror = function () { rej(r.error); };
+            r.onblocked = function () { rej(new Error('bloqueada')); };
+          } catch (e) { rej(e); }
+        });
+        p.catch(function () { p = null; });
+      }
+      return p;
+    }
+    function tx(modo, fn) {
+      return abre().then(function (db) {
+        return new Promise(function (res) {
+          var t = db.transaction('cols', modo), st = t.objectStore('cols'), out, q = fn(st);
+          if (q) q.onsuccess = function () { out = q.result; };
+          t.oncomplete = function () { res(out); }; t.onerror = function () { res(undefined); }; t.onabort = function () { res(undefined); };
+        });
+      }).catch(function () { return undefined; });
+    }
+    return {
+      lee: function (k) { return tx('readonly', function (st) { return st.get(k); }); },
+      pon: function (k, v) { return tx('readwrite', function (st) { return st.put(v, k); }); },
+      borra: function () { return tx('readwrite', function (st) { return st.clear(); }); }
+    };
+  })();
+  function almacenCols() { try { return (P && P.__almacenCols) || ALMACEN_COLS; } catch (e) { return ALMACEN_COLS; } }
+  function uidCols() { try { return (P && P.uid) || null; } catch (e) { return null; } }
+  function guardable(col) { return !!(GUARDA_COLS[col] && SUBTLE && uidCols()); }
+  var DUENO_COLS = null;   // una sola revisión por página de quién es lo guardado
+  function duenoCols(uid) {
+    if (!DUENO_COLS || DUENO_COLS.uid !== uid) {
+      var A = almacenCols();
+      DUENO_COLS = { uid: uid, p: (async function () {
+        var d = await A.lee('__usuario');
+        if (d !== uid) { await A.borra(); await A.pon('__usuario', uid); return false; }
+        return true;
+      })().catch(function () { return false; }) };
+    }
+    return DUENO_COLS.p;
+  }
+  async function guardadaCol(col) {
+    var uid = uidCols();
+    if (!guardable(col) || !(await duenoCols(uid))) return null;
+    var g = await almacenCols().lee(uid + '|' + col);
+    return g && g.h && Array.isArray(g.filas) ? g : null;
+  }
+  /* la huella de la colección según la base (con la sesión de quien pregunta); null si no se pudo */
+  async function huellaBase(col) {
+    try {
+      var r = await sb.rpc('docs_firmas', { p_docs: [], p_cols: [col], p_corta: true });
+      return r && !r.error && r.data && r.data.cols && typeof r.data.cols[col] === 'string' ? r.data.cols[col] : null;
+    } catch (e) { return null; }
+  }
+  var GUARDA_PEND = {};
+  /* lo guarda un momento después (en un rato libre), con su huella; regresa una promesa que se cumple al terminar */
+  function guardaCol(col, filas) {
+    var uid = uidCols();
+    if (!guardable(col)) return Promise.resolve(false);
+    if (GUARDA_PEND[col]) clearTimeout(GUARDA_PEND[col].t);
+    return new Promise(function (fin) {
+      var hazlo = async function () {
+        try {
+          if (uidCols() !== uid) return fin(false);
+          var h = await huella(firmaLarga(filas));
+          await duenoCols(uid);
+          await almacenCols().pon(uid + '|' + col, { h: h, filas: filas, t: Date.now() });
+          fin(true);
+        } catch (e) { fin(false); }
+      };
+      var t = setTimeout(function () {
+        try { if (typeof requestIdleCallback === 'function') return requestIdleCallback(hazlo, { timeout: 4000 }); } catch (e) {}
+        hazlo();
+      }, 1500);
+      GUARDA_PEND[col] = { t: t };
+    });
+  }
   function colAlDia(col) {
-    var e = ESPEJO[col] || (ESPEJO[col] = { filas: null, vuelo: null });
+    var e = ESPEJO[col] || (ESPEJO[col] = { filas: null, vuelo: null, lista: null, t: 0, guardado: false });
     if (e.vuelo) return e.vuelo;
     e.vuelo = (async function () {
+      var g = null;
       if (!e.filas) {
-        var todo = await conCampos(function (c) { return todaLaCol(col, c); });
-        e.filas = {};
-        todo.forEach(function (x) { e.filas[x.id] = x; });
-        return todo;
+        if (!e.guardado) {
+          e.guardado = true;   // lo guardado solo se usa la primera vez (después ya vive en e.filas)
+          g = await guardadaCol(col).catch(function () { return null; });
+        }
+        if (g) {
+          var hb = await huellaBase(col);
+          e.filas = {};
+          g.filas.forEach(function (x) { e.filas[x.id] = x; });
+          if (hb && hb === g.h) { e.lista = g.filas; e.t = Date.now(); e.deGuardado = true; return g.filas; }   // nada cambió: no se baja nada
+          // si cambió algo (o no se pudo preguntar), abajo: la lista de versiones y solo lo que cambió
+        } else {
+          var todo = await conCampos(function (c) { return todaLaCol(col, c); });
+          e.filas = {};
+          todo.forEach(function (x) { e.filas[x.id] = x; });
+          e.lista = todo; e.t = Date.now(); e.deGuardado = false;
+          guardaCol(col, todo);
+          return todo;
+        }
       }
       var lista = await todaLaCol(col, 'id,version,updated_at');
       var faltan = lista.filter(function (x) { return !mismaFila(e.filas[x.id], x); }).map(function (x) { return x.id; });
@@ -2359,12 +2497,51 @@
       var filas = {};
       lista.forEach(function (x) { if (e.filas[x.id] && mismaFila(e.filas[x.id], x)) filas[x.id] = e.filas[x.id]; });
       nuevas.forEach(function (x) { filas[x.id] = x; });
+      var cambio = !!g || nuevas.length > 0 || lista.length !== Object.keys(e.filas).length;
+      e.deGuardado = !cambio && !!e.deGuardado;
       e.filas = filas;
-      return lista.map(function (x) { return filas[x.id]; }).filter(Boolean);
+      var out = lista.map(function (x) { return filas[x.id]; }).filter(Boolean);
+      e.lista = out; e.t = Date.now();
+      if (cambio) guardaCol(col, out);
+      return out;
     })();
-    e.vuelo.then(function () { e.vuelo = null; }, function () { e.vuelo = null; e.filas = null; });
+    e.vuelo.then(function () { e.vuelo = null; }, function () { e.vuelo = null; e.filas = null; e.lista = null; });
     return e.vuelo;
   }
+  /* lo último que se le entregó a la página de una colección, si es de hace menos de ms (la primera revisión de una
+     vigilancia, justo después de que la pantalla la pidió con get(): antes volvía a pedir la lista de versiones) */
+  function colReciente(col, ms) {
+    var e = ESPEJO[col];
+    return e && !e.vuelo && e.lista && e.filas && Date.now() - e.t < ms ? e.lista : null;
+  }
+  /* Precarga (revisión de la noche del 17-nov-2026): la vista, en un rato libre, pone al día lo guardado de una colección
+     de GUARDA_COLS (de fondo; si nada cambió, solo pregunta la huella) para que la pantalla abra con lo que ya está aquí.
+     No se queda con nada en su memoria: lo suelta en cuanto lo guardó. */
+  /* ¿aquí sí se precarga? La misma regla que la Cartera (js/cartera-datos.js): en la computadora y el iPad; en el celular
+     no, ni con «ahorro de datos» o datos del celular */
+  function precargaToca() {
+    try {
+      if (/iPhone|iPod|Android.*Mobile|Mobile.*Android|Windows Phone/i.test(navigator.userAgent || '')) return false;
+      if (Math.min(screen.width || 0, screen.height || 0) < 600) return false;
+      var c = navigator.connection;
+      if (c && (c.saveData || c.type === 'cellular')) return false;
+      return typeof indexedDB !== 'undefined';
+    } catch (e) { return false; }
+  }
+  var PRECARGA_CADA = 30 * 60 * 1000;
+  P.precargaCol = async function (col) {
+    if (!guardable(col) || !precargaToca()) return false;
+    try {
+      var llave = 'profase-colpre:' + uidCols() + ':' + col;
+      try { var t0 = +localStorage.getItem(llave) || 0; if (Date.now() - t0 < PRECARGA_CADA) return false; localStorage.setItem(llave, String(Date.now())); } catch (er) { /* sin almacenamiento */ }
+      if (ESPEJO[col] && (ESPEJO[col].filas || ESPEJO[col].vuelo)) return false;   // esta página ya la usa
+      var filas = await colAlDia(col), e = ESPEJO[col], ok = true;
+      if (!(e && e.deGuardado)) ok = await guardaCol(col, filas);   // lo que no cambió ya está guardado
+      e = ESPEJO[col];
+      if (e && !e.vuelo) delete ESPEJO[col];   // la vista no se queda con nada en su memoria
+      return ok;
+    } catch (er) { return false; }
+  };
   function fotoTxt(fila) {
     var leido = false, obj;
     return { id: fila.id, exists: true, data: function () {
@@ -2398,10 +2575,14 @@
         var fila = r.data ? await leer(w.col, w.id) : null;
         w.firma = f; w.cb(foto(w.id, fila));
       } else {
-        var filas = await colAlDia(w.col);   // solo baja lo que cambió (ver «Cada colección se baja una sola vez»)
-        var f2 = filas.map(function (x) { return x.id + ':' + x.version; }).join(',');
-        if (f2 === w.firma) return;
-        w.firma = f2; w.cb(fotosCol(filas));
+        // la primera vez, si la pantalla acaba de pedir la colección (get), lo mismo que ya le llegó (revisión de la noche
+        // del 17-nov-2026: antes volvía a pedir la lista completa de versiones al momento); después, solo lo que cambió
+        var filas = (w.firma === null && colReciente(w.col, 3000)) || await colAlDia(w.col);
+        var fu = firmaLarga(filas);
+        w.firmaC = filas.map(function (x) { return x.id + ':' + x.version; }).join(',');   // la de antes, si no hay huella
+        if (SUBTLE) { try { w.firmaH = await huella(fu); } catch (e) { w.firmaH = null; } }
+        if (fu === w.firma) return;
+        w.firma = fu; w.cb(fotosCol(filas));
       }
     } catch (e) { if (w.err) { try { w.err(error(e)); } catch (_) {} } }
   }
@@ -2411,6 +2592,10 @@
      revisar y a bajar. Antes era una petición por cada cosa vigilada (la vista de dirección, 9 cada 20 s). Si la
      función no está o falla, se regresa a preguntar una por una, como antes. */
   var FIRMAS = true;
+  /* La firma de cada colección, corta (revisión de la noche del 17-nov-2026, 402_noche_docs_firmas_cortas.sql): la huella
+     SHA-256 de «id:versión:hora,…» en lugar de la lista completa (con Variaciones abierta, ~0.5 MB cada 20 s). La página
+     arma la misma con lo que ya tiene (w.firmaH). Si la base todavía no la conoce, regresa a la de antes. */
+  var CORTA = !!SUBTLE;
   async function vuelta() {
     if (revisando) return;
     revisando = true;
@@ -2419,17 +2604,21 @@
       if (FIRMAS && ws.length > 1) {
         var docs = [], cols = [];
         ws.forEach(function (w) { if (w.doc) docs.push({ col: w.col, id: w.id }); else if (cols.indexOf(w.col) < 0) cols.push(w.col); });
-        var r = null;
-        try { r = await sb.rpc('docs_firmas', { p_docs: docs, p_cols: cols }); } catch (e) { r = null; }   // sin red: esta vuelta, una por una
+        var r = null, corta = CORTA && cols.length > 0;
+        try { r = await sb.rpc('docs_firmas', corta ? { p_docs: docs, p_cols: cols, p_corta: true } : { p_docs: docs, p_cols: cols }); } catch (e) { r = null; }   // sin red: esta vuelta, una por una
         if (r && !r.error && r.data && r.data.docs && r.data.cols) {
           var D = r.data.docs, C = r.data.cols;
           await Promise.all(ws.map(function (w) {
             var f = w.doc ? (D[w.col + '/' + w.id] || '-') : (C[w.col] || '');
-            return f === w.firma ? null : revisa(w);
+            var mia = w.doc ? w.firma : (corta ? w.firmaH : w.firmaC);
+            return f === mia ? null : revisa(w);
           }));
           return;
         }
-        if (r && r.error && !(r.status >= 500)) FIRMAS = false;   // la base no tiene la función: una por una desde ahora
+        if (r && r.error && !(r.status >= 500)) {
+          if (corta) CORTA = false;   // la base todavía no tiene la corta: la de antes desde ahora
+          else FIRMAS = false;        // la base no tiene la función: una por una desde ahora
+        }
       }
       await Promise.all(ws.map(revisa));
     } finally { revisando = false; }

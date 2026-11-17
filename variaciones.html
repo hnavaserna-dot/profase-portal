@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=ca3bac5751"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=015948266c"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6293bc1355"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=58e7d432bf"></script><script src="js/hallazgos.js?v=8df4fce408"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=a525b66ff5"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/bitacora.js?v=a62c64c724"></script><script src="js/seguimiento.js?v=015948266c"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/ocultos.js?v=6293bc1355"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/variaciones-calculo.js?v=e33cdfbc8a"></script><script src="js/hallazgos.js?v=8df4fce408"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -1228,12 +1228,23 @@ const ctaFuera = cta => S.ctasOff.has(cta) || (S.ctasSolo.size>0 && !S.ctasSolo.
 const mesNum = (y,m) => y*12 + m;
 const pmes = p => { const [y,m] = String(p||"").split("-").map(Number); return y && m ? mesNum(y,m) : 0; };
 const exclVigente = (s, per) => { const d = pmes(s.desde); return !!d && per>=d && (s.vig===0 || per < d+s.vig); };
-function exclusionDe(f){
+function exclusionCalc(f){
   const per = mesNum(f.anio, f.mes);
   for(const k of ["x|"+f.rfc+"|"+f.cta, "x|*|"+f.cta]){ const s = SIL[k]; if(s && exclVigente(s, per)) return s; }
   const s = SIL[f.caso];   // las de antes
   if(s && s.desdeMes && !s.desde && f.mes >= s.desdeMes && (s.vig===0 || f.mes < s.desdeMes + s.vig)) return s;
   return null;
+}
+/* Revisión nocturna del 17-nov-2026: lo de cada hallazgo se calcula una vez mientras las exclusiones no cambien (antes, en
+   cada pintada, otra vez para todos: con los datos de verdad, ~0.13 s de cada una). Si llegan otras exclusiones (SIL nuevo) o
+   la Gerencia excluye o regresa una aquí (exclOlvida), se vuelve a calcular. Mismo resultado. */
+let EXCL = new WeakMap(), EXCL_DE = null;
+const exclOlvida = () => { EXCL = new WeakMap(); EXCL_DE = null; };
+function exclusionDe(f){
+  if(!f || typeof f !== "object") return exclusionCalc(f);
+  if(EXCL_DE !== SIL){ EXCL = new WeakMap(); EXCL_DE = SIL; }
+  if(EXCL.has(f)) return EXCL.get(f);
+  const s = exclusionCalc(f); EXCL.set(f, s); return s;
 }
 const silenciado = f => !!exclusionDe(f);
 const MESN = p => { const [y,m] = String(p||"").split("-").map(Number); return y && m ? MESES_ES[m-1].toLowerCase()+" "+y : ""; };
@@ -1310,11 +1321,15 @@ function ordenar(xs){
   };
   /* optimización (5-nov-2026): un solo comparador del español para todo el orden (mismo resultado que localeCompare(…,"es"), más rápido) */
   const cmp = COLL_ES.compare;
-  return xs.slice().sort((x,y)=>{
-    const a=val(x), b=val(y);
+  /* revisión nocturna del 17-nov-2026: lo que ordena cada renglón se saca una vez (antes, en cada comparación: con el
+     estatus, buscar su lugar en la lista por cada par); el mismo comparador sobre los mismos valores, el mismo orden */
+  const ks = xs.map(val), ix = xs.map((_,i)=>i);
+  ix.sort((i,j)=>{
+    const a=ks[i], b=ks[j];
     if(typeof a==="string") return s*cmp(a,b);
-    return a===b ? cmp(x.cliente,y.cliente) : s*(a-b);
+    return a===b ? cmp(xs[i].cliente,xs[j].cliente) : s*(a-b);
   });
+  return ix.map(i=>xs[i]);
 }
 
 /* ---------- iconos ---------- */
@@ -3486,7 +3501,7 @@ async function excluir({alcance, rfc, cta, vig, desde, quita}){
     // si la que tenía es otra (de antes o del otro alcance), se regresa para que quede una sola
     if(quita && quita.caso!==caso) await regresaCuenta(quita, true);
     await dbNS.collection("var_casos").doc(idCaso(caso)).set(d);
-    SIL[caso] = d;
+    SIL[caso] = d; exclOlvida();
     return true;
   }catch(e){ return "No se pudo guardar la exclusión ("+((e&&e.code)||"error")+")."; }
 }
@@ -3498,7 +3513,7 @@ async function regresaCuenta(s, callado){
     await dbNS.collection("var_casos").doc(idCaso(s.caso))
       .set({vig:null, desdeMes:null, desde:null, caso:s.caso, alcance:s.alcance||null, cta:s.cta||null, rfc:s.rfc||null,
             por:userId||"", porNombre:MI_NOMBRE, ts:new Date().toISOString()});
-    delete SIL[s.caso];
+    delete SIL[s.caso]; exclOlvida();
     return true;
   }catch(e){ return callado ? true : "No se pudo regresar la cuenta ("+((e&&e.code)||"error")+")."; }
 }
