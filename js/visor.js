@@ -1,6 +1,6 @@
 /* Portal PROFASE · Documentos del WorkFlow: vista previa ahí mismo y descarga rápida (29-oct-2026, pedido de Daniel:
    «al picarle ver no pasa nada; la idea es que abras ahí mismo un preview del pdf; si le picas bajar tarda mucho;
-   eficientiza ambos»). Lo usan WorkFlow › Panel de trabajo (workflow-trabajo.html) y Access › WorkFlow (access-wf.html).
+   eficientiza ambos»). Lo usa WorkFlow › Panel de trabajo (workflow-trabajo.html; el Historial del Access se quitó el 17-nov-2026).
 
    - «Ver» abre el PDF dentro de la misma página, encima de la ficha (sin ventanas nuevas que el navegador bloquee).
      En computadora usa el lector de PDF del navegador; en celular, tableta o donde el navegador no lo trae, dibuja

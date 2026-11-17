@@ -1080,7 +1080,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       rr+=cierrePl(c.cierre);
       return '<div class="item ag t-cita" data-cita="'+esc(c.id)+'" role="button" tabindex="0"><span class="hr num">'+esc(c.inicio)+'<small>'+esc(c.fin)+'</small></span><div class="tt">'
         +esc(c.titulo)+'<span class="ss">'+esc([lugarTxt(c), c.cliente?'Cliente '+c.cliente:''].filter(Boolean).join(' · '))+'</span>'
-        +'<span class="pls">'+(c.personal?'<span class="pl per">'+ico('user')+'Personal</span>':'')+(enFamilia(c)?'<span class="pl fam">'+ico('home')+'En Familia</span>':'')+quien+(v?'<span class="pl vid">'+ico('video')+'Videollamada</span>':'')+inv+rr+'</span>'
+        +'<span class="pls">'+(c.personal?'<span class="pl per">'+ico('user')+(c.familia?'Personal con AKG':'Personal')+'</span>':'')+(enFamilia(c)?'<span class="pl fam">'+ico('home')+'En Familia</span>':'')+quien+(v?'<span class="pl vid">'+ico('video')+'Videollamada</span>':'')+inv+rr+'</span>'
         +(v&&v.estado==='abierta'&&hoy&&!(c.cierre&&c.cierre.cierre)?'<span class="acts"><button type="button" class="btn sm primary" data-entra="'+esc(v.id)+'">'+ico('video')+'Entrar'+(v.esperando?' · '+plural(v.esperando,'espera','esperan'):'')+'</button>'
           +(c.edito||mia?'<button type="button" class="btn sm" data-copia="'+esc(c.id)+'">Copiar invitación</button>':'')+'</span>':'')
         +'</div></div>';
@@ -1322,7 +1322,7 @@ button.kpi:focus-visible{outline-offset:-3px}
       if(!rr[1].error&&Array.isArray(rr[1].data)) ex=rr[1].data[0]||null;
     }catch(e){ if(!c) return; }
     var v=c.video, mia=enMiAgenda(c), hoy=c.dia===hoyK();
-    var h='<div class="cdet"><p class="eti">'+(c.personal?(c.estado==='cancelada'?'Personal · cancelado':'Personal'):c.estado==='cancelada'?'Cita cancelada':'Cita')+(mia?'':' · agenda de '+esc(yLista(agendaDe(c))))+'</p><h3>'+esc(c.titulo)+'</h3>'
+    var h='<div class="cdet"><p class="eti">'+(c.personal?(c.familia?'Personal con AKG':'Personal')+(c.estado==='cancelada'?' · cancelado':''):c.estado==='cancelada'?'Cita cancelada':'Cita')+(mia?'':' · agenda de '+esc(yLista(agendaDe(c))))+'</p><h3>'+esc(c.titulo)+'</h3>'
       +'<p class="cwhen">'+ico('clock')+'<span>'+esc(mayus(fLarga(parse(c.dia))))+' · <b class="num">'+esc(c.inicio)+'–'+esc(c.fin)+'</b>'
         +(c.cierre&&c.cierre.fin_original?' <small>(era hasta las '+esc(c.cierre.fin_original)+')</small>':'')+'</span></p>'
       +'<p class="cwhen">'+ico('pin')+'<span>'+esc(lugarTxt(c))+'</span></p>'
@@ -1543,15 +1543,21 @@ button.kpi:focus-visible{outline-offset:-3px}
     AG.per=EC.personal||AG.per;
     if(base.personal===true&&!PERS.length){ toast('Lo personal lo agendan H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva.'); return; }
     var esPer=function(u){ return PERS.some(function(x){ return x.usuario===u; }); };
+    /* «Personal con AKG» (Héctor Daniel Nava, 17-nov-2026, 13:32: «agrega algo que diga; personal con AKG; para que ese sí se
+       vaya a lo personal con AKG (icloud familiar)»; 408_familia_con_akg.sql): como «Personal» y además entra a su calendario
+       Familia de iCloud; «Personal» a secas se queda en el CRM. FAMU: de quién es Familia (si está ligado y yo agendo lo
+       personal); él tiene que ir. */
+    var FAMU=EC.personal&&EC.personal.puede===true&&EC.personal.familia?EC.personal.familia:null;
     // una cita nueva con un prospecto (desde su expediente) solo la agendan la dirección y Eva (119)
     if(!c&&base.pr&&EC&&EC.puede_prospecto===false){ toast('Las citas con un prospecto las agendan H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva.'); return; }
     // la cita nueva no trae nada escogido: se escoge el cliente, el prospecto o «Tema interno» (121); una que ya existía
     // sin cliente es un tema interno; la que viene del Chat con videollamada, con un cliente
-    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):c&&c.personal?'personal':base.personal===true?'personal':(base.pr?'prospecto':base.g||ahora||base.video===true?'cliente':c?'interno':'');
-    var TIPOS=[['cliente','Con un cliente'],['prospecto','Con un prospecto'],['interno','Tema interno'],['personal','Personal']].filter(function(t){
+    var tipo0=ex?(ex.prospecto?'prospecto':'cliente'):c&&c.personal?(c.familia&&FAMU?'akg':'personal'):base.personal===true?'personal':(base.pr?'prospecto':base.g||ahora||base.video===true?'cliente':c?'interno':'');
+    var TIPOS=[['cliente','Con un cliente'],['prospecto','Con un prospecto'],['interno','Tema interno'],['personal','Personal'],['akg','Personal con AKG']].filter(function(t){
       if(t[0]==='prospecto') return EC.puede_prospecto!==false||tipo0==='prospecto';
       if(t[0]==='cliente') return (EC.clientes||[]).length>0||tipo0==='cliente';
       if(t[0]==='personal') return PERS.length>0&&!ahora;
+      if(t[0]==='akg') return PERS.length>0&&!ahora&&!!FAMU&&esPer(FAMU);
       return true;
     });
     if(!tipo0&&TIPOS.length===1) tipo0=TIPOS[0][0];   // sin clientes ni prospectos que escoger: solo temas internos
@@ -1651,7 +1657,8 @@ button.kpi:focus-visible{outline-offset:-3px}
       function pintaQuiN(){
         var n=q('#cQuiN'), ag=agSel(), iv=invSel();
         if(tipoSel()==='personal'){ n=q('#cParaN'); if(n) n.textContent=!quienes().length?'Escoge para quién es: uno o los dos.'
-            :'Les queda directo en su agenda, con su recordatorio.'+(AG.fam.de&&quienes().indexOf(AG.fam.de)>=0?(AG.fam.de===yoU()?' Lo tuyo entra solo a tu calendario Familia de iCloud.':' Lo de H\u00e9ctor Daniel Nava entra solo a su calendario Familia de iCloud.'):''); return; }
+            :conAkg()&&quienes().indexOf(FAMU)<0?(FAMU===yoU()?'«Personal con AKG» va en tu agenda: márcate.':'«Personal con AKG» va en la agenda de H\u00e9ctor Daniel Nava: márcalo.')
+            :'Les queda directo en su agenda, con su recordatorio.'; return; }
         n.textContent=!quienes().length?'Escoge al menos a una persona.'
           :!ag.length?'Agrégate tú o a alguien con «En su agenda»: la cita tiene que quedar en la agenda de alguien.'
           :iv.length?'A quien dice «Confirma» le llega la invitación para que conteste si va.'
@@ -1726,7 +1733,8 @@ button.kpi:focus-visible{outline-offset:-3px}
       }
 
       /* con quién es: un cliente (grupo y razón social, o todo el grupo), un prospecto o un tema interno (121) */
-      function tipoSel(){ if(fijo) return 'fijo'; return (ov.querySelector('input[name=cTipo]:checked')||{}).value||''; }
+      function tipoSel(){ if(fijo) return 'fijo'; var v=(ov.querySelector('input[name=cTipo]:checked')||{}).value||''; return v==='akg'?'personal':v; }
+      function conAkg(){ var i=fijo?null:ov.querySelector('input[name=cTipo]:checked'); return !!(i&&i.value==='akg'&&FAMU); }
       var bGru=null, bEmp=null;
       function grupoSel(){ var v=bGru?bGru.valor()[0]:null; return v?(EC.clientes||[]).filter(function(x){ return String(x.g)===v; })[0]||null:null; }
       // al cambiar de grupo, las razones sociales son las de ese grupo y quedan «todas»
@@ -1756,7 +1764,8 @@ button.kpi:focus-visible{outline-offset:-3px}
         var n=q('#cTipoN'); if(n) n.textContent=t==='cliente'?'Queda en el expediente del cliente y lleva minuta: si se hizo, cada quien que estuvo agrega lo suyo.'
           :t==='prospecto'?'Queda en su expediente de prospecto y lleva minuta.'+(quienes().indexOf('daniel.nava')<0?' H\u00e9ctor Daniel Nava va a todas las de prospecto: lo invitamos.':'')
           :t==='interno'?'Solo con personal de PROFASE: sin videollamada con gente de fuera. Si es con alguien de fuera, escoge el cliente.'
-          :t==='personal'?'Solo lo ven H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva. Si alguien del despacho quiere agendarles algo a esa hora, solo le sale que ya tienen algo, con las horas; nunca el asunto.'
+          :t==='personal'&&conAkg()?'Como «Personal» y además entra '+(FAMU===yoU()?'a tu calendario Familia de iCloud':'al calendario Familia de iCloud de H\u00e9ctor Daniel Nava')+': asunto, día, horas y lugar (las notas no). Si se cambia o se cancela aquí, se cambia allá.'
+          :t==='personal'?'Solo lo ven H\u00e9ctor Daniel Nava, H\u00e9ctor Nava Ramos y Eva; no entra al calendario Familia de iCloud. Si alguien del despacho quiere agendarles algo a esa hora, solo le sale que ya tienen algo, con las horas; nunca el asunto.'
           :t===''?'Toda reunión con gente de fuera lleva su cliente: el grupo y una, varias o todas sus razones sociales.':'';
         pintaQuiN();
       }
@@ -1778,7 +1787,9 @@ button.kpi:focus-visible{outline-offset:-3px}
           cambio:function(v){ var g=grupoSel(), n=g?(g.e||[]).length:0; if(n>1&&v.length===n) bEmp.pon([]); }});
         pintaEmp(false);
         if(gru0&&gru0.g===g0) bEmp.pon(es0.map(String));
-        ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=function(){ pintaTipo(); revisa(); }; });
+        ov.querySelectorAll('input[name=cTipo]').forEach(function(i){ i.onchange=function(){
+          if(conAkg()){ var b=ov.querySelector('input[name=cPara][value="'+FAMU+'"]'); if(b) b.checked=true; }
+          pintaTipo(); revisa(); }; });
         ov.querySelectorAll('input[name=cPara]').forEach(function(i){ i.onchange=function(){ pintaTipo(); revisa(); }; });
         q('#cPro').onchange=pintaTipo;
       }
@@ -1793,7 +1804,11 @@ button.kpi:focus-visible{outline-offset:-3px}
           if(lugSel()==='cliente') return {msg:'Un tema interno es solo con personal de PROFASE: si es con el cliente, escoge el cliente.', foco:'input[name=cTipo]'};
           return {ok:true, liga:{tipo:'interno'}};
         }
-        if(t==='personal') return {ok:true, liga:{tipo:'personal'}};
+        if(t==='personal'){
+          if(!conAkg()) return {ok:true, liga:{tipo:'personal', familia:false}};
+          if(quienes().indexOf(FAMU)<0) return {msg:FAMU===yoU()?'«Personal con AKG» va en tu agenda: márcate en «¿Para quién?».':'«Personal con AKG» va en la agenda de H\u00e9ctor Daniel Nava: márcalo en «¿Para quién?».', foco:'input[name=cPara]'};
+          return {ok:true, liga:{tipo:'personal', familia:true}};
+        }
         if(t==='cliente'){
           var g=grupoSel(); if(!g) return {msg:'Escoge el grupo de la lista (escribe parte de su nombre).', foco:'#cGru'};
           // ninguna escogida es «todas las razones sociales» (todo el grupo); una o varias, esas (141)

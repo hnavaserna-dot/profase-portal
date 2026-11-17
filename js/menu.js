@@ -78,8 +78,7 @@
       { k: 'workflow-trabajo', v: 'wft', t: 'Panel de trabajo', d: 'Cada actividad con su ficha: estatus, comentarios, documentos y autorización.' },   // etapa 2 del Access (29-oct-2026)
       { k: 'clientes', v: 'cli', t: 'Avance por cliente', d: 'Cada cliente y cómo va su trabajo.' },
       { k: 'comentarios', v: 'com', t: 'Comentarios', d: 'Ideas de cambio para las pantallas del Workflow.' },
-      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo)
-      { k: 'access-wf', v: 'axwf', t: 'Historial del Access', d: 'Las actividades como quedaron en el Access: estatus, bitácora y documentos.' }] },   // antes Access › WorkFlow; al final (1-nov-2026)
+      { k: 'workflow-config', v: 'wfc', t: 'Configuración', d: 'Catálogo de actividades, plantillas y las plantillas de cada cliente.' }] },   // las pantallas de configuración del Access (30-oct-2026, pedido de Fernando Cadengo) · Historial del Access: quitado del menú para todos el 17-nov-2026 (Héctor Daniel Nava: «quita del menú… lo del historial de acces (de todos)»; todo ya está en el Panel de trabajo)
     /* «Agenda» (Héctor Daniel, 1-nov-2026, 04:54: «Si dale ya», a la propuesta de un menú propio para lo personal de
        todos los días): el Calendario, los Recordatorios y las Notificaciones salieron de «Administración». Aquí van
        también los Pendientes del expediente de clientes cuando se publiquen. Las claves no cambiaron. */

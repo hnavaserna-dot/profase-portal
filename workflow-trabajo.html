@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=a525b66ff5"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=2a671ca07d"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=95e13ec8d8"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=015948266c"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=a525b66ff5"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/visor.js?v=bb7a6c386d"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=95e13ec8d8"></script><script src="js/buscador.js?v=514b1d6650"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/seguimiento.js?v=015948266c"></script>
 <style>
 /* Portal PROFASE · WorkFlow › Panel de trabajo (etapa 2 de la migración del Access, 29-oct-2026): el panel y la
    ficha de cada actividad del WorkFlow como en el Access (frm_WorkflowPanel y frm_view_WFRAct_Edit), para trabajar:
@@ -466,6 +466,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     <select id="f-cont" aria-label="Contador asignado" multiple><option value="">Todos los contadores asignados</option></select>
     <select id="f-aut" aria-label="Autoriza" multiple><option value="">Todos los que autorizan</option></select>
     <select id="f-per" aria-label="Periodicidad"><option value="">Mensuales y anuales</option><option value="1">Mensuales</option><option value="2">Anuales</option></select>
+    <!-- 407 (17-nov-2026): la consulta de auditoría. Solo sale a quien la base le da empresas para consultar -->
+    <select id="f-aud" aria-label="Qué ves" hidden><option value="">Mis actividades</option><option value="aud">Consulta de auditoría</option></select>
     <button class="btn" type="button" id="limpia">Limpiar filtros</button>
   </div>
   <section id="pilas" hidden></section>
@@ -566,8 +568,12 @@ tr.fila:hover td{background:var(--navy-soft)}
         P.sb.rpc('cob_mias').then(null, nada),
         P.sb.rpc('wf_dev_estado').then(null, nada),
         P.sb.rpc('wf_proy_estado').then(null, nada),
-        P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999).then(null, nada)]);
-      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7];
+        P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999).then(null, nada),
+        // 407: las empresas que ve solo para consultar (auditoría); a quien no es del equipo de auditoría, vacío
+        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_aud_mis_empresas').then(null, nada) : Promise.resolve({ data: [] })]);
+      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7], au = R0[8];
+      AUDS = {}; if (!au.error && Array.isArray(au.data)) au.data.forEach(function (x) { AUDS[x] = 1; });
+      HAY_AUD = Object.keys(AUDS).length > 0; $('f-aud').hidden = !HAY_AUD; if (!HAY_AUD) $('f-aud').value = '';
       VEO_RES = !v.error && v.data === true;
       if (!es.error && es.data) ENV = es.data;
       if (!ce.error && ce.data) CONF = ce.data;
@@ -576,7 +582,8 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (!pe.error && pe.data) PROY = pe.data;
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
-      if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.';
+      if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.'
+        + (HAY_AUD ? ' Las de la consulta de auditoría, solo para ver, en FILTROS › «Qué ves».' : '');
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
       $('gen-abre').hidden = !genero();
       $('dev-abre').hidden = !(DEV.crea && !CONSULTA);
@@ -592,6 +599,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       var hd = /^#dev-(\d{1,12})$/.exec(location.hash || ''); if (hd) abreDevCaso(+hd[1]);
       var hn = /^#devisr-(\d{1,12})-(\d{4})$/.exec(location.hash || ''); if (hn) abreDevNueva({ impuesto: 'isr', empresa: +hn[1], ejercicio: +hn[2] });
       var hp = /^#proy-(\d{1,12})$/.exec(location.hash || ''); if (hp) abreProyCaso(+hp[1]);
+      if (location.hash === '#aud') window.__verAud();
       if (location.hash === '#proy-nuevo') abreProyNuevo();
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
@@ -719,14 +727,16 @@ tr.fila:hover td{background:var(--navy-soft)}
       $(id).innerHTML = '<option value="">' + todos + '</option>' + lista.map(function (n) { var k = Array.isArray(n) ? n[0] : n, t = Array.isArray(n) ? n[1] : n; return '<option value="' + esc(k) + '">' + esc(t) + '</option>'; }).join('');
       ponVals(id, v.filter(function (x) { return ks.indexOf(x) >= 0; }));
     };
-    var u = function (f) { var o = {}; A.forEach(function (a) { var x = f(a); if (x) o[x] = 1; }); return Object.keys(o).sort(function (x, y) { return x.localeCompare(y); }); };
+    // 407: las opciones salen de lo que se ve en «Qué ves» (las de la auditoría no se mezclan con «Mis actividades»)
+    var AV = A.filter(enVista);
+    var u = function (f) { var o = {}; AV.forEach(function (a) { var x = f(a); if (x) o[x] = 1; }); return Object.keys(o).sort(function (x, y) { return x.localeCompare(y); }); };
     sel('f-pla', 'Todas las plantillas', u(plaDe));
     actividades();
     sel('f-resp', 'Todos los responsables', u(function (a) { return a.resp_nombre; }));
     sel('f-cont', 'Todos los contadores asignados', u(cont));
     sel('f-aut', 'Todos los que autorizan', u(function (a) { return a.aut_nombre; }));
     // Cliente (11-nov-2026): cada razón social, con su RFC y su grupo para encontrarla en el buscador de FILTROS
-    var cl = {}; A.forEach(function (a) { var k = cliDe(a); if (k && !cl[k]) cl[k] = (a.rs || a.rfc || k) + (a.rfc ? ' · ' + a.rfc : '') + (a.grupo && a.grupo !== a.rs ? ' · ' + a.grupo : ''); });
+    var cl = {}; AV.forEach(function (a) { var k = cliDe(a); if (k && !cl[k]) cl[k] = (a.rs || a.rfc || k) + (a.rfc ? ' · ' + a.rfc : '') + (a.grupo && a.grupo !== a.rs ? ' · ' + a.grupo : ''); });
     sel('f-cli', 'Todos los clientes', Object.keys(cl).map(function (k) { return [k, cl[k]]; }).sort(function (x, y) { return x[1].localeCompare(y[1]); }));
     var e = vals('f-est');
     $('f-est').innerHTML = '<option value="">Todos los estatus</option><option value="abiertas">Abiertas (por iniciar y en proceso)</option><option value="vencidas">Vencidas</option><option value="pausa">En pausa (por el cliente)</option>' + ORDEN_EST.map(function (k) { return '<option value="' + k + '">' + esc(EST[k]) + '</option>'; }).join('');
@@ -736,7 +746,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   function actividades() {
     var pl = vals('f-pla'), v = vals('f-act'), o = {};
     devMeses(); proyTipos();
-    A.forEach(function (a) { if (en(pl, plaDe(a))) o[a.actividad] = 1; });
+    A.forEach(function (a) { if (enVista(a) && en(pl, plaDe(a))) o[a.actividad] = 1; });
     var L = Object.keys(o).sort(function (x, y) { return x.localeCompare(y); });
     $('f-act').innerHTML = '<option value="">Todas las actividades</option>' + L.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
     ponVals('f-act', v.filter(function (x) { return L.indexOf(x) >= 0; }));
@@ -747,7 +757,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     var q = norm($('f-buscar').value.trim()), pl = vals('f-pla'), ac = vals('f-act'), r = vals('f-resp'), c = vals('f-cont'),
       au = vals('f-aut'), es = vals('f-est'), cl = vals('f-cli'), pe = +$('f-per').value || 0, dm = pl.indexOf(DEV_PLA) >= 0 || pl.indexOf(DEV_ISR) >= 0 ? $('f-dmes').value : '',
       pt = pl.indexOf(PROY_PLA) >= 0 ? $('f-ptipo').value : '';
+    var va = verAud();
     return A.filter(function (a) {
+      // 407: «Mis actividades» deja fuera lo que solo se ve por la auditoría; «Consulta de auditoría», solo eso
+      if (HAY_AUD && soloAud(a) !== va) return false;
       if (!en(pl, plaDe(a))) return false;
       if (dm && (plaDe(a) === DEV_PLA || plaDe(a) === DEV_ISR) && devMes(a) !== dm) return false;
       if (pt && plaDe(a) === PROY_PLA && proyTipo(a) !== pt) return false;
@@ -811,15 +824,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     var cola = es.length ? LISTA : abiertas;
     var per = $('f-mes').value ? MESES_L[+$('f-mes').value - 1] + ' ' + $('f-anio').value : 'Todo ' + $('f-anio').value;
     PROFASE_PILAS.pinta($('pilas'), {
-      titulo: ROL === 'contador' ? 'Tu trabajo · tus actividades' : 'Tu trabajo · las actividades',
+      titulo: verAud() ? 'Consulta de auditoría · solo para ver' : ROL === 'contador' ? 'Tu trabajo · tus actividades' : 'Tu trabajo · las actividades',
       meta: per + ' · ' + base.length + (base.length === 1 ? ' actividad' : ' actividades') + (base.length ? ' · ' + Math.round(100 * n[2] / base.length) + ' % terminadas' : ''),
       pilas: PILAS_W.map(function (p) {
         return { k: p.k, t: p.t, n: n[p.k], d: p.k === '2' ? pct(n[2]) : p.d, tono: p.tono, on: es.indexOf(p.k) >= 0, oculta: p.k === '3' && !n[3] && es.indexOf('3') < 0,
-          tag: p.k === 'vencidas' && n.vencidas && !CONSULTA && ROL === 'contador' ? 'Te toca' : '' };
+          tag: p.k === 'vencidas' && n.vencidas && !CONSULTA && ROL === 'contador' && !verAud() ? 'Te toca' : '' };
       }),
       // la pila deja solo ese estatus (si ya era solo ese, lo quita); en FILTROS se marcan varios
       alPicar: function (k) { var s = $('f-est'), e = vals('f-est'); ponVals('f-est', e.length === 1 && e[0] === k ? [] : [k]); s.dispatchEvent(new Event('change', { bubbles: true })); if (BAR && BAR.f) BAR.f.pinta(); },
-      boton: { t: CONSULTA ? 'Ver una por una' : es.length ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
+      boton: { t: CONSULTA || verAud() ? 'Ver una por una' : es.length ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
         alPicar: function () { if (!cola.length) return; COLA = cola.map(function (a) { return a.id; }); abre(COLA[0]); } },
       nota: es.length ? 'Abre la primera de la lista; con «Siguiente ›» pasas a la que sigue.' : 'Abre la primera de las que faltan (las vencidas primero y luego por fecha); con «Siguiente ›» pasas a la que sigue.'
     });
@@ -834,7 +847,9 @@ tr.fila:hover td{background:var(--navy-soft)}
         grupos: [
           { t: 'CLIENTE', campos: [d($('f-cli'), { t: 'CLIENTE', buscar: true })] },
           { t: 'ACTIVIDAD', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-pla'), { t: 'PLANTILLA' }), d($('f-act'), { t: 'ACTIVIDAD', buscar: true }), d($('f-dmes'), { t: 'MES O EJERCICIO QUE SE SOLICITA' }), d($('f-ptipo'), { t: 'TIPO DE PROYECTO' }), d($('f-per'), { t: 'PERIODICIDAD' })] },
-          { t: 'PERSONAS', campos: [d($('f-resp'), { t: 'RESPONSABLE' }), d($('f-cont'), { t: 'CONTADOR ASIGNADO' }), d($('f-aut'), { t: 'AUTORIZA' })] }],
+          { t: 'PERSONAS', campos: [d($('f-resp'), { t: 'RESPONSABLE' }), d($('f-cont'), { t: 'CONTADOR ASIGNADO' }), d($('f-aut'), { t: 'AUTORIZA' })] },
+          // 407: solo a quien tiene la consulta de auditoría (el campo se esconde con su <select>)
+          { t: 'QUÉ VES', campos: [d($('f-aud'), { t: 'QUÉ VES' })] }],
         limpiar: function () { $('limpia').click(); },
         resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' actividad' : ' actividades'); }
       } : null,
@@ -907,7 +922,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
   function respG(g) { return g.resps.length ? esc(g.resps[0]) + (g.resps.length > 1 ? ' <span class="rfc">+' + (g.resps.length - 1) + '</span>' : '') : '<span class="no">Sin responsable</span>'; }
   function filaAct(a, sub) {
-    var est = chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + (CUB[a.id] ? '<div><span class="tag az">Cubres a ' + esc(CUB[a.id].de) + '</span></div>' : '');
+    var est = chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + (CUB[a.id] ? '<div><span class="tag az">Cubres a ' + esc(CUB[a.id].de) + '</span></div>' : '')
+      + (soloAud(a) ? '<div><span class="tag az">Solo consulta (auditoría)</span></div>' : '');
     var resp = (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + (a.aut_nombre ? '<div class="rfc">Autoriza: ' + esc(a.aut_nombre) + '</div>' : '');
     var docs = a.n_docs ? '<span class="clip">' + esc(a.n_docs) + (a.n_docs === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>';
     var act = '<div>' + esc(a.actividad) + '</div><div class="rfc">' + esc(a.plantilla) + ' · paso ' + esc(a.secuencia) + (a.periodicidad === 2 ? ' · anual' : '') + '</div>';
@@ -970,6 +986,13 @@ tr.fila:hover td{background:var(--navy-soft)}
   function soyResp(a) { return (!!a.resp_usuario && a.resp_usuario === YO) || cubro(a, 'resp'); }
   function soyAut(a) { return (!!a.aut_usuario && a.aut_usuario === YO) || cubro(a, 'aut'); }
   function soyAsig(a) { return ROL === 'contador' && !!ASIGU[a.empresa_id] && ASIGU[a.empresa_id] === YO; }
+  // 407: la ve solo por la consulta de auditoría (no es responsable, no autoriza, no es el contador asignado ni la cubre)
+  var AUDS = {}, HAY_AUD = false;
+  function soloAud(a) { return HAY_AUD && !!AUDS[a.empresa_id] && !soyResp(a) && !soyAut(a) && !soyAsig(a) && !CUB[a.id]; }
+  function verAud() { return HAY_AUD && $('f-aud').value === 'aud'; }
+  function enVista(a) { return !HAY_AUD || soloAud(a) === verAud(); }
+  // desde el aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']('aud')): FILTROS › «Qué ves» en «Consulta de auditoría»
+  window.__verAud = function () { if (!HAY_AUD) return; $('f-aud').value = 'aud'; opciones(); mostrar = PAGINA; pinta(); if (BAR && BAR.f) BAR.f.pinta(); };
   function cierra2(a) { return a.aut_nombre ? soyAut(a) : soyResp(a); }   // quien termina o rechaza (además de gerentes y dirección)
   // las mismas reglas que la base (portal/sql/44_wf_trabajo_ajustes.sql); la base es la que manda
   function puedeEstatus(a, e) {
@@ -1081,9 +1104,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     cierraFicha();
     ABIERTA = id;
     if (COLA.indexOf(id) < 0) COLA = colaVisible();
-    var idx = COLA.indexOf(id), pasos = pasosDe(a), edita = puedeEditar(a);
-    var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a);
-    var envia = ENV.visible && !CONSULTA && ENVIABLES[a.actividad_id];
+    var aud = soloAud(a);   // 407: solo para ver (la base tampoco deja hacer nada más)
+    var idx = COLA.indexOf(id), pasos = pasosDe(a), edita = puedeEditar(a) && !aud;
+    var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a) && !aud;
+    var envia = ENV.visible && !CONSULTA && ENVIABLES[a.actividad_id] && !aud;
     var emes = CONF.edita && !CONSULTA;
     var sube = edita && (!a.reservado || VEO_RES);
     var oculta = a.reservado && !VEO_RES;
@@ -1116,15 +1140,16 @@ tr.fila:hover td{background:var(--navy-soft)}
       + (sube ? '<div class="drop" id="fe-drop"><b>Arrastra aquí tus archivos</b>o<br><button class="sg-b2" type="button" id="fe-escoge">Escoger archivos</button>'
         + '<input type="file" id="fe-arch" multiple hidden aria-label="Escoger documentos"><small id="fe-sube-msg">PDF, Excel, XML, fotos o lo que pida la actividad</small></div>' : '');
     var tabs = [];
-    if (a.dev_caso) tabs.push({ id: 'dev', t: 'Devolución', html: '<span id="dev-n" hidden></span><div id="dev-in"><div class="vacio">Revisando…</div></div>' });
-    if (a.proy_caso) tabs.push({ id: 'proy', t: 'Proyecto', html: '<div id="proy-in"><div class="vacio">Revisando…</div></div>' });
+    if (a.dev_caso && !aud) tabs.push({ id: 'dev', t: 'Devolución', html: '<span id="dev-n" hidden></span><div id="dev-in"><div class="vacio">Revisando…</div></div>' });
+    if (a.proy_caso && !aud) tabs.push({ id: 'proy', t: 'Proyecto', html: '<div id="proy-in"><div class="vacio">Revisando…</div></div>' });
     tabs.push({ id: 'docs', t: 'Documentos', nid: 'docs-n', html: docsTab });
     if (envia) tabs.push({ id: 'env', t: 'Envío', nid: 'env-n', html: '<div class="subir"><button class="btn acento" type="button" id="env-uno">Revisar y enviar al cliente</button><span class="rfc">' + esc(envNota()) + '</span></div>'
       + '<div id="env-uno-res"></div><div id="env-hist"><div class="vacio">Revisando…</div></div>' });
     tabs.push({ id: 'pasos', t: 'Pasos', n: otras.length, html: pasosTab });
     tabs.push({ id: 'bit', t: 'Bitácora', nid: 'bit-n', html: '<div id="bit-in"><div class="vacio">Revisando…</div></div>' });
     if (!tabs.some(function (x) { return x.id === TAB; })) TAB = 'com';
-    var antes = (CUB[a.id] ? '<div class="pzaviso" style="margin:0 0 12px"><b>La cubres:</b> ' + esc(CUB[a.id].de) + ' no está; la trabajas tú hasta el ' + esc(fecha(CUB[a.id].hasta)) + ' y al regresar vuelve a ' + esc(CUB[a.id].de) + '. El responsable y quien autoriza no cambian.</div>' : '')
+    var antes = (aud ? '<div class="pzaviso" style="margin:0 0 12px"><b>Solo consulta (auditoría):</b> la ves para consultar lo que se hizo. No la cambias, no comentas, no subes documentos y no cuenta como trabajo tuyo.</div>' : '')
+      + (CUB[a.id] ? '<div class="pzaviso" style="margin:0 0 12px"><b>La cubres:</b> ' + esc(CUB[a.id].de) + ' no está; la trabajas tú hasta el ' + esc(fecha(CUB[a.id].hasta)) + ' y al regresar vuelve a ' + esc(CUB[a.id].de) + '. El responsable y quien autoriza no cambian.</div>' : '')
       + (enPausa(a) ? '<div class="pzaviso" style="margin:0 0 12px"><b>En pausa' + (a.pausa_desde ? ' desde el ' + esc(fecha(diaMty(a.pausa_desde))) : '') + ':</b> ' + esc(a.pausa)
         + '. El cliente está en pausa (Panel › Pausas y motivos). Mientras siga así no cuenta como vencida y sí se puede trabajar. Al reactivarlo, su vencimiento Profase se recorre los días hábiles que estuvo en pausa.</div>' : '');
     BIT = { act: a.id };
@@ -1172,7 +1197,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       }
     });
     V = inst;
-    leePlatica(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes && !a.dev_caso && !a.proy_caso) pintaMes(a); if (pidePz) pintaPausa(a); if (a.dev_caso) pintaDev(a); if (a.proy_caso) pintaProy(a); pintaAnual(a);
+    leePlatica(a); pintaDocs(a); pintaBit(a); if (envia) pintaEnvios(a); if (emes && !a.dev_caso && !a.proy_caso) pintaMes(a); if (pidePz) pintaPausa(a); if (a.dev_caso && !aud) pintaDev(a); if (a.proy_caso && !aud) pintaProy(a); if (!aud) pintaAnual(a);
   }
   /* Estrategias fiscales (329_estrategias_fiscales.sql; Héctor Daniel Nava, 9-nov-2026, «4) sí»): la «Declaración anual» (37)
      de un cliente con una estrategia fiscal «En uso» sin lo usado de su ejercicio no se termina. La base lo detiene
@@ -1202,7 +1227,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ABIERTA !== a.id || !V) return;
     if (r.error || !r.data) { V.platica({ hilo: [], puede: false, noPuede: 'No se pudieron leer los comentarios. Cierra la ficha y vuelve a abrirla.' }); return; }
     PLAT = { act: a.id, hilo: platDe(r.data) };
-    V.platica({ hilo: PLAT.hilo, puede: !!r.data.puede, yo: r.data.yo || '' });
+    V.platica({ hilo: PLAT.hilo, puede: !!r.data.puede && !soloAud(a), yo: r.data.yo || '' });   // 407: la auditoría solo lee (la base también le dice 'ver')
     BIT.com = PLAT.hilo; bitPinta(a);
   }
   async function platCambia(a, fn, args) {
@@ -2734,13 +2759,15 @@ tr.fila:hover td{background:var(--navy-soft)}
   $('f-mes').addEventListener('change', function () { cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; }); });
   $('f-pla').addEventListener('change', function () { actividades(); mostrar = PAGINA; pinta(); });
   ['f-buscar', 'f-cli', 'f-dmes', 'f-ptipo', 'f-act', 'f-resp', 'f-cont', 'f-aut', 'f-est', 'f-per'].forEach(function (k) { $(k).addEventListener(k === 'f-buscar' ? 'input' : 'change', function () { mostrar = PAGINA; pinta(); }); });
+  // 407: «Qué ves» cambia también las opciones de los demás filtros (cada vista con sus clientes, plantillas y personas)
+  $('f-aud').addEventListener('change', function () { opciones(); mostrar = PAGINA; pinta(); if (BAR && BAR.f) BAR.f.pinta(); });
   $('limpia').onclick = function () {
-    ['f-buscar', 'f-dmes', 'f-ptipo', 'f-per'].forEach(function (k) { $(k).value = ''; });
+    ['f-buscar', 'f-dmes', 'f-ptipo', 'f-per', 'f-aud'].forEach(function (k) { $(k).value = ''; });
     VARIOS.forEach(function (k) { ponVals(k, []); });
     fijoBorra();
     // el periodo regresa al de siempre (el mes contable que se trabaja)
     var y0 = $('f-anio').value, m0 = $('f-mes').value; periodos();
-    actividades(); mostrar = PAGINA; pinta();
+    opciones(); mostrar = PAGINA; pinta();
     if ($('f-anio').value !== y0 || $('f-mes').value !== m0) cargaPeriodo().catch(function () { $('error').hidden = false; $('error').textContent = 'No se pudo leer ese periodo.'; });
     fijoGuarda();
   };
