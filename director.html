@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="1f29dd8bc244"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Dirección</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+})();</script><meta name="portal-version" content="4ac8682a1091"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Dirección</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 #refresh,#w-refresh{display:none!important}
 .asof::after{content:' · se actualiza sola';font-weight:400}
 /* ---- Pantallas (regla de Daniel, 29-oct-2026): las tres vistas (dirección, gerentes y contadores) se acomodan a
@@ -6683,8 +6683,24 @@ function pintarSync(){
      data-con-burbuja y la burbuja se queda (hoy, la minuta de una reunión; Daniel Nava, 5-nov-2026: «Tampoco veo
      la burbuja del chat; corrígela»). */
   const SELV='[aria-modal="true"],[role="dialog"],[role="alertdialog"],dialog[open]';
+  /* Revisión nocturna 17-nov-2026: con una pantalla grande (Variaciones, ~140 mil elementos) cada revisión recorría todo
+     (~9 ms en una laptop rápida, cada 400 ms, siempre). Ahora revisa solo si algo cambió desde la última (en la página o en
+     un marco a la vista: elementos, los atributos que deciden si una ventana se ve, una animación que terminó, un marco que cargó o la ventana que cambió de
+     tamaño) y, aunque nada cambie, cada 2 s. Lo mismo de antes: la misma revisión, las mismas reglas. */
+  let sucio=true,ultimo=0;
+  const VIGILA=new WeakSet(),ensucia=()=>{sucio=true};
+  function vigila(doc){
+    if(!doc||VIGILA.has(doc))return;
+    try{
+      new MutationObserver(ensucia).observe(doc.documentElement||doc,{subtree:true,childList:true,attributes:true,
+        attributeFilter:['class','style','hidden','open','role','aria-modal','data-con-burbuja']});
+      ['transitionend','transitioncancel','animationend','load'].forEach(t=>doc.addEventListener(t,ensucia,true));
+      VIGILA.add(doc);
+    }catch(err){}
+  }
   function ventanaEn(doc,n){
     if(!doc||n>3)return false;
+    vigila(doc);
     try{
       for(const d of doc.querySelectorAll(SELV)){
         if(d.closest('.rc-capa')||d.hasAttribute('data-con-burbuja')||!d.getClientRects().length)continue;
@@ -6700,7 +6716,12 @@ function pintarSync(){
     try{for(const f of document.querySelectorAll('iframe'))if(f!==fr&&f.getClientRects().length&&ventanaEn(f.contentDocument,1)){hay=true;break}}catch(err){}
     if(document.body.classList.contains('chf-aparta')!==hay)document.body.classList.toggle('chf-aparta',hay);
   }
-  setInterval(()=>{if(!document.hidden&&document.body.classList.contains('chf-en-bur'))aparta()},400);
+  vigila(document);addEventListener('resize',ensucia);
+  setInterval(()=>{
+    if(document.hidden||!document.body.classList.contains('chf-en-bur')){sucio=true;return}
+    const ahora=Date.now();if(!sucio&&ahora-ultimo<2000)return;
+    sucio=false;ultimo=ahora;aparta();
+  },400);
   new MutationObserver(()=>aplica()).observe(document.body,{attributes:true,attributeFilter:['data-view']});
   fr.addEventListener('load',()=>aplica());
   addEventListener('resize',()=>aplica());
