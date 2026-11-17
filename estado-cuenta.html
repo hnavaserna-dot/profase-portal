@@ -57,7 +57,12 @@
    banco) y la conciliación: cada depósito donde la columna H dice qué factura se pagó, contra los pagos del CRM. Nada se
    aplica solo: Eva (principalmente) o Daniel marcan «Está bien» con su nota; HNR solo ve. La base decide quién ve todo
    (tbc_estado(), portal/sql/130_tesoreria_espejo.sql); la página solo llama sus funciones tbc_*. Los nombres de las
-   compañías y de las hojas llegan con los datos. Excel y PDF con la marca PROFASE. */
+   compañías y de las hojas llegan con los datos. Excel y PDF con la marca PROFASE.
+   Pestaña «Resumen» (Héctor Daniel Nava, 17-nov-2026; portal/sql/410_tesoreria_resumen_libre.sql): lo que hay en el banco de
+   cada compañía (tbc_resumen_libre()) y, en la que paga las comisiones de la dirección, lo que queda libre después de restar
+   la Comisión HDN por pagar y lo de SV por entregar. Esas dos restas se le piden a Comisiones de dirección con sus mismas
+   funciones (cdir_pago_hdn y cdir_dev, que revisan quién las ve): son los mismos números de esa pantalla, ya cerrados a
+   cientos; aquí solo se restan. A un lado, lo que dice el Excel, para ver si coincide. Nada se guarda. */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
   --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
@@ -198,6 +203,23 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
 .facs{width:100%;font-size:13px}
 #k-sal{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
 #k-sal .v{font-size:22px;overflow-wrap:normal;white-space:nowrap}
+/* Resumen: una tarjeta por compañía, concepto e importe; lo que se abre (los meses, lo de SV) va debajo de su renglón */
+#k-res{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+#k-res .v{font-size:22px;overflow-wrap:normal;white-space:nowrap}
+#k-res .kpi.lib{border-color:var(--accent);background:var(--accent-soft)}
+.rt>tbody>tr>td{vertical-align:top;padding:10px 14px}
+.rt>tbody>tr>td.c{overflow-wrap:anywhere}
+.rt>tbody>tr>td.monto{font-size:15px;font-weight:600}
+.rt>tbody>tr.tot>td.monto{font-size:17px}
+.rt>tbody>tr.sub>td{border-top:0;padding-top:0}
+.rt details>summary{cursor:pointer;color:var(--navy);font-weight:700;font-size:12.5px;text-decoration:underline;text-underline-offset:2px;width:max-content;max-width:100%}
+:root[data-theme="dark"] .rt details>summary{color:var(--accent-ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .rt details>summary{color:var(--accent-ink)}}
+.rt details>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rt details .tabla{border:1px solid var(--line);border-radius:10px;margin:8px 0 4px}
+.rt details table{font-size:13px}
+.res-n{padding:12px 14px 14px;display:grid;gap:10px}
+@media (max-width:700px){.rt table.resp td .chip{align-self:flex-start}}
 .acc-nota{width:100%;min-height:64px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 9px;margin:6px 0 10px;resize:vertical}
 .chk-l{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
 .chk-l input{width:18px;height:18px;accent-color:var(--navy)}
@@ -226,10 +248,19 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
 
   <div id="todo" hidden>
     <div class="tabs prin" role="tablist" aria-label="Estado de cuenta bancario">
+      <button type="button" role="tab" data-pt="res" aria-selected="false">Resumen</button>
       <button type="button" role="tab" data-pt="con" aria-selected="true">Conciliación <span class="cta" id="n-con">0</span></button>
       <button type="button" role="tab" data-pt="sal" aria-selected="false">Saldos</button>
       <button type="button" role="tab" data-pt="hoj" aria-selected="false">Hojas del Excel</button>
     </div>
+
+    <!-- ===== Resumen: lo que hay en el banco y lo que queda libre ===== -->
+    <section id="s-res" hidden>
+      <div class="kpis" id="k-res"></div>
+      <div class="acciones" style="justify-content:flex-end;margin:12px 0"><button class="btn" type="button" data-excel id="x-res">Excel</button></div>
+      <div id="res-l"><div class="cargando">Cargando…</div></div>
+      <p class="pie">Los saldos son los de la hoja de saldos por día del Excel de Tesorería. Las restas las calcula el CRM con los mismos números de Comisiones de dirección; el Excel no cambia.</p>
+    </section>
 
     <!-- ===== Conciliación ===== -->
     <section id="s-con">
@@ -483,6 +514,95 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
       [4], [12, 16, 14, 14, 44, 60, 18, 40]);
   };
 
+  /* =============================== RESUMEN =============================== */
+  /* Lo que hay en el banco de cada compañía y lo que queda libre (17-nov-2026). Los saldos, de tbc_resumen_libre(); las dos
+     restas, de Comisiones de dirección con sus mismas funciones: lo por pagar de la Comisión HDN de cada mes abierto (ya
+     cerrado a cientos) y lo que toca entregar a SV (la pila «Por entregar a SV», también a cientos). Aquí solo se restan. */
+  var RL = null, RCOM = null, RSV = null, RFALLA = '';
+  function irA(k) { try { if (window.parent && window.parent !== window && window.parent.PORTAL_MENU) return window.parent.PORTAL_MENU.ir(k); } catch (e) { /* abierta sola */ } return false; }
+  function mesTxt(p) { var x = String(p || '').split('-'); return x.length < 2 ? String(p || '') : MESES_L[+x[1] - 1] + ' ' + x[0]; }
+  async function cargaRes() {
+    RL = await rpc('tbc_resumen_libre') || {};
+    RCOM = null; RSV = null; RFALLA = '';
+    if (!(RL.bancos || []).some(function (b) { return b.restas; })) return;
+    try {
+      var anio = +String(RL.hoy || HOY).slice(0, 4), c = await rpc('cdir_pago_hdn', { p_anio: anio }) || {}, meses = (c.meses || []).slice();
+      // los meses abiertos de años anteriores (lo por pagar es de todos los meses abiertos, no solo de este año)
+      var abre = [c.desde, c.cerrado_hasta].filter(Boolean).map(String).sort().pop(), a0 = abre ? +abre.slice(0, 4) : anio;
+      for (var a = anio - 1; a >= a0 && a >= anio - 5; a--) { var o = await rpc('cdir_pago_hdn', { p_anio: a }) || {}; meses = (o.meses || []).concat(meses); }
+      RCOM = { monto: Number((c.pendiente || {}).monto || 0), meses: meses.filter(function (m) { return Number(m.por_pagar) > 0; }), venir: c.por_venir || null };
+      var d = await rpc('cdir_dev', { p: {} }) || {}, r = d.sv_resumen || {};
+      RSV = { monto: Number(r.por_entregar_pago != null ? r.por_entregar_pago : r.por_entregar || 0), n: Number(r.n_por_entregar || 0),
+              grupos: (d.semanas || []).filter(function (x) { return Number(x.a_pagar) > 0; }) };
+    } catch (e) { RCOM = null; RSV = null; RFALLA = falla(e); }
+  }
+  // lo de una compañía: saldo, restas, libre y lo que dice el Excel
+  function cuentaRes(b) {
+    var saldo = b.saldo == null ? null : Number(b.saldo), con = !!b.restas && !!RCOM && !!RSV && saldo != null;
+    var com = con ? RCOM.monto : 0, sv = con ? RSV.monto : 0, libre = con ? Math.round((saldo - com - sv) * 100) / 100 : null;
+    var xl = b.excel_libre == null ? null : Number(b.excel_libre);
+    return { saldo: saldo, con: con, com: com, sv: sv, libre: libre, xl: xl, dif: con && xl != null ? Math.round((libre - xl) * 100) / 100 : null,
+             xlResta: xl != null && saldo != null ? Math.round((saldo - xl) * 100) / 100 : null };
+  }
+  function pintaRes() {
+    var B = (RL && RL.bancos) || [], k = '', h = '';
+    if (!B.length) { $('k-res').innerHTML = ''; $('res-l').innerHTML = '<div class="vacio">Todavía no hay saldos.</div>'; return; }
+    B.forEach(function (b) {
+      var c = cuentaRes(b);
+      k += '<div class="kpi"><div class="l">' + esc(b.nombre) + ' · en banco</div><div class="v">' + (c.saldo == null ? '—' : esc(dinero(c.saldo))) + '</div><div class="s">' + (b.fecha ? 'al ' + esc(fecha(b.fecha)) : 'sin saldo en el Excel') + '</div></div>';
+      if (c.con) k += '<div class="kpi lib"><div class="l">' + esc(b.nombre) + ' · libre</div><div class="v' + (c.libre < 0 ? ' neg' : '') + '">' + esc(dinero(c.libre)) + '</div><div class="s">ya sin la Comisión HDN ni lo de SV</div></div>';
+    });
+    $('k-res').innerHTML = k;
+    B.forEach(function (b) {
+      var c = cuentaRes(b);
+      h += '<div class="card"><header><div><h2>' + esc(b.nombre) + '</h2><div class="sub">'
+        + (c.saldo == null ? 'La hoja de saldos del Excel no trae a esta compañía.' : (b.origen === 'hoja' ? 'El último saldo de su hoja del banco' : 'El saldo de la hoja de saldos por día') + ', al ' + esc(fecha(b.fecha)) + (b.fecha && b.fecha < HOY ? ' (el último día que trae el Excel)' : '') + '.')
+        + '</div></div></header><div class="tabla"><table class="rt"><tbody>'
+        + '<tr><td class="c"><b>Saldo en banco</b></td><td class="monto">' + (c.saldo == null ? '—' : esc(dinero(c.saldo))) + '</td></tr>';
+      if (c.con) {
+        var nm = RCOM.meses.length, ng = RSV.grupos.length;
+        h += '<tr><td class="c"><b>Menos: Comisión HDN por pagar</b><div class="mut">' + (nm ? (nm === 1 ? 'De 1 mes' : 'De ' + nm + ' meses') + ', lo ya cobrado; cada mes cerrado a cientos.' : 'Nada por pagar.') + '</div></td><td class="monto">' + esc(dinero(-c.com)) + '</td></tr>';
+        if (nm) h += '<tr class="sub"><td colspan="2"><details><summary>Ver de qué meses</summary><div class="tabla"><table class="resp"><thead><tr><th>Mes</th><th class="monto">Comisión</th><th class="monto">A pagar</th><th class="monto">Ya pagado</th><th class="monto">Por pagar</th></tr></thead><tbody>'
+          + RCOM.meses.map(function (m) { return '<tr><td data-l="Mes" class="w">' + esc(mesTxt(m.periodo)) + (m.en_curso ? ' ' + chip('Mes en curso: se va sumando', 'az') : '') + '</td><td data-l="Comisión" class="monto">' + esc(dinero(m.comision)) + '</td><td data-l="A pagar" class="monto">' + esc(dinero(m.a_pagar)) + '</td><td data-l="Ya pagado" class="monto">' + esc(dinero(m.pagado)) + '</td><td data-l="Por pagar" class="monto"><b>' + esc(dinero(m.por_pagar)) + '</b></td></tr>'; }).join('')
+          + '</tbody></table></div><button class="lnk" type="button" data-ir="comisiones-direccion">Abrir Comisiones de dirección</button></details></td></tr>';
+        h += '<tr><td class="c"><b>Menos: SV por entregar</b><div class="mut">' + (ng ? (RSV.n === 1 ? 'De 1 devolución' : 'De ' + RSV.n + ' devoluciones') + ' que el cliente ya pagó; cerrado a cientos.' : 'Nada por entregar.') + '</div></td><td class="monto">' + esc(dinero(-c.sv)) + '</td></tr>';
+        if (ng) h += '<tr class="sub"><td colspan="2"><details><summary>Ver qué toca entregar</summary><div class="tabla"><table class="resp"><thead><tr><th>Cuándo toca</th><th>Devoluciones</th><th class="monto">Se le entrega</th></tr></thead><tbody>'
+          + RSV.grupos.map(function (g) { return '<tr><td data-l="Cuándo toca" class="w">' + (g.pago ? 'Pago SV #' + esc(g.pago) + ' programado' + (g.paga_el ? ' para el ' + esc(fecha(g.paga_el)) : '') : (g.paga_el ? esc(fecha(g.paga_el)) : 'Sin fecha')) + (g.toca ? ' ' + chip('Ya toca', 'ojo') : '') + '</td><td data-l="Devoluciones">' + esc(g.n) + '</td><td data-l="Se le entrega" class="monto"><b>' + esc(dinero(g.a_pagar)) + '</b></td></tr>'; }).join('')
+          + '</tbody></table></div><button class="lnk" type="button" data-ir="comisiones-direccion">Abrir Comisiones de dirección</button></details></td></tr>';
+        h += '<tr class="tot"><td class="c">Libre</td><td class="monto' + (c.libre < 0 ? ' neg' : '') + '">' + esc(dinero(c.libre)) + '</td></tr>';
+      }
+      h += '</tbody></table></div>';
+      var n = '';
+      if (b.restas && !c.con && c.saldo != null) n += '<div class="msg ojo">' + (RFALLA ? 'No se pudieron leer las comisiones (' + esc(RFALLA) + '). Se ve solo el saldo.' : 'Las restas de las comisiones no se pudieron calcular. Se ve solo el saldo.') + '</div>';
+      if (c.con && c.xl != null) {
+        var igual = Math.abs(c.dif) < 1;
+        n += '<div class="msg ' + (igual ? 'bien' : 'ojo') + '">En el Excel, el renglón «' + esc(b.excel_renglon || '') + '» dice <b>' + esc(dinero(c.xl)) + '</b>. '
+          + (igual ? 'Coincide con el CRM.' : 'El CRM da ' + esc(dinero(Math.abs(c.dif))) + (c.dif > 0 ? ' más' : ' menos') + ': el Excel resta ' + esc(dinero(c.xlResta)) + ' y el CRM, ' + esc(dinero(c.com + c.sv)) + ' (' + esc(dinero(c.com)) + ' de la Comisión HDN y ' + esc(dinero(c.sv)) + ' de SV).') + '</div>';
+      } else if (c.con) n += '<div class="mut">El Excel no trae su renglón de este saldo ya restado para ese día, así que no hay con qué compararlo.</div>';
+      if (c.con && RCOM.venir && Number(RCOM.venir.monto) > 0) n += '<div class="mut"><b>Por venir:</b> ' + esc(dinero(RCOM.venir.monto)) + ' de Comisión HDN de ' + (+RCOM.venir.facturas === 1 ? '1 factura' : esc(RCOM.venir.facturas) + ' facturas') + ' que el cliente todavía no paga. No se resta: ese dinero aún no está en el banco.</div>';
+      h += (n ? '<div class="res-n">' + n + '</div>' : '') + '</div>';
+    });
+    $('res-l').innerHTML = h;
+    $('res-l').querySelectorAll('[data-ir]').forEach(function (x) { x.onclick = function () { irA(x.getAttribute('data-ir')); }; });
+  }
+  $('x-res').onclick = function () {
+    var F = [];
+    ((RL && RL.bancos) || []).forEach(function (b) {
+      var c = cuentaRes(b);
+      F.push([b.nombre, 'Saldo en banco', b.fecha ? 'Al ' + fecha(b.fecha) : '', c.saldo == null ? '' : c.saldo]);
+      if (!c.con) return;
+      F.push([b.nombre, 'Menos: Comisión HDN por pagar', 'Cada mes cerrado a cientos', -c.com]);
+      RCOM.meses.forEach(function (m) { F.push([b.nombre, '   ' + mesTxt(m.periodo), m.en_curso ? 'Mes en curso' : 'Por pagar', -Number(m.por_pagar)]); });
+      F.push([b.nombre, 'Menos: SV por entregar', 'Cerrado a cientos', -c.sv]);
+      RSV.grupos.forEach(function (g) { F.push([b.nombre, '   ' + (g.pago ? 'Pago SV #' + g.pago + ' programado' : (g.paga_el ? 'Toca el ' + fecha(g.paga_el) : 'Sin fecha')), g.n + (+g.n === 1 ? ' devolución' : ' devoluciones'), -Number(g.a_pagar)]); });
+      F.push([b.nombre, 'Libre', '', c.libre]);
+      if (c.xl != null) { F.push([b.nombre, 'En el Excel', b.excel_renglon || '', c.xl]); F.push([b.nombre, 'Diferencia (CRM menos Excel)', '', c.dif]); }
+      if (RCOM.venir && Number(RCOM.venir.monto) > 0) F.push([b.nombre, 'Por venir (no se resta)', RCOM.venir.facturas + ' facturas por cobrar', Number(RCOM.venir.monto)]);
+    });
+    excel(this, 'Resumen de bancos ' + HOY, 'Resumen de bancos', ['Lo que hay en el banco y lo que queda libre', 'Exportado el ' + fecha(HOY)],
+      ['Compañía', 'Concepto', 'Detalle', 'Importe'], F, [4], [22, 40, 34, 18]);
+  };
+
   /* =============================== SALDOS =============================== */
   async function pintaSal() {
     var H = (EST.hojas || []).filter(function (h) { return h.saldo != null && h.ultima; })
@@ -566,7 +686,8 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
   function pestana(t) {
     PT = t;
     document.querySelectorAll('[data-pt]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-pt') === t ? 'true' : 'false'); });
-    $('s-con').hidden = t !== 'con'; $('s-sal').hidden = t !== 'sal'; $('s-hoj').hidden = t !== 'hoj';
+    $('s-res').hidden = t !== 'res'; $('s-con').hidden = t !== 'con'; $('s-sal').hidden = t !== 'sal'; $('s-hoj').hidden = t !== 'hoj';
+    if (t === 'res') { if (RL) pintaRes(); else cargaRes().then(pintaRes).catch(function (e) { RL = null; $('res-l').innerHTML = '<div class="vacio">No se pudo leer el resumen. Pica otra vez la pestaña para volver a intentar.</div>'; error(falla(e)); }); }
     if (t === 'sal') pintaSal().catch(function (e) { error(falla(e)); });
     if (t === 'hoj' && !HDAT) { pintaHojaSel(); cargaHoja().catch(function (e) { error(falla(e)); }); }
   }
@@ -589,17 +710,21 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
       $('consulta').hidden = !CONSULTA;
       $('desde').textContent = fecha(EST.desde);
       pintaDatos();
+      if (!(EST.hojas || []).length) { $('cargando').hidden = true; $('vacio').hidden = false; return; }
+      // la dirección abre en «Resumen» (lo que hay y lo que queda libre); Eva, en la conciliación, que es su trabajo. El
+      // resumen se pide junto con la conciliación y todo se enseña ya armado, para que nada brinque al cargar.
+      var dir = p.rol === 'director' || p.rolReal === 'director';
+      await Promise.all([cargaCon(), dir ? cargaRes().catch(function () { RL = null; }) : null]);
       $('cargando').hidden = true;
-      if (!(EST.hojas || []).length) { $('vacio').hidden = false; return; }
-      await cargaCon();
       pintaCias(); pintaCon();
+      if (dir) pestana('res');
       $('todo').hidden = false;
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   // al volver a la pestaña, lo más nuevo (sin preguntar mientras no se ve)
   document.addEventListener('visibilitychange', async function () {
     if (document.hidden || !EST || !EST.ve) return;
-    try { var e = await rpc('tbc_estado'); if (e && e.ve) { var nuevo = !EST.archivo || !e.archivo || e.archivo.procesado !== EST.archivo.procesado; EST = e; pintaDatos(); if (nuevo) { RES = null; HDAT = null; await cargaCon(); pintaCias(); pintaCon(); if (PT !== 'con') pestana(PT); } } } catch (err) {}
+    try { var e = await rpc('tbc_estado'); if (e && e.ve) { var nuevo = !EST.archivo || !e.archivo || e.archivo.procesado !== EST.archivo.procesado; EST = e; pintaDatos(); if (nuevo) { RES = null; HDAT = null; RL = null; await cargaCon(); pintaCias(); pintaCon(); if (PT !== 'con') pestana(PT); } else if (PT === 'res') { RL = null; pestana('res'); } } } catch (err) {}
   });
   arranca();
 })();
