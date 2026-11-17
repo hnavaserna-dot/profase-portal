@@ -332,6 +332,7 @@ tr.lote .d{color:var(--muted);font-weight:500;font-size:12.5px}
 .fac .x{border:0;background:var(--surface-2);color:var(--muted);border-radius:6px;padding:2px 7px;font-weight:700;font-size:12px;cursor:pointer}
 .fac .x:hover{background:var(--red-soft);color:var(--red)}
 .fac.desl{border-style:dashed;color:var(--muted);background:var(--surface-2);padding-right:9px}
+.rfc.varias{color:var(--ink);margin-top:4px;line-height:1.35}
 .mas{border:1px dashed var(--line-strong);background:var(--surface);border-radius:8px;padding:5px 10px;font-size:12.5px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap}
 :root[data-theme="dark"] .mas{color:#9FB6E0}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .mas{color:#9FB6E0}}
@@ -491,7 +492,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
           <button class="btn" type="button" id="l-auto" hidden>Ligar automático</button>
         </div>
       </header>
-      <div class="oculto" aria-hidden="true"><select id="l-ver" tabindex="-1"><option value="">Todos</option><option value="sin">Sin factura</option><option value="crm">Ligadas solas por el CRM</option><option value="desl">Desligadas</option><option value="nt">Sin terminar</option></select></div>
+      <div class="oculto" aria-hidden="true"><select id="l-ver" tabindex="-1"><option value="">Todos</option><option value="sin">Sin factura</option><option value="crm">Ligadas solas por el CRM</option><option value="desl">Desligadas</option><option value="varias">Les tocaban varias</option><option value="nt">Sin terminar</option></select></div>
       <div class="pastillas" id="l-past" role="group" aria-label="Cuáles"></div>
       <div id="lista-lig"></div>
       <div class="vacio" id="lig-vacia" hidden>No hay trabajo del WorkFlow en ese mes.</div>
@@ -889,7 +890,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
       setTimeout(function () { try { B.foco(); } catch (e) {} }, 40);
     });
   }
-  var PAST = [['', 'Todos'], ['sin', 'Sin factura'], ['crm', 'Ligó el CRM'], ['desl', 'Desligadas'], ['nt', 'Sin terminar']];
+  var PAST = [['', 'Todos'], ['sin', 'Sin factura'], ['varias', 'Les tocaban varias'], ['crm', 'Ligó el CRM'], ['desl', 'Desligadas'], ['nt', 'Sin terminar']];
   function pintaLig() {
     var G = (LIG && LIG.grupos) || [], F = (LIG && LIG.facturas) || [], ed = !!(LIG && LIG.editable) && !P.consulta, ver = $('l-ver').value;
     var dir = !!(LIG && LIG.autoriza);
@@ -898,13 +899,15 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
     var desl = function (g) { return (g.desl || []).length > 0; };
     var sinF = function (g) { return !(g.fac || []).length; };
     var nt = function (g) { return !g.term; };
-    var pasa = { '': function () { return true; }, sin: sinF, crm: delCrm, desl: desl, nt: nt };
+    // 405 (17-nov-2026): sin factura porque le tocaban varias y por su concepto no se supo cuál lo cobra
+    var varias = function (g) { return sinF(g) && (g.varias || []).length > 0; };
+    var pasa = { '': function () { return true; }, sin: sinF, varias: varias, crm: delCrm, desl: desl, nt: nt };
     var L = G.filter(pasa[ver] || pasa['']);
-    var nsin = G.filter(sinF).length, ncrm = G.filter(delCrm).length, ndesl = G.filter(desl).length, nnt = G.filter(nt).length;
+    var nsin = G.filter(sinF).length, nvar = G.filter(varias).length, ncrm = G.filter(delCrm).length, ndesl = G.filter(desl).length, nnt = G.filter(nt).length;
     $('lig-sub').textContent = G.length + (G.length === 1 ? ' trabajo' : ' trabajos') + ' · ' + nsin + ' sin factura'
       + (ncrm ? ' · ' + ncrm + (ncrm === 1 ? ' ligado solo por el CRM' : ' ligados solos por el CRM') : '')
       + (ndesl ? ' · ' + ndesl + (ndesl === 1 ? ' con una factura desligada' : ' con facturas desligadas') : '');
-    var cuenta = { '': G.length, sin: nsin, crm: ncrm, desl: ndesl, nt: nnt };
+    var cuenta = { '': G.length, sin: nsin, varias: nvar, crm: ncrm, desl: ndesl, nt: nnt };
     $('l-past').innerHTML = PAST.filter(function (p) { return !p[0] || cuenta[p[0]] || p[0] === ver; }).map(function (p) {
       return '<button type="button" data-v="' + p[0] + '" aria-pressed="' + (ver === p[0]) + '">' + esc(p[1]) + '<b>' + cuenta[p[0]] + '</b></button>';
     }).join('');
@@ -924,7 +927,9 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
           + '<td class="c-cli"><div class="rs">' + esc(g.rs) + '</div></td>'
           + '<td class="c-trab">' + esc(g.pln) + '<div class="rfc">' + (g.b ? '<span class="chip bl">' + esc('Bloque ' + g.b) + '</span> ' : '') + g.n + (g.n === 1 ? ' actividad' : ' actividades') + '</div></td>'
           + '<td class="c-est">' + (g.term ? '<span class="est2 t">Terminado</span>' : '<span class="est2 s">Sin terminar</span><div class="rfc">todavía no comisiona</div>') + '</td>'
-          + '<td class="c-fac">' + (facs || '<span class="est2 sf">Sin factura</span> ') + dsl + '</td>'
+          + '<td class="c-fac">' + (facs || '<span class="est2 sf">Sin factura</span> ') + dsl
+          + (varias(g) ? '<div class="rfc varias">Le tocaban ' + g.varias.map(function (f) { return esc(f.folio || 'sin folio') + (f.fecha ? ' (' + esc(fecha(f.fecha)) + ')' : ''); }).join(', ')
+                          + ' y por su concepto no se supo cuál lo cobra.' + (ed ? ' Escoge con «+ Ligar factura».' : '') + '</div>' : '') + '</td>'
           + '<td class="monto c-acc">' + (ed ? '<button class="mas" type="button" data-pon="' + i + '">+ Ligar factura</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     pintaRelig();
@@ -935,12 +940,14 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
       b.onclick = async function () {
         var g = L[+b.dataset.pon], quitadas = {}; (g.desl || []).forEach(function (d) { quitadas[d.id] = 1; });
         var ya = {}; (g.fac || []).forEach(function (f) { ya[f.id] = 1; });
+        var tocaba = {}; (g.varias || []).forEach(function (f) { tocaba[f.id] = 1; });   // 405: las que le tocaban, primero
         var op = function (f, propia) {
-          var nota = quitadas[f.id] ? (dir ? 'se desligó' : 'se desligó: pide el sí') : (propia ? 'mismo cliente' : '');
+          var nota = quitadas[f.id] ? (dir ? 'se desligó' : 'se desligó: pide el sí') : tocaba[f.id] ? 'le tocaba' : (propia ? 'mismo cliente' : '');
           return { v: String(f.id), t: (f.folio || 'sin folio') + ' · ' + fecha(f.fecha) + ' · ' + f.rs, nota: nota };
         };
-        var ops = F.filter(function (f) { return f.e === g.e && !ya[f.id]; }).map(function (f) { return op(f, true); })
-          .concat(F.filter(function (f) { return f.e !== g.e && !ya[f.id]; }).map(function (f) { return op(f, false); }));
+        var ops = F.filter(function (f) { return tocaba[f.id] && !ya[f.id]; }).map(function (f) { return op(f, f.e === g.e); })
+          .concat(F.filter(function (f) { return !tocaba[f.id] && f.e === g.e && !ya[f.id]; }).map(function (f) { return op(f, true); }))
+          .concat(F.filter(function (f) { return !tocaba[f.id] && f.e !== g.e && !ya[f.id]; }).map(function (f) { return op(f, false); }));
         if (!ops.length) { mal('No hay facturas para ligar a este trabajo.'); return; }
         var v = await eligeDlg('Ligar una factura', g.pln + ' · ' + g.rs, ops, 'Ligar', 'Escribe parte del folio o del cliente');
         if (!v) return;
@@ -1007,7 +1014,8 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   }
   // Desde un aviso de la campanita (acc_com_tab.js, PROFASE_ABRE['access-comisiones']): «?relig=<número>» abre esa
   // petición para contestarla; «?ver=<qué>» enseña lo nuevo que avisó Claude (regla de Daniel, 2-nov-2026, 12:27).
-  var ABRE = (function () { try { var u = new URLSearchParams(location.search); return { relig: u.get('relig') || '', ver: u.get('ver') || '' }; } catch (e) { return { relig: '', ver: '' }; } })();
+  // «?varias=AAAA-MM» (405, 17-nov-2026): el aviso de los trabajos a los que les tocaban varias facturas abre ese mes con su filtro.
+  var ABRE = (function () { try { var u = new URLSearchParams(location.search); return { relig: u.get('relig') || '', ver: u.get('ver') || '', varias: u.get('varias') || '' }; } catch (e) { return { relig: '', ver: '', varias: '' }; } })();
   var NUEVO = {
     'ligas-desligar': { tab: 'lig', el: 'nuevo-lig', texto: '<b>Nuevo:</b> lo que quitas aquí se queda «desligado» (el CRM ya no lo vuelve a ligar solo) y volver a ligar esa misma factura le pide el «sí» a Héctor Daniel Nava. Desde octubre de 2026 la factura de cada mes se liga sola con sus 3 bloques (cierre, Coordinación y nómina); el bloque de cada plantilla está en «Servicios de cada plantilla».' },
     'bloques': { tab: 'sw', el: 'pie-sw' }
@@ -1019,6 +1027,15 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
       var r = ((LIG && LIG.relig) || []).find(function (x) { return String(x.id) === ABRE.relig; });
       if (!r) { bien('Esa petición ya se contestó.'); return; }
       ilumina($('lista-relig').querySelector('[data-relig="' + r.id + '"]'));
+      return;
+    }
+    if (/^\d{4}-\d{2}$/.test(ABRE.varias)) {
+      await muestra('lig');
+      var ym = +ABRE.varias.slice(0, 4) * 100 + +ABRE.varias.slice(5, 7), s = $('l-mes');
+      if (!Array.prototype.some.call(s.options, function (o) { return +o.value === ym; })) { var o = document.createElement('option'); o.value = ym; o.textContent = mesTxt(ym); s.appendChild(o); }
+      s.value = ym; $('l-ver').value = 'varias'; await cargaLig();
+      if (!($('lista-lig').querySelector('tr.lg'))) { $('l-ver').value = ''; pintaLig(); bien('Esos trabajos ya tienen su factura.'); return; }
+      ilumina($('lista-lig').querySelector('tr.lg'));
       return;
     }
     var n = NUEVO[ABRE.ver];

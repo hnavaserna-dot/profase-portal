@@ -220,6 +220,13 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 .pi-mas{flex:none;width:30px;height:30px;margin-top:1px;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);color:var(--accent-ink);font-size:20px;font-weight:600;line-height:1;cursor:pointer;display:grid;place-items:center}
 .pi-mas:hover{border-color:var(--accent);background:var(--accent-soft)}
 .pi-mas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* el ojito de las pilas con montos (Héctor Daniel Nava, 17-nov-2026): tapadas siempre; el ojito las destapa */
+.pi-ojo{flex:none;width:30px;height:30px;margin-top:1px;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);color:var(--navy);cursor:pointer;display:grid;place-items:center;padding:0}
+.pi-ojo svg{width:17px;height:17px;display:block}
+.pi-ojo:hover{border-color:var(--navy);background:var(--navy-soft)}
+.pi-ojo[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.pi-ojo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pi-tapa{letter-spacing:.08em;color:var(--muted);white-space:nowrap}
 .pi-cab:disabled{cursor:default}
 .pi-cab:not(:disabled):hover h3{color:var(--accent-ink)}
 .pi-ico{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--navy-soft);color:var(--navy)}
@@ -275,6 +282,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   .pi-n{position:absolute;left:17px;top:-3px;min-width:18px;height:18px;padding:0 5px;font-size:11px;box-shadow:0 0 0 2px var(--surface)}
   .pi-va{display:none}
   .pi-mas{width:28px;height:28px;font-size:18px}
+  .pi-ojo{width:28px;height:28px}
   .pi-hoja{min-height:118px;padding:8px 9px}.pi-t{font-size:13.5px}.pi-fl{width:32px}
 }
 </style></head><body>
@@ -1276,7 +1284,25 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
      Inicio, al volver a la app y cada 2 minutos, y solo si el Inicio se ve. El «Hoy», «En 20 min» o «Venció» se recalcula
      cada 30 segundos sin preguntar a la base. Una pila: lo más urgente encima; se desliza con el dedo (o con las flechas
      y el teclado) y vuelve a empezar al llegar al final. */
-  var AG = { firma: null, pilas: [], idx: {}, top: {}, pidiendo: null, ult: 0, arrastre: false, repintar: false, noClic: 0, tn: 0 };
+  var AG = { firma: null, pilas: [], idx: {}, top: {}, pidiendo: null, ult: 0, arrastre: false, repintar: false, noClic: 0, tn: 0, ver: {} };
+  /* Las pilas con montos salen tapadas (Héctor Daniel Nava, 17-nov-2026, 10:08: «como hay veces que yo soy el que proyecta
+     al equipo; quiero que esta pila tenga un ojito para tapar y destapar; y que siempre esté tapado… tanto a mí como a
+     HNR»; escogió que también «Reembolsos por pagar» y que se vuelvan a tapar al salir del Inicio). Lo destapado vive
+     solo en esta página (AG.ver), nunca en el navegador ni en la base: al volver a cargar, al salir del Inicio
+     (ini_tab.js llama a INICIO.tapa) o al esconderse la app, se tapa otra vez. Una pila nueva con montos entra aquí. */
+  var TAPA = { comision: 1, reembolsos: 1 };
+  var OJO = { ver: SVGA_OJO('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+              tapar: SVGA_OJO('<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>') };
+  function SVGA_OJO(d) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
+  function tapada(k) { return !!TAPA[k] && !AG.ver[k]; }
+  var MONTO = /-?\$\s?\d[\d,]*(?:\.\d+)?/g;
+  function sinMonto(s) { return String(s == null ? '' : s).replace(MONTO, '$ •••••'); }
+  // tapa todo lo destapado (y vuelve a pintar solo si había algo destapado)
+  function tapaTodo() {
+    var habia = false; for (var k in AG.ver) if (AG.ver[k]) habia = true;
+    AG.ver = {};
+    if (habia) { if (AG.arrastre) AG.repintar = true; else pintaAgenda(); }
+  }
   var SVGA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
   var ICO = {
     pendientes: SVGA + '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9.5 3.5V5h5V3.5"/><path d="m8.5 11.5 2 2 4.5-4.5"/><path d="M8.5 17h7"/></svg>',
@@ -1383,9 +1409,11 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   }
   function hojaHtml(P, it, i) {
     var c = cuando(P.k, it), et = etiquetas(P.k, it), u = Math.min(c.u, et.u);
-    return '<button type="button" class="pi-hoja" data-u="' + u + '" data-it="' + i + '" aria-label="' + esc(c.t + '. ' + (it.t || '') + (it.s ? '. ' + it.s : '')) + '">'
-      + '<span class="pi-cuando ' + c.c + '">' + esc(c.t) + '</span><span class="pi-t">' + esc(it.t || '') + '</span>'
-      + (it.s ? '<span class="pi-s">' + esc(it.s) + '</span>' : '') + (et.h ? '<span class="pi-et">' + et.h + '</span>' : '') + '</button>';
+    var tp = tapada(P.k), t = tp ? sinMonto(it.t) : String(it.t || ''), s = tp ? sinMonto(it.s) : String(it.s || '');
+    var pinta = function (x) { return tp ? esc(x).replace(/\$ •••••/g, '<span class="pi-tapa">$ •••••</span>') : esc(x); };
+    return '<button type="button" class="pi-hoja" data-u="' + u + '" data-it="' + i + '" aria-label="' + esc(c.t + '. ' + (tp ? t.replace(/\$ •••••/g, 'monto tapado') : t) + (s ? '. ' + s : '')) + '">'
+      + '<span class="pi-cuando ' + c.c + '">' + esc(c.t) + '</span><span class="pi-t">' + pinta(t) + '</span>'
+      + (s ? '<span class="pi-s">' + pinta(s) + '</span>' : '') + (et.h ? '<span class="pi-et">' + et.h + '</span>' : '') + '</button>';
   }
   function cuenta(P) {
     var its = P.items || [], n = +P.n || its.length, g = 3;
@@ -1397,7 +1425,12 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     var h = '<article class="pila" data-k="' + esc(k) + '" aria-roledescription="pila" aria-label="' + esc((P.t || k) + ': ' + n) + '"><div class="pi-top">'
       + '<button type="button" class="pi-cab"' + (P.liga && ve(P.liga) ? ' title="Ver todo"' : ' disabled') + '><span class="pi-ico">' + (ICO[k] || ICO.otro) + '</span>'
       + '<h3>' + esc(P.t || k) + '</h3>' + (n ? cuenta(P) : '') + '<span class="pi-va" aria-hidden="true">›</span></button>'
-      + (P.nuevo && nuevoDe(k) ? '<button type="button" class="pi-mas" aria-label="Nuevo: ' + esc(String(P.t || k).toLowerCase()) + '" title="Nuevo">+</button>' : '') + '</div>';
+      + (P.nuevo && nuevoDe(k) ? '<button type="button" class="pi-mas" aria-label="Nuevo: ' + esc(String(P.t || k).toLowerCase()) + '" title="Nuevo">+</button>' : '')
+      + (TAPA[k] && its.length ? (function () {
+          var vis = !tapada(k), txt = (vis ? 'Tapar' : 'Ver') + ' los montos';
+          return '<button type="button" class="pi-ojo" aria-pressed="' + vis + '" aria-label="' + esc(txt + ': ' + String(P.t || k).toLowerCase()) + '" title="' + txt + '">'
+            + (vis ? OJO.tapar : OJO.ver) + '</button>';
+        })() : '') + '</div>';
     if (!its.length) return h + '<div class="pi-vacia">' + OK_SVG + '<span>' + esc(VACIA[k] || 'Al día.') + '</span></div></article>';
     h += '<div class="pi-mazo' + (its.length > 1 ? '' : ' uno') + '">' + (its.length > 1 ? '<span class="pi-capas" aria-hidden="true"><i></i>' + (its.length > 2 ? '<i></i>' : '') + '</span>' : '')
       + hojaHtml(P, its[i], i) + '</div>';
@@ -1439,7 +1472,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     // si llegó algo más urgente arriba, la pila vuelve a enseñar lo de arriba
     L.forEach(function (P) { var t = P.items && P.items[0] ? P.items[0].id : ''; if (AG.top[P.k] !== t) { AG.top[P.k] = t; delete AG.idx[P.k]; } });
     var foco = document.activeElement, fk = null, fc = '';
-    if (foco && $('pilas').contains(foco)) { var fp = foco.closest('.pila'); fk = fp && fp.getAttribute('data-k'); fc = foco.classList.contains('pi-fl') ? '.pi-fl[data-d="' + foco.getAttribute('data-d') + '"]' : foco.classList.contains('pi-cab') ? '.pi-cab' : foco.classList.contains('pi-mas') ? '.pi-mas' : '.pi-hoja'; }
+    if (foco && $('pilas').contains(foco)) { var fp = foco.closest('.pila'); fk = fp && fp.getAttribute('data-k'); fc = foco.classList.contains('pi-fl') ? '.pi-fl[data-d="' + foco.getAttribute('data-d') + '"]' : foco.classList.contains('pi-cab') ? '.pi-cab' : foco.classList.contains('pi-mas') ? '.pi-mas' : foco.classList.contains('pi-ojo') ? '.pi-ojo' : '.pi-hoja'; }
     $('pilas').innerHTML = L.map(pilaHtml).join('');
     $('ag-res').innerHTML = resumen(L);
     $('agenda').hidden = false;
@@ -1559,6 +1592,8 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       if (fl) { mueve(fl.closest('.pila').getAttribute('data-k'), +fl.getAttribute('data-d')); return; }
       var hj = e.target.closest('.pi-hoja');
       if (hj) { var P = pilaDe(hj.closest('.pila')), it = P && (P.items || [])[+hj.getAttribute('data-it')]; if (it) abre(it.liga || P.liga, it.x, P.liga); return; }
+      var oj = e.target.closest('.pi-ojo');   // el ojito: tapa o destapa los montos de esa pila
+      if (oj) { var ok = oj.closest('.pila').getAttribute('data-k'); if (TAPA[ok]) { AG.ver[ok] = !AG.ver[ok]; pintaAgenda(); } return; }
       var ms = e.target.closest('.pi-mas');
       if (ms) { var f = nuevoDe(ms.closest('.pila').getAttribute('data-k')); if (f) f(); return; }
       var cb = e.target.closest('.pi-cab');
@@ -1573,6 +1608,9 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     setInterval(function () { if (seVe()) retoca(); }, 30000);
     setInterval(function () { if (seVe() && PERFIL && Date.now() - AG.ult > 100000) cargaAgenda(); }, 120000);
     document.addEventListener('visibilitychange', function () { if (seVe() && PERFIL && Date.now() - AG.ult > 15000) cargaAgenda(); });
+    // los montos se vuelven a tapar en cuanto el Inicio deja de verse (otra pestaña, la app en segundo plano)
+    document.addEventListener('visibilitychange', function () { if (document.hidden) tapaTodo(); });
+    addEventListener('pagehide', tapaTodo);
     try { window.parent.addEventListener('profase:notif', function () { clearTimeout(AG.tn); AG.tn = setTimeout(function () { if (seVe() && PERFIL) cargaAgenda(); }, 1200); }); } catch (e) { /* sin página de afuera */ }
   })();
 
@@ -1662,7 +1700,9 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 
   // La página de afuera avisa al regresar al Inicio: «Tu agenda» se pone al día siempre (con su firma, casi nada viaja) y
   // las tarjetas, si pasó más de un minuto, sin parpadear
-  window.INICIO = { refresca: function () { if (!PERFIL) return; cargaAgenda(); if (Date.now() - CARGADO > 60000) corre(true); } };
+  // (y la de afuera llama a tapa al salir del Inicio: las pilas con montos regresan tapadas)
+  window.INICIO = { refresca: function () { tapaTodo(); if (!PERFIL) return; cargaAgenda(); if (Date.now() - CARGADO > 60000) corre(true); },
+                    tapa: tapaTodo };
 
   (async function () {
     try {
