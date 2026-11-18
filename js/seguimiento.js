@@ -54,7 +54,9 @@
      sinPlatica: true,               // la pantalla no tiene comentarios: sin la pestaña «Comentarios» (abre en la primera)
      PROFASE_SEG.pasos({titulo, nota, lista: [{id, t, marca, est: 'ok'|'mal'|'na'|'am'|'az'|'off'|'', aqui, title}]})
                                      // los pasos (o los meses, los años) en una línea; los que no son «aqui» llevan
-                                     // data-paso="id" para que la página los abra
+                                     // data-paso="id" para que la página los abra. La línea se queda donde la
+                                     // dejaste al abrir otro paso (y abre con el escogido a la vista), y al cambiar de
+                                     // paso o con ‹ › la ventana no parpadea (18-nov-2026; ver guardaPasos(), abajo)
      PROFASE_SEG.falta(titulo, [['si'|'no'|'va', '<html>'], …])   // «Qué falta…» en palabras, con ✓ ✕ →
      en el resumen, '<div class="r2"><span>Etiqueta <b>valor</b></span>…</div>' y '<span class="tg">…</span>'.
 
@@ -198,6 +200,7 @@
     + 'border:1px solid var(--sg-ln2);background:var(--sg-sf);box-shadow:var(--sg-sh);animation:sgpop .18s cubic-bezier(.2,.9,.3,1.2)}'
     + '@keyframes sgpop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}'
     + '@media (prefers-reduced-motion:reduce){.sg-modal{animation:none}}'
+    + '.sg-modal.sg-sigue{animation:none}'
     + '.sg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid var(--sg-ln);padding:16px 22px}'
     + '.sg-head .kick{margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--sg-na2)}'
     + '.sg-head h2{margin:0;font-size:19px;font-weight:600;letter-spacing:-.015em;color:var(--sg-ink)}'
@@ -531,9 +534,16 @@
         : (soloVer ? '' : '<button type="button" class="sg-b2" id="sOk" disabled>Guardar</button>')
       + (hayNav && nav.sig ? '<button type="button" class="sg-b1" id="sSig">' + (soloVer ? 'Siguiente ›' : 'Guardar y siguiente ›') + '</button>' : ''))
       + '</div></div></div></div>';
+    // sin parpadeo (18-nov-2026, Fernando Cadengo: «Si»): si es otro paso (o ‹ ›, o «Guardar y siguiente ›»), la ventana
+    // de antes se acaba de cerrar o sigue abierta: la nueva no vuelve a aparecer con su animación (por un instante se veía la
+    // lista de atrás); solo cambia lo de adentro. Las páginas abren la siguiente en el mismo clic: 300 ms sobran.
+    var sigue = !!host.querySelector('.segv') || Date.now() - ULT_CIERRE < 300;
+    guardaPasos(host);
     host.innerHTML = html;
     var scrim = host.querySelector('.segv');
     var q = function (s) { return scrim.querySelector(s); };
+    if (sigue) { var md0 = scrim.querySelector('.sg-modal'); if (md0) md0.classList.add('sg-sigue'); }
+    ponPasos(scrim);
     var despues = q('[data-despues]');
     if (o.despues) { if (typeof o.despues === 'string') despues.innerHTML = o.despues; else despues.appendChild(o.despues); }
     else despues.remove();
@@ -586,6 +596,7 @@
       if (cerrado) return; cerrado = true; host.__segFin = null;
       if (tic) clearInterval(tic);
       document.removeEventListener('keydown', alTeclado, true);
+      guardaPasos(host); ULT_CIERRE = Date.now();   // la línea de pasos, para la siguiente ficha (arriba, «se queda donde la dejaste»)
       host.innerHTML = '';
       ventanaAvisa();
       if (o.alCerrar) o.alCerrar();
@@ -746,11 +757,48 @@
     var L = o.lista || [];
     if (!L.length) return '';
     return '<div class="sg-pasos' + (o.chico ? ' chico' : '') + '"><div class="t"><span>' + esc(o.titulo || 'Pasos') + '</span>' + (o.nota ? '<span>' + esc(o.nota) + '</span>' : '') + '</div>'
-      + '<ol>' + L.map(function (x) {
+      + '<ol>' + L.map(function (x, i) {
         var aqui = !!x.aqui, pica = !aqui && x.id != null && x.id !== '';
-        return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
+        return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '" data-k="' + esc(x.id != null && x.id !== '' ? x.id : '#' + i) + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
           + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span>' + esc(x.t || '') + '</span></button></li>';
       }).join('') + '</ol></div>';
+  }
+  /* La línea de pasos se queda donde la dejaste (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de trabajo:
+     «Que se mantenga el scroll de las tareas en donde lo dejaste (que no se vaya al inicio de nuevo)»; a las dos preguntas,
+     «En todas» y «Si» a quitar el parpadeo). Al picar un paso, la página cierra la ficha y abre la del otro paso: la línea
+     nueva nacía al principio y había que volver a deslizarla. Ahora, al cerrar (o al abrir otra encima), cada línea guarda
+     hasta dónde estaba deslizada, con su «firma» (los pasos que trae); la siguiente ficha con la misma línea (el mismo
+     cliente y mes, con otro paso escogido) abre exactamente ahí. Si el paso escogido no se ve, o es otra línea (otro
+     cliente o mes, con ‹ › o desde la lista), abre con ese paso al centro. Una sola versión para todas las fichas con su
+     línea de pasos, meses o años (Panel de trabajo, Variaciones / Movimientos, Activo fijo, Cartera, Estrategias, Centauro,
+     Buzón tributario e IMPI). Solo en la memoria de esta página: nada va al navegador ni a la base. */
+  var PASOS_MEM = [], ULT_CIERRE = 0;
+  function pasosFirma(ol, i) {
+    return i + '#' + [].map.call(ol.children, function (li) { return li.getAttribute('data-k') || ''; }).join('|');
+  }
+  function guardaPasos(raiz) {
+    if (!raiz || !raiz.querySelectorAll) return;
+    [].forEach.call(raiz.querySelectorAll('.sg-pasos ol'), function (ol, i) {
+      if (!ol.children.length) return;
+      var f = pasosFirma(ol, i);
+      PASOS_MEM = PASOS_MEM.filter(function (m) { return m.f !== f; });
+      PASOS_MEM.push({ f: f, x: ol.scrollLeft });
+      if (PASOS_MEM.length > 30) PASOS_MEM.shift();
+    });
+  }
+  function ponPasos(raiz) {
+    if (!raiz || !raiz.querySelectorAll) return;
+    [].forEach.call(raiz.querySelectorAll('.sg-pasos ol'), function (ol, i) {
+      if (!ol.children.length || ol.scrollWidth <= ol.clientWidth + 2) return;
+      var f = pasosFirma(ol, i), m = PASOS_MEM.filter(function (z) { return z.f === f; })[0];
+      if (m) ol.scrollLeft = m.x;
+      var aq = ol.querySelector('li.aqui'); if (!aq) return;
+      // la posición del paso dentro de la línea (sin lo que ya esté deslizada ni la animación de la ventana)
+      var a = aq.offsetLeft - ol.children[0].offsetLeft, b = a + aq.offsetWidth, orilla = 12, x = ol.scrollLeft, w = ol.clientWidth;
+      if (b <= x || a >= x + w) ol.scrollLeft = Math.max(0, a - (w - aq.offsetWidth) / 2);   // no se ve: al centro
+      else if (a < x + orilla) ol.scrollLeft = Math.max(0, a - orilla);                       // se ve a medias: lo justo
+      else if (b > x + w - orilla) ol.scrollLeft = b + orilla - w;
+    });
   }
   /* «Qué falta…» en palabras: l = [['si'|'no'|'va', '<html>'], …] (el texto ya escapado por la página) */
   function falta(titulo, l) {
