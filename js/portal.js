@@ -403,7 +403,7 @@
     return px;
   }
   (function candadoConsulta() {
-    var desde = sb.from.bind(sb), rpc = sb.rpc.bind(sb);
+    var desde = sb.from.bind(sb), rpcBase = sb.rpc.bind(sb);
     sb.from = function (t) {
       var q = desde(t);
       if (P.consulta) ['insert', 'update', 'upsert', 'delete'].forEach(function (m) { q[m] = rechazo; });
@@ -430,6 +430,60 @@
        tome una respuesta de antes. Revisión nocturna del 13-nov-2026. */
     var JUNTA = { rh_estado: 1, cob_estado: 1, fac_estado: 1, cdir_estado: 1, exp_estado: 1, agenda_cierre_mias: 1 }, VAN = {};
     function alEntrar() { try { return performance.now() < 30000; } catch (e) { return false; } }
+    /* Una sola llamada para «lo que ve cada quien» al entrar (revisión nocturna del 18-nov-2026; portal/sql/416). Al abrir,
+       cada bloque de la página pregunta por su lado su estado (~40 llamadas sin parámetros en el mismo instante): en la
+       base suman ~350 ms, pero juntas hacían fila y cada una esperaba de 0.6 a 1.3 s («Comprobar real» del 17-nov). Las
+       que salen juntas (en 12 ms) se mandan en una o dos tandas (portal_estados): la base corre cada una con la sesión de
+       quien entró, con sus mismas reglas, y cada parte recibe exactamente lo mismo que si la hubiera pedido sola, con su
+       propia copia. Si una sale con error, si la base no la acepta en la tanda o si la tanda falla, esa parte la pide sola
+       como siempre (así el error llega tal cual). Solo en los primeros 30 s de la página y solo las de la lista (la base
+       revisa además su propia lista cerrada). */
+    var LOTE = { es_solo_consulta: 1, puedo_bajar_original: 1, puedo_actualizar: 1, recorridos_mios: 1, veo_cartera: 1, veo_caja: 1,
+      veo_af: 1, veo_cal: 1, cot_lee: 1, qc_yo: 1, cambios_rol: 1, cambios_avisos: 1, wf_conf_estado: 1, fac_estado: 1, cli_estado: 1,
+      rec_estado: 1, sc_yo: 1, chat_yo: 1, chat_sala_puedo: 1, chat_veo_conectados: 1, cdir_estado: 1, ceq_estado: 1, rh_estado: 1,
+      cob_estado: 1, tes_estado: 1, tbc_estado: 1, tdc_estado: 1, mul_estado: 1, bzt_estado: 1, cen_estado: 1, usr_estado: 1,
+      rcd_estado: 1, exp_estado: 1, cpf_estado: 1, fb_estado: 1, impi_estado: 1, cos_estado: 1, qchat_estado: 1, est_estado: 1,
+      pcad_estado: 1, ev_estado: 1, cumple_aviso: 1, cal_mis_eventos: 1, agenda_cierre_mias: 1 };
+    var COLA = null, SIN_LOTE = false, TANDA = 22;
+    function sola(fn) { return rpcBase(fn); }
+    function copiaDe(d) { return d != null && typeof d === 'object' ? JSON.parse(JSON.stringify(d)) : d; }
+    function manda(c) {
+      var fns = [];
+      c.forEach(function (x) { if (fns.indexOf(x.fn) < 0) fns.push(x.fn); });
+      if (fns.length < 2) { c.forEach(function (x) { x.ok(sola(x.fn)); }); return; }
+      var cada = function (r) {
+        var d = r && !r.error && r.data && typeof r.data === 'object' && !Array.isArray(r.data) ? r.data : null;
+        if (!d && r && r.error && /PGRST202|42883|portal_estados/.test(String(r.error.code || '') + ' ' + String(r.error.message || ''))) SIN_LOTE = true;
+        c.forEach(function (x) {
+          var e = d && d[x.fn];
+          if (e && Object.prototype.hasOwnProperty.call(e, 'd')) {
+            try { x.ok({ data: copiaDe(e.d), error: null, count: null, status: 200, statusText: 'OK' }); return; } catch (er) { /* abajo, sola */ }
+          }
+          x.ok(sola(x.fn));
+        });
+      };
+      Promise.resolve(rpcBase('portal_estados', { p_fns: fns })).then(cada, function () { cada(null); });
+    }
+    function sale() {
+      var c = COLA; COLA = null;
+      if (!c || !c.length) return;
+      var fns = [];
+      c.forEach(function (x) { if (fns.indexOf(x.fn) < 0) fns.push(x.fn); });
+      if (fns.length <= TANDA) { manda(c); return; }
+      // muchas: en dos tandas parejas que van al mismo tiempo (la base trabaja con dos a la vez)
+      var mitad = Math.ceil(fns.length / 2), a = fns.slice(0, mitad);
+      manda(c.filter(function (x) { return a.indexOf(x.fn) >= 0; }));
+      manda(c.filter(function (x) { return a.indexOf(x.fn) < 0; }));
+    }
+    function rpc(fn, args, opc) {
+      if (!SIN_LOTE && LOTE[fn] && sinArgs(args) && opc === undefined && alEntrar()) {
+        return new Promise(function (ok) {
+          if (!COLA) { COLA = []; setTimeout(sale, 12); }
+          COLA.push({ fn: fn, ok: ok });
+        });
+      }
+      return rpcBase.apply(null, arguments);
+    }
     function sinArgs(a) {   // sin nada o con {} (los ayudantes «rpc» de las páginas mandan {}): es la misma pregunta
       if (a === undefined || a === null) return true;
       if (typeof a !== 'object' || Array.isArray(a)) return false;
