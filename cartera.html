@@ -2159,7 +2159,7 @@ function encabezadoFicha(c){
   h.appendChild(tx);
   const wb=el('div','wbtns');
   const bx=el('button','minibtn xlbtn','Excel'); bx.type='button'; bx.setAttribute('data-excel','Excel');   // marca.js le pone su «PDF» al lado
-  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes y Proveedores (demostrativo)':S.tab==='can'?'Las canceladas que siguen en el Tablero QUO: un bloque por hoja':'Lo que está seleccionado en la ficha, con el formato del reporte CXC CXP';
+  bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes, Proveedores, Anticipos, Notas de crédito y Canceladas (demostrativo)':S.tab==='can'?'Las canceladas que siguen en el Tablero QUO: un bloque por hoja':'Lo que está seleccionado en la ficha, con el formato del reporte CXC CXP';
   bx.onclick=async()=>{ bx.disabled=true; bx.textContent='Generando…';
     try{ bx.textContent=S.tab==='apl'?await exportaAplicaciones(S.cliente):S.tab==='can'?await exportaCanceladas(S.cliente):await exportaReporteCxcCxp(S.cliente); }
     catch(e){ bx.textContent='No se pudo exportar'; bx.title=String(e&&e.message||e); }
@@ -4868,7 +4868,8 @@ function ventanaDeshaz(ci,n){
   abreOv2(sheet2('Deshacer lo de «Agotar»',D.cli[ci][1]+' · '+rfc,body,pie));
 }
 
-/* ── Excel de las aplicaciones (con su PDF al lado, js/marca.js): Resumen, Clientes y Proveedores. Cada factura vigente
+/* ── Excel de las aplicaciones (con su PDF al lado, js/marca.js): Resumen, Clientes y Proveedores (y, desde el 18-nov-2026,
+   Anticipos, Notas de crédito y Canceladas: ver «Las hojas Anticipos…», abajo). Cada factura vigente
    con saldo, con su relación, lo que se aplica y cómo quedaría (demostrativo). Una sola pieza para el de una empresa
    (pestaña Aplicaciones de su ventana) y para el de varias («Excel de aplicaciones» de la pantalla principal, 4-nov-2026,
    pedido de Fernando): las mismas cuentas (aplEmp, aplStats) y las mismas columnas; con varias empresas, además el grupo
@@ -4964,19 +4965,25 @@ async function exportaAplicaciones(ci){
   await cargaUuids([D.cli[ci][2]]);
   const c=D.cli[ci], MK=window.PROFASE_MARCA;
   const facs=aplFacsDe(docsVentana(ci).filter(pasaMF));
+  // los anticipos y notas (los mismos filtros de la ventana) y las canceladas (los de la pestaña «Canceladas»)
+  const ext=aplDocsDe(facs,docsVentana(ci).filter(r=>pasaMF(r)),false);
+  ext.can=await aplCanTrae([ci],cd=>cnPasaVentana(cd));
   const wb=MK.libro(EX,'Aplicaciones · '+c[1]);
   // Resumen
-  const ws=wb.addWorksheet('Resumen'); [34,16,16].forEach((w,i)=>ws.getColumn(i+1).width=w);
-  const f0=MK.encabezado(wb,ws,3,{titulo:'Aplicaciones de anticipos y notas de crédito',lineas:[c[1]+' · '+c[2],
+  const ws=wb.addWorksheet('Resumen'); [34,16,16,18,18].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const f0=MK.encabezado(wb,ws,5,{titulo:'Aplicaciones de anticipos y notas de crédito',lineas:[c[1]+' · '+c[2],
     'Corte del Tablero QUO: '+fmtD(M.generado)+' '+M.hora,'Demostrativo: no cambia saldos en QUO ni en la Cartera.']});
   ws.getRow(f0).values=['Concepto','Clientes','Proveedores']; MK.cabecera(ws,f0,1,3,{derecha:[2,3]});
   const de=l=>facs.filter(x=>ladoFac(x.r)===l), s=[0,1].map(l=>aplStats(de(l)));
   const filas=APL_RES.map(([t,k,m])=>[t,...s.map(x=>m?cent(x[k]):x[k])]);
   filas.forEach((v,i)=>{ ws.getRow(f0+1+i).values=v; if(APL_RES[i][2]) [2,3].forEach(k=>ws.getCell(f0+1+i,k).numFmt=RCX_MON); });
-  MK.cuerpo(ws,f0+1,f0+filas.length,1,3); MK.impresion(ws,{vertical:true});
+  MK.cuerpo(ws,f0+1,f0+filas.length,1,3);
+  aplResumenExtra(ws,f0+filas.length+2,facs,ext);
+  MK.impresion(ws,{vertical:true});
   const corte=xd(M.generado||iso(TODAY));
   hojaApl(wb,'Clientes',de(0),c,corte);
   hojaApl(wb,'Proveedores',de(1),c,corte);
+  aplHojasExtra(wb,ext,{gen:false,orden:[ci],lineas:[c[1]+' · '+c[2],'Corte del Tablero QUO: '+fmtD(M.generado)+' '+M.hora]});
   const mm=String(TODAY.getMonth()+1).padStart(2,'0');
   return descargaXlsx(wb,(mm+' Aplicaciones '+c[1]).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx');
 }
@@ -4996,7 +5003,7 @@ const APLG={lado:'2',que:'t'};
 const aplGenBase=()=>ROWS.filter(r=>esFacApl(r)&&pasa(r,{sinMod:true}));
 function botonAplGen(){
   const b=el('button','xls xlgen',APLG_TXT||APLG_LAB); b.type='button'; b.id='xlapl'; b.disabled=!!APLG_TXT; b.setAttribute('data-excel',APLG_LAB);
-  b.title='Las aplicaciones de anticipos y notas de crédito de todas las empresas con lo filtrado: resumen por grupo y empresa, clientes y proveedores (demostrativo)';
+  b.title='Las aplicaciones de anticipos y notas de crédito de todas las empresas con lo filtrado: resumen por grupo y empresa, clientes, proveedores, anticipos, notas de crédito y canceladas (demostrativo)';
   b.onclick=()=>{ if(APLG_TXT) return; ventanaAplGen(); };
   return b;
 }
@@ -5018,8 +5025,8 @@ function ventanaAplGen(){
     body.appendChild(fs); };
   grupo('Lado','lado',[['2','Clientes y proveedores'],['0','Solo clientes',plural(nl(0),'factura','facturas')],['1','Solo proveedores',plural(nl(1),'factura','facturas')]]);
   grupo('Qué facturas','que',[['t','Todas las que tienen saldo','También las que no tienen relación y las quitadas, como el Excel de la pestaña Aplicaciones de cada empresa.'],
-    ['a','Solo donde se aplica algo','Las que se cancelan o se reducen.']]);
-  body.appendChild(el('p','enota','Demostrativo: no cambia saldos en QUO ni en la Cartera. Sale con la marca PROFASE.'));
+    ['a','Solo donde se aplica algo','Las que se cancelan o se reducen; en Anticipos y Notas de crédito, solo los que se aplican.']]);
+  body.appendChild(el('p','enota','Trae Resumen, Clientes, Proveedores, Anticipos, Notas de crédito y Canceladas. Demostrativo: no cambia saldos en QUO ni en la Cartera. Sale con la marca PROFASE.'));
   const pie=el('div','sheet-f'); pie.appendChild(boton('Cancelar','g',cierraOv2));
   pie.appendChild(boton('Generar','',()=>{ cierraOv2(); generaAplGen(); }));
   const s=sheet2('Excel de aplicaciones','Anticipos y notas de crédito que se podrían aplicar a facturas con saldo',body,pie);
@@ -5109,17 +5116,25 @@ async function exportaAplGeneral(paso,op){
   const alcance=una?una[1]+' · '+una[2]:gr1?'Grupo '+gr1+' · '+plural(emps.size,'empresa','empresas'):plural(grs.size,'grupo','grupos')+' · '+plural(emps.size,'empresa','empresas');
   const lineas=[alcance,'Filtros: '+textoFiltros().replace(/^Rubros: [^·]*· /,'')+' · '+(op.lado==null?'clientes y proveedores':op.lado===0?'solo clientes':'solo proveedores')
     +' · '+(op.solo?'solo donde se aplica algo':'todas las facturas con saldo'),'Corte del Tablero QUO: '+fmtD(M.generado)+' '+M.hora];
+  // los anticipos y notas de esas empresas (los mismos filtros; con «solo donde se aplica algo», solo los que se aplican) y
+  // sus canceladas (la puerta de la pestaña «Canceladas», una empresa por llamada)
+  const orden=[...emps];
+  const ext=aplDocsDe(facs,op.solo?[]:ROWS.filter(r=>esDocApl(r)&&emps.has(r.cli)&&(op.lado==null||ladoDoc(r)===op.lado)&&pasa(r,{sinMod:true})),op.solo);
+  paso('Trayendo las canceladas…'); await espera();
+  ext.can=await aplCanTrae(orden,cd=>op.lado==null||(cd.lado==='prov'?1:0)===op.lado,(k,t)=>paso('Trayendo las canceladas… '+F.int.format(k)+' de '+plural(t,'empresa','empresas')));
+  paso('Armando el Excel…'); await espera();
   const wb=MK.libro(EX,'Aplicaciones · '+(una?una[1]:gr1||'general'));
-  hojaAplResumen(wb,facs,lineas);
+  hojaAplResumen(wb,facs,lineas,ext);
   const lados=op.lado==null?[0,1]:[op.lado];
   lados.forEach(l=>{ const f=facs.filter(x=>ladoFac(x.r)===l); if(f.length||lados.length===1) hojaApl(wb,l===0?'Clientes':'Proveedores',f,null,corte,{gen:true,lineas}); });
+  aplHojasExtra(wb,ext,{gen:true,orden,lineas});
   paso('Guardando archivo…'); await espera();
   const mm=String(TODAY.getMonth()+1).padStart(2,'0');
   return descargaXlsx(wb,(mm+' Aplicaciones '+(una?una[1]:gr1||'General')).replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.xlsx');
 }
 // el Resumen de varias empresas: un renglón por empresa y lado, el subtotal de cada grupo, el total de cada lado y el general
 const APLR_COLS=[['Grupo',22],['Empresa',40],['Lado',13]].concat(APL_RES.map(([t,k])=>[t.replace(' (demostrativo)','').replace('Relaciones ',''),k==='saldo'||k==='apl'||k==='queda'?17:12]));
-function hojaAplResumen(wb,facs,lineas){
+function hojaAplResumen(wb,facs,lineas,ext){
   const MK=window.PROFASE_MARCA, ws=wb.addWorksheet('Resumen'), nc=APLR_COLS.length, mon=[];
   APLR_COLS.forEach(([t,w],i)=>{ ws.getColumn(i+1).width=w; if(i>2&&APL_RES[i-3][2]) mon.push(i+1); });
   const f0=MK.encabezado(wb,ws,nc,{titulo:'Aplicaciones de anticipos y notas de crédito',lineas:lineas.concat(['Demostrativo: no cambia saldos en QUO ni en la Cartera.'])});
@@ -5144,8 +5159,317 @@ function hojaAplResumen(wb,facs,lineas){
   });
   if(lados.length>1) lados.forEach(l=>pon('Total '+lado(l).toLowerCase(),'','',aplStats(facs.filter(x=>ladoFac(x.r)===l)),'sub'));
   pon('TOTAL GENERAL','','',aplStats(facs),'tot');
+  if(ext) aplResumenGen(ws,n,G,facs,ext);
   ws.views=[{state:'frozen',ySplit:f0}];
   MK.impresion(ws,{repetir:f0});
+}
+
+/* ── Las hojas «Anticipos», «Notas de crédito» y «Canceladas» del Excel de aplicaciones, y sus bloques del Resumen
+   (18-nov-2026, pedido de Fernando Cadengo con su Excel de ONESTA: «se agregaron 3 pestañas mas, notas de credito y
+   anticipos estan las columnas que necesitamos, en el resumen igual se agregaron unos renglones, y en canceladas dame
+   sugerencias de que columnas poner»; a la muestra: un renglón por pareja anticipo–factura («1. a»), «el saldo que tiene
+   la factura disponible antes de aplicar el anticipo» y «Así es»; nivel 1). Van en los dos Excel (el de la pestaña
+   Aplicaciones de cada empresa y el «Excel de aplicaciones» general), con su PDF al lado.
+   · Anticipos y Notas de crédito: las mismas aplicaciones de las hojas Clientes y Proveedores, vistas desde el anticipo o
+     la nota. Un renglón por cada factura del Excel en que se aplica, con lo que le quedaba a la factura antes de ese
+     documento («Saldo de la factura antes de aplicar…») y cómo va bajando su saldo a favor (en el orden de la fecha de
+     sus facturas); lo que no se aplica en ninguna, en un solo renglón con su relación o «Sin relación». Una sola cuenta
+     (aplEmp: rl.parte): lo que se aplica de anticipos y notas da lo mismo que «Se puede aplicar» de las facturas.
+   · Canceladas: lo de la pestaña «Canceladas» (la misma puerta, cartera_can, con sus reglas: lo reservado del SAT, solo a
+     la dirección) más lo de las aplicaciones: qué aplicación tenía (aceptada o confirmada por el XML) y por cuánto, si la
+     factura nueva que la sustituye tiene saldo y qué hacer.
+   Demostrativo, como todo lo de Aplicaciones: no cambia saldos en QUO ni en la Cartera. ── */
+// las parejas (factura, anticipo o nota) de las facturas del Excel, en el orden en que se aplican en cada factura
+function aplPares(facs){
+  const deDoc=new Map();
+  facs.forEach(F2=>{ if(!(F2.aplicado>0.005)) return; let q=F2.r.saldo;
+    F2.apl.forEach(rl=>rl.docs.forEach(d=>{ const m=rl.parte.get(d); if(!(m>0.005)) return;
+      const p={F2,rl,d,m,antes:q}; q-=m; p.despues=q;
+      let a=deDoc.get(d); if(!a) deDoc.set(d,a=[]); a.push(p); })); });
+  return deDoc;
+}
+// los anticipos y notas del Excel: los que se aplican en sus facturas y, con «todas las facturas», los de la misma base
+// (los mismos filtros) que no se aplican en ninguna; los que solo se aplican en facturas que no entran, no salen
+function aplDocsDe(facs,base,solo){
+  const deDoc=aplPares(facs), docs=[...deDoc.keys()];
+  if(!solo) base.forEach(r=>{ if(!esDocApl(r)||deDoc.has(r)) return; const X=aplD(r);
+    if(X&&(X.todas||X.rels).some(rl=>rl.on&&rl.parte.has(r))) return; docs.push(r); });
+  return {deDoc,docs};
+}
+// los renglones de un anticipo o nota: uno por cada factura del Excel en que se aplica (su saldo a favor baja con todas
+// sus aplicaciones, en el orden de la fecha de su factura) o uno solo con su relación si no se aplica en ninguna
+function aplDocFilas(d,deDoc){
+  const X=aplD(d), favor=-d.saldo, mias=deDoc.get(d)||[];
+  if(mias.length){
+    const en=new Map(mias.map(p=>[p.rl,p])), out=[];
+    const ord=((X&&(X.todas||X.rels))||[]).filter(rl=>rl.on&&rl.parte.has(d));
+    mias.forEach(p=>{ if(!ord.includes(p.rl)) ord.push(p.rl); });
+    ord.sort((a,b)=>String(a.fac.fecha||'').localeCompare(String(b.fac.fecha||''))||folioDe(a.fac).localeCompare(folioDe(b.fac),'es'));
+    let q=favor;
+    ord.forEach(rl=>{ const m=rl.parte.get(d)||0; q-=m; const p=en.get(rl);
+      if(p) out.push({rl,f:p.F2.r,est:p.F2.est,se:m,antes:p.antes,queda:q,despues:p.despues}); });
+    return {favor,filas:out};
+  }
+  const rl=X?(X.prim||(X.orden||[])[0]||null):null;
+  if(!rl) return {favor,filas:[{sin:X&&X.usadas&&X.usadas.length?'Sin relación disponible':'Sin relación',se:0,queda:favor}]};
+  const F2=aplF(rl.fac), qf=F2&&F2.aplicado>0.005?F2.queda:rl.fac.saldo;
+  return {favor,filas:[{rl,f:rl.fac,est:null,se:0,antes:qf,queda:favor,despues:qf}]};
+}
+const APL_DCOLS=(de,el)=>['Cliente o proveedor '+de,'Lado','Fecha '+de,'QUO ID '+de,'UUID o número interno de QUO '+de,'Total '+de,
+  'Saldo a favor '+de+' (antes de aplicar)','Relación','Cliente o proveedor de la factura','RFC','Factura','Fecha de la factura',
+  'UUID de la factura','Saldo real (factura)','Estado de la relación','Total del CFDI (factura)','Saldo de la factura antes de aplicar '+el,
+  'Se aplica','Saldo '+de+' quedaría (demostrativo)','Le queda a la factura'];
+const APL_DANCHO=[40,11,12,12,36,15,17,22,40,16,14,12,38,15,26,16,20,15,20,16];
+function aplDocFila(d,favor,x){
+  const cp=D.cp[d.cp]||['',''], f=x.f||null, cf=f?(D.cp[f.cp]||['','']):['',''], t=x.rl?relTipo(x.rl):null;
+  const est=x.sin?'—':x.se>0.005?(x.est==='cancela'?'Se cancela':'Se reduce'):(t==='quit'?'Quitada':'No se aplica'+aplPorQue(x.rl));
+  return [cp[1]||'',ladoDoc(d)===0?'Cliente':'Proveedor',d.fecha?xd(d.fecha):null,d.quo||'',d.uuid||'',cent(Math.abs(d.total||0)),cent(favor),
+    x.sin||APL_T[t],f?(cf[1]||''):'',f?(cf[0]||''):'',f?folioDe(f):'',f&&f.fecha?xd(f.fecha):null,f?(f.uuid||''):'',
+    f?cent(f.saldo):'',est,f?cent(Math.abs(f.total||0)):'',f?cent(x.antes):'',cent(x.se),cent(x.queda),f?cent(x.despues):''];
+}
+// lo de los anticipos o notas de un conjunto (las cifras de su bloque del Resumen)
+function aplDocStats(docs,deDoc){
+  const o={n:0,favor:0,con:0,completo:0,parte:0,sin:0,apl:0,queda:0,conf:0,acep:0,auto:0,sug:0,rev:0}, rls=new Set();
+  docs.forEach(d=>{ const X=aplD(d), favor=-d.saldo, us=(deDoc.get(d)||[]).reduce((a,p)=>{ rls.add(p.rl); return a+p.m; },0);
+    o.n++; o.favor+=favor; if(X&&X.rels.length) o.con++; else o.sin++;
+    if(us>0.005){ if(favor-us<=0.01) o.completo++; else o.parte++; }
+    o.apl+=us; o.queda+=favor-us; });
+  rls.forEach(rl=>{ const k=relFiltro(rl); if(k in o) o[k]++; });
+  return o;
+}
+const APL_DRES=[['Con saldo a favor','n'],['Saldo a favor','favor',1],['Con relación','con'],['Se usan completos','completo'],
+  ['Se usan en parte','parte'],['Sin relación','sin'],['Se puede aplicar','apl',1],['Saldo a favor que quedaría (demostrativo)','queda',1],
+  ['Relaciones confirmadas (CFDI)','conf'],['Relaciones aceptadas','acep'],['Relaciones automáticas','auto'],
+  ['Relaciones sugeridas','sug'],['Para revisar (otro nombre)','rev']];
+// los cuatro grupos del bloque de anticipos y notas: [lado, es nota, nombre]
+const APL_DGR=[[0,false,'Anticipos de clientes'],[0,true,'Notas de crédito de clientes'],[1,false,'Anticipos de proveedores'],[1,true,'Notas de crédito de proveedores']];
+const aplDeGrupo=(docs,g)=>docs.filter(d=>ladoDoc(d)===g[0]&&esNota(d)===g[1]);
+// el cuadre: lo que se aplica de anticipos y notas de un lado contra «Se puede aplicar» de sus facturas
+function aplCuadre(facs,ext,l){
+  const a=aplDocStats(ext.docs.filter(d=>ladoDoc(d)===l),ext.deDoc).apl, b=aplStats(facs.filter(x=>ladoFac(x.r)===l)).apl;
+  return {a,b,ok:Math.abs(a-b)<0.02};
+}
+function aplCuadreTxt(facs,ext){
+  return 'Cuadre: '+[0,1].map(l=>{ const c=aplCuadre(facs,ext,l);
+    return (l===0?'clientes':'proveedores')+' '+F.mxn2.format(c.a)+(c.ok?' ✓ igual que «Se puede aplicar» de sus facturas':' ✗ no cuadra con «Se puede aplicar» de sus facturas ('+F.mxn2.format(c.b)+')'); }).join(' · ')+'.';
+}
+
+// lo que se sabe de una cancelada para las aplicaciones: qué es, qué aplicación tenía, si la nueva tiene saldo y qué hacer
+const APL_CQUE={fac:['Factura emitida','Factura recibida'],ant:['Anticipo de cliente','Anticipo a proveedor'],nc:['Nota de crédito emitida','Nota de crédito recibida']};
+const mayus=s=>s.charAt(0).toUpperCase()+s.slice(1);
+function aplCanInfo(ci,cd){
+  const rfc=D.cli[ci][2], U=String(cd.uuid||'').toUpperCase(), ix=uIdx(ci), rs=U?(ix.get(U)||[]):[];
+  const r=rs.find(x=>ladoFac(x)>=0||ladoDoc(x)>=0)||rs[0]||null;
+  const kind=r&&ladoDoc(r)>=0?(esNota(r)?'nc':'ant'):r&&ladoFac(r)>=0?'fac':/^(E|EGRESO)$/i.test(String(cd.tc||''))?'nc':'fac';
+  const lado=cd.lado==='prov'?1:cd.lado==='cli'?0:(r?Math.max(ladoFac(r),ladoDoc(r),0):0);
+  const apls=[];
+  if(U){
+    (APL.porRfc.get(rfc)||[]).forEach(([parte,fu,du])=>{ if(fu!==U&&du!==U) return;
+      const u=fu===U?du:fu, o=(ix.get(u)||[])[0]||null, dec=APL.dec.get(rfc+'|'+parte+'|'+fu+'|'+du);
+      apls.push({u,o,como:'aceptada',m:dec&&dec.m!=null?+dec.m:null}); });
+    // lo que dice el XML (nota de crédito, devolución o aplicación de anticipo): solo con un documento de la cartera del otro tipo
+    const relX=SAT.rel.get(rfc), xs=relX?relX.get(U):null;
+    if(xs) xs.forEach(u=>{ if(apls.some(a=>a.u===u)) return; const o=(ix.get(u)||[])[0]||null;
+      if(!o||!(kind==='fac'?ladoDoc(o)>=0:ladoFac(o)>=0)) return; apls.push({u,o,como:'confirmada por el XML',m:null}); });
+  }
+  // por cuánto: lo que guardó «Agotar» y, si no, lo que alcanzaba entre los dos saldos
+  apls.forEach(a=>{ if(a.m==null&&a.o) a.m=Math.min(Math.abs(+cd.saldo||0),Math.abs(a.o.saldo||0)); });
+  const nom=a=>a.o?docNom(a.o)+' '+folioDe(a.o):'CFDI '+String(a.u).slice(0,13)+'…';
+  let nueva='', nuevaSaldo=false;
+  if(cd.sustituida==='si'&&cd.sus){ const o=(ix.get(String(cd.sus).toUpperCase())||[]).find(x=>Math.abs(x.saldo)>0.005)||null;
+    nuevaSaldo=!!o; nueva=o?'Sí ('+F.mxn2.format(Math.abs(o.saldo))+')':'No'; }
+  const lo=kind==='ant'?'lo':'la', pl=apls.length>1;
+  let hacer='Quitar'+lo+' del Tablero QUO.';
+  if(apls.length){
+    const con=apls.map(nom).join(', ');
+    if(kind==='fac') hacer+=nuevaSaldo?' Pasar la aplicación ('+con+') a la factura nueva'+(cd.sus_folio?' '+cd.sus_folio:'')+'.'
+      :' La aplicación con '+con+' ya no va: '+(pl?'quedan libres':'queda libre')+' para otra factura.';
+    else hacer+=' No aplicar'+lo+': está cancelad'+(kind==='ant'?'o':'a')+'; '+(pl?'las facturas ':'la factura ')+apls.map(a=>a.o?folioDe(a.o):'CFDI').join(', ')
+      +(pl?' vuelven':' vuelve')+' a quedar con su saldo.';
+  } else if(kind!=='fac') hacer+=' No se aplica a ninguna factura.';
+  return {cd,r,kind,lado,que:APL_CQUE[kind][lado]||APL_CQUE[kind][0],apls,
+    aplTxt:apls.length?apls.map(a=>mayus(nom(a))+' ('+a.como+')').join(' · '):'No',
+    monto:apls.reduce((s,a)=>s+(a.m||0),0),nueva,nuevaSaldo,hacer};
+}
+const APL_CCOLS=['Lado','Qué es','Cliente o proveedor','RFC','Folio','Fecha','UUID o número interno de QUO','QUO ID','Total del CFDI',
+  'Saldo en la cartera','En QUO','En el SAT','Dónde sigue','Sustituida por (folio)','UUID de la nueva','La nueva tiene saldo',
+  'Tenía una aplicación (con qué)','Monto de esa aplicación','Qué hacer'];
+const APL_CANCHO=[11,22,40,16,14,12,38,12,15,15,11,26,30,16,38,18,44,16,64];
+function aplCanFila(x){
+  const cd=x.cd;
+  return [x.lado===0?'Cliente':'Proveedor',x.que,cd.cp_nombre||'',cd.cp_rfc||'',cnFolio(cd),cd.fecha?xd(String(cd.fecha).slice(0,10)):null,
+    cd.uuid||'',x.r?x.r.quo||'':'',cent(+cd.total||0),cent(+cd.saldo||0),cd.cq?'Cancelada':'Activa',cnSat(cd),cnDonde(cd),
+    cd.sustituida==='si'?(cd.sus_folio||'Sí'):cd.sustituida==='no'?'No':'Sin revisar',cd.sustituida==='si'?(cd.sus||''):'',x.nueva,
+    x.aplTxt,x.apls.length?cent(x.monto):'',x.hacer];
+}
+function aplCanStats(items){
+  const o={n:0,saldo:0,fac:0,ant:0,nc:0,apl:0,nueva:0};
+  (items||[]).forEach(x=>{ o.n++; o.saldo+=(+x.cd.saldo||0); o[x.kind]++; if(x.apls.length) o.apl++; if(x.nuevaSaldo) o.nueva++; });
+  return o;
+}
+const APL_CRES=[['Siguen en el Tablero QUO','n'],['Su saldo','saldo',1],['Facturas','fac'],['Anticipos','ant'],['Notas de crédito','nc'],
+  ['Tenían una aplicación','apl'],['Sustituidas, con la nueva con saldo','nueva']];
+// las canceladas de varias empresas: la misma puerta de la pestaña «Canceladas» (cartera_can), una empresa por llamada y 4 a
+// la vez, solo las que tienen alguna. null si no se pudo saber qué está cancelado; en cada empresa, null si no llegaron.
+async function aplCanTrae(cis,filtro,avance){
+  if(!CAN.ok) await cargaCan();
+  if(!CAN.ok) return null;
+  const out=new Map(), pend=cis.filter(ci=>{ const x=canRes(D.cli[ci][2]); return x&&x.pend>0; });
+  let j=0, n=0;
+  const trabaja=async()=>{ while(j<pend.length){ const ci=pend[j++], det=await canTrae(D.cli[ci][2]);
+    out.set(ci,det?(det.docs||[]).filter(filtro).map(cd=>aplCanInfo(ci,cd)):null); n++; if(avance) avance(n,pend.length); } };
+  await Promise.all(Array.from({length:4},trabaja));
+  return out;
+}
+// una hoja de lista del Excel de aplicaciones (Anticipos, Notas de crédito o Canceladas), con la marca y, con varias
+// empresas, el grupo y la empresa en cada renglón, el encabezado de cada empresa y su subtotal (como Clientes y Proveedores)
+function hojaAplLista(wb,nombre,o){
+  const MK=window.PROFASE_MARCA, ws=wb.addWorksheet(nombre), gen=!!o.gen, sx=gen?2:0;
+  const cols=(gen?['Grupo','Empresa']:[]).concat(o.cols), nc=cols.length;
+  (gen?[22,40]:[]).concat(o.anchos).forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const mon=o.mon.map(i=>i+sx), fe=o.fechas.map(i=>i+sx), su=o.suma.map(i=>i+sx);
+  const f0=MK.encabezado(wb,ws,nc,{titulo:'Aplicaciones · '+nombre,lineas:o.lineas.concat(['Demostrativo: no cambia saldos en QUO ni en la Cartera.'])});
+  ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,nc,{derecha:mon});
+  let n=f0+1;
+  const pinta=(r,est)=>{ for(let i=1;i<=nc;i++){ const x=ws.getRow(r).getCell(i); x.font={name:MK.fuente,size:10,bold:true,color:{argb:MK.colores.azul}};
+    if(est==='emp') x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE6ECF6'}};
+    else if(est==='sub'){ x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEEF2F8'}}; x.border={top:{style:'hair',color:{argb:'FFB8C2D0'}},bottom:{style:'hair',color:{argb:'FFB8C2D0'}}}; }
+    else x.border={top:{style:'thin',color:{argb:MK.colores.azul}}}; } };
+  // SUBTOTAL(109) no cuenta otros SUBTOTAL: el total de abajo no suma dos veces los de cada empresa
+  const subtotal=(etq,a,b,vals,est)=>{ const tr=ws.getRow(n); tr.getCell(1).value=etq;
+    su.forEach((i,j)=>{ const L=colL(i-1); tr.getCell(i).value=b>=a?{formula:'SUBTOTAL(109,'+L+a+':'+L+b+')',result:cent(vals[j])}:0; tr.getCell(i).numFmt=RCX_MON; });
+    pinta(n,est); n++; };
+  const tot=o.suma.map(()=>0);
+  o.grupos.forEach(g=>{
+    if(gen){ const e=D.cli[g.ci]; ws.getRow(n).getCell(1).value=(e[3]||'Sin grupo')+' · '+e[1]+' · '+e[2]; pinta(n,'emp'); n++; }
+    const a=n;
+    g.filas.forEach(v=>{ const e=D.cli[g.ci], r=ws.getRow(n); r.values=(gen?[e[3]||'Sin grupo',e[1]]:[]).concat(v);
+      fe.forEach(i=>{ const x=r.getCell(i); if(x.value instanceof Date) x.numFmt='dd/mm/yyyy'; });
+      mon.forEach(i=>{ const x=r.getCell(i); if(typeof x.value==='number') x.numFmt=RCX_MON; }); n++; });
+    if(n>a) MK.cuerpo(ws,a,n-1,1,nc);
+    const b=n-1;
+    if(g.nota){ ws.getRow(n).getCell(1).value=g.nota; n++; }
+    const vs=o.suma.map(i=>g.filas.reduce((s,v)=>s+(+v[i-1]||0),0)); vs.forEach((v,j)=>tot[j]+=v);
+    if(gen) subtotal('Subtotal · '+D.cli[g.ci][1]+' · '+o.cuenta(g),a,b,vs,'sub');
+  });
+  if(!o.grupos.some(g=>g.filas.length)&&!o.grupos.some(g=>g.nota)){ ws.getRow(n).getCell(1).value=o.vacio; n++; }
+  subtotal('TOTAL · '+o.total,f0+1,n-1,tot,'tot');
+  ws.autoFilter={from:{row:f0,column:1},to:{row:Math.max(f0,n-2),column:nc}};
+  ws.views=[{state:'frozen',ySplit:f0}];
+  MK.impresion(ws,{repetir:f0});
+}
+// las tres hojas nuevas, en el orden de las empresas del Excel (o: {gen, lineas, orden: [empresas]})
+function aplHojasExtra(wb,ext,o){
+  const porCi=new Map(); ext.docs.forEach(d=>{ let a=porCi.get(d.cli); if(!a) porCi.set(d.cli,a=[]); a.push(d); });
+  const cpNom=d=>String((D.cp[d.cp]||[])[1]||'');
+  [[false,'Anticipos','del anticipo','el anticipo',['anticipo','anticipos'],'Ningún anticipo con saldo a favor con los filtros.'],
+   [true,'Notas de crédito','de la nota','la nota',['nota de crédito','notas de crédito'],'Ninguna nota de crédito con saldo a favor con los filtros.']]
+    .forEach(([nota,nombre,de,el,pl,vacio])=>{
+      const grupos=[]; let nd=0, nr=0;
+      o.orden.forEach(ci=>{
+        const ds=(porCi.get(ci)||[]).filter(d=>esNota(d)===nota).sort((a,b)=>ladoDoc(a)-ladoDoc(b)||cpNom(a).localeCompare(cpNom(b),'es')
+          ||String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.uuid||'').localeCompare(String(b.uuid||'')));
+        if(!ds.length) return;
+        const filas=[]; ds.forEach(d=>{ const R=aplDocFilas(d,ext.deDoc); R.filas.forEach(x=>filas.push(aplDocFila(d,R.favor,x))); });
+        nd+=ds.length; nr+=filas.length; grupos.push({ci,filas,nd:ds.length});
+      });
+      hojaAplLista(wb,nombre,{gen:o.gen,lineas:o.lineas,cols:APL_DCOLS(de,el),anchos:APL_DANCHO,mon:[6,7,14,16,17,18,19,20],fechas:[3,12],suma:[18],
+        grupos,vacio,cuenta:g=>plural(g.nd,pl[0],pl[1])+' · '+plural(g.filas.length,'renglón','renglones'),
+        total:plural(nd,pl[0],pl[1])+' · '+plural(nr,'renglón','renglones')});
+    });
+  const grupos=[]; let nc=0;
+  if(ext.can) o.orden.forEach(ci=>{ const it=ext.can.get(ci); if(it===undefined) return;
+    if(it===null){ grupos.push({ci,filas:[],nota:'No se pudieron traer sus canceladas; vuelve a bajar el Excel en unos minutos.'}); return; }
+    if(!it.length) return;
+    const filas=it.slice().sort((a,b)=>a.lado-b.lado).map(aplCanFila); nc+=filas.length; grupos.push({ci,filas}); });
+  hojaAplLista(wb,'Canceladas',{gen:o.gen,cols:APL_CCOLS,anchos:APL_CANCHO,mon:[9,10,18],fechas:[6],suma:[9,10],grupos,
+    lineas:o.lineas.concat(['Lo cancelado (en el SAT o en QUO) que sigue en el Tablero QUO o en su cartera: lo de la pestaña «Canceladas», con lo de sus aplicaciones.',
+      'Qué hacer en QUO con todas: quitarlas del Tablero QUO. Lo de meses ya declarados se revisa con el gerente antes, por si pide complementaria.']),
+    vacio:ext.can?'Ninguna cancelada sigue en el Tablero QUO.':'No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.',
+    cuenta:g=>plural(g.filas.length,'cancelada','canceladas'),total:plural(nc,'cancelada','canceladas')});
+}
+// los bloques del Resumen de una empresa (Concepto, y una columna por grupo): anticipos y notas, y canceladas
+function aplResumenExtra(ws,n,facs,ext){
+  const MK=window.PROFASE_MARCA;
+  [4,5].forEach(i=>{ if(!ws.getColumn(i).width||ws.getColumn(i).width<18) ws.getColumn(i).width=18; });
+  const titulo=t=>{ const x=ws.getCell(n,1); x.value=t; x.font={name:MK.fuente,size:11,bold:true,color:{argb:MK.colores.azul}}; n++; };
+  const nota=t=>{ const x=ws.getCell(n,1); x.value=t; x.font={name:MK.fuente,size:9,color:{argb:'FF5A6577'}}; n++; };
+  titulo('Del lado de los anticipos y notas de crédito');
+  ws.getRow(n).values=['Concepto'].concat(APL_DGR.map(g=>g[2])); MK.cabecera(ws,n,1,5,{derecha:[2,3,4,5]}); n++;
+  const st=APL_DGR.map(g=>aplDocStats(aplDeGrupo(ext.docs,g),ext.deDoc)), a=n;
+  APL_DRES.forEach(([t,k,m])=>{ ws.getRow(n).values=[t].concat(st.map(x=>m?cent(x[k]):x[k]));
+    if(m) [2,3,4,5].forEach(i=>ws.getCell(n,i).numFmt=RCX_MON); n++; });
+  MK.cuerpo(ws,a,n-1,1,5);
+  nota(aplCuadreTxt(facs,ext));
+  n++;
+  titulo('Canceladas que siguen en el Tablero QUO');
+  if(!ext.can){ nota('No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.'); return n; }
+  const it=[...ext.can.values()].flat().filter(Boolean);
+  ws.getRow(n).values=['Concepto','Clientes','Proveedores']; MK.cabecera(ws,n,1,3,{derecha:[2,3]}); n++;
+  const sc=[0,1].map(l=>aplCanStats(it.filter(x=>x.lado===l))), b=n;
+  APL_CRES.forEach(([t,k,m])=>{ ws.getRow(n).values=[t].concat(sc.map(x=>m?cent(x[k]):x[k]));
+    if(m) [2,3].forEach(i=>ws.getCell(n,i).numFmt=RCX_MON); n++; });
+  MK.cuerpo(ws,b,n-1,1,3);
+  if([...ext.can.values()].some(v=>v===null)) nota('Algunas empresas no trajeron sus canceladas; vuelve a bajar el Excel en unos minutos.');
+  return n;
+}
+// los bloques del Resumen de varias empresas (debajo del TOTAL GENERAL de las facturas, con sus propios encabezados): un
+// renglón por empresa y grupo de anticipos o notas, y uno por empresa y lado de las canceladas; G: los grupos y empresas
+// en el orden del Resumen
+function aplResumenGen(ws,n,G,facs,ext){
+  const MK=window.PROFASE_MARCA;
+  ws.getColumn(3).width=Math.max(ws.getColumn(3).width||0,30);
+  const titulo=t=>{ const x=ws.getCell(n,1); x.value=t; x.font={name:MK.fuente,size:11,bold:true,color:{argb:MK.colores.azul}}; n++; };
+  const nota=t=>{ const x=ws.getCell(n,1); x.value=t; x.font={name:MK.fuente,size:9,color:{argb:'FF5A6577'}}; n++; };
+  const tabla=(cols,res,filas)=>{
+    const nc=cols.length, mon=[]; res.forEach(([t,k,m],i)=>{ if(m) mon.push(i+4); });
+    ws.getRow(n).values=cols; MK.cabecera(ws,n,1,nc,{derecha:cols.map((x,i)=>i+1).filter(i=>i>3)}); n++;
+    const pon=(a,b,c,st,est)=>{ const r=ws.getRow(n); r.values=[a,b,c].concat(res.map(([t,k,m])=>m?cent(st[k]):st[k]));
+      mon.forEach(i=>r.getCell(i).numFmt=RCX_MON);
+      if(est) for(let i=1;i<=nc;i++){ const x=r.getCell(i); x.font={name:MK.fuente,size:10,bold:true,color:{argb:MK.colores.azul}};
+        if(est==='sub') x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEEF2F8'}};
+        else x.border={top:{style:'thin',color:{argb:MK.colores.azul}}}; }
+      n++; };
+    filas(pon,nc);
+  };
+  const lado=l=>l===0?'clientes':'proveedores';
+  // anticipos y notas de crédito
+  n++;
+  titulo('Del lado de los anticipos y notas de crédito');
+  const porCi=new Map(); ext.docs.forEach(d=>{ let a=porCi.get(d.cli); if(!a) porCi.set(d.cli,a=[]); a.push(d); });
+  const grs=APL_DGR.filter(g=>aplDeGrupo(ext.docs,g).length);
+  if(!grs.length) nota('Ningún anticipo ni nota de crédito con saldo a favor con los filtros.');
+  else tabla(['Grupo','Empresa','Qué'].concat(APL_DRES.map(([t])=>t.replace(' (demostrativo)','').replace('Relaciones ',''))),APL_DRES,(pon,nc)=>{
+    const st=ds=>aplDocStats(ds,ext.deDoc);
+    G.forEach(g=>{ const a=n;
+      g.e.forEach(x=>grs.forEach(gr=>{ const ds=aplDeGrupo(porCi.get(x.ci)||[],gr); if(ds.length) pon(g.g,D.cli[x.ci][1],gr[2],st(ds)); }));
+      if(n>a) MK.cuerpo(ws,a,n-1,1,nc);
+      if(G.length>1||g.e.length>1) grs.forEach(gr=>{ const ds=aplDeGrupo(g.e.flatMap(x=>porCi.get(x.ci)||[]),gr); if(ds.length) pon(g.g,'Subtotal del grupo',gr[2],st(ds),'sub'); });
+    });
+    const ls=[0,1].filter(l=>ext.docs.some(d=>ladoDoc(d)===l));
+    if(ls.length>1) ls.forEach(l=>pon('Total '+lado(l),'','',st(ext.docs.filter(d=>ladoDoc(d)===l)),'sub'));
+    pon('TOTAL GENERAL','','',st(ext.docs),'tot');
+  });
+  nota(aplCuadreTxt(facs,ext));
+  // canceladas
+  n++;
+  titulo('Canceladas que siguen en el Tablero QUO');
+  if(!ext.can){ nota('No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.'); return n; }
+  const it=[...ext.can.values()].flat().filter(Boolean);
+  if(!it.length) nota('Ninguna cancelada sigue en el Tablero QUO.');
+  else tabla(['Grupo','Empresa','Lado'].concat(APL_CRES.map(([t])=>t)),APL_CRES,(pon,nc)=>{
+    const deCi=ci=>ext.can.get(ci)||[];
+    G.forEach(g=>{ const a=n;
+      g.e.forEach(x=>[0,1].forEach(l=>{ const xs=deCi(x.ci).filter(y=>y.lado===l); if(xs.length) pon(g.g,D.cli[x.ci][1],l===0?'Clientes':'Proveedores',aplCanStats(xs)); }));
+      if(n>a) MK.cuerpo(ws,a,n-1,1,nc);
+      if(G.length>1||g.e.length>1) [0,1].forEach(l=>{ const xs=g.e.flatMap(x=>deCi(x.ci)).filter(y=>y.lado===l); if(xs.length) pon(g.g,'Subtotal del grupo',l===0?'Clientes':'Proveedores',aplCanStats(xs),'sub'); });
+    });
+    const ls=[0,1].filter(l=>it.some(x=>x.lado===l));
+    if(ls.length>1) ls.forEach(l=>pon('Total '+lado(l),'','',aplCanStats(it.filter(x=>x.lado===l)),'sub'));
+    pon('TOTAL GENERAL','','',aplCanStats(it),'tot');
+  });
+  if([...ext.can.values()].some(v=>v===null)) nota('Algunas empresas no trajeron sus canceladas; vuelve a bajar el Excel en unos minutos.');
+  return n;
 }
 
 /* ── exportar «Reporte CXC CXP» con la estructura del reporte de variaciones (sin consultas ni conexiones) ── */
