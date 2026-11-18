@@ -18,7 +18,8 @@
      marcador: 'Escribe parte del nombre',
      vacio: 'No hay coincidencias',
      sinOpciones: 'Primero escoge el grupo',  // lo que dice si todavía no hay opciones
-     cambio: function (valores) { … }        // después de cualquier cambio
+     cambio: function (valores) { … },       // después de cualquier cambio
+     flota: true                             // (opcional) en una barra: la lista flota encima (ver abajo)
    });
    b.valor()            // ['12', …]  (con varios y «todos» escogido: []); con una sola opción, si se escribió un nombre de la
                         // lista sin escogerlo (o lo escrito solo coincide con una), esa
@@ -27,7 +28,15 @@
    b.opciones([…])      // cambia las opciones (lo escogido que ya no esté, se quita)
    b.habilita(true|false)
    b.foco()
-   La lista que se despliega avisa con PORTAL.abreMenu y se cierra si se abre otro menú (un solo menú abierto a la vez). */
+   La lista que se despliega avisa con PORTAL.abreMenu y se cierra si se abre otro menú (un solo menú abierto a la vez).
+
+   En una barra de trabajo, la lista flota (17-nov-2026, Fernando Cadengo, con la captura de Quo Facturita › Facturar ›
+   Facturas: «cuando se elije una empresa se mueve lo blanco»: la lista del RFC empujaba dentro de la barra, la barra crecía
+   y todo lo de junto se recorría hacia abajo). Con flota: true, o si el buscador vive dentro de la barra común
+   (.ppl-bar de js/pilas.js) o de algo con data-pb-flota, la lista sale encima de lo de abajo, fija en la pantalla y pegada
+   a la caja (como FILTROS y «Más ▾»): la barra no cambia de alto, ningún recuadro la corta, abre hacia arriba si abajo no
+   cabe, sigue a la caja al deslizar y se cierra si la caja ya no se ve. En el celular (600 px o menos) y en las formas y
+   ventanas, como siempre: la lista empuja lo de abajo (con el teclado del teléfono abierto así nunca queda debajo). */
 (function () {
   'use strict';
   if (window.PROFASE_BUSCA) return;
@@ -54,6 +63,8 @@
     + '.pb-x:hover{background:var(--pb-sf2);color:var(--pb-ink)}'
     + '.pb-lst{border:1px solid var(--pb-ln2);border-radius:8px;background:var(--pb-sf);max-height:232px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}'
     + '.pb-lst[hidden]{display:none!important}'
+    // en una barra, la lista flota encima (fija en la pantalla y pegada a la caja; la coloca flotaColoca())
+    + '.pb-lst.pb-flt{position:fixed;z-index:60;margin:0;box-shadow:0 12px 32px rgba(10,18,32,.22);border-color:var(--pb-ln)}'
     + '.pb-it{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:7px 10px;border:0;border-top:1px solid var(--pb-ln2);background:none;color:var(--pb-ink);font:inherit;font-size:14px;text-align:left;cursor:pointer;line-height:1.3}'
     + '.pb-it:first-child{border-top:0}'
     + '.pb-it:hover,.pb-it.act{background:var(--pb-sf2)}'
@@ -142,6 +153,7 @@
       lst.innerHTML = h;
       inp.setAttribute('aria-activedescendant', act >= 0 && vistos[act] ? idL + '-' + act : '');
       var a = lst.querySelector('.pb-it.act'); if (a && a.scrollIntoView) { try { a.scrollIntoView({ block: 'nearest' }); } catch (e) { /* nada */ } }
+      if (flotando) flotaColoca();   // si la barra se movió mientras tanto, la lista la sigue
     }
     function pintaChips() {
       if (!chips) return;
@@ -171,6 +183,41 @@
       if (v && !abierto) { try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu(yo); } catch (e) { /* sin aviso */ } }
       abierto = !!v; lst.hidden = !abierto; inp.setAttribute('aria-expanded', String(abierto));
       if (abierto) { act = -1; filas(); }
+      flotaPon(abierto);
+    }
+
+    // En una barra de trabajo, la lista flota (ver el principio del archivo): fija en la pantalla y pegada a la caja, para que
+    // la barra no crezca ni se recorra lo de junto. Se decide al abrir, porque la barra común (js/pilas.js) mueve la caja ahí
+    // después de crearla.
+    var caja = w.querySelector('.pb-caja'), flotando = false;
+    function vaFlotando() {
+      if (abierta || (window.innerWidth || 0) <= 600) return false;
+      return cfg.flota != null ? !!cfg.flota : !!(w.closest && w.closest('.ppl-bar,[data-pb-flota]'));
+    }
+    function flotaColoca(e) {
+      if (!flotando) return;
+      if (e && e.type === 'scroll' && e.target === lst) return;   // se desliza la lista misma
+      if (!vaFlotando()) { flotaPon(false); return; }            // la pantalla se hizo chica: como en el celular
+      var r = caja.getBoundingClientRect(), vv = window.visualViewport;
+      var arr = vv ? vv.offsetTop : 0, aba = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      var an = document.documentElement.clientWidth || window.innerWidth;
+      if (!caja.getClientRects().length || r.bottom < arr || r.top > aba) { abre(false); return; }   // la caja ya no se ve
+      var abajo = aba - r.bottom - 12, arriba = r.top - arr - 12, sube = abajo < 160 && arriba > abajo;
+      var ancho = Math.min(Math.max(r.width, 260), an - 16), izq = Math.max(8, Math.min(r.left, an - 8 - ancho));
+      lst.style.left = izq + 'px'; lst.style.width = ancho + 'px';
+      lst.style.maxHeight = Math.max(96, Math.min(232, sube ? arriba : abajo)) + 'px';
+      if (sube) { lst.style.top = 'auto'; lst.style.bottom = (window.innerHeight - r.top + 4) + 'px'; }
+      else { lst.style.bottom = 'auto'; lst.style.top = (r.bottom + 4) + 'px'; }
+    }
+    function flotaPon(on) {
+      on = !!on && vaFlotando();
+      if (on === flotando) { if (on) flotaColoca(); return; }
+      flotando = on; lst.classList.toggle('pb-flt', on);
+      var vv = window.visualViewport, f = on ? 'addEventListener' : 'removeEventListener';
+      window[f]('scroll', flotaColoca, true); window[f]('resize', flotaColoca);
+      if (vv) { vv[f]('resize', flotaColoca); vv[f]('scroll', flotaColoca); }
+      if (on) flotaColoca();
+      else ['left', 'top', 'bottom', 'width', 'maxHeight'].forEach(function (k) { lst.style[k] = ''; });
     }
     function escoge(o) {
       if (!o) return;
