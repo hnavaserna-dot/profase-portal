@@ -817,8 +817,14 @@
        pantallas, las de hoy y las nuevas; construir.py (exige_fechas_ios) no publica si se quita. ---- */
   (function pantallas() {
     var FECHAS = 'input[type=date],input[type=month],input[type=week]';
+    try { if (/iPhone|iPod/.test(navigator.userAgent || '')) document.documentElement.classList.add('pf-iphone'); } catch (e) {}
     var css = 'html{-webkit-text-size-adjust:100%;text-size-adjust:100%}'
       + '@media (pointer:coarse) and (max-width:900px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}}'
+      // El iPhone se acerca solo al escribir en un campo de menos de 16 px, mida lo que mida su pantalla. El iPhone Duo abierto
+      // (Héctor Daniel Nava, 17-nov-2026) mide 951 px de ancho, y un iPhone grande acostado más de 900: ahí la regla de arriba
+      // ya no llegaba. En cualquier iPhone (html.pf-iphone, abajo) los campos miden 16 px en cualquier ancho; el iPad y la
+      // computadora no cambian. construir.py (exige_fechas_ios) no publica si se quita.
+      + 'html.pf-iphone input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),html.pf-iphone select,html.pf-iphone textarea{font-size:16px!important}'
       + '@supports (-webkit-touch-callout:none){' + FECHAS + '{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;text-align:left}'
       + FECHAS.split(',').map(function (s) { return s + '::-webkit-date-and-time-value'; }).join(',') + '{text-align:left;min-height:1.2em;margin:0}}'
       // En las tablas las palabras no se parten a la mitad (regla de Daniel: «nunca a media palabra»; revisión a fondo,
