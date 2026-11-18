@@ -2427,7 +2427,8 @@
      p_corta, 402: unas letras) y, si es la misma, se usa lo guardado sin bajar nada; si no, se pide la lista de versiones
      y se baja solo lo que cambió. Las reglas de la base siguen decidiendo qué ve cada quien: lo guardado es solo lo que la
      base ya le dio y la huella la calcula la base con su sesión. Solo las colecciones de GUARDA_COLS. */
-  var GUARDA_COLS = { var_com: 1, var_est: 1 };
+  // (18-nov-2026, revisión nocturna) también var_eventos: los avisos de Variaciones (más de 12 mil, ~3 MB), que solo crecen
+  var GUARDA_COLS = { var_com: 1, var_est: 1, var_eventos: 1 };
   var SUBTLE = null;
   try { if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') SUBTLE = crypto.subtle; } catch (e) { SUBTLE = null; }
   async function huella(txt) {
