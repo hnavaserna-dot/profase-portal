@@ -872,7 +872,25 @@
   (function pantallas() {
     var FECHAS = 'input[type=date],input[type=month],input[type=week]';
     try { if (/iPhone|iPod/.test(navigator.userAgent || '')) document.documentElement.classList.add('pf-iphone'); } catch (e) {}
-    var css = 'html{-webkit-text-size-adjust:100%;text-size-adjust:100%}'
+    /* El iPhone plegable (el iPhone Duo de Héctor Daniel Nava; 18-nov-2026, 15:29 y 15:31: «El chat en mi iphone duo en
+       crm; me manda directo a chat; no me abre ventanita»; «Es en la pantalla exterior»). Su pantalla de fuera no se
+       reconoce por su ancho: el 17-nov se supuso que medía 466 px (de páginas de referencia, no de Apple) y no era. Se
+       reconoce por su forma: todo iPhone normal de los que traen iOS 26 es angosto y alto (su lado corto entre su lado
+       largo da 0.46; el SE, 0.56) y la pantalla de un plegable, cerrado o abierto, es más cuadrada (0.6 o más). También
+       cuenta un iPhone de 400 px o más de lado corto que no mide como ningún iPhone normal (con «Ampliar pantalla» los
+       normales miden menos de 400 o como otro de la lista). screen no cambia con las barras de Safari ni al acostarlo; se
+       pregunta cada vez, porque cambia al abrirlo o cerrarlo. Una sola versión: quien decida «celular» por el ancho
+       (como la burbuja del chat, chico() de chat_tab.js) le pregunta aquí. */
+    var IPHONES = ['375x667', '375x812', '390x844', '393x852', '402x874', '414x736', '414x896', '420x912', '428x926', '430x932', '440x956'];
+    P.plegable = function () {
+      try {
+        if (!/iPhone/.test(navigator.userAgent || '')) return false;
+        var a = Math.min(screen.width, screen.height), l = Math.max(screen.width, screen.height);
+        if (!a || !l) return false;
+        return a / l >= 0.6 || (a >= 400 && IPHONES.indexOf(a + 'x' + l) < 0);
+      } catch (e) { return false; }
+    };
+    var css ='html{-webkit-text-size-adjust:100%;text-size-adjust:100%}'
       + '@media (pointer:coarse) and (max-width:900px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),select,textarea{font-size:16px!important}}'
       // El iPhone se acerca solo al escribir en un campo de menos de 16 px, mida lo que mida su pantalla. El iPhone Duo abierto
       // (Héctor Daniel Nava, 17-nov-2026) mide 951 px de ancho, y un iPhone grande acostado más de 900: ahí la regla de arriba
