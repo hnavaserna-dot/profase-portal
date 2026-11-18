@@ -467,7 +467,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     <select id="f-aut" aria-label="Autoriza" multiple><option value="">Todos los que autorizan</option></select>
     <select id="f-per" aria-label="Periodicidad"><option value="">Mensuales y anuales</option><option value="1">Mensuales</option><option value="2">Anuales</option></select>
     <!-- 407 (17-nov-2026): la consulta de auditoría. Solo sale a quien la base le da empresas para consultar -->
-    <select id="f-aud" aria-label="Qué ves" hidden><option value="">Mis actividades</option><option value="aud">Consulta de auditoría</option></select>
+    <select id="f-aud" aria-label="Qué ves" hidden><option value="">Mis actividades</option><option value="aud">Consulta de auditoría</option><option value="tc">También consulta</option></select>
     <button class="btn" type="button" id="limpia">Limpiar filtros</button>
   </div>
   <section id="pilas" hidden></section>
@@ -570,10 +570,15 @@ tr.fila:hover td{background:var(--navy-soft)}
         P.sb.rpc('wf_proy_estado').then(null, nada),
         P.sb.from('wf_asignado').select('empresa_id,nombre,usuario').order('empresa_id').range(0, 4999).then(null, nada),
         // 407: las empresas que ve solo para consultar (auditoría); a quien no es del equipo de auditoría, vacío
-        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_aud_mis_empresas').then(null, nada) : Promise.resolve({ data: [] })]);
-      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7], au = R0[8];
+        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_aud_mis_empresas').then(null, nada) : Promise.resolve({ data: [] }),
+        // 415: las actividades que ve solo para consultar («También consulta»: el Cálculo de impuestos del cliente de su DyP…)
+        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_tc_mis_acts').then(null, nada) : Promise.resolve({ data: [] })]);
+      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7], au = R0[8], tc = R0[9];
       AUDS = {}; if (!au.error && Array.isArray(au.data)) au.data.forEach(function (x) { AUDS[x] = 1; });
-      HAY_AUD = Object.keys(AUDS).length > 0; $('f-aud').hidden = !HAY_AUD; if (!HAY_AUD) $('f-aud').value = '';
+      HAY_AUD = Object.keys(AUDS).length > 0;
+      TCS = {}; if (!tc.error && Array.isArray(tc.data)) tc.data.forEach(function (x) { TCS[+x] = 1; });
+      HAY_TC = Object.keys(TCS).length > 0;
+      quesVes();
       VEO_RES = !v.error && v.data === true;
       if (!es.error && es.data) ENV = es.data;
       if (!ce.error && ce.data) CONF = ce.data;
@@ -583,7 +588,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (ra.error) throw ra.error;
       (ra.data || []).forEach(function (s) { if (!ASIG[s.empresa_id]) { ASIG[s.empresa_id] = s.nombre; ASIGU[s.empresa_id] = s.usuario || ''; } });
       if (ROL === 'contador') $('subt').textContent = 'Tus actividades del WorkFlow (donde eres responsable, autorizas o eres el contador asignado), como en el panel del Access: abre la ficha para cambiar el estatus, comentar, subir documentos y pedir la autorización.'
-        + (HAY_AUD ? ' Las de la consulta de auditoría, solo para ver, en FILTROS › «Qué ves».' : '');
+        + (HAY_AUD || HAY_TC ? ' Lo que solo consultas (' + [HAY_AUD ? 'la auditoría' : '', HAY_TC ? '«También consulta»' : ''].filter(Boolean).join(' y ') + '), en FILTROS › «Qué ves».' : '');
       if (CONSULTA) $('subt').textContent = 'El WorkFlow como en el panel del Access, para consultar.';
       $('gen-abre').hidden = !genero();
       $('dev-abre').hidden = !(DEV.crea && !CONSULTA);
@@ -600,6 +605,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       var hn = /^#devisr-(\d{1,12})-(\d{4})$/.exec(location.hash || ''); if (hn) abreDevNueva({ impuesto: 'isr', empresa: +hn[1], ejercicio: +hn[2] });
       var hp = /^#proy-(\d{1,12})$/.exec(location.hash || ''); if (hp) abreProyCaso(+hp[1]);
       if (location.hash === '#aud') window.__verAud();
+      if (location.hash === '#tc') window.__verTc();
       if (location.hash === '#proy-nuevo') abreProyNuevo();
     } catch (e) {
       $('cargando').hidden = true; $('error').hidden = false;
@@ -757,10 +763,10 @@ tr.fila:hover td{background:var(--navy-soft)}
     var q = norm($('f-buscar').value.trim()), pl = vals('f-pla'), ac = vals('f-act'), r = vals('f-resp'), c = vals('f-cont'),
       au = vals('f-aut'), es = vals('f-est'), cl = vals('f-cli'), pe = +$('f-per').value || 0, dm = pl.indexOf(DEV_PLA) >= 0 || pl.indexOf(DEV_ISR) >= 0 ? $('f-dmes').value : '',
       pt = pl.indexOf(PROY_PLA) >= 0 ? $('f-ptipo').value : '';
-    var va = verAud();
+    var vv = vista();
     return A.filter(function (a) {
-      // 407: «Mis actividades» deja fuera lo que solo se ve por la auditoría; «Consulta de auditoría», solo eso
-      if (HAY_AUD && soloAud(a) !== va) return false;
+      // 407 y 415: «Mis actividades» deja fuera lo que solo se consulta; «Consulta de auditoría» y «También consulta», solo eso
+      if (HAY_VER && vistaDe(a) !== vv) return false;
       if (!en(pl, plaDe(a))) return false;
       if (dm && (plaDe(a) === DEV_PLA || plaDe(a) === DEV_ISR) && devMes(a) !== dm) return false;
       if (pt && plaDe(a) === PROY_PLA && proyTipo(a) !== pt) return false;
@@ -824,15 +830,15 @@ tr.fila:hover td{background:var(--navy-soft)}
     var cola = es.length ? LISTA : abiertas;
     var per = $('f-mes').value ? MESES_L[+$('f-mes').value - 1] + ' ' + $('f-anio').value : 'Todo ' + $('f-anio').value;
     PROFASE_PILAS.pinta($('pilas'), {
-      titulo: verAud() ? 'Consulta de auditoría · solo para ver' : ROL === 'contador' ? 'Tu trabajo · tus actividades' : 'Tu trabajo · las actividades',
+      titulo: verAud() ? 'Consulta de auditoría · solo para ver' : verTc() ? 'También consulta · solo para ver' : ROL === 'contador' ? 'Tu trabajo · tus actividades' : 'Tu trabajo · las actividades',
       meta: per + ' · ' + base.length + (base.length === 1 ? ' actividad' : ' actividades') + (base.length ? ' · ' + Math.round(100 * n[2] / base.length) + ' % terminadas' : ''),
       pilas: PILAS_W.map(function (p) {
         return { k: p.k, t: p.t, n: n[p.k], d: p.k === '2' ? pct(n[2]) : p.d, tono: p.tono, on: es.indexOf(p.k) >= 0, oculta: p.k === '3' && !n[3] && es.indexOf('3') < 0,
-          tag: p.k === 'vencidas' && n.vencidas && !CONSULTA && ROL === 'contador' && !verAud() ? 'Te toca' : '' };
+          tag: p.k === 'vencidas' && n.vencidas && !CONSULTA && ROL === 'contador' && !verSolo() ? 'Te toca' : '' };
       }),
       // la pila deja solo ese estatus (si ya era solo ese, lo quita); en FILTROS se marcan varios
       alPicar: function (k) { var s = $('f-est'), e = vals('f-est'); ponVals('f-est', e.length === 1 && e[0] === k ? [] : [k]); s.dispatchEvent(new Event('change', { bubbles: true })); if (BAR && BAR.f) BAR.f.pinta(); },
-      boton: { t: CONSULTA || verAud() ? 'Ver una por una' : es.length ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
+      boton: { t: CONSULTA || verSolo() ? 'Ver una por una' : es.length ? 'Revisar estas' : 'Empezar a revisar', n: cola.length,
         alPicar: function () { if (!cola.length) return; COLA = cola.map(function (a) { return a.id; }); abre(COLA[0]); } },
       nota: es.length ? 'Abre la primera de la lista; con «Siguiente ›» pasas a la que sigue.' : 'Abre la primera de las que faltan (las vencidas primero y luego por fecha); con «Siguiente ›» pasas a la que sigue.'
     });
@@ -848,7 +854,7 @@ tr.fila:hover td{background:var(--navy-soft)}
           { t: 'CLIENTE', campos: [d($('f-cli'), { t: 'CLIENTE', buscar: true })] },
           { t: 'ACTIVIDAD', campos: [d($('f-est'), { t: 'ESTATUS' }), d($('f-pla'), { t: 'PLANTILLA' }), d($('f-act'), { t: 'ACTIVIDAD', buscar: true }), d($('f-dmes'), { t: 'MES O EJERCICIO QUE SE SOLICITA' }), d($('f-ptipo'), { t: 'TIPO DE PROYECTO' }), d($('f-per'), { t: 'PERIODICIDAD' })] },
           { t: 'PERSONAS', campos: [d($('f-resp'), { t: 'RESPONSABLE' }), d($('f-cont'), { t: 'CONTADOR ASIGNADO' }), d($('f-aut'), { t: 'AUTORIZA' })] },
-          // 407: solo a quien tiene la consulta de auditoría (el campo se esconde con su <select>)
+          // 407 y 415: solo a quien consulta algo que no es suyo (el campo se esconde con su <select>)
           { t: 'QUÉ VES', campos: [d($('f-aud'), { t: 'QUÉ VES' })] }],
         limpiar: function () { $('limpia').click(); },
         resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' actividad' : ' actividades'); }
@@ -923,7 +929,7 @@ tr.fila:hover td{background:var(--navy-soft)}
   function respG(g) { return g.resps.length ? esc(g.resps[0]) + (g.resps.length > 1 ? ' <span class="rfc">+' + (g.resps.length - 1) + '</span>' : '') : '<span class="no">Sin responsable</span>'; }
   function filaAct(a, sub) {
     var est = chipEst(a.estatus) + (enPausa(a) ? '<div><span class="tag pz" title="' + esc(a.pausa) + '">En pausa</span></div>' : '') + (CUB[a.id] ? '<div><span class="tag az">Cubres a ' + esc(CUB[a.id].de) + '</span></div>' : '')
-      + (soloAud(a) ? '<div><span class="tag az">Solo consulta (auditoría)</span></div>' : '');
+      + (soloAud(a) ? '<div><span class="tag az">Solo consulta (auditoría)</span></div>' : soloTc(a) ? '<div><span class="tag az">Solo consulta</span></div>' : '');
     var resp = (esc(a.resp_nombre) || '<span class="no">Sin responsable</span>') + (a.aut_nombre ? '<div class="rfc">Autoriza: ' + esc(a.aut_nombre) + '</div>' : '');
     var docs = a.n_docs ? '<span class="clip">' + esc(a.n_docs) + (a.n_docs === 1 ? ' doc.' : ' docs.') + '</span>' : '<span class="no">—</span>';
     var act = '<div>' + esc(a.actividad) + '</div><div class="rfc">' + esc(a.plantilla) + ' · paso ' + esc(a.secuencia) + (a.periodicidad === 2 ? ' · anual' : '') + '</div>';
@@ -989,10 +995,29 @@ tr.fila:hover td{background:var(--navy-soft)}
   // 407: la ve solo por la consulta de auditoría (no es responsable, no autoriza, no es el contador asignado ni la cubre)
   var AUDS = {}, HAY_AUD = false;
   function soloAud(a) { return HAY_AUD && !!AUDS[a.empresa_id] && !soyResp(a) && !soyAut(a) && !soyAsig(a) && !CUB[a.id]; }
-  function verAud() { return HAY_AUD && $('f-aud').value === 'aud'; }
-  function enVista(a) { return !HAY_AUD || soloAud(a) === verAud(); }
-  // desde el aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']('aud')): FILTROS › «Qué ves» en «Consulta de auditoría»
-  window.__verAud = function () { if (!HAY_AUD) return; $('f-aud').value = 'aud'; opciones(); mostrar = PAGINA; pinta(); if (BAR && BAR.f) BAR.f.pinta(); };
+  // 415: la ve solo por «También consulta» (una actividad de un cliente y mes donde hace otra; la base decide cuáles)
+  var TCS = {}, HAY_TC = false, HAY_VER = false;
+  function soloTc(a) { return HAY_TC && !!TCS[a.id] && !soloAud(a) && !soyResp(a) && !soyAut(a) && !soyAsig(a) && !CUB[a.id]; }
+  function soloVer(a) { return soloAud(a) || soloTc(a); }   // la ficha sin nada que cambie (la base tampoco deja)
+  function vistaDe(a) { return soloAud(a) ? 'aud' : soloTc(a) ? 'tc' : ''; }
+  function vista() { return HAY_VER ? $('f-aud').value : ''; }
+  function verAud() { return vista() === 'aud'; }
+  function verTc() { return vista() === 'tc'; }
+  function verSolo() { return verAud() || verTc(); }
+  function enVista(a) { return !HAY_VER || vistaDe(a) === vista(); }
+  // «Qué ves»: «Mis actividades» y, solo si las tiene, «Consulta de auditoría» y «También consulta»
+  function quesVes() {
+    HAY_VER = HAY_AUD || HAY_TC;
+    var s = $('f-aud'), v = s.value;
+    s.innerHTML = '<option value="">Mis actividades</option>' + (HAY_AUD ? '<option value="aud">Consulta de auditoría</option>' : '')
+      + (HAY_TC ? '<option value="tc">También consulta</option>' : '');
+    s.hidden = !HAY_VER;
+    s.value = (v === 'aud' && HAY_AUD) || (v === 'tc' && HAY_TC) ? v : '';
+  }
+  // desde el aviso (wft_tab.js, PROFASE_ABRE['workflow-trabajo']('aud' o 'tc')): FILTROS › «Qué ves» en esa vista
+  function verVista(k) { if (k === 'aud' ? !HAY_AUD : !HAY_TC) return; $('f-aud').value = k; opciones(); mostrar = PAGINA; pinta(); if (BAR && BAR.f) BAR.f.pinta(); }
+  window.__verAud = function () { verVista('aud'); };
+  window.__verTc = function () { verVista('tc'); };
   function cierra2(a) { return a.aut_nombre ? soyAut(a) : soyResp(a); }   // quien termina o rechaza (además de gerentes y dirección)
   // las mismas reglas que la base (portal/sql/44_wf_trabajo_ajustes.sql); la base es la que manda
   function puedeEstatus(a, e) {
@@ -1104,7 +1129,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     cierraFicha();
     ABIERTA = id;
     if (COLA.indexOf(id) < 0) COLA = colaVisible();
-    var aud = soloAud(a);   // 407: solo para ver (la base tampoco deja hacer nada más)
+    var aud = soloVer(a);   // 407 y 415: solo para ver (la base tampoco deja hacer nada más)
     var idx = COLA.indexOf(id), pasos = pasosDe(a), edita = puedeEditar(a) && !aud;
     var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a) && !aud;
     var envia = ENV.visible && !CONSULTA && ENVIABLES[a.actividad_id] && !aud;
@@ -1148,7 +1173,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     tabs.push({ id: 'pasos', t: 'Pasos', n: otras.length, html: pasosTab });
     tabs.push({ id: 'bit', t: 'Bitácora', nid: 'bit-n', html: '<div id="bit-in"><div class="vacio">Revisando…</div></div>' });
     if (!tabs.some(function (x) { return x.id === TAB; })) TAB = 'com';
-    var antes = (aud ? '<div class="pzaviso" style="margin:0 0 12px"><b>Solo consulta (auditoría):</b> la ves para consultar lo que se hizo. No la cambias, no comentas, no subes documentos y no cuenta como trabajo tuyo.</div>' : '')
+    var antes = (aud ? '<div class="pzaviso" style="margin:0 0 12px"><b>' + (soloTc(a) ? 'Solo consulta (también consulta):</b> la ves porque se la consulta junto con otra actividad tuya de este cliente y mes, o porque te la pusieron para consultar.' : 'Solo consulta (auditoría):</b> la ves para consultar lo que se hizo.') + ' No la cambias, no comentas, no subes documentos y no cuenta como trabajo tuyo.</div>' : '')
       + (CUB[a.id] ? '<div class="pzaviso" style="margin:0 0 12px"><b>La cubres:</b> ' + esc(CUB[a.id].de) + ' no está; la trabajas tú hasta el ' + esc(fecha(CUB[a.id].hasta)) + ' y al regresar vuelve a ' + esc(CUB[a.id].de) + '. El responsable y quien autoriza no cambian.</div>' : '')
       + (enPausa(a) ? '<div class="pzaviso" style="margin:0 0 12px"><b>En pausa' + (a.pausa_desde ? ' desde el ' + esc(fecha(diaMty(a.pausa_desde))) : '') + ':</b> ' + esc(a.pausa)
         + '. El cliente está en pausa (Panel › Pausas y motivos). Mientras siga así no cuenta como vencida y sí se puede trabajar. Al reactivarlo, su vencimiento Profase se recorre los días hábiles que estuvo en pausa.</div>' : '');
@@ -1227,7 +1252,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ABIERTA !== a.id || !V) return;
     if (r.error || !r.data) { V.platica({ hilo: [], puede: false, noPuede: 'No se pudieron leer los comentarios. Cierra la ficha y vuelve a abrirla.' }); return; }
     PLAT = { act: a.id, hilo: platDe(r.data) };
-    V.platica({ hilo: PLAT.hilo, puede: !!r.data.puede && !soloAud(a), yo: r.data.yo || '' });   // 407: la auditoría solo lee (la base también le dice 'ver')
+    V.platica({ hilo: PLAT.hilo, puede: !!r.data.puede && !soloVer(a), yo: soloVer(a) ? '' : (r.data.yo || '') });   // 407 y 415: solo lee (la base también le dice 'ver'); sin «Corregir» ni «Borrar»
     BIT.com = PLAT.hilo; bitPinta(a);
   }
   async function platCambia(a, fn, args) {
