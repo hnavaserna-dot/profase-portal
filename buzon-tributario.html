@@ -601,7 +601,9 @@ tr.click:hover td{background:var(--navy-soft)}
     };
   });
   async function carga() {
+    var pes = PES;
     DATOS = await rpc('bzt_lista', { p: { pestana: PES, desde: $('f-desde').value, hasta: $('f-hasta').value } });
+    try { DATOS.pes = pes; } catch (e) {}   // de qué pestaña es la lista que llegó (lo usa «ver:correo-pdf»)
     FILAS = DATOS.filas || [];
     var ids = {}; FILAS.forEach(function (f) { ids[f.id] = 1; });
     Object.keys(SEL).forEach(function (k) { if (!ids[k]) delete SEL[k]; });
@@ -610,7 +612,57 @@ tr.click:hover td{background:var(--navy-soft)}
 
   /* ---------- la ficha de un aviso ---------- */
   function esPdf(d) { return /\.pdf$/i.test(d.nombre || '') || d.tipo === 'application/pdf'; }
+  /* «PDF del correo» (Héctor Daniel Nava, 18-nov-2026, 13:16: «sí así es», a lo que pidió Francisco Rivera: «que ese
+     comunicado nos lo arroje el CRM en PDF… un botón que permita descargarlo sin marca de agua de PROFASE y poder adjuntarlo
+     en la aclaración que hagamos»). Lo arma la página con lo que ya trae la ficha (el asunto y el texto del correo, el día y
+     la hora en que llegó, el contribuyente y el folio, si lo hay): limpio, como un correo impreso, sin nada de PROFASE ni
+     nada interno (a quién se asignó, notas, plazos). Va por el mismo visor que los documentos del aviso: se ve y se baja
+     con la marca PROFASE puesta encima (sellaPDF) y, al bajarlo, «Con marca PROFASE» / «Original (sin marca)» a todos los
+     que ven el aviso (originalTodos, como los documentos; petición 20261103-1342). No guarda nada. */
+  var CORREO = null;
+  function correoDoc(a) {
+    var nom = 'Correo del SAT ' + String(a.rfc || '') + ' ' + String(a.fecha || '').slice(0, 10) + (a.hora ? ' ' + String(a.hora).replace(':', '') : '');
+    return { id: 'correo-' + a.id, nombre: nom.replace(/\s+/g, ' ').trim() + '.pdf', tipo: 'application/pdf', correo: a };
+  }
+  // el texto en lo que entiende la letra estándar del PDF (comillas, guiones y viñetas de Word; sin espacios invisibles)
+  function plano(s) {
+    return String(s || '').replace(/\r\n?/g, '\n').replace(/[\u2018\u2019\u201A\u2032]/g, "'").replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+      .replace(/[\u2010-\u2015\u2212]/g, '-').replace(/\u2026/g, '...').replace(/[\u2022\u2023\u25AA\u25CF\u25E6\u2043]/g, '-')
+      .replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/\t/g, '    ').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+      .replace(/[^\n\x20-\x7E\u00A1-\u00FF]/g, '');
+  }
+  async function pdfCorreo(a) {
+    var Hoja = await window.PROFASE_MARCA.pdfJS();
+    var doc = new Hoja({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 56, ancho = W - 2 * M, y = M;
+    function escribe(t, tam, estilo, gris, despues) {
+      doc.setFont('helvetica', estilo); doc.setFontSize(tam); doc.setTextColor(gris, gris, gris);
+      doc.splitTextToSize(plano(t), ancho).forEach(function (l) {
+        if (y + tam > H - M) { doc.addPage(); y = M; }
+        doc.text(l, M, y + tam); y += tam * 1.4;
+      });
+      y += despues || 0;
+    }
+    if (a.asunto) escribe(a.asunto, 13, 'bold', 20, 6);
+    escribe('Recibido el ' + fecha(a.fecha) + (a.hora ? ', ' + a.hora : ''), 10, 'normal', 70, 0);
+    escribe('Contribuyente: ' + cliente(a) + (a.razon && a.rfc ? ' · RFC ' + a.rfc : ''), 10, 'normal', 70, 0);
+    if (a.folio) escribe('Folio u oficio: ' + a.folio, 10, 'normal', 70, 0);
+    y += 8; doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.6); doc.line(M, y, W - M, y); y += 14;
+    escribe(a.cuerpo, 10.5, 'normal', 30, 0);
+    var n = doc.getNumberOfPages();
+    for (var i = 1; i <= n; i++) {
+      doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(140, 140, 140);
+      if (n > 1) doc.text(i + ' de ' + n, W - M, H - 30, { align: 'right' });
+    }
+    try { doc.setProperties({ title: plano(a.asunto || 'Correo del SAT') }); } catch (e) {}
+    return new Uint8Array(doc.output('arraybuffer'));
+  }
   async function bytesDoc(d) {
+    if (d.correo) {
+      var c = await pdfCorreo(d.correo);
+      var s = await window.PROFASE_MARCA.sellaPDF(c, { titulo: d.nombre });   // con marca al verlo; el original va dentro
+      return s || c;
+    }
     var r = await P.sb.storage.from('buzon').download(d.ruta);
     if (r.error || !r.data) throw new Error('No se pudo traer el archivo');
     var b = new Uint8Array(await r.data.arrayBuffer());
@@ -726,8 +778,14 @@ tr.click:hover td{background:var(--navy-soft)}
       + (enAvisos(a) && !a.cerrado_por ? '<dt>Informativo</dt><dd>Se registró solo en «Avisos del SAT» · ' + esc(fh(a.en_avisos)) + '</dd>' : '')
       + (a.observaciones ? '<dt>Observaciones</dt><dd>' + esc(a.observaciones) + '</dd>' : '')
       + '</dl>';
+    // (18-nov-2026) «PDF del correo»: el comunicado tal cual llegó, para adjuntarlo a la aclaración (abajo, pdfCorreo)
+    CORREO = a.cuerpo ? correoDoc(a) : null;
     var correoT = a.asunto || a.cuerpo ? '<div class="sec"><div class="in">' + (a.asunto ? '<div class="t"><b>' + esc(a.asunto) + '</b></div>' : '')
-      + (a.cuerpo ? '<div class="correo">' + esc(a.cuerpo) + '</div>' : '') + '<div class="mut">Lo que dice el mensaje se lee en el Buzón Tributario del SAT del cliente.</div></div></div>' : '';
+      + (a.cuerpo ? '<div class="correo">' + esc(a.cuerpo) + '</div>' : '') + '<div class="mut">Lo que dice el mensaje se lee en el Buzón Tributario del SAT del cliente.</div>'
+      + (CORREO ? '<div class="bloque" id="c-pdf" style="margin-top:10px"><div class="t">PDF del correo</div>'
+          + '<div class="acciones" style="margin-top:6px"><button class="btn chico" type="button" data-cver="1">Ver</button><button class="btn chico" type="button" data-cbaja="1">Bajar</button></div>'
+          + '<div class="mut">Para adjuntarlo a la aclaración, al bajarlo escoge «Original (sin marca)»: sale limpio, sin logo ni marca de agua.</div></div>' : '')
+      + '</div></div>' : '';
     var acc = [], cl = !!pu.cerrar, nNotas = (a.notas || []).length;
     // (293) lo que se escribe al escoger «Cerrado»: el concepto (si aquí no hay otro), la nota y lo que falta
     function cajaCierre(suf, conConcepto) {
@@ -861,7 +919,9 @@ tr.click:hover td{background:var(--navy-soft)}
       },
       enlaza: function (scrim) {
         scrim.addEventListener('click', function (e) {
-          var b = e.target.closest('[data-dver],[data-dbaja],[data-dquita]'); if (!b) return;
+          var b = e.target.closest('[data-dver],[data-dbaja],[data-dquita],[data-cver],[data-cbaja]'); if (!b) return;
+          if (b.dataset.cver) return CORREO && visor().ver(CORREO, b);     // (18-nov-2026) el PDF del correo del SAT
+          if (b.dataset.cbaja) return CORREO && visor().baja(CORREO, b);
           if (b.dataset.dver) return visor().ver(DOCS[b.dataset.dver], b);
           if (b.dataset.dbaja) return visor().baja(DOCS[b.dataset.dbaja], b);
           var d = DOCS[b.dataset.dquita];
@@ -1348,6 +1408,7 @@ tr.click:hover td{background:var(--navy-soft)}
       if (q.get('ver') === 'cerrar-aviso') window.__bztAbre('ver:cerrar-aviso');
       if (q.get('ver') === 'apoyos') window.__bztAbre('ver:apoyos');
       if (q.get('ver') === 'cancelaciones') window.__bztAbre('ver:cancelaciones');
+      if (q.get('ver') === 'correo-pdf') window.__bztAbre('ver:correo-pdf');
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
@@ -1412,6 +1473,29 @@ tr.click:hover td{background:var(--navy-soft)}
         sigue();
       };
       ilu4(); return;
+    }
+    // (18-nov-2026) lo nuevo: «PDF del correo» («Nuevos cambios», clave ver|correo-pdf|…): abre el aviso más reciente que
+    // llegó por correo, en su pestaña «El correo del SAT», con el botón iluminado
+    if (String(x || '') === 'ver:correo-pdf') {
+      var t6 = 0, ilu6 = function () {
+        if (!EST || !$('cargando').hidden || !$('principal') || $('principal').hidden || !DATOS) { if (t6++ < 80) setTimeout(ilu6, 150); return; }
+        if (PES !== 'avisos') document.querySelector('[data-pes="avisos"]').click();
+        if (DATOS.pes !== 'avisos') { if (t6++ < 80) setTimeout(ilu6, 150); return; }   // espera la lista de «Avisos del SAT»
+        var c = (FILAS || []).filter(function (f) { return f && f.origen === 'correo' && f.concepto !== 'cancelacion'; })[0];
+        if (!c) { avisa('Nuevo: en la ficha de cada aviso que llegó por correo, la pestaña «El correo del SAT» trae «PDF del correo», para bajarlo «Original (sin marca)» y adjuntarlo a la aclaración.'); return; }
+        ficha(c.id);
+        var t7 = 0, enCorreo = function () {
+          if (!VB || ABIERTO !== c.id) { if (t7++ < 60) setTimeout(enCorreo, 150); return; }
+          try { VB.pestana('correo'); } catch (e) {}
+          avisa('Nuevo: «PDF del correo». Al bajarlo escoge «Original (sin marca)» para adjuntarlo a la aclaración en el SAT.');
+          var b = document.getElementById('c-pdf');   // después del mensaje (que se desliza a la vista): lo nuevo queda en medio
+          if (b) { b.style.outline = '3px solid var(--accent)'; b.style.outlineOffset = '3px';
+            setTimeout(function () { try { b.scrollIntoView({ block: 'center' }); } catch (e) {} }, 80);
+            setTimeout(function () { b.style.outline = ''; b.style.outlineOffset = ''; }, 6000); }
+        };
+        enCorreo();
+      };
+      ilu6(); return;
     }
     var v = VER[String(x || '').replace(/^ver:/, '')];
     if (/^ver:/.test(String(x || '')) && v) {
