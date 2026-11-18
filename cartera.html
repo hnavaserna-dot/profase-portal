@@ -1218,7 +1218,7 @@ function chipContador(nom,extra){
 const fmtD=s=>{if(!s)return '—'; const d=new Date(s+'T00:00:00');
   return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});};
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-const fallo=e=>{document.getElementById('vista').innerHTML='<div class="empty">No se pudieron cargar los datos. '+String(e).replace(/[<>&]/g,'')+'</div>';};
+const fallo=e=>{document.getElementById('vista').innerHTML='<div class="empty">'+(window.PORTAL&&PORTAL.falla?PORTAL.falla(e,'No se pudieron cargar los datos'):'No se pudieron cargar los datos. Qué hacer: vuelve a cargar la pantalla.').replace(/[<>&]/g,'')+'</div>';};
 
 
 /* ── Datos: colección «cartera» de la base del portal ──
@@ -1394,8 +1394,9 @@ async function arrancaYa(recarga){
   carListo(true);
 }
 function avisaArriba(txt){
+  if(window.PORTAL&&PORTAL.conQueHacer) txt=PORTAL.conQueHacer(txt);   // un error dice qué hacer (js/portal.js)
   const a=document.getElementById('m-act'); a.textContent=txt; a.hidden=false;
-  clearTimeout(a._t); a._t=setTimeout(()=>{a.hidden=true;},6000);
+  clearTimeout(a._t); a._t=setTimeout(()=>{a.hidden=true;},/Qué hacer/.test(txt)?30000:6000);   // un error se queda más
   // con la ventana de una empresa (o una ventanita) abierta, esta línea queda atrás, tapada: el mismo mensaje sale además en
   // el aviso chico de abajo, encima de todo y con su ✕ (PORTAL.toast de js/portal.js). 5-nov-2026: así se perdían el «Listo»
   // y los errores de «Agotar» y de ✓ Aplicar, y parecía que «no pasó nada» (Fernando Cadengo).
@@ -1408,7 +1409,7 @@ function avisaArriba(txt){
     await window.claude.use('db');
     SB=window.PORTAL.sb; YO=window.PORTAL.perfil;
     const q=await SB.rpc('veo_cartera'); ALCANCE=q.error?null:q.data;
-    if(!ALCANCE){ v.innerHTML='<div class="empty">Tu usuario no tiene acceso a la cartera. Si lo necesitas, pídeselo a Daniel.</div>'; carListo(false); return; }
+    if(!ALCANCE){ v.innerHTML='<div class="empty">Tu usuario no tiene acceso a la cartera. Qué hacer: si la necesitas para tu trabajo, pídele el acceso a tu gerente.</div>'; carListo(false); return; }
     await CD.dueno(YO.id);
     try{ const a=new URLSearchParams(location.search).get('abre'); if(a&&/^(\d{1,12}|ver:[a-z-]{1,40}|pila:can)$/.test(a)) ABRE_PEND=a; }catch(e){}
     if(window.PROFASE_OCULTOS){ await window.PROFASE_OCULTOS.carga(); window.PROFASE_OCULTOS.alCambiar(()=>{ if(CARGADA){ S.doc=null; render(); } }); }
@@ -1419,7 +1420,7 @@ function avisaArriba(txt){
       if(!s.exists||!CARGADA) return;
       const d=s.data(); if(META&&d.refreshedAt!==META.refreshedAt) arranca(true).catch(()=>{});
     },()=>{});
-  }catch(e){ carListo(false); fallo(e&&e.message||e); }
+  }catch(e){ carListo(false); fallo(e); }
 })();
 
 /* ── tamaño de letra; se recuerda en este navegador ── */
@@ -2162,7 +2163,7 @@ function encabezadoFicha(c){
   bx.title=S.tab==='apl'?'Las aplicaciones: Resumen, Clientes, Proveedores, Anticipos, Notas de crédito y Canceladas (demostrativo)':S.tab==='can'?'Las canceladas que siguen en el Tablero QUO: un bloque por hoja':'Lo que está seleccionado en la ficha, con el formato del reporte CXC CXP';
   bx.onclick=async()=>{ bx.disabled=true; bx.textContent='Generando…';
     try{ bx.textContent=S.tab==='apl'?await exportaAplicaciones(S.cliente):S.tab==='can'?await exportaCanceladas(S.cliente):await exportaReporteCxcCxp(S.cliente); }
-    catch(e){ bx.textContent='No se pudo exportar'; bx.title=String(e&&e.message||e); }
+    catch(e){ bx.textContent='No se pudo exportar'; bx.title=msgErr(e,'No se pudo exportar'); avisaArriba(bx.title); }
     setTimeout(()=>{ bx.disabled=false; bx.textContent='Excel'; },2500); };
   wb.appendChild(bx);
   if(ESTC.ok){ const be=el('button','minibtn xlbtn','Estatus: '+estEmpresaTxt(S.cliente)+' ▾'); be.type='button'; be.dataset.estEmpresa='1';
@@ -2746,7 +2747,7 @@ const rfcDe=r=>D.cli[r.cli][2];
 const viva=CD.viva;
 const stDe=m=>m.estatus==='fuera'?(m.estado==='por_aprobar'?'por_aprobar':'fuera'):m.estatus==='estrategia'?'estrategia':'normal';
 const cuando=x=>{ try{ return window.PROFASE_HORA?window.PROFASE_HORA.fechaHora(x):fmtD(String(x).slice(0,10)); }catch(e){ return ''; } };
-const msgErr=e=>String((e&&(e.message||e.details||e.hint))||e||'No se pudo').replace(/^.*?ERROR:\s*/,'');
+const msgErr=(e,que)=>window.PORTAL&&PORTAL.falla?PORTAL.falla(e,que):String((e&&(e.message||e.details||e.hint))||e||'No se pudo').replace(/^.*?ERROR:\s*/,'');   // la pieza común: por qué y qué hacer
 // ¿puede quitarle a esta marca su estatus? (la base lo vuelve a revisar)
 const quitaMarca=m=>!!m&&yoMarco()&&(yoApruebo()||m.mia||m.estatus==='estrategia'||m.motivo==='sin_estrategia');
 /* «Sin estrategia fiscal (solo esta factura)» (359; ajuste de Gabo, Fernando Cadengo, 11-nov-2026): una marca «normal» de una
@@ -3192,7 +3193,7 @@ async function abreSegDesde(rfc,uuid,parte,empresa){
   if(ci<0){ avisaArriba('Esa empresa no está en tu cartera.'); return; }
   abreCliente(ci,{tab:uuid?'todos':'fac'});
   try{ if(!UUID_OK.has(rfc)) await cargaUuids([rfc]); }catch(e){}
-  if(!await cargaSeg(rfc)){ avisaArriba('No se pudo abrir su seguimiento; intenta en un momento.'); return; }
+  if(!await cargaSeg(rfc)){ avisaArriba('No se pudo abrir su seguimiento. Qué hacer: intenta en un momento.'); return; }
   pintaModal();
   if(empresa||!uuid){ if(empresa) return; abreSegEmpresa(ci); return; }
   const d=ROWS.find(x=>x.cli===ci&&x.uuid&&String(x.uuid).toUpperCase()===uuid&&(x.parte||'k')===parte);
@@ -3373,7 +3374,7 @@ function botonEstrategia(){
     if(EXC_TXT) return;
     const pon=t=>{ EXC_TXT=t; const x=document.getElementById('xlest'); if(x){ x.textContent=t||EXC_LAB; x.disabled=!!t; } };
     let fin; try{ fin=await exportaGeneral(pon,'estrategia'); }
-    catch(e){ fin=msgErr(e).length<60?msgErr(e):'No se pudo exportar'; }
+    catch(e){ fin='No se pudo exportar'; avisaArriba(msgErr(e,'No se pudo exportar')); }
     pon(fin); setTimeout(()=>pon(null),2500);
   };
   return b;
@@ -3915,10 +3916,10 @@ function pestanaCan(lista){
   const rfc=D.cli[S.cliente][2];
   if(!S.cnf) S.cnf={1:'todas',2:'todas'};
   CAN_VIS=[]; CAN_DOC=new Map();
-  if(!CAN.ok){ lista.appendChild(el('div','empty','No se pudo saber qué está cancelado; vuelve a intentar en un momento.')); return; }
+  if(!CAN.ok){ lista.appendChild(el('div','empty','No se pudo saber qué está cancelado. Qué hacer: vuelve a intentar en un momento.')); return; }
   const det=CAN.det.get(rfc);
   if(!det){
-    if(CAN.err.has(rfc)){ const e=el('div','empty','No se pudieron traer las canceladas de esta empresa. ');
+    if(CAN.err.has(rfc)){ const e=el('div','empty','No se pudieron traer las canceladas de esta empresa. Qué hacer: ');
       const b=el('button','lnk','Volver a intentar'); b.type='button'; b.onclick=()=>{ CAN.err.delete(rfc); canAbre(rfc); pintaModal(); }; e.appendChild(b); lista.appendChild(e); }
     else { lista.appendChild(el('div','empty','Trayendo las canceladas de esta empresa…')); canAbre(rfc); }
     return;
@@ -4427,7 +4428,7 @@ async function aplPonYa(items,txt){
       fac:x.rl.fac.uuid,doc:x.d.uuid,folio_fac:folioDe(x.rl.fac),folio_doc:folioDe(x.d),accion:x.accion,
       monto:x.accion==='aplicar'&&x.monto>0.005?x.monto:undefined}; })};
   let q; try{ q=await SB.rpc('cartera_apl_pon',{p}); }catch(e){ q={error:e}; }
-  if(q.error){ if(S.cliente!=null) pintaModal(); avisaArriba('No se pudo guardar: '+msgErr(q.error)); return; }
+  if(q.error){ if(S.cliente!=null) pintaModal(); avisaArriba(msgErr(q.error,'No se pudo guardar')); return; }
   await cargaApl(); await aplRepinta();
   if(txt) avisaArriba(txt);
 }
@@ -4784,7 +4785,7 @@ function pintaAgotar(ci,body,pie){
     const l=el('label','ago-pp'), i=el('input'); i.type='checkbox'; i.id='ago-pp'; i.checked=P.pp;
     i.onchange=async()=>{ i.disabled=true;
       let q; try{ q=await SB.rpc('cartera_apl_pp_pon',{p:{rfc,prendida:i.checked}}); }catch(e){ q={error:e}; }
-      if(q.error) avisaArriba('No se pudo cambiar la regla del grupo: '+msgErr(q.error));
+      if(q.error) avisaArriba(msgErr(q.error,'No se pudo cambiar la regla del grupo'));
       await cargaApl(); render(); pintaAgotar(ci,body,pie); };
     l.appendChild(i);
     const sp=el('span',null,'Los anticipos del grupo '+(D.cli[ci][3]||'(sin grupo)')+' son pagos parciales');
@@ -4844,7 +4845,7 @@ async function guardaAgotar(ci,P,b,body,pie){
   // empresa y parecía que «no pasó nada»); el reparto se vuelve a calcular con lo que sí se guardó, para volver a intentar
   await cargaApl(); await aplRepinta();
   const txt=(hechos?'Se guardaron '+F.int.format(hechos)+' de '+F.int.format(items.length)+' relaciones; lo demás no se pudo'
-    :'No se guardó ninguna relación')+': '+msgErr(err)+'.';
+    :'No se guardó ninguna relación')+'. '+msgErr(err);
   if(body&&pie&&document.getElementById('ov2box').contains(body)){
     pintaAgotar(ci,body,pie);
     const m=el('div','actmsg err ago-err',txt); m.setAttribute('role','alert');
@@ -4860,7 +4861,7 @@ function ventanaDeshaz(ci,n){
   const pie=el('div','sheet-f'); pie.appendChild(boton('Cancelar','g',cierraOv2));
   const b=boton('Deshacer','',async()=>{ b.disabled=true; b.textContent='Deshaciendo…';
     let q; try{ q=await SB.rpc('cartera_apl_deshaz_agotar',{p:{rfc}}); }catch(e){ q={error:e}; }
-    if(q.error){ b.disabled=false; b.textContent='Deshacer'; avisaArriba('No se pudo deshacer: '+msgErr(q.error)); return; }
+    if(q.error){ b.disabled=false; b.textContent='Deshacer'; avisaArriba(msgErr(q.error,'No se pudo deshacer')); return; }
     cierraOv2(); await cargaApl(); await aplRepinta();
     const k=(q.data&&q.data.cambios)||0;
     avisaArriba('Listo: '+plural(k,'relación regresó','relaciones regresaron')+' a lo sugerido.'); });
@@ -5036,7 +5037,7 @@ async function generaAplGen(){
   const pon=t=>{ APLG_TXT=t; const x=document.getElementById('xlapl'); if(x){ x.textContent=t||APLG_LAB; x.disabled=!!t; } };
   let fin;
   try{ fin=await exportaAplGeneral(pon,{lado:APLG.lado==='2'?null:+APLG.lado,solo:APLG.que==='a'}); }
-  catch(e){ fin='No se pudo exportar'; const x=document.getElementById('xlapl'); if(x) x.title=String(e&&e.message||e); avisaArriba('No se pudo exportar: '+(e&&e.message||e)); }
+  catch(e){ fin='No se pudo exportar'; const x=document.getElementById('xlapl'); if(x) x.title=msgErr(e,'No se pudo exportar'); avisaArriba(msgErr(e,'No se pudo exportar')); }
   pon(fin); setTimeout(()=>pon(null),2500);
 }
 /* ── Las cifras de las aplicaciones para el «Excel de hallazgos» (js/hallazgos.js; 12-nov-2026, Fernando Cadengo con la hoja
@@ -5057,7 +5058,7 @@ window.__carHallApl=async function(lista,avance){
   return lista.map(it=>{
     const ci=ciDe.get(u(it.rfc));
     if(ci==null) return {estado:'La empresa ya no está en la cartera'};
-    if(!UUID_OK.has(D.cli[ci][2])) return {estado:'No se pudieron leer los folios de esta empresa; vuelve a bajarlo en unos minutos'};
+    if(!UUID_OK.has(D.cli[ci][2])) return {estado:'No se pudieron leer los folios de esta empresa. Qué hacer: vuelve a bajarlo en unos minutos'};
     const ix=uIdx(ci), fs=ix.get(u(it.uf))||[], ds=ix.get(u(it.ud))||[];
     const fr=fs.find(esFacApl)||fs.find(r=>ladoFac(r)>=0)||null, dr=ds.find(esDocApl)||ds.find(r=>ladoDoc(r)>=0)||null;
     const o={}, lado=fr?ladoFac(fr):dr?ladoDoc(dr):-1;
@@ -5379,13 +5380,13 @@ function aplHojasExtra(wb,ext,o){
     });
   const grupos=[]; let nc=0;
   if(ext.can) o.orden.forEach(ci=>{ const it=ext.can.get(ci); if(it===undefined) return;
-    if(it===null){ grupos.push({ci,filas:[],nota:'No se pudieron traer sus canceladas; vuelve a bajar el Excel en unos minutos.'}); return; }
+    if(it===null){ grupos.push({ci,filas:[],nota:'No se pudieron traer sus canceladas. Qué hacer: vuelve a bajar el Excel en unos minutos.'}); return; }
     if(!it.length) return;
     const filas=it.slice().sort((a,b)=>a.lado-b.lado).map(aplCanFila); nc+=filas.length; grupos.push({ci,filas}); });
   hojaAplLista(wb,'Canceladas',{gen:o.gen,cols:APL_CCOLS,anchos:APL_CANCHO,mon:[9,10,18],fechas:[6],suma:[9,10],grupos,
     lineas:o.lineas.concat(['Lo cancelado (en el SAT o en QUO) que sigue en el Tablero QUO o en su cartera: lo de la pestaña «Canceladas», con lo de sus aplicaciones.',
       'Qué hacer en QUO con todas: quitarlas del Tablero QUO. Lo de meses ya declarados se revisa con el gerente antes, por si pide complementaria.']),
-    vacio:ext.can?'Ninguna cancelada sigue en el Tablero QUO.':'No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.',
+    vacio:ext.can?'Ninguna cancelada sigue en el Tablero QUO.':'No se pudo saber qué está cancelado. Qué hacer: vuelve a bajar el Excel en unos minutos.',
     cuenta:g=>plural(g.filas.length,'cancelada','canceladas'),total:plural(nc,'cancelada','canceladas')});
 }
 // los bloques del Resumen de una empresa (Concepto, y una columna por grupo): anticipos y notas, y canceladas
@@ -5403,7 +5404,7 @@ function aplResumenExtra(ws,n,facs,ext){
   nota(aplCuadreTxt(facs,ext));
   n++;
   titulo('Canceladas que siguen en el Tablero QUO');
-  if(!ext.can){ nota('No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.'); return n; }
+  if(!ext.can){ nota('No se pudo saber qué está cancelado. Qué hacer: vuelve a bajar el Excel en unos minutos.'); return n; }
   const it=[...ext.can.values()].flat().filter(Boolean);
   ws.getRow(n).values=['Concepto','Clientes','Proveedores']; MK.cabecera(ws,n,1,3,{derecha:[2,3]}); n++;
   const sc=[0,1].map(l=>aplCanStats(it.filter(x=>x.lado===l))), b=n;
@@ -5454,7 +5455,7 @@ function aplResumenGen(ws,n,G,facs,ext){
   // canceladas
   n++;
   titulo('Canceladas que siguen en el Tablero QUO');
-  if(!ext.can){ nota('No se pudo saber qué está cancelado; vuelve a bajar el Excel en unos minutos.'); return n; }
+  if(!ext.can){ nota('No se pudo saber qué está cancelado. Qué hacer: vuelve a bajar el Excel en unos minutos.'); return n; }
   const it=[...ext.can.values()].flat().filter(Boolean);
   if(!it.length) nota('Ninguna cancelada sigue en el Tablero QUO.');
   else tabla(['Grupo','Empresa','Lado'].concat(APL_CRES.map(([t])=>t)),APL_CRES,(pon,nc)=>{
@@ -5657,7 +5658,7 @@ function botonGeneral(){
     const pon=t=>{ GEN_TXT=t; const x=document.getElementById('xlgen'); if(x){ x.textContent=t||GEN_LAB; x.disabled=!!t; } };
     let fin;
     try{ fin=await exportaGeneral(pon); }
-    catch(e){ fin='No se pudo exportar'; const x=document.getElementById('xlgen'); if(x) x.title=String(e&&e.message||e); }
+    catch(e){ fin='No se pudo exportar'; const x=document.getElementById('xlgen'); if(x) x.title=msgErr(e,'No se pudo exportar'); avisaArriba(msgErr(e,'No se pudo exportar')); }
     pon(fin); setTimeout(()=>pon(null),2500);
   };
   return b;
