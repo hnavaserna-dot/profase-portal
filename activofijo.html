@@ -896,7 +896,7 @@ function excItem(x,extra){
     +'<div class="exc-m">'+esc([cub,quien].filter(Boolean).join(" · "))+(x.motivo?' · Motivo: '+esc(x.motivo):'')+'</div>'
     +(bt.length?'<div class="exc-a">'+bt.join("")+'</div>':'')+'</div>';
 }
-function excErr(e){ return window.PORTAL&&PORTAL.falla ? PORTAL.falla(e) : ((e&&e.message)||"No se pudo. Qué hacer: vuelve a intentar en un momento.") }
+function excErr(e){ var m=(e&&e.message)||String(e||""); return m.replace(/^.*?ERROR:\s*/,"")||"No se pudo; intenta de nuevo." }
 /* la ventana para poner (o proponer) una */
 function excForm(pre){
   if(!excPuede()) return;
@@ -1011,7 +1011,7 @@ function excConcentrado(){
       var act=LEIDO.filas.filter(function(f){ return /^(s|si|sí|1|x|true)$/i.test(String(f.activa).trim()) }).length;
       log('<b>'+LEIDO.filas.length+'</b> renglones en la hoja «'+esc(LEIDO.hoja)+'» ('+act+' activos). Pica «Cargar».');
       $("#excCargar").disabled=!LEIDO.filas.length;
-    }catch(e){ LEIDO=null; $("#excCargar").disabled=true; log('<span class="err">'+esc(PORTAL.falla(e,"No se pudo leer el archivo"))+'</span>') } };
+    }catch(e){ LEIDO=null; $("#excCargar").disabled=true; log('<span class="err">'+esc(e.message||String(e))+'</span>') } };
   $("#excArch").addEventListener("change",function(){ lee(this.files&&this.files[0]) });
   var dz=$("#excDrop");
   dz.addEventListener("dragover",function(e){ e.preventDefault(); dz.dataset.over="1" });
@@ -1135,9 +1135,11 @@ function armaEst(k,x){
   d.hist=((prev&&prev.hist)||[]).concat([{e:d.e,nombre:d.porNombre,ts:ahora}]).slice(-40);
   return d;
 }
-function errTxt(e){                                       /* la pieza común: por qué y qué hacer (js/portal.js) */
-  if(window.PORTAL&&PORTAL.falla) return PORTAL.falla(e,"No se pudo guardar");
-  return "No se pudo guardar. Qué hacer: vuelve a intentar en un momento."; }
+function errTxt(e){ var m=(e&&e.message)||String(e||"");
+  if(/Sin revisión|Modificación|Gerencia Contable/.test(m)) return m;     /* la regla de los estatus (230), tal cual */
+  if(/row-level security|permission|42501|violates/i.test(m)) return "No tienes permiso para ese cambio.";
+  if(/fetch|network/i.test(m)) return "Sin conexión: vuelve a intentar.";
+  return "No se pudo guardar: "+m.slice(0,120); }
 async function guardaEstados(lista){                       /* [{k,e}] */
   if(!lista.length) return 0;
   var filas=lista.map(function(x){ return {col:"af_est",id:x.k,data:armaEst(x.k,x)} });
@@ -1228,7 +1230,6 @@ function openModal(html){
 function closeModal(){ var L=$("#layer2"); if(L) L.innerHTML="" }
 var toastT;
 function toast(msg){
-  if (window.PORTAL && PORTAL.esError && PORTAL.esError(msg)) { PORTAL.toast(msg); return; }   // un error: el aviso común, con su «Qué hacer» y su ✕
   var t=$("#toastBox");
   if(!t){ t=document.createElement("div"); t.id="toastBox"; t.className="toast"; t.setAttribute("role","status"); document.body.appendChild(t) }
   t.textContent=msg; clearTimeout(toastT); toastT=setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t) },3600);
@@ -1741,7 +1742,7 @@ function vigila(){
   },fallo));
 }
 (async function arranca(){
-  if(!(window.claude&&window.PORTAL)){ gate("Sin conexión con la base","Qué hacer: recarga la página."); return }
+  if(!(window.claude&&window.PORTAL)){ gate("Sin conexión con la base","Recarga la página."); return }
   try{
     db=await window.claude.use("db"); P=window.PORTAL; YO=P.perfil;
     var q=await P.sb.rpc("veo_af"); R=q.error?null:q.data;
@@ -1754,7 +1755,7 @@ function vigila(){
       else { MIOS=new Set(R.mios||[]); R=Object.assign({},R,{ve:"propio",marca:MIOS.size>0,confirma:false,carga:false}) }
     }
     if(R&&P.consulta) R=Object.assign({},R,{carga:false,confirma:false,marca:false,consulta:true});
-  }catch(e){ gate("Sin conexión con la base","Qué hacer: recarga la página."); return }
+  }catch(e){ gate("Sin conexión con la base","Recarga la página."); return }
   if(!R){ gate("Sin acceso","Esta pestaña la ven Daniel, Cadengo, la Gerencia Contable y el contador de cada cliente."); return }
   await excEstado();
   var chip=$("#roleChip"), rol=R.confirma?"Gerencia Contable":R.marca?"Mis clientes":"";
