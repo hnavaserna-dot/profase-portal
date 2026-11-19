@@ -343,7 +343,7 @@
     ws = wb.addWorksheet('Aplicaciones CXP Y CXC');
     cols = [['Grupo', 20], ['Empresa', 34], ['RFC', 15], ['Contador asignado', 24], ['Si es cliente o proveedor', 13],
       ['Cliente o proveedor', 32], ['Factura', 14], ['Folio fiscal de la factura', 38], ['Saldo de la factura', 16],
-      ['Relación (Sugerida, Automática, Aceptada, Confirmada)', 20], ['Anticipo o nota de crédito', 16],
+      ['Relación (Sugerencia por confirmar, Automática, Aceptada, Confirmada)', 22], ['Anticipo o nota de crédito', 16],
       ['Su folio fiscal (o número de QUO)', 38], ['Monto a aplicar', 16], ['Lo decidió', 24], ['Comentario', 44], ['Fecha', 17],
       ['Estado de la relación', 26], ['Total del CFDI (anticipo o nota)', 17], ['Se aplica', 15],
       ['Saldo de la factura quedaría (demostrativo)', 18], ['Le queda al anticipo o nota', 17]];
