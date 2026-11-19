@@ -230,8 +230,16 @@
       var abajo = H - rb.bottom - 14, arriba = rb.top - 14;
       var haciaAbajo = abajo >= alto || abajo >= arriba;
       var lugar = Math.max(160, Math.floor(haciaAbajo ? abajo : arriba));
-      s.maxHeight = lugar + 'px';
-      var top = haciaAbajo ? rb.bottom + 6 : Math.max(8, rb.top - 6 - Math.min(alto, lugar));
+      var top;
+      if (abajo < alto && arriba < alto && alto <= H - 16) {
+        // no cabe completa ni abajo ni arriba del botón, pero sí en la pantalla: se recorre para verse completa (tapa un poco
+        // el botón) en lugar de cortarse y tener que deslizarla por dentro (18-nov-2026: «Más ▾» del Panel en el iPhone Duo)
+        s.maxHeight = (H - 16) + 'px';
+        top = Math.max(8, Math.min(haciaAbajo ? rb.bottom + 6 : rb.top - 6 - alto, H - 8 - alto));
+      } else {
+        s.maxHeight = lugar + 'px';
+        top = haciaAbajo ? rb.bottom + 6 : Math.max(8, rb.top - 6 - Math.min(alto, lugar));
+      }
       var left = Math.max(8, Math.min(rb.right - ancho, W - 8 - ancho));
       s.top = Math.round(top) + 'px'; s.left = Math.round(left) + 'px';
       // si un recuadro de la página cambia desde dónde cuenta «fixed» (un transform), se corrige con lo que de verdad quedó

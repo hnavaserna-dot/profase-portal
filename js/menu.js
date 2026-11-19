@@ -131,6 +131,8 @@
     { k: 'cen', t: 'Centauro', d: 'Los XML de cada cliente tal cual los entrega el SAT, las canceladas contra QUO, la lista 69-B y sus reportes.', subs: [
       // 385 (12-nov-2026; Héctor Daniel Nava: «quiero ver qué ha hecho; qué no ha hecho; cómo vamos avanzando»)
       { k: 'centauro-comovamos', v: 'cenq', t: 'Cómo vamos', d: 'Lo que ha hecho el robot con cada cliente, lo que le falta y por qué, y cómo va avanzando.' },
+      // 430 (18-nov-2026; Héctor Daniel Nava: «que cuando centauro encuentre algo; digas el motivo y hagas una mini auditoria»)
+      { k: 'centauro-hallazgos', v: 'cenh', t: 'Hallazgos', d: 'Lo que no cuadra con el SAT, cada uno con su mini auditoría: qué dice el SAT, qué dice el WorkFlow y qué hacer.' },
       { k: 'centauro-semaforo', v: 'cenx', t: 'Semáforo', d: 'Cada cliente mes por mes: lo que hay que corregir (rojo) y revisar (amarillo).' },
       { k: 'centauro-riesgos', v: 'cenf', t: 'Riesgos fiscales', d: 'Lo que encontró la revisión fiscal de las declaraciones, de todos los clientes en una sola lista.' },
       { k: 'centauro-declaraciones', v: 'cend', t: 'Declaraciones', d: 'Las declaraciones de cada cliente que el robot baja del portal del SAT, con su acuse.' },
