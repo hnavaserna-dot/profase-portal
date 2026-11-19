@@ -59,8 +59,10 @@
        El CRM lee del XML el folio, el cliente y los montos (mul_factura_nueva(), nadie los captura) y le avisa a Eva.
        Desde el 5-nov-2026 Eva también sube (Héctor Daniel Nava: «quiero que Eva pueda cargar también facturas a
        multinacional»; portal/sql/cambios/20261105_mul_eva_sube.sql): el mismo botón; si la sube ella, no se avisa a nadie.
-     - Eva Rangel ve el tablero y marca «Cobrada» («Ver y macar cobradas»); la dirección ve todo (HNR, solo consulta) y
-       solo Héctor Daniel Nava marca una factura cancelada en el SAT.
+     - Eva Rangel ve el tablero y marca «Cobrada» («Ver y macar cobradas»); la dirección ve todo (HNR, solo consulta).
+       Una factura cancelada en el SAT la marcan Héctor Daniel Nava y, desde el 19-nov-2026, Eva («quiero que también Eva
+       pueda cancelar de multinacional»; cambios/20261119_mul_eva_cancela.sql), en la ficha o en la lista de «Por cobrar»
+       (junto a «Liquidar»); y el CRM la marca solo cuando el SAT dice que se canceló (451, nube/mul_sat.py › revisa()).
    Lo ven solo ellos cuatro (mul_quien y la dirección; candado multinacional_protegida(), portal/sql/136_multinacional.sql).
    Todo por funciones mul_*; la página no lee tablas. El XML y el PDF salen tal cual se subieron: son los comprobantes de
    Multinacional y nunca llevan la marca PROFASE («ahí nunca llevaría branding profase… en todo caso sería branding
@@ -122,6 +124,9 @@ button,select,input,textarea{font:inherit;color:inherit}
 .btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
 .btn.peligro{color:var(--red);border-color:var(--red)}
 .btn.chico{padding:4px 9px;font-size:12px}
+.fac-acc{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* de la tableta a la laptop chica: «Liquidar» arriba y «Marcar cancelada» abajo, el texto en dos renglones si hace falta (que la tabla no se salga) */
+@media (min-width:701px) and (max-width:1199px){.fac-acc{flex-direction:column;align-items:stretch}.fac-acc .btn{white-space:normal;line-height:1.2}}
 .lnk{border:0;background:none;padding:0;color:var(--navy);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 :root[data-theme="dark"] .lnk{color:var(--accent-ink)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lnk{color:var(--accent-ink)}}
@@ -319,13 +324,13 @@ td.sel input{width:18px;height:18px}
     </div>
     <div class="mul-bar" id="fac-bar"><input type="search" id="q" placeholder="Buscar folio, cliente o RFC" aria-label="Buscar folio, cliente o RFC"><button class="btn" type="button" id="b-edo" hidden title="Lo que un cliente tiene por cobrar, en PDF con la marca Multinacional, para mandárselo">Estado de cuenta (PDF)</button><span id="rango" class="mul-fe" hidden><label class="mut" for="f-desde">Del</label> <input type="date" id="f-desde"> <label class="mut" for="f-hasta">al</label> <input type="date" id="f-hasta"></span></div>
     <div id="kpis"></div>
-    <div class="card">
+    <div class="card" id="fac-card">
       <header><div><h2 id="h-lista">Por cobrar</h2><div class="sub" id="lista-sub"></div></div></header>
       <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th class="monto">Total</th><th>Estatus</th><th><span class="sr">Acción</span></th></tr></thead>
         <tbody id="lista"></tbody></table></div>
       <nav class="pgn" id="fac-pag" aria-label="Páginas de facturas"></nav>
     </div>
-    <p class="pie" id="pie">Cada factura sale de su XML: el folio, el cliente y los montos los lee el CRM, nadie los captura. Nada se borra: una factura cancelada en el SAT se marca «Cancelada».</p>
+    <p class="pie" id="pie">Cada factura sale de su XML: el folio, el cliente y los montos los lee el CRM, nadie los captura. Nada se borra: una factura cancelada en el SAT se marca «Cancelada»; el CRM le pregunta al SAT una vez al día y la marca sola.</p>
   </section>
 
   <!-- ===== Cotizaciones (Mónica y la dirección; 143_multinacional_cotizador.sql) ===== -->
@@ -641,7 +646,7 @@ td.sel input{width:18px;height:18px}
     $('lista-sub').textContent = L.length + (L.length === 1 ? ' factura' : ' facturas') + ' · ' + dinero(suma) + (FT === 'por' ? ' · la más vieja arriba' : '');
     $('rango').hidden = FT === 'por';
     if (FT === 'por') L = L.slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.id - b.id; });
-    var cobra = !!(EST && EST.cobra) && !CONSULTA;
+    var cobra = !!(EST && EST.cobra) && !CONSULTA, canc = !!(EST && EST.cancela) && !CONSULTA;
     pinta.L = L;
     var firma = [FT, MAS30, $('q').value, $('f-desde').value, $('f-hasta').value].join('|'), Vf = pag(PGF, firma, FIRF, L); FIRF = firma;
     $('lista').innerHTML = L.length ? Vf.map(function (f) {
@@ -649,8 +654,18 @@ td.sel input{width:18px;height:18px}
         + '<td data-l="Cliente" class="w"><span class="rs">' + esc(f.cliente) + '</span><div class="mut">' + esc(f.rfc) + '</div></td>'
         + '<td data-l="Total" class="monto">' + esc(dinero(f.tipo === 'E' ? -f.total : f.total, f.moneda)) + '</td>'
         + '<td data-l="Estatus">' + estatusDe(f) + '</td>'
-        + '<td data-l="">' + (cobra && f.estatus === 'por_cobrar' && f.tipo === 'I' ? '<button class="btn chico bien" type="button" data-cobrada="' + f.id + '" title="Registra un pago por lo que le queda">Liquidar</button>' : '') + '</td></tr>';
+        + '<td data-l="">' + accFila(f, cobra, canc) + '</td></tr>';
     }).join('') : '<tr><td colspan="6" class="vacio">' + (FT === 'por' ? 'No hay facturas por cobrar.' : 'No hay facturas con lo que escogiste.') + '</td></tr>';
+  }
+  // Lo que se hace desde la lista de «Por cobrar»: «Liquidar» (quien cobra) y, desde el 19-nov-2026, «Marcar cancelada»
+  // (quien marca canceladas: Héctor Daniel Nava y Eva; «que se pueda desde aquí a cancelar»); una con abonos, solo desde su
+  // ficha después de quitarle el pago. Las dos preguntan antes (la de cancelar, con el motivo obligatorio).
+  function accFila(f, cobra, canc) {
+    if (f.estatus !== 'por_cobrar' || f.tipo !== 'I') return '';
+    var b = '';
+    if (cobra) b += '<button class="btn chico bien" type="button" data-cobrada="' + f.id + '" title="Registra un pago por lo que le queda">Liquidar</button>';
+    if (canc && !(Number(f.abonado || 0) > 0.005)) b += '<button class="btn chico" type="button" data-cancela="' + f.id + '" title="Se canceló en el SAT: ya no cuenta para lo por cobrar">Marcar cancelada</button>';
+    return b ? '<span class="fac-acc">' + b + '</span>' : '';
   }
   async function carga() {
     DATOS = await rpc('mul_facturas_lista', { p: { desde: $('f-desde').value || null, hasta: $('f-hasta').value || null } });
@@ -668,10 +683,12 @@ td.sel input{width:18px;height:18px}
   $('lista').addEventListener('click', function (e) {
     var b = e.target.closest('[data-cobrada]');
     if (b) { e.stopPropagation(); cobrada(+b.getAttribute('data-cobrada')); return; }
+    var bc = e.target.closest('[data-cancela]');
+    if (bc) { e.stopPropagation(); cancela(+bc.getAttribute('data-cancela')); return; }
     var tr = e.target.closest('tr[data-id]'); if (tr) { NAV = (pinta.L || []).map(function (f) { return 'f' + f.id; }); ficha(+tr.getAttribute('data-id')); }
   });
 
-  /* ---------- Eva: cobrada / de regreso; la dirección: cancelada ---------- */
+  /* ---------- Eva: cobrada / de regreso; Héctor Daniel Nava y Eva: cancelada ---------- */
   // «Liquidar» (antes «Cobrada»; 332): un pago por lo que le queda a la factura, con el día en que entró el dinero y cómo
   // se pagó. Queda en el registro de pagos. La fecha de arriba de «Facturas disponibles» es la que viene puesta.
   function deFac(id) { return FAC.concat(PFAC).filter(function (x) { return x.id === id; })[0]; }
@@ -691,8 +708,9 @@ td.sel input{width:18px;height:18px}
     try { await rpc('mul_por_cobrar', { p_id: id, p_motivo: r.nota }); avisa('Listo: regresó a «Por cobrar».'); cierra(); await recarga(); }
     catch (e) { error(falla(e)); }
   }
-  async function cancela(id) {
-    var r = await pregunta({ texto: '¿Marcar esta factura como cancelada en el SAT? Ya no cuenta para lo por cobrar ni lo facturado.', si: 'Sí, cancelada', nota: 'Motivo', notaObligada: true });
+  async function cancela(id, f0) {
+    var f = f0 || deFac(id);
+    var r = await pregunta({ texto: '¿Marcar ' + (f ? 'la factura ' + folio(f) + ' de ' + f.cliente : 'esta factura') + ' como cancelada en el SAT? Ya no cuenta para lo por cobrar ni lo facturado.', si: 'Sí, cancelada', nota: 'Motivo', notaObligada: true });
     if (!r) return;
     try { await rpc('mul_cancela', { p_id: id, p_motivo: r.nota }); avisa('Listo: quedó cancelada.'); cierra(); await recarga(); }
     catch (e) { error(falla(e)); }
@@ -745,7 +763,7 @@ td.sel input{width:18px;height:18px}
     if ($('f-rp')) $('f-rp').onclick = function () { abrePago(f.tipo === 'E' ? { rfc: f.rfc, nc: f.id } : { rfc: f.rfc, factura: f.id }); };
     enVentana().querySelectorAll('[data-vpago]').forEach(function (b) { b.onclick = function () { NAV = null; fichaPago(+b.getAttribute('data-vpago')); }; });
     if ($('f-reg')) $('f-reg').onclick = function () { porCobrar(f.id); };
-    if ($('f-can')) $('f-can').onclick = function () { cancela(f.id); };
+    if ($('f-can')) $('f-can').onclick = function () { cancela(f.id, f); };
     if ($('f-xml')) $('f-xml').onclick = function () { bajaXml(f, this); };
     var d = { id: f.id, nombre: folio(f).replace(/\s+/g, '') + '.pdf' };
     if ($('f-ver')) { $('f-ver').onclick = function () { visor().ver(d, this); }; }
@@ -2171,14 +2189,15 @@ td.sel input{width:18px;height:18px}
 
   /* Lo nuevo de esta pantalla desde su aviso de la campanita (clave «ver|<qué>|…»: mul_tab.js, PROFASE_ABRE['mul-facturas'],
      la abre con ?ver=<qué>). Se ilumina 12 s y lleva su nota corta; solo si esa parte se ve (a quien le toca).
-     Hoy «subir»: Eva Rangel también sube las facturas (5-nov-2026). */
+     Hoy «subir»: Eva Rangel también sube las facturas (5-nov-2026); «cancelar»: Eva también marca canceladas (19-nov-2026). */
   var NUEVOS = {
+    'cancelar': { el: 'fac-card', si: function () { return !!(EST && EST.cancela) && !CONSULTA; }, nota: 'Nuevo: ya puedes marcar canceladas las facturas de Multinacional que se cancelaron en el SAT. En «Por cobrar» pica «Marcar cancelada» (junto a «Liquidar») o, en la ficha de la factura, el mismo botón; escribe el motivo. Si tiene pagos, primero quítalos en Multinacional › Pagos. Además, el CRM le pregunta al SAT una vez al día y marca solas las que ya se cancelaron.' },
     'subir': { el: 'b-subir', nota: 'Nuevo: ya puedes subir tú también las facturas de Multinacional. Pica «Subir facturas» y escoge el XML y el PDF de cada una; el CRM lee el folio, el cliente y los montos.' },
     // Pagos (332, 9-nov-2026): a quien registra se le ilumina «Registrar pago»; a quien solo ve, la lista
     'pagos': { el: 'b-pago', alt: 'p-fac', sec: 's-pag', nota: 'Nuevo: los pagos de Multinacional, como en Tesorería › Pagos. Aquí ves lo que tiene saldo y lo abonado; «Liquidar» registra el pago de lo que le queda y «Registrar pago» captura un abono o un pago a varias facturas. Las facturas que emite Multinacional ya llegan solas del SAT desde hoy.' }
   };
   function verNuevo(t) {
-    var n = NUEVOS[t], b = n && $(n.el); if (b && b.hidden && n.alt) b = $(n.alt); if (!b || b.hidden) return;
+    var n = NUEVOS[t], b = n && $(n.el); if (b && b.hidden && n.alt) b = $(n.alt); if (!b || b.hidden || (n.si && !n.si())) return;
     var w = $(n.sec || 's-fac'); if (w && !w.querySelector('.nuevo-nota')) w.insertAdjacentHTML('afterbegin', '<div class="nuevo-nota" role="status">' + esc(n.nota) + '</div>');
     b.classList.add('nuevo');
     try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {}
