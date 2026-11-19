@@ -750,6 +750,8 @@ td.ab{width:40px;padding-left:4px}
 .cnsal{font-size:10.5px;font-weight:700;color:var(--warn);margin-top:2px;font-family:var(--f-ui)}
 .cnsi{font-weight:600;font-size:12px;overflow-wrap:anywhere}
 .cndupt{font-size:11px;font-weight:700;color:var(--crit);margin-top:2px}
+.cnpag{font-size:10.5px;font-weight:700;color:var(--warn);margin-top:3px;font-family:var(--f-ui)}   /* 435: lo que QUO tiene en sus bancos */
+.cnqmov{font-size:11.5px;color:var(--ink-2);margin:2px 0 0 12px}
 .drow.cnr.dup{box-shadow:inset 3px 0 0 var(--crit)}
 .cnmov{display:none;flex-wrap:wrap;gap:4px;margin-top:4px}
 .mlist[data-oc="3"] .cnmov{display:flex}
@@ -3820,10 +3822,10 @@ function canRes(rfc){
   const d=CAN.det.get(rfc);
   if(d){ const p=d.docs||[];
     return {n:+d.n||0,limpias:+d.limpias||0,pend:p.length,b1:p.filter(x=>x.bloque===1).length,b2:p.filter(x=>x.bloque!==1).length,
-      sa:+d.sinc_activas||0,sc:+d.sinc_canceladas||0,calculado:d.calculado,desde:d.desde}; }
+      sa:+d.sinc_activas||0,sc:+d.sinc_canceladas||0,calculado:d.calculado,desde:d.desde,bd:d.bancos_desde}; }
   const x=CAN.emp.get(rfc); if(!x) return null;
   return {n:+x.n||0,limpias:+x.limpias||0,pend:(+x.b1||0)+(+x.b2||0),b1:+x.b1||0,b2:+x.b2||0,
-    sa:+x.sinc_activas||0,sc:+x.sinc_canceladas||0,calculado:x.calculado,desde:x.desde};
+    sa:+x.sinc_activas||0,sc:+x.sinc_canceladas||0,calculado:x.calculado,desde:x.desde,bd:x.bancos_desde};
 }
 const canPct=x=>x&&x.n?Math.floor(x.limpias*100/x.n):0;
 // su botón en «Pendientes» de la ficha: «Canceladas 1,811 · 0 %» (sale aunque ya estén todas limpias: así se ve el 100 %)
@@ -3852,12 +3854,53 @@ const cnDup=d=>!d.cq&&d.sustituida==='si'&&d.sus_quo==='activa';
 const CN_NQ={activa:'activa en QUO',cancelada:'cancelada en QUO',no_esta:'no está en QUO'};
 const cnDonde=d=>d.en_tab&&d.en_car?'En el Tablero QUO y en su cartera':d.en_tab?'En el Tablero QUO':'En su cartera (de antes de los meses que se traen del Tablero)';
 const cnMes=s=>{ if(!s) return ''; const d=new Date(String(s).slice(0,10)+'T00:00:00'); return isNaN(d)?'':d.toLocaleDateString('es-MX',{month:'long',year:'numeric'}).replace(' de ',' de '); };
+// 435 (19-nov-2026, pedido de Fernando Cadengo con la hoja «Canceladas» del Excel de aplicaciones: «porque si ya tienen
+// saldo 0, dice que no esta aplicado nada en quo»; «1. A 2. Si»): lo que QUO tiene de una cancelada. De sus Movimientos
+// bancarios (los trae la carga directa: car_can.quo_pagos, por la misma puerta cartera_can), sus cobros o pagos; si no tiene,
+// con cuánto sigue o por qué ya no tiene saldo. Lo que QUO aplica sin movimiento bancario (un anticipo o una nota de crédito)
+// no lo trae la carga: se dice «casi seguro». bd: desde qué mes se trajeron los bancos de esa empresa (de antes no se sabe).
+// Una sola regla para la pestaña «Canceladas», su Excel y la hoja «Canceladas» de los Excel de aplicaciones.
+const CN_QT={COBRO:['cobro','cobros'],PAGO:['pago','pagos']};
+function cnQuoMon(v,mon){
+  if(mon&&mon!=='MXN'){ try{ return new Intl.NumberFormat('es-MX',{style:'currency',currency:mon,minimumFractionDigits:2}).format(+v||0); }catch(e){ return F.dec.format(+v||0)+' '+mon; } }
+  return F.mxn2.format(+v||0);
+}
+const cnKind=cd=>/^(E|EGRESO)$/i.test(String(cd.tc||''))?'nc':'fac';
+const cnQuoMov=x=>(x.f?' del '+fmtD(String(x.f).slice(0,10)):'')+' por '+cnQuoMon(x.m,x.mon)+(x.p?' (póliza '+x.p+')':'');
+function cnQuo(cd,bd,kind){
+  const qp=cd.quo_pagos, sal=+cd.saldo||0, sin=sal<0.01, k=kind||cnKind(cd);
+  if(qp&&+qp.n){
+    const ms=qp.movs||[], m=ms[0]||{}, ts=new Set(ms.map(x=>String(x.t||'').toUpperCase())), t=ts.size===1?CN_QT[[...ts][0]]:null;
+    const n=+qp.n, nom=t?t[n===1?0:1]:(n===1?'movimiento':'movimientos');
+    const desc=n===1?nom+cnQuoMov(m):F.int.format(n)+' '+nom+(qp.tot!=null?' por '+cnQuoMon(qp.tot,qp.mon):'')+'; el último'+cnQuoMov(m);
+    return {pago:true,n,nom,desc,movs:ms,txt:(sin?'Pagada en QUO: ':'Abonada en QUO: ')+desc+(sin?'':'; le queda '+F.mxn2.format(sal)),corto:sin?'Pagada en QUO':'Abonada en QUO'};
+  }
+  const viejo=!!(bd&&cd.fecha&&String(cd.fecha).slice(0,10)<String(bd).slice(0,10));
+  const antes=viejo?' (sus bancos de QUO se traen desde '+cnMes(bd)+': de antes no se sabe)':'';
+  if(cd.cq) return {pago:false,txt:sin?'QUO ya la canceló (sin saldo)':'QUO ya la canceló, pero su cartera sigue con saldo de '+F.mxn2.format(sal),corto:''};
+  // sin «desde cuándo se trajeron sus bancos»: el reloj todavía no vuelve a contar esa empresa (o QUO no tiene sus bancos)
+  if(sin&&!bd) return {pago:false,txt:'Sin saldo en QUO (sus bancos de QUO todavía no se revisan)',corto:'Sin saldo'};
+  if(sin) return {pago:false,aplicada:!viejo,txt:'Sin saldo en QUO y sin cobro ni pago en sus bancos'
+    +(viejo?antes:': casi seguro, '+(k==='fac'?'le aplicaron un anticipo o una nota de crédito en QUO':'se aplicó a una factura en QUO')),corto:viejo?'Sin saldo':'¿Aplicada en QUO?'};
+  if(cd.sal==='igual') return {pago:false,txt:'Con todo su saldo en QUO (sin cobros ni pagos en sus bancos)'+antes,corto:''};
+  return {pago:false,txt:'Con saldo de '+F.mxn2.format(sal)+' en QUO; sin cobros ni pagos en sus bancos'+antes,corto:''};
+}
+// lo que hay que hacer en QUO antes de quitarla del Tablero, por lo que tiene en QUO ('' si nada)
+function cnQuoHacer(cd,qq,kind){
+  const k=kind||cnKind(cd), lo=qq.n===1?'lo':'los';
+  const nueva=cd.sustituida==='si'&&cd.sus?(k==='ant'?'el anticipo nuevo':k==='nc'?'la nota de crédito nueva':'la factura nueva')+(cd.sus_folio?' '+cd.sus_folio:''):'';
+  if(qq.pago) return 'En los bancos de QUO tiene '+(qq.n===1?'un ':'')+qq.desc+': pasar'+lo+' a '+(nueva||'el CFDI que '+(qq.n===1?'lo':'los')+' debe llevar')+' o quitárse'+lo+'.';
+  if(qq.aplicada) return 'Sin saldo en QUO y sin cobro en sus bancos: revisar en QUO '+(k==='fac'?'qué anticipo o nota de crédito se le aplicó y pasarlo a '+(nueva||'la factura que lo debe llevar')
+    :'a qué factura se aplicó y quitar esa aplicación (esa factura vuelve a quedar con su saldo)')+'.';
+  return '';
+}
 // las fichas de cada bloque (filtran al picarlas; otra vez, regresa a «Todas»)
 const CN_F={todas:['Todas',()=>true],act:['Activas en QUO',d=>!d.cq],can:['Canceladas en QUO',d=>!!d.cq],
   cero:['En $0',d=>d.sal==='cero'],menor:['Abonadas',d=>d.sal==='menor'],mayor:['Saldo mayor',d=>d.sal==='mayor'],
-  sus:['Con sustitución',d=>d.sustituida==='si'],dup:['La nueva también está activa',cnDup]};
-const CN_BLQ={1:{t:'Bloque 1 · Con el 100 % de su saldo',d:'El saldo es igual al total: nadie la ha pagado ni abonado.',f:['todas','act','can','sus','dup']},
-  2:{t:'Bloque 2 · Saldo distinto al total',d:'Ya tienen algún pago, abono o ajuste.',f:['todas','cero','menor','mayor','act','can','sus','dup']}};
+  sus:['Con sustitución',d=>d.sustituida==='si'],dup:['La nueva también está activa',cnDup],
+  pag:['Con cobro o pago en QUO',d=>!!(d.quo_pagos&&+d.quo_pagos.n)],apq:['Sin saldo y sin cobro en QUO',d=>!d.cq&&(+d.saldo||0)<0.01&&!(d.quo_pagos&&+d.quo_pagos.n)]};
+const CN_BLQ={1:{t:'Bloque 1 · Con el 100 % de su saldo',d:'El saldo es igual al total: nadie la ha pagado ni abonado.',f:['todas','act','can','pag','sus','dup']},
+  2:{t:'Bloque 2 · Saldo distinto al total',d:'Ya tienen algún pago, abono o ajuste.',f:['todas','cero','menor','mayor','act','can','pag','apq','sus','dup']}};
 // lo de la barra de la ventana que sí aplica aquí: la búsqueda, el saldo, la fecha y el lado (Clientes / Proveedores)
 function cnPasaVentana(d){
   if(S.lado==='cli'&&d.lado!=='cli') return false;
@@ -3881,6 +3924,10 @@ function bloqueCan(cd){
   l('Dónde',cnDonde(cd));
   l('En el SAT',cnSat(cd));
   l('Saldo',F.mxn2.format(+cd.saldo||0)+' de '+F.mxn2.format(+cd.total||0)+(cd.sal&&cd.sal!=='igual'?' · '+CN_SAL[cd.sal]:''));
+  const qq=cnQuo(cd,S.cliente!=null?(canRes(D.cli[S.cliente][2])||{}).bd:null), pre=cnQuoHacer(cd,qq);   // 435
+  const lq=l('Qué tiene en QUO',qq.txt); lq.id='can-quo';
+  if(qq.pago&&qq.movs.length>1) qq.movs.forEach(m=>box.appendChild(el('div','cnqmov','· '+((CN_QT[String(m.t||'').toUpperCase()]||['Movimiento'])[0]).replace(/^./,c=>c.toUpperCase())+cnQuoMov(m))));
+  if(qq.pago&&qq.n>qq.movs.length) box.appendChild(el('div','cnqmov aplsin','(y '+F.int.format(qq.n-qq.movs.length)+' más, de antes)'));
   const s=cd.sustituida;
   const ls=l('Sustituida',s==='si'?'Sí'+(cd.sus_folio?' · '+cd.sus_folio:''):s==='no'?'No':'Sin revisar');
   if(s==='si'){
@@ -3893,7 +3940,7 @@ function bloqueCan(cd){
     :'No está en lo que se le preguntó al SAT: no se sabe si tiene sustitución.'));
   if(cd.uuid){ const x=el('div','l'); x.appendChild(document.createTextNode('Folio fiscal: ')); x.appendChild(el('span','num',cd.uuid)); box.appendChild(x); }
   if(cd.entro) box.appendChild(el('div','l aplsin','Cuenta en el avance desde el '+fmtD(String(cd.entro).slice(0,10))+'.'));
-  const q=el('div','l cnqh'); q.appendChild(el('b',null,'Qué hacer en QUO: quitarla del Tablero QUO.'));
+  const q=el('div','l cnqh'); q.appendChild(el('b',null,'Qué hacer en QUO: '+(pre?pre+' Luego, quitarla del Tablero QUO.':'quitarla del Tablero QUO.')));
   q.appendChild(document.createTextNode(' La siguiente carga de Quo la marca sola como limpia.')); box.appendChild(q);
   return box;
 }
@@ -3984,6 +4031,8 @@ function pestanaCan(lista){
       // en el celular (sin las columnas de la derecha), lo esencial debajo del folio
       const mv=el('div','cnmov'); mv.appendChild(el('span','pill '+(cd.cq?'p-cl':'p-can'),cd.cq?'Cancelada':'Activa'));
       if(cd.sustituida==='si') mv.appendChild(el('span','pill '+(cnDup(cd)?'p-can':'p-cl'),'Sustituida'+(cnDup(cd)?' · la nueva activa':'')));
+      const qq=cnQuo(cd,x.bd);   // 435: lo que tiene en QUO, debajo de «En QUO»
+      if(qq.pago||qq.aplicada) mv.appendChild(el('span','pill p-pap',qq.corto));
       tx2.appendChild(mv);
       c0.appendChild(tx2); bt.appendChild(c0);
       const cp=mo('','tx p3',170); cp.appendChild(el('div',null,cd.cp_nombre||'—')); if(cd.cp_rfc) cp.appendChild(el('div','aplsin',cd.cp_rfc)); bt.appendChild(cp);
@@ -3993,7 +4042,9 @@ function pestanaCan(lista){
         tt.appendChild(el('div','aplsin',s3)); }
       bt.appendChild(tt);
       const sa=mo(F.mxn.format(+cd.saldo||0),'mo b r',112); if(cd.sal&&cd.sal!=='igual') sa.appendChild(el('div','cnsal',CN_SAL[cd.sal])); bt.appendChild(sa);
-      const q=mo('','p2',92); q.appendChild(el('span','pill '+(cd.cq?'p-cl':'p-can'),cd.cq?'Cancelada':'Activa')); bt.appendChild(q);
+      const q=mo('','p2',92); q.appendChild(el('span','pill '+(cd.cq?'p-cl':'p-can'),cd.cq?'Cancelada':'Activa'));
+      if(qq.corto){ const qc=el('div',qq.pago||qq.aplicada?'cnpag':'aplsin',qq.corto); qc.title=qq.txt; q.appendChild(qc); }
+      bt.appendChild(q);
       bt.appendChild(mo(cnSat(cd),'tx p2',150));
       const su=mo('','p2',176);
       if(cd.sustituida==='si'){ su.appendChild(el('div','cnsi','Sí'+(cd.sus_folio?' · '+cd.sus_folio:'')));
@@ -4007,8 +4058,12 @@ function pestanaCan(lista){
     });
     if(P) lista.appendChild(P.nav);
     const si=sel.filter(d=>d.sustituida==='si').length, no=sel.filter(d=>d.sustituida==='no').length, dup=sel.filter(cnDup).length;
+    const pq=sel.filter(CN_F.pag[1]).length, apq=sel.filter(CN_F.apq[1]).length;
     const pie=el('div','cnpie');
-    pie.appendChild(document.createTextNode('Sustituida: '+F.int.format(si)+' sí · '+F.int.format(no)+' no · '+F.int.format(sel.length-si-no)+' sin revisar. Excel y PDF con todas las del bloque.'));
+    pie.appendChild(document.createTextNode('Sustituida: '+F.int.format(si)+' sí · '+F.int.format(no)+' no · '+F.int.format(sel.length-si-no)+' sin revisar.'
+      +(pq?' '+plural(pq,'tiene cobro o pago en los bancos de QUO','tienen cobro o pago en los bancos de QUO')+'.':'')
+      +(apq?' '+plural(apq,'sin saldo y sin cobro en QUO (casi seguro, aplicada en QUO)','sin saldo y sin cobro en QUO (casi seguro, aplicadas en QUO)')+'.':'')
+      +' Excel y PDF con todas las del bloque.'));
     if(dup&&S.cnf[b]!=='dup') pie.appendChild(el('span','dup',' '+plural(dup,'activa en QUO tiene su factura nueva también activa: la vieja y la nueva suman a la vez.','activas en QUO tienen su factura nueva también activa: la vieja y la nueva suman a la vez.')));
     lista.appendChild(pie);
   });
@@ -4035,21 +4090,21 @@ async function exportaCanceladas(ci){
   const x=canRes(rfc), docs=det.docs||[];
   const wb=MK.libro(EX,'Canceladas en el Tablero QUO · '+c[1]);
   const cols=['Documento','Tipo','Cliente o proveedor','RFC','Fecha','Folio fiscal (UUID)','Moneda','Total','Total en su moneda','Saldo','El saldo',
-    'En QUO','Dónde está','En el SAT','Sustituida','Folio de la nueva','Folio fiscal de la nueva','La nueva en QUO','Cuenta desde'];
+    'En QUO','Dónde está','En el SAT','Sustituida','Folio de la nueva','Folio fiscal de la nueva','La nueva en QUO','Cuenta desde','Qué tiene en QUO'];
   const lineas=[c[1]+' · '+rfc,
     (x.pend?plural(x.pend,'cancelada sigue','canceladas siguen')+' en el Tablero QUO':'Ninguna cancelada sigue en el Tablero QUO')+(x.n?' · '+F.int.format(x.limpias)+' de '+F.int.format(x.n)+' limpias ('+canPct(x)+' %)':''),
     'Qué hacer en QUO con todas: quitarlas del Tablero QUO. Lo de meses ya declarados se revisa con el gerente antes, por si pide complementaria.',
     'En Sincronizados (no suman, no entran al 100 %): '+F.int.format(x.sa+x.sc)+' · '+plural(x.sa,'activa','activas')+' · '+plural(x.sc,'cancelada','canceladas')+(x.sa?' (no pasarlas al Tablero)':'')];
   [1,2].forEach(b=>{
     const rows=docs.filter(d=>(d.bloque===1?1:2)===b), ws=wb.addWorksheet(b===1?'Bloque 1 · 100 % del saldo':'Bloque 2 · Saldo distinto');
-    [16,22,40,16,12,38,8,15,16,15,14,11,30,26,11,16,38,16,12].forEach((w,i)=>ws.getColumn(i+1).width=w);
+    [16,22,40,16,12,38,8,15,16,15,14,11,30,26,11,16,38,16,12,60].forEach((w,i)=>ws.getColumn(i+1).width=w);
     const f0=MK.encabezado(wb,ws,cols.length,{titulo:CN_BLQ[b].t,lineas:lineas.concat([CN_BLQ[b].d])});
     ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,cols.length,{derecha:[8,9,10]});
     rows.forEach((d,i)=>{ const f=f0+1+i;
       ws.getRow(f).values=[cnFolio(d),cnTipo(d),d.cp_nombre||'',d.cp_rfc||'',d.fecha?xd(String(d.fecha).slice(0,10)):'',d.uuid||'',d.moneda||'',
         cent(+d.total),d.moneda&&d.moneda!=='MXN'&&+d.totex?cent(+d.totex):'',cent(+d.saldo),CN_SAL[d.sal]||'',d.cq?'Cancelada':'Activa',cnDonde(d),cnSat(d),
         d.sustituida==='si'?'Sí':d.sustituida==='no'?'No':'Sin revisar',d.sustituida==='si'?(d.sus_folio||''):'',d.sustituida==='si'?(d.sus||''):'',
-        d.sustituida==='si'&&d.sus_quo?CN_NQ[d.sus_quo]:'',d.entro?xd(String(d.entro).slice(0,10)):''];
+        d.sustituida==='si'&&d.sus_quo?CN_NQ[d.sus_quo]:'',d.entro?xd(String(d.entro).slice(0,10)):'',cnQuo(d,x.bd).txt];
       [8,9,10].forEach(k=>ws.getCell(f,k).numFmt=RCX_MON); [5,19].forEach(k=>ws.getCell(f,k).numFmt='dd/mm/yyyy'); });
     if(rows.length){ MK.cuerpo(ws,f0+1,f0+rows.length,1,cols.length);
       const ft=f0+rows.length+1; ws.getRow(ft).values=['Total · '+plural(rows.length,'cancelada','canceladas'),'','','','','','',cent(rows.reduce((a,d)=>a+(+d.total||0),0)),'',cent(rows.reduce((a,d)=>a+(+d.saldo||0),0))];
@@ -5361,7 +5416,8 @@ function aplCanInfo(ci,cd){
   if(cd.sustituida==='si'&&cd.sus){ const o=(ix.get(String(cd.sus).toUpperCase())||[]).find(x=>Math.abs(x.saldo)>0.005)||null;
     nuevaSaldo=!!o; nueva=o?'Sí ('+F.mxn2.format(Math.abs(o.saldo))+')':'No'; }
   const lo=kind==='ant'?'lo':'la', pl=apls.length>1;
-  let hacer='Quitar'+lo+' del Tablero QUO.';
+  const qq=cnQuo(cd,(canRes(rfc)||{}).bd,kind), pre=cnQuoHacer(cd,qq,kind);   // 435: lo que tiene en QUO
+  let hacer=(pre?pre+' Luego, quitar':'Quitar')+lo+' del Tablero QUO.';
   if(apls.length){
     const con=apls.map(nom).join(', ');
     if(kind==='fac') hacer+=nuevaSaldo?' Pasar la aplicación ('+con+') a la factura nueva'+(cd.sus_folio?' '+cd.sus_folio:'')+'.'
@@ -5371,26 +5427,30 @@ function aplCanInfo(ci,cd){
   } else if(kind!=='fac') hacer+=' No se aplica a ninguna factura.';
   return {cd,r,kind,lado,que:APL_CQUE[kind][lado]||APL_CQUE[kind][0],apls,
     aplTxt:apls.length?apls.map(a=>mayus(nom(a))+' ('+a.como+')').join(' · '):'No',
-    monto:apls.reduce((s,a)=>s+(a.m||0),0),nueva,nuevaSaldo,hacer};
+    monto:apls.reduce((s,a)=>s+(a.m||0),0),nueva,nuevaSaldo,hacer,quo:qq.txt,qpago:!!qq.pago,qapl:!!qq.aplicada};
 }
+// 435: «Qué tiene en QUO» (sus cobros y pagos en los bancos de QUO, o por qué ya no tiene saldo) y la aplicación de la
+// Cartera del CRM con su nombre completo (antes «Tenía una aplicación»: se leía como si dijera lo que se hizo en QUO)
 const APL_CCOLS=['Lado','Qué es','Cliente o proveedor','RFC','Folio','Fecha','UUID o número interno de QUO','QUO ID','Total del CFDI',
-  'Saldo en la cartera','En QUO','En el SAT','Dónde sigue','Sustituida por (folio)','UUID de la nueva','La nueva tiene saldo',
-  'Tenía una aplicación (con qué)','Monto de esa aplicación','Qué hacer'];
-const APL_CANCHO=[11,22,40,16,14,12,38,12,15,15,11,26,30,16,38,18,44,16,64];
+  'Saldo en la cartera','En QUO','En el SAT','Dónde sigue','Qué tiene en QUO','Sustituida por (folio)','UUID de la nueva','La nueva tiene saldo',
+  'Aplicación en la Cartera del CRM (con qué)','Monto de esa aplicación','Qué hacer'];
+const APL_CANCHO=[11,22,40,16,14,12,38,12,15,15,11,26,30,52,16,38,18,44,16,64];
 function aplCanFila(x){
   const cd=x.cd;
   return [x.lado===0?'Cliente':'Proveedor',x.que,cd.cp_nombre||'',cd.cp_rfc||'',cnFolio(cd),cd.fecha?xd(String(cd.fecha).slice(0,10)):null,
-    cd.uuid||'',x.r?x.r.quo||'':'',cent(+cd.total||0),cent(+cd.saldo||0),cd.cq?'Cancelada':'Activa',cnSat(cd),cnDonde(cd),
+    cd.uuid||'',x.r?x.r.quo||'':'',cent(+cd.total||0),cent(+cd.saldo||0),cd.cq?'Cancelada':'Activa',cnSat(cd),cnDonde(cd),x.quo,
     cd.sustituida==='si'?(cd.sus_folio||'Sí'):cd.sustituida==='no'?'No':'Sin revisar',cd.sustituida==='si'?(cd.sus||''):'',x.nueva,
     x.aplTxt,x.apls.length?cent(x.monto):'',x.hacer];
 }
 function aplCanStats(items){
-  const o={n:0,saldo:0,fac:0,ant:0,nc:0,apl:0,nueva:0};
-  (items||[]).forEach(x=>{ o.n++; o.saldo+=(+x.cd.saldo||0); o[x.kind]++; if(x.apls.length) o.apl++; if(x.nuevaSaldo) o.nueva++; });
+  const o={n:0,saldo:0,fac:0,ant:0,nc:0,apl:0,nueva:0,pq:0,apq:0};
+  (items||[]).forEach(x=>{ o.n++; o.saldo+=(+x.cd.saldo||0); o[x.kind]++; if(x.apls.length) o.apl++; if(x.nuevaSaldo) o.nueva++;
+    if(x.qpago) o.pq++; if(x.qapl) o.apq++; });
   return o;
 }
 const APL_CRES=[['Siguen en el Tablero QUO','n'],['Su saldo','saldo',1],['Facturas','fac'],['Anticipos','ant'],['Notas de crédito','nc'],
-  ['Tenían una aplicación','apl'],['Sustituidas, con la nueva con saldo','nueva']];
+  ['Con cobro o pago en los bancos de QUO','pq'],['Sin saldo y sin cobro en QUO (casi seguro, aplicadas en QUO)','apq'],
+  ['Con aplicación en la Cartera del CRM','apl'],['Sustituidas, con la nueva con saldo','nueva']];
 // las canceladas de varias empresas: la misma puerta de la pestaña «Canceladas» (cartera_can), una empresa por llamada y 4 a
 // la vez, solo las que tienen alguna. null si no se pudo saber qué está cancelado; en cada empresa, null si no llegaron.
 async function aplCanTrae(cis,filtro,avance){
@@ -5474,8 +5534,9 @@ function aplHojasExtra(wb,ext,o){
     if(it===null){ grupos.push({ci,filas:[],nota:'No se pudieron traer sus canceladas. Qué hacer: vuelve a bajar el Excel en unos minutos.'}); return; }
     if(!it.length) return;
     const filas=it.slice().sort((a,b)=>a.lado-b.lado).map(aplCanFila); nc+=filas.length; grupos.push({ci,filas}); });
-  hojaAplLista(wb,'Canceladas',{gen:o.gen,cols:APL_CCOLS,anchos:APL_CANCHO,mon:[9,10,18],fechas:[6],suma:[9,10],grupos,
+  hojaAplLista(wb,'Canceladas',{gen:o.gen,cols:APL_CCOLS,anchos:APL_CANCHO,mon:[9,10,19],fechas:[6],suma:[9,10],grupos,
     lineas:o.lineas.concat(['Lo cancelado (en el SAT o en QUO) que sigue en el Tablero QUO o en su cartera: lo de la pestaña «Canceladas», con lo de sus aplicaciones.',
+      '«Qué tiene en QUO»: sus cobros y pagos en los bancos de QUO (o por qué ya no tiene saldo). «Aplicación en la Cartera del CRM»: lo que se decidió en la pestaña Aplicaciones o lo que relaciona su XML, no lo que se hizo en QUO.',
       'Qué hacer en QUO con todas: quitarlas del Tablero QUO. Lo de meses ya declarados se revisa con el gerente antes, por si pide complementaria.']),
     vacio:ext.can?'Ninguna cancelada sigue en el Tablero QUO.':'No se pudo saber qué está cancelado. Qué hacer: vuelve a bajar el Excel en unos minutos.',
     cuenta:g=>plural(g.filas.length,'cancelada','canceladas'),total:plural(nc,'cancelada','canceladas')});
