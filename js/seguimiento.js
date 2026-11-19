@@ -796,8 +796,8 @@
       // la posición del paso dentro de la línea (sin lo que ya esté deslizada ni la animación de la ventana)
       var a = aq.offsetLeft - ol.children[0].offsetLeft, b = a + aq.offsetWidth, orilla = 12, x = ol.scrollLeft, w = ol.clientWidth;
       if (b <= x || a >= x + w) ol.scrollLeft = Math.max(0, a - (w - aq.offsetWidth) / 2);   // no se ve: al centro
-      else if (a < x + orilla) ol.scrollLeft = Math.max(0, a - orilla);                       // se ve a medias: lo justo
-      else if (b > x + w - orilla) ol.scrollLeft = b + orilla - w;
+      else if (a < x) ol.scrollLeft = Math.max(0, a - orilla);                                // se ve a medias: lo justo
+      else if (b > x + w) ol.scrollLeft = b + orilla - w;                                    // (completo: no se mueve)
     });
   }
   /* «Qué falta…» en palabras: l = [['si'|'no'|'va', '<html>'], …] (el texto ya escapado por la página) */
