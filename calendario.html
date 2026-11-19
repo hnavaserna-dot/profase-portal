@@ -240,6 +240,9 @@ table{border-collapse:collapse;width:100%;font-size:14px}
 th{background:var(--surface-2);text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:8px 10px;white-space:nowrap}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
 td.nw{white-space:nowrap}
+/* RH › Colaboradores: el sueldo mensual, solo a quien la base se lo da (19-nov-2026) */
+th.c-sueldo,td.c-sueldo{text-align:right;white-space:nowrap}
+.s-falta{display:inline-block;font-size:11.5px;border-radius:999px;padding:1px 8px;background:var(--accent-soft);color:var(--accent-ink);font-weight:500;white-space:nowrap}
 .who{display:flex;align-items:center;gap:10px;min-width:180px}
 .av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink);font-family:var(--f-display);font-weight:700;font-size:12px;overflow:hidden}
 .av img{width:100%;height:100%;object-fit:cover}
@@ -725,7 +728,7 @@ button.kpi:focus-visible{outline-offset:-3px}
           </div>
           <div id="col-pilas"></div>
           <div class="tablebox"><table>
-            <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th class="solo-colab"></th></tr></thead>
+            <thead><tr><th>Colaborador</th><th>Área</th><th>Cumpleaños</th><th>Ingreso a PROFASE</th><th id="thSueldo" class="c-sueldo" hidden>Sueldo mensual</th><th class="solo-colab"></th></tr></thead>
             <tbody id="colBody"></tbody>
           </table></div>
           <nav class="pgn" id="col-pag" aria-label="Páginas de colaboradores"></nav>
@@ -2022,13 +2025,18 @@ button.kpi:focus-visible{outline-offset:-3px}
   async function pideSinCumple(){
     if(!colabCap||pidiendoSC) return; pidiendoSC=true;
     try{ var r=await window.PORTAL.sb.rpc('cal_sin_cumple'); if(!r.error&&Array.isArray(r.data)) sinCumple=r.data; }catch(e){}
-    pidiendoSC=false; pintaSinCumple(); colListo();
+    pidiendoSC=false; pintaSinCumple(); colListo('sc');
   }
   /* RH › Colaboradores no se enseña hasta tener a los colaboradores y, a quien los captura, el aviso de a quién le falta su
      cumpleaños (auditoría externa del 11-nov-2026, H-13: llegaban después y movían la tabla mientras uno la veía); como
      mucho 1.5 s. Solo en ese modo: el Calendario y Eventos no cambian. */
   var COL_ESPERA=RHMODO==='colab';
-  function colListo(){ if(!COL_ESPERA) return; COL_ESPERA=false; var c=$('contenido'), k=$('kpis'), m=document.querySelector('main'); if(c) c.style.visibility=''; if(k) k.style.visibility=''; if(m) m.style.visibility=''; }
+  /* 19-nov-2026: también espera el sueldo (solo a quien la base se lo da), para que su columna no mueva la tabla al llegar;
+     'ya' (el tope de 1.5 s o una falla) la enseña sin esperar más. */
+  var COL_HECHO={};
+  function colListo(que){ if(!COL_ESPERA) return; if(que) COL_HECHO[que]=true;
+    if(que!=='ya'&&((colabCap&&!COL_HECHO.sc)||(pidioSueldo&&!COL_HECHO.s))) return;
+    COL_ESPERA=false; var c=$('contenido'), k=$('kpis'), m=document.querySelector('main'); if(c) c.style.visibility=''; if(k) k.style.visibility=''; if(m) m.style.visibility=''; }
   function pintaSinCumple(){
     var b=$('sinCumple'); if(!b) return;
     var l=sinCumple.filter(function(u){ return !colab.some(function(c){ return norm(c.nombre)===norm(u.nombre); }); });
@@ -2404,8 +2412,31 @@ button.kpi:focus-visible{outline-offset:-3px}
       filtros:d?{grupos:[{t:'COLABORADORES',campos:[d($('fArea'),{t:'ÁREA'}),d($('fMes'),{t:'MES DE CUMPLEAÑOS'})]}],limpiar:function(){ $('fArea').value=''; $('fMes').value=''; renderCol(); }}:null});
     if(window.PROFASE_PAGINAS) COL_PG=PROFASE_PAGINAS.crea({donde:$('col-pag'),clave:'rh-colaboradores',nombre:'Colaboradores',arriba:$('p-col'),cambio:function(){ renderCol(); }});
   }
+  /* El sueldo mensual en RH › Colaboradores (pedido de Fernando Cadengo para Alex Luna, 19-nov-2026: «quiere tener más a la
+     mano el dato de sueldo en colaboradores»; «como en la imagen»). Solo en esta pantalla (?rh=colab) y solo a quien la base
+     le da los sueldos: rh_colaboradores(), la misma lectura de RH › Vacaciones y permisos › «Días y sueldo» (una sola
+     versión), que solo contesta a RH y la dirección (rh_puede 'ver'); a Andrea Reyna, que captura colaboradores, le contesta
+     que no y la columna no sale. El sueldo nunca se guarda en los colaboradores (cal_colab, que lee el Calendario de todos);
+     se cambia en «Días y sueldo». */
+  var SUELDO=null, pidioSueldo=false;
+  function pideSueldo(){
+    if(pidioSueldo||RHMODO!=='colab'||!colabVe||!(window.PORTAL&&PORTAL.sb)) return;
+    pidioSueldo=true;
+    PORTAL.sb.rpc('rh_colaboradores').then(function(r){
+      if(r&&r.error){ colListo('s'); if(String(r.error.code||'')!=='42501') toast(falla(r.error,'No se pudo traer el sueldo de los colaboradores')); return; }   // 42501: no es de RH, la columna no sale
+      if(!r||!Array.isArray(r.data)){ colListo('s'); return; }
+      var m={}; r.data.forEach(function(x){ if(x&&x.id) m[x.id]=x.sueldo==null?null:+x.sueldo; });
+      SUELDO=m; renderCol(); colListo('s');
+    },function(e){ colListo('s'); toast(falla(e,'No se pudo traer el sueldo de los colaboradores')); });
+  }
+  function celdaSueldo(c){
+    var s=SUELDO[c.id];
+    if(s==null||isNaN(s)) return '<span class="s-falta" title="Se captura en RH › Vacaciones y permisos › Días y sueldo">Falta</span>';
+    return '<span class="num">$'+s.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>';
+  }
   function renderCol(){
     barraCol();
+    var thS=$('thSueldo'); if(thS) thS.hidden=!SUELDO;
     var base=filtrados(), cap=capCol(), mesHoy=HOY.getMonth()+1;
     var PC={mes:function(c){ return c.mes===mesHoy; }, aniv:function(c){ return !!c.ingreso&&parse(c.ingreso).getMonth()+1===mesHoy&&parse(c.ingreso).getFullYear()<HOY.getFullYear(); }, sin:function(c){ return !c.ingreso; }};
     var n=function(k){ return base.filter(PC[k]).length; };
@@ -2423,11 +2454,14 @@ button.kpi:focus-visible{outline-offset:-3px}
       return '<tr><td><div class="who">'+avatar(c)+(cap?'<button type="button" class="nomb" data-edit-col="'+esc(c.id)+'" aria-label="Editar a '+esc(c.nombre)+'">'+esc(c.nombre)+LAPIZ+'</button>':esc(c.nombre))+'</div></td><td class="nw">'+esc(c.area||'')+'</td>'
         +'<td class="nw">'+c.dia+' de '+MESES[c.mes-1]+'</td>'
         +'<td class="nw">'+(i?'<span class="num">'+i.getDate()+'-'+MES3[i.getMonth()]+'-'+i.getFullYear()+'</span> · '+(an<1?'menos de un año':an+(an===1?' año':' años')):'—')+'</td>'
+        +(SUELDO?'<td class="c-sueldo">'+celdaSueldo(c)+'</td>':'')
         +(cap?'<td class="nw"><button type="button" class="link" data-edit-col="'+esc(c.id)+'">Editar</button><button type="button" class="link danger" data-del-col="'+esc(c.id)+'">Quitar</button></td>':'')
         +'</tr>';
-    }).join(''):'<tr><td colspan="5" class="empty">'+(colab.length?(COLX?'Nadie con lo que escogiste.':'Nadie coincide con la búsqueda.'):'Todavía no hay colaboradores capturados.')+'</td></tr>';
+    }).join(''):'<tr><td colspan="6" class="empty">'+(colab.length?(COLX?'Nadie con lo que escogiste.':'Nadie coincide con la búsqueda.'):'Todavía no hay colaboradores capturados.')+'</td></tr>';
     $('colNota').textContent=cap
       ? 'Del cumpleaños solo se guarda el día y el mes, sin el año, para no exponer la edad. Todos salen en el Calendario, en el aviso del día y en su felicitación. La fecha de ingreso lleva el año porque con ella se calculan los aniversarios y los días de vacaciones. Si alguien deja el despacho, regístralo en RH › Altas y bajas (así queda su baja); «Quitar» es solo para un error de captura.'
+        +(SUELDO?' El sueldo mensual lo ven solo RH y la dirección; se cambia en RH › Vacaciones y permisos › Días y sueldo.':'')
+      : SUELDO ? 'El sueldo mensual lo ven solo RH y la dirección; se cambia en RH › Vacaciones y permisos › Días y sueldo.'
       : colabCap ? 'Los colaboradores se capturan en RH › Colaboradores.'
       : 'Del cumpleaños solo se guarda el día y el mes. Si tus datos no están o hay que corregirlos, avísale a RH.';
     enlaza($('colBody'));
@@ -3237,19 +3271,25 @@ button.kpi:focus-visible{outline-offset:-3px}
     var ws=wb.addWorksheet('Colaboradores');
     var head=COLS.slice();
     if(!plantilla) head.push('Años en PROFASE');
-    ws.columns=head.map(function(_,i){ return {width:ANCHOS[i]||14}; });
+    // el sueldo, solo en el Excel de RH › Colaboradores y solo a quien la base se lo da (RH y la dirección); nunca en la
+    // plantilla (es la que se vuelve a subir) ni a quien solo captura colaboradores (19-nov-2026, pedido de Fernando Cadengo)
+    var conS=!plantilla&&!!SUELDO;
+    if(conS) head.push('Sueldo mensual');
+    ws.columns=head.map(function(_,i){ return {width:ANCHOS[i]||16}; });
     var g=MK.encabezado(wb, ws, head.length, {titulo: plantilla?'Plantilla de colaboradores · Calendario del equipo':'Colaboradores · Calendario del equipo',
       lineas: plantilla
         ? ['Un renglón por colaborador, desde el renglón de abajo de los encabezados. Del cumpleaños solo el día y el mes (sin año).',
            'Área: '+AREAS.join(', ')+'. Mes: número (1 a 12) o nombre. Fecha de ingreso: dd/mm/aaaa.',
            'Si un nombre ya existe en el portal, se actualizan sus datos; si no, se agrega.']
-        : [filas.length+(filas.length===1?' colaborador':' colaboradores'), 'Exportado el '+cuandoTxt()]});
+        : [filas.length+(filas.length===1?' colaborador':' colaboradores')+(conS?' · con su sueldo mensual (solo RH y la dirección)':''), 'Exportado el '+cuandoTxt()]});
     head.forEach(function(t,i){ ws.getCell(g,i+1).value=t; });
     MK.cabecera(ws, g, 1, head.length);
     filas.forEach(function(c,k){
       var r=ws.getRow(g+1+k), v=[c.nombre, c.area||'', c.dia, c.mes, fechaXls(c.ingreso)];
       if(!plantilla) v.push(anios(c));
+      if(conS){ var s=SUELDO[c.id]; v.push(s==null||isNaN(s)?'Falta':s); }
       r.values=v; r.getCell(5).numFmt='dd/mm/yyyy';
+      if(conS) r.getCell(head.length).numFmt='"$"#,##0.00';
     });
     var hasta=g+Math.max(filas.length, plantilla?150:0);
     if(plantilla){
@@ -3520,15 +3560,15 @@ button.kpi:focus-visible{outline-offset:-3px}
        arrancar, salen desde el primer cuadro (los mismos botones, en el mismo lugar). */
     if(ARR.ag){ try{ var a0=await ARR.ag; if(!a0.error&&a0.data){ AG.est=a0.data; AG.ok=true; renderVer(); } }catch(e){} }
     $('kpis').hidden=false; $('contenido').hidden=false;
-    if(COL_ESPERA){ $('contenido').style.visibility='hidden'; $('kpis').style.visibility='hidden'; var m0=document.querySelector('main'); if(m0) m0.style.visibility='hidden'; setTimeout(colListo,1500); }   // 12-nov-2026: también el resumen de arriba y todo lo de abajo, que se movían al salir el resumen
+    if(COL_ESPERA){ $('contenido').style.visibility='hidden'; $('kpis').style.visibility='hidden'; var m0=document.querySelector('main'); if(m0) m0.style.visibility='hidden'; setTimeout(function(){ colListo('ya'); },1500); }   // 12-nov-2026: también el resumen de arriba y todo lo de abajo, que se movían al salir el resumen
     sel=hoyK();
     renderLegend(); render(); if(!EVMODO) cargaCli();
     arrancaAgenda().then(function(){ renderLegend(); });
 
     db.collection('cal_colab').onSnapshot(function(snap){
-      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render(); pideFotos(); pideSinCumple();
-      if(!colabCap) colListo();
-    }, function(){ cargaCol=true; toast('Se perdió la conexión con los datos. Recarga la página si no vuelve sola.'); render(); colListo(); });
+      colab=snap.docs.map(limpiaCol).filter(function(c){ return c.nombre; }); cargaCol=true; render(); pideFotos(); pideSinCumple(); pideSueldo();
+      if(!colabCap) colListo('sc');
+    }, function(){ cargaCol=true; toast('Se perdió la conexión con los datos. Recarga la página si no vuelve sola.'); render(); colListo('ya'); });
     db.collection('cal_eventos').onSnapshot(function(snap){
       eventos=snap.docs.map(function(ds){ var o=ds.data()||{}; return {id:ds.id, titulo:String(o.titulo||''), fecha:o.fecha||'', hora:o.hora||'', lugar:o.lugar||'', desc:o.desc||'',
           organiza:o.organiza||'', invita:o.invita&&typeof o.invita==='object'?o.invita:{modo:'todos'}, limite:o.limite||'', cupo:+o.cupo||null, acomp:o.acomp===true, max_acomp:+o.max_acomp||0,
