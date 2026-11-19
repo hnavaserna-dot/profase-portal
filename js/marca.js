@@ -562,9 +562,13 @@
   function bloquesDe(ws) {
     var mk = ws.__mk || { cab: [] }, ini = mk.inicio || 1, out = [], tabla = null, hubo = false;
     var sin = ((ws.__pdf && ws.__pdf.sin) || []).map(function (x) { return String(x).toLowerCase(); });
+    // renglones que solo son para el Excel (19-nov-2026: el renglón de totales de arriba de los títulos, que en el PDF
+    // repetiría el total de abajo de la tabla sin sus columnas): ws.__pdf.sinFilas = [números de renglón]
+    var sinF = (ws.__pdf && ws.__pdf.sinFilas) || [];
     function lee(cab) {
       out = []; tabla = null;
       for (var r = ini; r <= ws.rowCount; r++) {
+        if (sinF.indexOf(r) >= 0) continue;
         var vals = filaDe(ws, r);
         if (!vals.length) { tabla = null; continue; }
         if (esCabecera(ws, r, mk, vals) || (cab && !hubo && vals.length >= 2)) {
