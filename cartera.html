@@ -5070,8 +5070,12 @@ const APL_XCOLS=l=>[l===1?'Proveedor':'Cliente','RFC','Factura','Fecha','Días d
 const APL_XANCHO=[44,16,16,12,10,38,16,15,2,16,26,22,30,18,10,38,18,18,16,22,30];
 // cada columna por su lugar (sin el grupo y la empresa)
 const APL_XI={fecha:3,dias:4,total:6,saldo:7,sep:8,se1:9,docs:12,dfecha:13,ddias:14,se2:18,queda:19,dqueda:20};
-const APL_XMON=[7,9,18,19];      // las que suman: saldo real, se aplica (las dos) y quedaría
-const APL_XDOC=[6,16,17,20];     // con dinero pero no suman: el total de la factura y lo de un solo anticipo o nota
+// las que suman (19-nov-2026, Fernando Cadengo: «poner totales a las columnas … I,J,L,S,T,U,V», en el Excel general, con el
+// grupo y la empresa; en el de una empresa son las mismas, dos columnas antes): el total y el saldo real de la factura, lo
+// que se aplica (las dos), el total y el saldo del anticipo o nota y lo que le quedaría a la factura. Suman renglón por
+// renglón: un anticipo o nota que se aplica en varias facturas cuenta su total y su saldo una vez en cada una
+const APL_XMON=[6,7,9,16,17,18,19];
+const APL_XDOC=[20];             // con dinero pero no suma: lo que le queda a cada anticipo o nota (de uno solo, en número)
 const APL_XBANDAS=[[0,7,'Datos de las facturas con saldo excluyendo las canceladas','az'],
   [9,20,'Datos de lo que se puede aplicar ya sea nota de crédito / anticipo','na']];
 // por qué una relación no se aplica (19-nov-2026, «que todo diga su porqué»): el anticipo o nota ya se usó completo en otra
@@ -5111,8 +5115,6 @@ function aplStats(facs){
     sin:facs.filter(x=>!x.rels.length).length,apl:s.tot,pcm:s.pcm,queda:facs.reduce((a,x)=>a+(x.aplicado>0.005?x.queda:x.r.saldo),0),
     conf:s.n.conf,acep:s.n.acep,auto:s.n.auto,sug:s.n.sug,rev:s.n.rev};
 }
-const aplValor=(F2,i)=>i===APL_XI.saldo?F2.r.saldo:(i===APL_XI.se1||i===APL_XI.se2)?(F2.aplicado>0.005?F2.aplicado:0)
-  :(F2.aplicado>0.005?F2.queda:F2.r.saldo);
 // las aplicaciones de un anticipo o nota en el orden de la fecha de sus facturas (el de las hojas Anticipos y Notas de
 // crédito); extra: las que también van aunque no estén en su lista. Una sola versión para las cuatro hojas.
 function aplOrdDoc(d,extra){
@@ -5166,6 +5168,7 @@ function hojaApl(wb,nombre,facs,c,corte,op){
   const ft=fb+1, f0=fb+2, monDoc=APL_XDOC.map(i=>i+1+sx), ci=k=>APL_XI[k]+1+sx;
   ws.getRow(f0).values=cols; MK.cabecera(ws,f0,1,nc,{derecha:mon.concat(monDoc,[ci('dias'),ci('ddias')]),alto:44});   // títulos de hasta 3 renglones
   let n=f0+1;
+  const vals=new Map();   // lo que lleva cada factura en su renglón: de ahí salen los resultados de los totales
   const fila=F2=>{
     const d=F2.r, cp=D.cp[d.cp]||['',''], rl=F2.prim, t=rl?relTipo(rl):null, e=D.cli[d.cli];
     const docs=F2.apl.flatMap(x=>x.docs), rel=F2.apl.length?docs:rl?rl.docs:[];
@@ -5176,7 +5179,7 @@ function hojaApl(wb,nombre,facs,c,corte,op){
     const queda=docs.map(x=>{ const r0=relDe(x); return r0?aplQuedaEn(x,r0):(aplD(x)?aplD(x).queda:0); });
     // sin nada aplicado (por confirmar o «No se aplica»): lo que le queda hoy a cada uno, sin tocarlo (19-nov-2026)
     const qdocs=F2.apl.length?docs:rel, qv=F2.apl.length?queda:rel.map(x=>{ const X=aplD(x); return X?X.queda:Math.max(0,-x.saldo); });
-    ws.getRow(n).values=(gen?[e[3]||'Sin grupo',e[1]]:[]).concat([cp[1]||'',cp[0]||'',folioDe(d),d.fecha?xd(d.fecha):null,
+    const v=(gen?[e[3]||'Sin grupo',e[1]]:[]).concat([cp[1]||'',cp[0]||'',folioDe(d),d.fecha?xd(d.fecha):null,
       d.dias!=null?d.dias:'',d.uuid||'',cent(Math.abs(d.total||0)),cent(d.saldo),null,
       F2.aplicado>0.005?cent(F2.aplicado):0,
       rl?APL_T[t]+(F2.rels.length>1?' (+'+(F2.rels.length-1)+' más)':''):'Sin relación',
@@ -5186,10 +5189,13 @@ function hojaApl(wb,nombre,facs,c,corte,op){
       uno?(dd.fecha?xd(dd.fecha):null):rel.map(x=>x.fecha?fmtD(x.fecha):'sin fecha').join(' + '),
       uno?(dd.dias!=null?dd.dias:''):rel.map(x=>x.dias!=null?x.dias:'sin fecha').join(' + '),
       rel.map(x=>x.uuid||'').join(' + '),
-      uno?cent(Math.abs(dd.total||0)):rel.map(x=>F.mxn2.format(Math.abs(x.total||0))).join(' + '),
-      uno?cent(-dd.saldo):rel.map(x=>F.mxn2.format(-x.saldo)).join(' + '),
+      // el total y el saldo de lo que se aplica, en número aunque sean 2 o 3 (19-nov-2026, Fernando Cadengo: «que te de el
+      // total no que te marque sumando las cifras»); cuáles son, en «Documentos relacionados»
+      rel.length?cent(rel.reduce((s2,x)=>s2+Math.abs(x.total||0),0)):'',
+      rel.length?cent(rel.reduce((s2,x)=>s2-x.saldo,0)):'',
       F2.aplicado>0.005?cent(F2.aplicado):0,cent(F2.aplicado>0.005?F2.queda:d.saldo),
       qdocs.length===1?cent(qv[0]):qdocs.map((x,i)=>folioDe(x)+': '+F.mxn2.format(qv[i])).join(' · ')]);
+    ws.getRow(n).values=v; vals.set(F2,v);
     ws.getCell(n,ci('fecha')).numFmt='dd/mm/yyyy'; mon.forEach(i=>ws.getCell(n,i).numFmt=RCX_MON);
     monDoc.forEach(i=>{ if(typeof ws.getCell(n,i).value==='number') ws.getCell(n,i).numFmt=RCX_MON; });
     if(uno) ws.getCell(n,ci('dfecha')).numFmt='dd/mm/yyyy';
@@ -5199,8 +5205,8 @@ function hojaApl(wb,nombre,facs,c,corte,op){
   // total: true el de abajo, 'arriba' el de arriba de los títulos (en su renglón fijo, fila), falso el de cada empresa
   const subtotal=(etq,a,b,lista,total,fila)=>{
     const tr=ws.getRow(fila||n); tr.getCell(1).value=etq;
-    mon.forEach((i,j)=>{ const L=colL(i-1); tr.getCell(i).value={formula:'SUBTOTAL(109,'+L+a+':'+L+Math.max(a,b)+')',
-      result:cent(lista.reduce((s2,F2)=>s2+aplValor(F2,APL_XMON[j]),0))}; tr.getCell(i).numFmt=RCX_MON; });
+    mon.forEach(i=>{ const L=colL(i-1); tr.getCell(i).value={formula:'SUBTOTAL(109,'+L+a+':'+L+Math.max(a,b)+')',
+      result:cent(lista.reduce((s2,F2)=>s2+(+(vals.get(F2)||[])[i-1]||0),0))}; tr.getCell(i).numFmt=RCX_MON; });
     for(let i=1;i<=nc;i++){ const x=tr.getCell(i); x.font={name:MK.fuente,size:10,bold:true,color:{argb:MK.colores.azul}};
       x.border=total==='arriba'?APL_TOT_ARRIBA.borde(MK):total?{top:{style:'thin',color:{argb:MK.colores.azul}}}:{top:{style:'hair',color:{argb:'FFB8C2D0'}},bottom:{style:'hair',color:{argb:'FFB8C2D0'}}};
       if(total!==true) x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEEF2F8'}}; }
@@ -5678,7 +5684,10 @@ function aplHojasExtra(wb,ext,o){
         nd+=ds.length; nr+=filas.length; grupos.push({ci,filas,nd:ds.length});
       });
       hojaAplLista(wb,nombre,{gen:o.gen,lineas:o.lineas,cols:APL_DCOLS(N),anchos:APL_DANCHO,arriba:true,mon:[7,8,10,19,20,21,22,23,24],fechas:[3,16],
-        suma:[10,22],bandas:APL_DBANDAS(N),sep:9,der:[4,17],
+        // los totales (19-nov-2026, Fernando Cadengo: «Columnas anticipo I,J,L,U,V,W,X,Y,Z» y «notas de credito» las mismas,
+        // en el Excel general; en el de una empresa, dos columnas antes): todas las de dinero. Suman renglón por renglón: el
+        // total y el saldo de un anticipo o nota que se aplica en varias facturas cuentan una vez en cada renglón
+        suma:[7,8,10,19,20,21,22,23,24],bandas:APL_DBANDAS(N),sep:9,der:[4,17],
         grupos,vacio,cuenta:g=>plural(g.nd,pl[0],pl[1])+' · '+plural(g.filas.length,'renglón','renglones'),
         total:plural(nd,pl[0],pl[1])+' · '+plural(nr,'renglón','renglones')});
     });
