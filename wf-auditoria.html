@@ -93,6 +93,9 @@ button,select,input,textarea{font:inherit;color:inherit}
 .btn:hover{border-color:var(--navy)}
 .btn[disabled]{opacity:.6;cursor:default}
 .btn.acento{background:var(--accent);border-color:var(--accent);color:#14233F}
+.obl-marca{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.obl-marca label{font-size:13px;line-height:1.4}
+.obl-marca textarea{width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:8px;padding:8px;background:var(--surface);resize:vertical;min-height:56px}
 .btn:focus-visible,select:focus-visible,input:focus-visible,.tabla tr.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
 .nota.bien{background:var(--ok-soft)}
@@ -218,10 +221,11 @@ button,select,input,textarea{font:inherit;color:inherit}
   function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
   function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   function items() { return (DATOS && DATOS.items) || []; }
-  function mesTxt(h) { return /anual/i.test(h.actividad || '') ? 'Anual de ' + h.ejercicio : h.mes ? MESES_L[h.mes - 1] + ' de ' + h.ejercicio : String(h.ejercicio || ''); }
+  function mesTxt(h) { return /anual/i.test(h.actividad || '') || h.diag_clave === 'obl_anual' ? 'Anual de ' + h.ejercicio : h.mes ? MESES_L[h.mes - 1] + ' de ' + h.ejercicio : String(h.ejercicio || ''); }
   function per(h) { return h.ejercicio + '-' + String(h.mes || 1).padStart(2, '0'); }
   function abierto(h) { return h.estado === 'abierto'; }
   function como(h) {
+    if (h.estado === 'descartado' && h.no_aplica) return chip('No le toca al despacho · ' + fecha(h.resuelto), 'az');
     if (!abierto(h)) return chip('Ya quedó · ' + fecha(h.resuelto), 'ok');
     if (h.reabrio) return chip('Regresó a Rechazada', 'mal');
     if (h.tipo === 'por_vencer' || h.tipo === 'sin_terminar') return chip('Por atender', 'ojo');
@@ -329,12 +333,14 @@ button,select,input,textarea{font:inherit;color:inherit}
       { t: 'Lo encontró la revisión', est: 'ok', marca: '✓', title: 'El ' + fechaHora(h.creado) },
       { t: h.reabrio ? 'Regresó a Rechazada' : h.act ? 'En la tarea' : 'Del cliente', est: h.reabrio ? 'mal' : ab ? 'na' : 'ok', marca: h.reabrio ? '!' : ab ? '2' : '✓',
         title: h.reabrio ? 'El ' + fechaHora(h.reabrio_en) : h.actividad || 'Sin tarea' },
-      { t: 'Ya quedó', est: ab ? '' : 'ok', marca: ab ? '3' : '✓', title: ab ? 'Todavía no' : 'El ' + fecha(h.resuelto) }] });
-    var L = [];
+      { t: h.no_aplica && !ab ? 'No le toca' : 'Ya quedó', est: ab ? '' : 'ok', marca: ab ? '3' : '✓', title: ab ? 'Todavía no' : 'El ' + fecha(h.resuelto) }] });
+    var L = [], obl = h.tipo === 'oblig_sin_tarea', na = h.no_aplica;
     if (ab) L.push(['no', esc(h.que_hacer || '') + (h.quien ? ' <b>Quién:</b> ' + esc(h.quien) + '.' : '')]);
+    else if (na) L.push(['si', 'Se marcó «No le toca al despacho» el ' + esc(fecha(na.cuando)) + (na.quien ? ' (' + esc(na.quien) + ')' : '') + ': ' + esc(String(na.motivo || '').replace(/[.\s]+$/, '')) + '.']);
     else L.push(['si', 'Ya quedó el ' + esc(fecha(h.resuelto)) + '.']);
     if (ab && h.consecuencia) L.push(['va', 'Si no se corrige: ' + esc(h.consecuencia)]);
     if (ab && h.act) L.push(['va', 'Se corrige en la tarea; al quedar, este hallazgo pasa solo a «Ya quedó».']);
+    if (ab && obl) L.push(['va', 'En cuanto tenga su tarea en el WorkFlow (o la constancia ya no traiga la obligación), la revisión de cada mañana lo pasa sola a «Ya quedó».']);
     var aud = '<dl class="aud">'
       + '<dt>Qué dice el SAT</dt><dd>' + esc(h.sat_dice || '') + '</dd>'
       + '<dt>Qué dice el WorkFlow</dt><dd>' + esc(h.wf_dice || '') + '</dd>'
@@ -348,7 +354,15 @@ button,select,input,textarea{font:inherit;color:inherit}
       + (h.aut ? '<dt>Autoriza</dt><dd>' + esc(h.aut) + '</dd>' : '')
       + '<dt>Cómo está</dt><dd>' + esc(ESTATUS[h.estatus] || '') + '</dd>'
       + (h.ven_sat ? '<dt>Vence en el SAT</dt><dd>' + esc(fecha(h.ven_sat)) + '</dd>' : '') + '</dl>'
+      : obl ? '<p class="mut">No tiene tarea: eso es lo que falta. Se le da en Workflow › Panel de trabajo con «Agregar tarea».</p>'
       : '<p class="mut">Es del cliente, no de una sola tarea.</p>';
+    var marcar = '';
+    if (obl && DATOS.obl_puede && !CONSULTA) {
+      if (ab) marcar = '<div class="sg-fila obl-marca"><label for="f-mot"><b>¿No le toca al despacho?</b> Si la presenta otro despacho o el cliente, escribe quién y márcalo: ya no vuelve a salir para este cliente.</label>'
+        + '<textarea id="f-mot" rows="2" maxlength="500" placeholder="Por ejemplo: la DIOT la presenta el despacho del cliente desde 2025"></textarea>'
+        + '<button class="btn" type="button" id="f-noap">No le toca al despacho</button><p class="nota mal" id="f-marca-err" hidden role="alert"></p></div>';
+      else if (na) marcar = '<div class="sg-fila obl-marca"><button class="btn" type="button" id="f-sile">Sí le toca (regresarlo a abiertos)</button><p class="nota mal" id="f-marca-err" hidden role="alert"></p></div>';
+    }
     var idx = COLA.indexOf(h.id);
     var inst = window.PROFASE_SEG.abre({
       ancho: true, sinPlatica: true,
@@ -362,13 +376,38 @@ button,select,input,textarea{font:inherit;color:inherit}
         + '<p>' + esc(h.diagnostico || '') + '</p>'
         + '<div class="seg-chips">' + como(h) + (h.mio && ab ? ' ' + chip('Te toca', 'na') : '') + '</div>',
       bajoResumen: pasos + window.PROFASE_SEG.falta(ab ? 'Qué hacer' : 'Cómo quedó', L),
-      despues: h.act ? '<div class="sg-fila"><button class="btn acento" type="button" id="f-tarea">Abrir la tarea en el Panel de trabajo</button></div>' : '',
+      despues: (h.act ? '<div class="sg-fila"><button class="btn acento" type="button" id="f-tarea">Abrir la tarea en el Panel de trabajo</button></div>' : '') + marcar,
       pestanas: [{ id: 'aud', t: 'Mini auditoría', html: aud }, { id: 'tarea', t: 'La tarea', html: tarea }],
       alCerrar: function () { if (VI !== inst) return; VI = null; pinta(); },
-      enlaza: function (scrim) { var b = scrim.querySelector('#f-tarea'); if (b) b.onclick = function () { abreTarea(h); }; }
+      enlaza: function (scrim) {
+        var b = scrim.querySelector('#f-tarea'); if (b) b.onclick = function () { abreTarea(h); };
+        var n = scrim.querySelector('#f-noap'); if (n) n.onclick = function () { marca(h, true, (scrim.querySelector('#f-mot') || {}).value, n, scrim); };
+        var s2 = scrim.querySelector('#f-sile'); if (s2) s2.onclick = function () { marca(h, false, null, s2, scrim); };
+      }
     });
     VI = inst;
     pinta();
+  }
+
+  /* «No le toca al despacho» / «Sí le toca» (solo gerentes y la dirección; la base lo vuelve a revisar) */
+  async function marca(h, no, mot, btn, scrim) {
+    var err = scrim && scrim.querySelector('#f-marca-err');
+    if (err) err.hidden = true;
+    if (no && String(mot || '').replace(/[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '').length < 15) {
+      var t = 'Escribe por qué no le toca al despacho (al menos 15 letras; por ejemplo, quién la presenta). Qué hacer: escribe el motivo y vuelve a picar el botón.';
+      if (err) { err.textContent = t; err.hidden = false; } else error(t);
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      await rpc('cen_hall_obl_marca', { p_id: h.id, p_no_le_toca: no, p_motivo: no ? String(mot).trim() : null });
+      avisa(no ? 'Quedó «No le toca al despacho»: ya no vuelve a salir para este cliente.' : 'Regresó a abiertos: la revisión de cada mañana lo vuelve a comparar.');
+      if (VI) { var v = VI; VI = null; try { v.cerrar(); } catch (e) { /* ya cerrada */ } }
+      await carga();
+    } catch (e) {
+      var m = falla(e);
+      if (err) { err.textContent = m; err.hidden = false; } else error(m);
+    } finally { if (btn) btn.disabled = false; }
   }
 
   /* ---------- Excel y PDF de la lista (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
