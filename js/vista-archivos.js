@@ -292,7 +292,7 @@
     return new Promise(function (ok, ko) {
       var url = URL.createObjectURL(new Blob([TRABAJO], { type: 'text/javascript' })), w;
       try { w = new Worker(url); } catch (e) { URL.revokeObjectURL(url); ko(e); return; }
-      var t = setTimeout(function () { w.terminate(); URL.revokeObjectURL(url); ko(new Error('El archivo tardó demasiado en abrir.')); }, 25000);
+      var t = setTimeout(function () { w.terminate(); URL.revokeObjectURL(url); ko(new Error('El archivo tardó demasiado en abrir. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.')); }, 25000);
       w.onmessage = function (ev) { clearTimeout(t); w.terminate(); URL.revokeObjectURL(url); var d = ev.data || {}; if (d.ok) ok(d); else ko(new Error(d.error || 'No se pudo leer')); };
       w.onerror = function (ev) { clearTimeout(t); w.terminate(); URL.revokeObjectURL(url); ko(new Error((ev && ev.message) || 'No se pudo leer')); };
       // el CSV se lee como texto (con sus acentos); lo demás, tal cual
@@ -599,7 +599,7 @@
     op = op || {};
     var q = tipo(op);
     if (!q || ABRIENDO) return null;
-    if ((op.tam || 0) > MAX_VISTA) throw new Error('Es muy grande para verlo aquí; bájalo.');
+    if ((op.tam || 0) > MAX_VISTA) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
     ABRIENDO = true;
     var btn = op.boton, t0 = btn ? btn.textContent : '', v = null, falla = null;
     if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
@@ -608,11 +608,11 @@
       b = await b;
       if (!b) throw new Error('No llegó el archivo');
       if (!(b instanceof Uint8Array)) b = ArrayBuffer.isView(b) ? new Uint8Array(b.buffer, b.byteOffset, b.byteLength) : new Uint8Array(b);
-      if (b.length > MAX_VISTA) throw new Error('Es muy grande para verlo aquí; bájalo.');
+      if (b.length > MAX_VISTA) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
       if (q === 'hojas') {
         var csv = /\.csv$/i.test(op.nombre || '') || /text\/csv/i.test(op.tipo || '');
         var r = await leeHojas(b, csv, !csv && (/\.xls[xm]$/i.test(op.nombre || '') || /openxmlformats-officedocument\.spreadsheetml|ms-excel\.sheet\.macroenabled/i.test(op.tipo || '')));
-        if (!r.hojas.length) throw new Error('No trae hojas visibles.');
+        if (!r.hojas.length) throw new Error('No trae hojas visibles. Qué hacer: bájalo con «Bajar» y ábrelo en Excel.');
         v = abre(op, tablaHoja(r.hojas[0]) + (r.ocultas ? '<p class="vx-nota">' + r.ocultas + (r.ocultas === 1 ? ' hoja oculta no se enseña' : ' hojas ocultas no se enseñan') + '.</p>' : ''), r.hojas);
       } else if (q === 'xml' && window.PROFASE_CFDI) {
         var txt = decodifica(b), doc = new DOMParser().parseFromString(txt, 'application/xml');
@@ -630,7 +630,11 @@
       }
     } catch (e) {
       var m = e && e.message ? e.message : '';
-      falla = new Error(/^Es muy grande/.test(m) ? m : 'No se pudo abrir aquí: ' + (m || 'intenta otra vez') + '. Puedes bajarlo.');
+      if (/Qué hacer/.test(m)) falla = new Error(m);
+      else {
+        try { if (window.PORTAL && PORTAL.fallaAnota && m) PORTAL.fallaAnota('vista de archivos: ' + m, ''); } catch (x) { /* nada */ }
+        falla = new Error('No se pudo abrir aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
+      }
     }
     if (btn) { btn.disabled = false; btn.textContent = t0; }
     ABRIENDO = false;

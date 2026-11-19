@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=076cd06123"></script><script src="js/tabla-pegada.js?v=c408286b46"></script><script src="js/marca.js?v=7916b2996f"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=fbee1363c9"></script><script src="js/seguimiento.js?v=015948266c"></script><script src="js/paginas.js?v=6ea2a01361"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=7ec8828657"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=f576fcf525"></script><script src="js/seguimiento.js?v=6b2d238d66"></script><script src="js/paginas.js?v=6ea2a01361"></script>
 <style>
 /* Portal PROFASE · Tesorería › Recordatorios de pago (antes Administración) (etapa 5 de la migración del Access, 29-oct-2026): como
    «Recordatorios de Pago» del Access y con sus errores corregidos. Todo pasa por las funciones de la base
@@ -243,12 +243,12 @@ tr.fila:hover td{background:var(--navy-soft)}
   function dineroCorto(n) { n = Number(n || 0); return Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toLocaleString('es-MX', { maximumFractionDigits: 2 }) + ' M' : '$' + Math.round(n).toLocaleString('es-MX'); }
   function hoy() { var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
   function haceDias(n) { var d = new Date(Date.now() - n * 864e5); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
-  function falla(e) { var m = (e && (e.message || e.error_description || e.msg)) || ''; return String(m).replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Vuelve a intentar en un momento.'; }
+  function falla(e, que) { return window.PORTAL && PORTAL.falla ? PORTAL.falla(e, que) : (String((e && (e.message || e.error_description || e.msg)) || '').replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
   function cia(id) { var c = (EST && EST.companias || []).filter(function (x) { return x.id === id; })[0]; return c ? c.nombre : 'Compañía ' + id; }
   function escribe() { return !CONSULTA; }
   function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; setTimeout(function () { $('aviso').hidden = true; }, 8000); }
-  function error(t) { $('error').textContent = t; $('error').hidden = false; }
+  function error(t) { t = window.PORTAL && PORTAL.conQueHacer ? PORTAL.conQueHacer(t) : t; $('error').textContent = t; $('error').hidden = false; }
   function chip(e) { return '<span class="chip ' + (e === 2 ? 'ojo' : e === 0 ? 'ok' : '') + '">' + esc(ESTATUS[e] || '') + '</span>'; }
   function ant() { var n = parseInt($('c-ant').value, 10); return isFinite(n) && n > 0 ? n : 0; }
 
@@ -275,7 +275,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('modo').hidden = m === 'real';
       $('b-mandar').hidden = !escribe();
       $('cargando').hidden = true; $('principal').hidden = false;
-    } catch (e) { $('cargando').hidden = true; error('No se pudieron leer los recordatorios: ' + falla(e)); }
+    } catch (e) { $('cargando').hidden = true; error(falla(e, 'No se pudieron leer los recordatorios')); }
   }
   async function recarga() {
     var r = await Promise.all([rpc('rec_grupos', { p_compania: CIA, p_antiguedad: ant() }), rpc('rec_lista', { p_compania: CIA, p_estatus: $('f-est').value === '' ? null : +$('f-est').value }),
@@ -420,7 +420,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     return mia;
   }
   function cierra() { if (VENT) VENT.cerrar(); }
-  function msgEn(id, clase, t) { var el = $(id); if (el) { el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; } if (VENT && t) VENT.pie(t); }
+  function msgEn(id, clase, t) { if (clase === 'mal' && t && window.PORTAL && PORTAL.conQueHacer) t = PORTAL.conQueHacer(t); var el = $(id); if (el) { el.className = 'msg ' + clase; el.textContent = t; el.hidden = !t; } if (VENT && t) VENT.pie(t); }
 
   // Armar o cambiar el recordatorio de un grupo
   async function abreGrupo(gid, rid) {
@@ -649,7 +649,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       ventana({
         kick: cia(v.compania) + ' · ' + fechaHora(v.fecha), titulo: gr,
         resumen: '<div class="r1"><h3>Cómo salió</h3><span class="big"><span class="chip ' + e[0] + '">' + esc(e[1]) + '</span></span></div>'
-          + (v.detalle ? '<p>' + esc(v.detalle) + '</p>' : '') + (v.usuario ? '<p>Lo mandó ' + esc(v.usuario) + '</p>' : '')
+          + (v.detalle ? '<p>' + esc(v.estado === 'error' ? (/Qué hacer:/.test(v.detalle) ? v.detalle : 'No se mandó. Qué hacer: vuelve a mandarlo en un rato; lo que no se mandó se queda sin marcar.') : v.detalle) + '</p>' : '') + (v.usuario ? '<p>Lo mandó ' + esc(v.usuario) + '</p>' : '')
           + ((v.para || []).length ? '<p>Para: ' + esc((v.para || []).join(', ')) + (v.copia ? ' · copia oculta a ' + esc(v.copia) : '') + '</p>' : ''),
         derecha: sec('Facturas y saldos al momento del envío', String(F.length)) + (F.length ? '<ul class="sg-lista">' + F.map(function (f) {
           return '<li><div class="x"><div class="t">' + esc(f.folio) + ' · ' + esc(f.razon) + '</div><div class="d">' + esc(fecha(f.fecha)) + ' · ' + esc(f.dias) + ' días</div></div>'
@@ -678,7 +678,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     var EST_TXT = { enviado: 'Enviado', prueba: 'Prueba', error: 'No salió', no: 'No se mandó' };
     ventana({ kick: 'Recordatorios' + (d && d.modo === 'prueba' ? ' · Modo prueba: llegaron al correo de prueba' : ''), titulo: bien + ' de ' + R.length + ' salieron', nav: null,
       derecha: sec('Resultado') + '<ul class="sg-lista">' + R.map(function (x) {
-        return '<li><div class="x"><div class="t">' + esc(x.grupo || ('Recordatorio ' + x.id)) + ' · ' + esc(EST_TXT[x.estado] || x.estado) + '</div><div class="d">' + esc(x.descripcion || '') + (x.monto != null ? ' · ' + esc(dinero(x.monto)) : '') + (x.detalle ? ' · ' + esc(x.detalle) : '') + (x.para ? ' · ' + esc(x.para.join(', ')) : '') + '</div></div></li>';
+        return '<li><div class="x"><div class="t">' + esc(x.grupo || ('Recordatorio ' + x.id)) + ' · ' + esc(EST_TXT[x.estado] || x.estado) + '</div><div class="d">' + esc(x.descripcion || '') + (x.monto != null ? ' · ' + esc(dinero(x.monto)) : '') + (x.detalle ? ' · ' + esc(x.estado === 'error' || x.estado === 'no' ? (/Qué hacer:/.test(x.detalle) ? x.detalle : 'No se mandó. Qué hacer: vuelve a mandarlo en un rato; lo que no se mandó se queda sin marcar.') : x.detalle) : '') + (x.para ? ' · ' + esc(x.para.join(', ')) : '') + '</div></div></li>';
       }).join('') + '</ul>' });
     await recarga();
     b.disabled = false;
@@ -699,7 +699,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       ws.views = [{ state: 'frozen', ySplit: f0 }];
       MK.impresion(ws, { repetir: f0 });
       await MK.guardar(wb, 'Recordatorios de pago PROFASE.xlsx');
-    } catch (e) { error('No se pudo armar el Excel. Vuelve a intentar.'); setTimeout(function () { $('error').hidden = true; }, 6000); }
+    } catch (e) { error('No se pudo armar el Excel. Qué hacer: vuelve a intentar.'); setTimeout(function () { $('error').hidden = true; }, 6000); }
     b.disabled = false;
   }
 

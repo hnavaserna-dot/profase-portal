@@ -47,6 +47,10 @@
      platica: {..., titulo: 'Comentarios', pie: 'texto bajo el cuadro', oculto: 'texto en lugar de la plática'},
      alEsc: function () { return true si la página ya usó el Esc (una ventana suya encima) }
    y además: v.platica({hilo, puede, yo, oculto}) para ponerla cuando llega; v.pestana('id'); v.cual(); v.sucio().
+   Una pestaña que recibe archivos (18-nov-2026, pedido de Fernando Cadengo): su zona para soltarlos lleva
+   data-suelta="Arrastra aquí tus archivos" (lo que dice la zona). Con eso, al dejar un archivo arrastrado medio segundo
+   sobre el nombre de la pestaña, se abre sola, la zona se ilumina mientras se arrastra y, si se suelta fuera de la zona,
+   sale el aviso con qué hacer (soltarEnPestana() en abre()). Subir lo que se suelta en la zona sigue siendo de la página.
 
    La misma ficha ancha en las demás pantallas de trabajo (11-nov-2026, Héctor Daniel Nava: «2,3,4 y 5»: Estrategias
    fiscales, Centauro › Semáforo y Riesgos fiscales, Clientes › Buzón tributario y Administración › IMPI). Las piezas que
@@ -54,7 +58,9 @@
      sinPlatica: true,               // la pantalla no tiene comentarios: sin la pestaña «Comentarios» (abre en la primera)
      PROFASE_SEG.pasos({titulo, nota, lista: [{id, t, marca, est: 'ok'|'mal'|'na'|'am'|'az'|'off'|'', aqui, title}]})
                                      // los pasos (o los meses, los años) en una línea; los que no son «aqui» llevan
-                                     // data-paso="id" para que la página los abra
+                                     // data-paso="id" para que la página los abra. La línea se queda donde la
+                                     // dejaste al abrir otro paso (y abre con el escogido a la vista), y al cambiar de
+                                     // paso o con ‹ › la ventana no parpadea (18-nov-2026; ver guardaPasos(), abajo)
      PROFASE_SEG.falta(titulo, [['si'|'no'|'va', '<html>'], …])   // «Qué falta…» en palabras, con ✓ ✕ →
      en el resumen, '<div class="r2"><span>Etiqueta <b>valor</b></span>…</div>' y '<span class="tg">…</span>'.
 
@@ -198,6 +204,7 @@
     + 'border:1px solid var(--sg-ln2);background:var(--sg-sf);box-shadow:var(--sg-sh);animation:sgpop .18s cubic-bezier(.2,.9,.3,1.2)}'
     + '@keyframes sgpop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}'
     + '@media (prefers-reduced-motion:reduce){.sg-modal{animation:none}}'
+    + '.sg-modal.sg-sigue{animation:none}'
     + '.sg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid var(--sg-ln);padding:16px 22px}'
     + '.sg-head .kick{margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--sg-na2)}'
     + '.sg-head h2{margin:0;font-size:19px;font-weight:600;letter-spacing:-.015em;color:var(--sg-ink)}'
@@ -310,6 +317,12 @@
     + '.segv .sg-tab[aria-selected="true"]{color:var(--sg-ink);border-bottom-color:var(--sg-na)}'
     + '.segv .sg-tab i{font-style:normal;font-weight:600;letter-spacing:0;color:var(--sg-ink4)}'
     + '.segv .sg-tab i:empty{display:none}'
+    // arrastrar un archivo a la pestaña que lo recibe (18-nov-2026): la pestaña que se va a abrir y la zona para soltarlo
+    + '.segv .sg-tab.sg-tab-va{color:var(--sg-ink);border-bottom-color:var(--sg-na);background:var(--sg-nas);border-radius:6px 6px 0 0}'
+    + '.segv[data-arrastra] [data-suelta]{border-color:var(--sg-na);background:var(--sg-nas);color:var(--sg-ink)}'
+    + '.segv [data-suelta].sg-suelta-aqui{animation:sg-suelta .45s ease-in-out 3}'
+    + '@keyframes sg-suelta{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 5px var(--sg-nab)}}'
+    + '@media (prefers-reduced-motion:reduce){.segv [data-suelta].sg-suelta-aqui{animation:none;box-shadow:0 0 0 4px var(--sg-nab)}}'
     + '.segv .sg-pan{padding-top:14px}'
     + '.segv .sg-pan>.seg-sec:first-child{margin-top:0}'
     + '@media (min-width:900px){.sg-modal.sg-ancho.sg-fijo{height:min(90vh,880px)}'
@@ -324,8 +337,10 @@
     + '.segv .sg-pasos{margin:16px 0 0}'
     + '.segv .sg-pasos .t{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sg-ink3);margin-bottom:8px}'
     + '.segv .sg-pasos ol{list-style:none;margin:0;padding:0 0 2px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin}'
-    + '.segv .sg-pasos li{flex:1 0 74px;min-width:74px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}'
-    + '.segv .sg-pasos.chico li{flex-basis:38px;min-width:38px}'
+    // cada paso mide al menos lo que su palabra más larga: el nombre pasa entero al siguiente renglón, nunca a media palabra
+    // («Opinión de cumplimient·o» en el celular; revisión de pantallas del 18-nov-2026)
+    + '.segv .sg-pasos li{flex:1 0 74px;min-width:min-content;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}'
+    + '.segv .sg-pasos.chico li{flex-basis:38px;min-width:min-content}'
     + '.segv .sg-pasos li+li::before{content:"";position:absolute;top:14px;left:-50%;width:100%;height:2px;background:var(--sg-ln2);z-index:0}'
     + '.segv .sg-pasos button{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;padding:0 2px;font:inherit;color:var(--sg-ink2);cursor:pointer}'
     + '.segv .sg-pasos button[disabled]{cursor:default}'
@@ -337,7 +352,10 @@
     + '.segv .sg-pasos li.az b{background:var(--sg-ac);color:#fff}'
     + '.segv .sg-pasos li.off b{background:var(--sg-sf3);color:var(--sg-ink4);text-decoration:line-through}'
     + '.segv .sg-pasos li.aqui b{box-shadow:0 0 0 3px var(--sg-nab)}'
-    + '.segv .sg-pasos span{font-size:11px;line-height:1.25;overflow-wrap:anywhere}'
+    + '.segv .sg-pasos span{font-size:11px;line-height:1.25;overflow-wrap:normal;word-break:normal;display:flex;flex-direction:column}'
+    // el mismo nombre en negritas, invisible y sin alto: el paso ya mide lo de su nombre en negritas, así que escogerlo (negritas)
+    // no cambia el ancho de la línea ni la mueve
+    + '.segv .sg-pasos span::after{content:attr(data-t);font-weight:700;visibility:hidden;height:0;overflow:hidden;pointer-events:none;speak:never}'
     + '.segv .sg-pasos li.aqui span{font-weight:700;color:var(--sg-ink)}'
     + '.segv .sg-falta{margin-top:14px;border-radius:12px;border:1px solid var(--sg-nab);border-left:4px solid #F07A1E;background:var(--sg-nas);padding:10px 14px;font-size:12.5px;line-height:1.5;color:var(--sg-ink)}'
     + '.segv .sg-falta>b{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-na2);margin-bottom:4px}'
@@ -531,9 +549,16 @@
         : (soloVer ? '' : '<button type="button" class="sg-b2" id="sOk" disabled>Guardar</button>')
       + (hayNav && nav.sig ? '<button type="button" class="sg-b1" id="sSig">' + (soloVer ? 'Siguiente ›' : 'Guardar y siguiente ›') + '</button>' : ''))
       + '</div></div></div></div>';
+    // sin parpadeo (18-nov-2026, Fernando Cadengo: «Si»): si es otro paso (o ‹ ›, o «Guardar y siguiente ›»), la ventana
+    // de antes se acaba de cerrar o sigue abierta: la nueva no vuelve a aparecer con su animación (por un instante se veía la
+    // lista de atrás); solo cambia lo de adentro. Las páginas abren la siguiente en el mismo clic: 300 ms sobran.
+    var sigue = !!host.querySelector('.segv') || Date.now() - ULT_CIERRE < 300;
+    guardaPasos(host);
     host.innerHTML = html;
     var scrim = host.querySelector('.segv');
     var q = function (s) { return scrim.querySelector(s); };
+    if (sigue) { var md0 = scrim.querySelector('.sg-modal'); if (md0) md0.classList.add('sg-sigue'); }
+    ponPasos(scrim);
     var despues = q('[data-despues]');
     if (o.despues) { if (typeof o.despues === 'string') despues.innerHTML = o.despues; else despues.appendChild(o.despues); }
     else despues.remove();
@@ -586,6 +611,7 @@
       if (cerrado) return; cerrado = true; host.__segFin = null;
       if (tic) clearInterval(tic);
       document.removeEventListener('keydown', alTeclado, true);
+      guardaPasos(host); ULT_CIERRE = Date.now();   // la línea de pasos, para la siguiente ficha (arriba, «se queda donde la dejaste»)
       host.innerHTML = '';
       ventanaAvisa();
       if (o.alCerrar) o.alCerrar();
@@ -639,6 +665,58 @@
     }
     arrancaTic();
     if (TODAS) scrim.addEventListener('click', function (ev) { var b = ev.target.closest('[data-tab]'); if (b && scrim.contains(b)) pestana(b.getAttribute('data-tab')); });
+    if (TODAS) soltarEnPestana();
+    /* Arrastrar un archivo a la pestaña que lo recibe (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de
+       trabajo: «que al momento de colocarlo sobre la palabra DOCUMENTOS, cambie a esa pestaña»; «1. B»; «sí, así es»).
+       La pestaña cuyo panel trae una zona para soltar archivos (data-suelta="<lo que dice la zona>") se abre sola si se
+       deja un archivo arrastrado medio segundo sobre su nombre; mientras se arrastra, la zona se ilumina. Lo que se suelta
+       en la zona lo sube la página, como siempre. Soltarlo en otra parte de la ficha (también sobre el nombre de la pestaña:
+       «1. B») no sube nada ni deja que el navegador abra el archivo: sale el aviso con qué hacer, se abre esa pestaña y la
+       zona parpadea. Sin zona (quien no sube documentos), no hace nada y queda la red de js/portal.js. */
+    function soltarEnPestana() {
+      var SUELTA_MS = 500, sTab = null, sReloj = 0, sFin = 0;
+      function conArchivos(ev) { var t = ev.dataTransfer && ev.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+      function zonas() { return [].slice.call(scrim.querySelectorAll('[data-pan] [data-suelta]')); }
+      function panDe(z) { var p = z.closest('[data-pan]'); return p ? p.getAttribute('data-pan') : ''; }
+      function enZona(t) { return !!(t && t.closest && t.closest('[data-suelta]')); }
+      function quitaTab() { clearTimeout(sReloj); sReloj = 0; if (sTab) sTab.classList.remove('sg-tab-va'); sTab = null; }
+      function termina() { quitaTab(); clearTimeout(sFin); scrim.removeAttribute('data-arrastra'); }
+      // mientras dure el arrastre el navegador repite «dragover» (aunque el puntero no se mueva); si deja de llegar, terminó
+      function sigue() { scrim.setAttribute('data-arrastra', ''); clearTimeout(sFin); sFin = setTimeout(termina, 1200); }
+      function sobre(ev) {
+        if (cerrado || !conArchivos(ev)) return;
+        var Z = zonas(); if (!Z.length) return;
+        sigue();
+        var t = ev.target && ev.target.closest ? ev.target : null, tab = t && t.closest('[data-tab]'), id = tab && tab.getAttribute('data-tab');
+        if (id && id !== cual() && Z.some(function (z) { return panDe(z) === id; })) {
+          if (sTab !== tab) {
+            quitaTab(); sTab = tab; tab.classList.add('sg-tab-va');
+            sReloj = setTimeout(function () { var i = sTab && sTab.getAttribute('data-tab'); quitaTab(); if (i && !cerrado) pestana(i); }, SUELTA_MS);
+          }
+        } else if (sTab) quitaTab();
+        // fuera de la zona la ficha lo recibe, para decir qué hacer (y que el navegador no abra el archivo)
+        if (!enZona(t)) { ev.preventDefault(); try { ev.dataTransfer.dropEffect = 'copy'; } catch (e) { /* nada */ } }
+      }
+      scrim.addEventListener('dragenter', sobre);
+      scrim.addEventListener('dragover', sobre);
+      scrim.addEventListener('drop', function (ev) {
+        if (cerrado || !conArchivos(ev)) return;
+        var Z = zonas(); termina();
+        if (!Z.length || enZona(ev.target)) return;   // en la zona: lo sube la página
+        ev.preventDefault();
+        var z = Z.filter(function (x) { return panDe(x) === cual(); })[0] || Z[0], id = panDe(z);
+        if (id && id !== cual()) pestana(id);
+        var tb = q('[data-tab="' + id + '"]'), nom = tb && tb.firstChild && tb.firstChild.nodeType === 3 ? tb.firstChild.nodeValue.trim() : '';
+        var dice = z.getAttribute('data-suelta') || 'Arrastra aquí tus archivos';
+        z.classList.remove('sg-suelta-aqui'); void z.offsetWidth; z.classList.add('sg-suelta-aqui');
+        setTimeout(function () { z.classList.remove('sg-suelta-aqui'); }, 1600);
+        try { z.scrollIntoView({ block: 'center' }); } catch (e) { /* nada */ }
+        if (window.PORTAL && window.PORTAL.avisoChico) {
+          window.PORTAL.avisoChico({ id: 'sg-suelta', texto: 'Ahí no se sube el archivo',
+            detalle: 'Qué hacer: suéltalo en el recuadro «' + dice + '»' + (nom ? ' de la pestaña ' + nom : '') + '.', ms: 9000 });
+        }
+      });
+    }
     hiloBox.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-todos]')) { todos = true; pintaHilo(); return; }
       var caja = ev.target.closest('.seg-c'); if (!caja) return;
@@ -664,7 +742,7 @@
       Promise.resolve(okC ? o.corrige(cid, nuevo) : o.borra(cid)).then(function (r) {
         if (typeof r === 'string') { msg.textContent = r; return; }
         pintaHilo(); if (o.alCambiar) o.alCambiar();
-      }, function () { msg.textContent = 'No se pudo. Intenta de nuevo.'; });
+      }, function () { msg.textContent = 'No se pudo. Qué hacer: intenta de nuevo.'; });
     });
     var qb = q('[data-ayuda]'), qt = q('[data-ayuda-txt]');
     if (qb && qt) qb.addEventListener('click', function () { qt.hidden = !qt.hidden; qb.setAttribute('aria-expanded', String(!qt.hidden)); });
@@ -699,11 +777,11 @@
       var cambia = est && elegido !== actual;
       Promise.resolve(o.guarda({estatus: cambia ? elegido : undefined, de: actual, texto: txt ? txt.value.trim() : ''})).then(function (r) {
         ocupado = false;
-        if (r !== true) { av.textContent = typeof r === 'string' ? r : 'No se pudo guardar. Intenta de nuevo.'; [ok, sg].forEach(function (b) { if (b) b.disabled = false; }); return; }
+        if (r !== true) { av.textContent = typeof r === 'string' ? r : 'No se pudo guardar. Qué hacer: intenta de nuevo.'; [ok, sg].forEach(function (b) { if (b) b.disabled = false; }); return; }
         cerrar(); if (o.alGuardar) o.alGuardar();
         if (siguiente && nav && nav.ir) nav.ir(1);
       }, function () {
-        ocupado = false; av.textContent = 'No se pudo guardar. Intenta de nuevo.';
+        ocupado = false; av.textContent = 'No se pudo guardar. Qué hacer: intenta de nuevo.';
         [ok, sg].forEach(function (b) { if (b) b.disabled = false; });
       });
     }
@@ -746,11 +824,48 @@
     var L = o.lista || [];
     if (!L.length) return '';
     return '<div class="sg-pasos' + (o.chico ? ' chico' : '') + '"><div class="t"><span>' + esc(o.titulo || 'Pasos') + '</span>' + (o.nota ? '<span>' + esc(o.nota) + '</span>' : '') + '</div>'
-      + '<ol>' + L.map(function (x) {
+      + '<ol>' + L.map(function (x, i) {
         var aqui = !!x.aqui, pica = !aqui && x.id != null && x.id !== '';
-        return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
-          + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span>' + esc(x.t || '') + '</span></button></li>';
+        return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '" data-k="' + esc(x.id != null && x.id !== '' ? x.id : '#' + i) + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
+          + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span data-t="' + esc(x.t || '') + '">' + esc(x.t || '') + '</span></button></li>';
       }).join('') + '</ol></div>';
+  }
+  /* La línea de pasos se queda donde la dejaste (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de trabajo:
+     «Que se mantenga el scroll de las tareas en donde lo dejaste (que no se vaya al inicio de nuevo)»; a las dos preguntas,
+     «En todas» y «Si» a quitar el parpadeo). Al picar un paso, la página cierra la ficha y abre la del otro paso: la línea
+     nueva nacía al principio y había que volver a deslizarla. Ahora, al cerrar (o al abrir otra encima), cada línea guarda
+     hasta dónde estaba deslizada, con su «firma» (los pasos que trae); la siguiente ficha con la misma línea (el mismo
+     cliente y mes, con otro paso escogido) abre exactamente ahí. Si el paso escogido no se ve, o es otra línea (otro
+     cliente o mes, con ‹ › o desde la lista), abre con ese paso al centro. Una sola versión para todas las fichas con su
+     línea de pasos, meses o años (Panel de trabajo, Variaciones / Movimientos, Activo fijo, Cartera, Estrategias, Centauro,
+     Buzón tributario e IMPI). Solo en la memoria de esta página: nada va al navegador ni a la base. */
+  var PASOS_MEM = [], ULT_CIERRE = 0;
+  function pasosFirma(ol, i) {
+    return i + '#' + [].map.call(ol.children, function (li) { return li.getAttribute('data-k') || ''; }).join('|');
+  }
+  function guardaPasos(raiz) {
+    if (!raiz || !raiz.querySelectorAll) return;
+    [].forEach.call(raiz.querySelectorAll('.sg-pasos ol'), function (ol, i) {
+      if (!ol.children.length) return;
+      var f = pasosFirma(ol, i);
+      PASOS_MEM = PASOS_MEM.filter(function (m) { return m.f !== f; });
+      PASOS_MEM.push({ f: f, x: ol.scrollLeft });
+      if (PASOS_MEM.length > 30) PASOS_MEM.shift();
+    });
+  }
+  function ponPasos(raiz) {
+    if (!raiz || !raiz.querySelectorAll) return;
+    [].forEach.call(raiz.querySelectorAll('.sg-pasos ol'), function (ol, i) {
+      if (!ol.children.length || ol.scrollWidth <= ol.clientWidth + 2) return;
+      var f = pasosFirma(ol, i), m = PASOS_MEM.filter(function (z) { return z.f === f; })[0];
+      if (m) ol.scrollLeft = m.x;
+      var aq = ol.querySelector('li.aqui'); if (!aq) return;
+      // la posición del paso dentro de la línea (sin lo que ya esté deslizada ni la animación de la ventana)
+      var a = aq.offsetLeft - ol.children[0].offsetLeft, b = a + aq.offsetWidth, orilla = 12, x = ol.scrollLeft, w = ol.clientWidth;
+      if (b <= x || a >= x + w) ol.scrollLeft = Math.max(0, a - (w - aq.offsetWidth) / 2);   // no se ve: al centro
+      else if (a < x) ol.scrollLeft = Math.max(0, a - orilla);                                // se ve a medias: lo justo
+      else if (b > x + w) ol.scrollLeft = b + orilla - w;                                    // (completo: no se mueve)
+    });
   }
   /* «Qué falta…» en palabras: l = [['si'|'no'|'va', '<html>'], …] (el texto ya escapado por la página) */
   function falta(titulo, l) {

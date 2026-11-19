@@ -386,8 +386,8 @@
      pero no cambia nada. El candado de verdad está en la base (portal/sql/19_solo_consulta.sql): ahí se detiene
      cualquier alta, cambio o baja suya. Aquí solo se avisa claro («Solo consulta») si una página intenta guardar,
      para que no salga un error raro; las páginas además esconden sus botones de guardar con P.consulta. ---- */
-  var MSG_CONSULTA = 'Tu usuario es de solo consulta: puedes ver todo, pero no cambiar nada.';
-  var MSG_EQUIPO = 'La vista del equipo es de solo consulta para ti: para capturar lo tuyo regresa a «Mi vista».';
+  var MSG_CONSULTA = 'Tu usuario es de solo consulta: puedes ver todo, pero no cambiar nada. Qué hacer: si algo se tiene que cambiar, pídeselo a quien lo captura en el despacho.';
+  var MSG_EQUIPO = 'La vista del equipo es de solo consulta para ti. Qué hacer: para capturar lo tuyo, regresa a «Mi vista» en el menú de tu foto (arriba a la derecha).';
   P.MSG_CONSULTA = MSG_CONSULTA;
   function errConsulta() { var x = new Error(MSG_CONSULTA); x.code = 'not_granted'; return x; }
   // Respuesta de Supabase que dice «no se puede», y que aguanta .eq(), .select() y demás antes del await
@@ -672,6 +672,8 @@
     + 'border-left:5px solid #F07A1E;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:8px 6px 8px 14px;'
     + 'font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;animation:pa-sube .18s ease-out}'
     + '.pa-tx{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;padding:3px 0}.pa-tx small{display:block;font-size:12.5px;color:#DCE5F3;margin-top:2px}'
+    // un error (PORTAL.falla, abajo): su raya en rojo y su «Qué hacer» aparte, para que se vea qué hacer
+    + '.pa-av.mal{border-left-color:#E5484D}.pa-av.mal .pa-tx small{color:#fff;font-weight:600}'
     + '.pa-tx b{font-variant-numeric:tabular-nums}'
     // con dos botones: el texto y la ✕ arriba, los botones abajo (la ✕ nunca queda sola en otro renglón)
     + '.pa-av.dos{flex-wrap:wrap}.pa-av.dos .pa-tx{flex:1 1 calc(100% - 52px)}.pa-av.dos .pa-x{order:1;align-self:flex-start}.pa-av.dos .pa-ok,.pa-av.dos .pa-sec{order:2}'
@@ -702,12 +704,13 @@
     });
     // ni con los botones de abajo de una ventana abierta (la ventana común de js/seguimiento.js), aquí o en una pantalla
     // en su marco: en el celular el aviso tapaba «Guardar» (11-nov-2026, al pasar los paneles a la ventana común)
-    [].forEach.call(document.querySelectorAll('.segv .sg-foot'), function (x) { cosas.push(x.getBoundingClientRect()); });
+    // y el pie de cualquier otra ventana que lo pida con data-pie-ventana (el seguimiento de la opinión, js/opinion-seg.js, 432)
+    [].forEach.call(document.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) { cosas.push(x.getBoundingClientRect()); });
     [].forEach.call(document.querySelectorAll('iframe'), function (f) {
       try {
         if (!f.getClientRects().length || !f.contentDocument) return;
         var fr = f.getBoundingClientRect();
-        [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot'), function (x) {
+        [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) {
           var q = x.getBoundingClientRect();
           cosas.push({ top: fr.top + q.top, bottom: fr.top + q.bottom, left: fr.left + q.left, right: fr.left + q.right, height: q.height });
         });
@@ -724,15 +727,165 @@
   // la ventana común avisa al abrirse y al cerrarse (js/seguimiento.js), aquí o desde una pantalla en su marco
   document.addEventListener('profase-ventana', function () { setTimeout(avAcomoda, 60); });
   function avCambio() { var k = document.getElementById('pa-avisos'); avN = k ? k.children.length : 0; avAcomoda(); try { document.dispatchEvent(new CustomEvent('profase-avisos')); } catch (e) { /* nada */ } }
+  /* ---- Todo error dice por qué y qué hacer (Héctor Daniel Nava, 18-nov-2026: que el CRM sea como los sistemas Quo; «si
+     dale sí así es y dale a todo»). Una sola pieza para todo el portal, lo de hoy y lo nuevo (la misma idea que Q.falla de
+     los sistemas Quo): PORTAL.falla(error, 'No se pudo guardar') convierte cualquier error en palabras con «Qué hacer: …».
+     - Lo que contesta la base ya trae su propio «Qué hacer» (dónde y cómo arreglarlo) y pasa tal cual.
+     - La sesión vencida, sin internet o la base que tarda se dicen así, cada uno con lo que hay que hacer.
+     - Un error técnico nunca se enseña: es de nuestro lado, se dice así («no tuyo») y queda avisado solo, sin datos de
+       nadie (P.fallaAnota → portal_falla_anota, portal/sql/429_todo_error_que_hacer.sql); la revisión de cada noche lo
+       arregla y al encargado técnico le llega un aviso al día.
+     - Nunca manda a buscar a una persona por su nombre: un permiso se le pide a quien toca por su puesto.
+     - La red de P.avisoChico (abajo) le pone su «Qué hacer» a un aviso de error que llegue sin él, y «Ir a …» si el «Qué
+       hacer» dice en qué pantalla se arregla (el nombre del menú, «Clientes › Base de clientes»).
+     Una pantalla nueva solo usa PORTAL.falla(e) (o PORTAL.toast con el texto del error); nunca enseña e.message tal cual.
+     construir.py (exige_que_hacer()) y herramientas/pruebas/pantallas/prueba_que_hacer.py lo cuidan. ---- */
+  var FAL_TEC = /\b(column|relation|function|syntax|violates|null value|duplicate key|invalid input|operator|does not exist|constraint|schema|deadlock|could not|undefined|cannot|unexpected|internal|stack depth|out of memory|PGRST\d{3}|TypeError|ReferenceError|SyntaxError|RangeError)\b|^[a-z_]+\(|\bis not (a function|defined)\b|\bof (undefined|null)\b|non-2xx|Edge Function/i;
+  var FAL_SES = /JWT|refresh token|not authenticated|Auth session missing|invalid claim|PGRST301|sesi[oó]n (se )?(venci|expir|cerr)/i;
+  var FAL_RED = /Failed to fetch|NetworkError|Load failed|network ?error|fetch failed|ERR_INTERNET|ERR_NETWORK|net::|conexi[oó]n (perdida|rechazada)/i;
+  var FAL_TARDA = /statement timeout|canceling statement|timed? ?out|timeout|\b57014\b/i;
+  var FAL_PERM = /row-level security|permission denied|\b42501\b/i;
+  var FAL_ERROR = /^\s*(No se pud|No se puede|No pudimos|No pude|No fue posible|No se guard|No se subi|No se mand|No se borr|No se carg|No se encontr|No se leyó|No se abri|Error\b|Falló|Fallo\b|Algo (salió|falló)|Ocurrió un error|Hubo un (error|problema)|No tienes permiso|No hay conexión)/i;
+  function falTexto(e) {
+    if (e == null) return '';
+    if (typeof e === 'string') return e;
+    var x = e && e.error && typeof e.error === 'object' ? e.error : e;
+    var m = x.message || x.error_description || x.msg || (typeof x.error === 'string' ? x.error : '') || x.details || '';
+    if (!m && x instanceof Error) m = String(x);
+    return String(m || '');
+  }
+  function falCodigo(e) { var x = e && e.error && typeof e.error === 'object' ? e.error : e; return String((x && typeof x === 'object' && (x.code || x.status)) || ''); }
+  // a quién se le pide un permiso, por su puesto (nunca por su nombre); la dirección no le pide permiso a nadie
+  function falQuien() {
+    var r = P.perfil ? (P.perfil.rolReal || P.perfil.rol) : '';
+    return r === 'director' ? '' : r === 'gerente' ? 'a la dirección' : 'a tu gerente';
+  }
+  // «No se pudo guardar» + «Escoge el motivo…» → «No se pudo guardar: escoge el motivo…» (un nombre propio no se toca)
+  function falJunta(que, t) {
+    que = String(que || '').replace(/[.:;,\s]+$/, '');
+    if (!que) return t;
+    var baja = /^[A-ZÁÉÍÓÚÑ][a-záéíóúñü]+(\s|,|:|$)/.test(t) && !/^[A-ZÁÉÍÓÚÑ][a-záéíóúñü]+\s+[A-ZÁÉÍÓÚÑ]/.test(t);
+    return que + ': ' + (baja ? t.charAt(0).toLowerCase() + t.slice(1) : t);
+  }
+  // un mensaje de la base o de una pantalla que todavía no dice qué hacer: se le pone lo que toca por lo que dice
+  // «No se pudo leer. Vuelve a intentar en un momento.» → «No se pudo leer. Qué hacer: vuelve a intentar en un momento.»
+  var FAL_HAZ = /^(Vuelve|Intenta|Recarga|Revisa|Ábrelo|Abre|Bájalo|Baja|Pica|Usa|Escribe|Escoge|Elige|Selecciona|Pídele|Pídeselo|Pide|Espera|Cierra|Entra|Sube|Agrega|Pon|Captura|Prueba|Actualiza|Manda|Busca|Corrige|Quita|Llama|Pregunta|Guarda|Cámbialo|Cambia|Regresa|Dale|Activa|Permite|Conecta|Ciérralo|Ve a|Revisalo|Revísalo|Inténtalo|Hazlo|Avísale)\b/i;
+  function falHaz(m) {
+    var p = m.match(/^([\s\S]*?[.:;])\s+([^.;:]*[^\s.;:][^.;]*)\.?\s*$/);
+    if (!p || !FAL_HAZ.test(p[2])) return null;
+    var hz = p[2].charAt(0).toLowerCase() + p[2].slice(1);
+    if (/^avísale\b/i.test(hz)) return null;   // «avísale a …» lleva a una persona: lo decide falSigue por puesto
+    return p[1].replace(/[:;]$/, '.') + ' Qué hacer: ' + hz.replace(/[\s.]+$/, '') + '.';
+  }
+  function falSigue(m) {
+    var hz = falHaz(m); if (hz) return hz;
+    var q = falQuien(), t = m.replace(/[\s.]+$/, '') + '.';
+    if (/^Primero\b/.test(m)) return t + ' Qué hacer: hazlo primero y vuelve a intentar.';
+    if (/cop(iar|ió)\b/i.test(m)) return t + ' Qué hacer: cópialo a mano.';
+    if (/(no se encontr|no encontr|no encuentro|no existe|ya no est[aá]|ya no existe)/i.test(m))
+      return t + ' Qué hacer: vuelve a cargar la pantalla; pudo haberse cambiado o quitado mientras la tenías abierta.';
+    if (/^Ya\b/.test(m)) return t + ' Qué hacer: vuelve a cargar la pantalla para ver cómo quedó.';
+    if (/(no tienes|no puedes|no te toca|sin permiso|no tiene(s)? acceso|^solo (la|el|los|las|quien|puede)|^sólo )/i.test(m))
+      return t + (q ? ' Qué hacer: si es parte de tu trabajo, pídele el permiso ' + q + '.' : ' Qué hacer: es una regla del portal; si la quieres cambiar, pídeselo a tu Claude.');
+    if (/^(Escribe|Escoge|Elige|Revisa|Falta|Faltan|Pon |Captura|Agrega|Sube|Indica|Selecciona|Corrige)/.test(m) ||
+        /(no es v[aá]lid|no v[aá]lid|inv[aá]lid|obligatori|requerid|debe ser|tiene que|no puede (ser|ir|estar|quedar|pasar))/i.test(m))
+      return t + ' Qué hacer: corrígelo aquí mismo y vuelve a intentar.';
+    if (/(hasta \d|m[aá]ximo|como mucho|l[ií]mite|tope)/i.test(m)) return t + ' Qué hacer: ajústalo a lo que dice y vuelve a intentar.';
+    if (/^No se pud(o|ieron)\b/i.test(m)) return t + ' Qué hacer: vuelve a intentar en un momento; si sigue igual, revisa tu internet y vuelve a cargar la pantalla.';
+    return t + ' Qué hacer: revisa lo que capturaste y vuelve a intentar; si sigue igual, ' + (q ? 'coméntaselo ' + q : 'pídeselo a tu Claude') + '.';
+  }
+  var falVistos = {};
+  // lo de nuestro lado queda avisado solo y sin datos de nadie: el texto técnico sin comillas, números, correos ni RFC
+  P.fallaAnota = function (m, cod) {
+    try {
+      var limpio = String(m || '').replace(/(DETAIL|CONTEXT|HINT|Detalle):[\s\S]*$/i, '')
+        .replace(/"[^"]*"|'[^']*'|«[^»]*»|“[^”]*”/g, '«…»').replace(/\([^()]*\)\s*=\s*\([^()]*\)/g, '(…)')
+        .replace(/[^\s@]+@[^\s@]+/g, '…').replace(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/gi, '…').replace(/\d{3,}/g, '#')
+        .replace(/\s+/g, ' ').trim().slice(0, 200) || '(sin texto)';
+      var pant = (location.pathname.split('/').pop() || 'index').replace(/\.html$/, '') || 'index', nom = '';
+      try {
+        var t = window.top.PORTAL_MENU && window.top.PORTAL_MENU.actual();
+        if (t) { nom = t.mt + ' › ' + t.t; if (/^(director|gerentes|contadores|index)$/.test(pant)) pant = t.k; }
+      } catch (x) { /* otro sitio */ }
+      var k = pant + '|' + limpio;
+      if (falVistos[k] && Date.now() - falVistos[k] < 600000) return;   // el mismo, una vez cada 10 minutos por pantalla
+      falVistos[k] = Date.now();
+      if (!P.sb || !P.uid) return;
+      P.sb.rpc('portal_falla_anota', { p_pantalla: pant.slice(0, 40), p_nombre: nom.slice(0, 80),
+        p_codigo: String(cod || '').slice(0, 20), p_mensaje: limpio }).then(function () {}, function () {});
+    } catch (x) { /* nunca estorba */ }
+  };
+  P.falla = function (e, que) {
+    var m = falTexto(e).replace(/^[\s\S]*?\bERROR:\s*/, '').replace(/^Error:\s*/, '').trim(), cod = falCodigo(e);
+    var codPortal = e && typeof e === 'object' && typeof e.code === 'string' ? e.code : '';
+    var r;
+    if (/Qué hacer/.test(m)) {
+      if (/de nuestro lado/i.test(m)) P.fallaAnota(m, cod);
+      r = m;
+    } else if (navigator.onLine === false || FAL_RED.test(m) || codPortal === 'unavailable') {
+      r = 'No hay conexión con el portal. Qué hacer: revisa tu internet y vuelve a intentar; lo que ya estaba guardado no se pierde.';
+    } else if (FAL_SES.test(m) || /^(PGRST301|401)$/.test(cod) || codPortal === 'unauthenticated') {
+      r = 'Tu sesión se venció. Qué hacer: vuelve a cargar la pantalla y, si te lo pide, entra otra vez con tu usuario y contraseña; lo que ya estaba guardado se queda.';
+    } else if (FAL_TARDA.test(m) || cod === '57014') {
+      P.fallaAnota(m || 'tardó', cod);
+      r = 'El portal tardó en contestar; es de nuestro lado y ya quedó avisado. Qué hacer: vuelve a intentar en un momento.';
+    } else if (m && (m === MSG_CONSULTA || /solo consulta/i.test(m))) {
+      r = falSigue(m);
+    } else if (FAL_PERM.test(m) || cod === '42501' || codPortal === 'not_granted') {
+      P.fallaAnota(m || 'permiso', cod);
+      var q = falQuien();
+      r = q ? 'No tienes permiso para hacer esto aquí. Qué hacer: si es parte de tu trabajo, pídele el permiso ' + q + '; si crees que es un error, ya quedó avisado.'
+            : 'La base no dejó guardarlo por un permiso; es de nuestro lado y ya quedó avisado. Qué hacer: vuelve a intentar en un rato.';
+    } else if (!m || FAL_TEC.test(m) || m.length > 400) {
+      P.fallaAnota(m || '(sin texto)', cod);
+      r = 'Es de nuestro lado, no tuyo; ya quedó avisado. Qué hacer: vuelve a intentar en un rato.';
+    } else {
+      r = falSigue(m);
+    }
+    return que ? falJunta(que, r) : r;
+  };
+  // un texto que una pantalla va a enseñar: si es de error y no dice qué hacer, se le pone (los textos que no son de error
+  // pasan tal cual); la usan las pantallas que enseñan sus errores en su propia línea, no en un aviso chico
+  P.conQueHacer = function (t) { t = String(t == null ? '' : t); return t && !/Qué hacer/.test(t) && P.esError(t) ? P.falla(t) : t; };
+  // ¿parece un aviso de error? (para la red de abajo)
+  P.esError = function (t) { t = String(t || ''); return FAL_ERROR.test(t) || /Qué hacer:/.test(t) || FAL_TEC.test(t); };
+  // «Ir a …»: si el «Qué hacer» dice en qué pantalla se arregla («Clientes › Base de clientes») y quien lo lee la tiene
+  function falIrA(t) {
+    try {
+      var M = window.PORTAL_MENU; if (!M || !M.modulos) return null;
+      var act = M.actual && M.actual(), best = null;
+      M.modulos().forEach(function (m) {
+        (m.subs || []).forEach(function (s) {
+          var i = t.indexOf(m.t + ' › ' + s.t);
+          if (i >= 0 && (!best || i < best.i || (i === best.i && s.t.length > best.s.t.length))) best = { i: i, s: s };
+        });
+      });
+      if (!best || (act && act.k === best.s.k)) return null;
+      return { texto: 'Ir a ' + best.s.t, accion: function () { M.ir(best.s.k); } };
+    } catch (e) { return null; }
+  }
   var avTic = 0;
   P.avisoChico = function (o) {
     o = o || {};
     var a = arriba();
     if (a && a.avisoChico) { try { return a.avisoChico(o); } catch (e) { /* sigue aquí */ } }
+    // la red: un aviso de error sin «Qué hacer» recibe el suyo; el «Qué hacer» va aparte, y se queda hasta su ✕
+    var mal = !o.html && o.tipo !== 'bien' && o.tipo !== 'aviso' && (o.tipo === 'mal' || P.esError(String(o.texto || '') + ' ' + String(o.detalle || '')));
+    if (mal) {
+      var tx0 = String(o.texto || '').trim(), de0 = String(o.detalle || '').trim(), full;
+      if (/Qué hacer/.test(tx0 + ' ' + de0)) full = tx0 + (de0 ? ' ' + de0 : '');
+      else full = de0 ? P.falla(de0, tx0) : P.falla(tx0);
+      var iq = full.indexOf('Qué hacer:');
+      o = Object.assign({}, o, { texto: iq > 0 ? full.slice(0, iq).trim() : full, detalle: iq > 0 ? full.slice(iq).trim() : '' });
+      if (o.ms == null || o._toast) o.ms = 0;
+      if (!o.id) o.id = 'mal|' + o.texto.slice(0, 80);
+      var ir = !o.boton && !(o.botones || []).length ? falIrA(full) : null;
+      if (ir) { o.boton = ir.texto; o.accion = ir.accion; }
+    }
     var c = avCaja();
     if (o.id) { var viejo = c.querySelector('[data-pa="' + String(o.id).replace(/["\\]/g, '') + '"]'); if (viejo) viejo.remove(); }
     var el = document.createElement('div');
-    el.className = 'pa-av'; el.setAttribute('role', 'status'); el.setAttribute('data-aviso-chico', '');
+    el.className = 'pa-av' + (mal ? ' mal' : ''); el.setAttribute('role', mal ? 'alert' : 'status'); el.setAttribute('data-aviso-chico', '');
     if (o.id) el.setAttribute('data-pa', String(o.id));
     var tx = document.createElement('span'); tx.className = 'pa-tx';
     if (o.html) tx.innerHTML = o.html; else tx.textContent = o.texto || '';
@@ -767,7 +920,7 @@
     cx.setAttribute('aria-label', 'Cerrar aviso'); cx.title = 'Cerrar';
     cx.onclick = function () { cierra(); try { if (typeof o.alCerrar === 'function') o.alCerrar(); } catch (e) { /* nada */ } };
     el.appendChild(cx);
-    var ms = o.ms == null ? 15000 : +o.ms || 0;
+    var ms = o.ms == null ? (o._toast ? 6000 : 15000) : +o.ms || 0;
     el.addEventListener('pointerenter', function () { clearTimeout(reloj); });
     el.addEventListener('pointerleave', function () { espera(ms ? 6000 : 0); });
     el.addEventListener('focusin', function () { clearTimeout(reloj); });
@@ -782,7 +935,8 @@
     return { el: el, cierra: cierra };
   };
   // un aviso de solo texto (por ejemplo «Ojo: ahora se empalma con otra cita tuya»)
-  P.toast = function (txt, ms) { return P.avisoChico({ texto: txt, ms: ms == null ? 6000 : ms }); };
+  // (si es un error, la red de arriba le pone su «Qué hacer» y se queda hasta su ✕)
+  P.toast = function (txt, ms) { return P.avisoChico({ texto: txt, ms: ms, _toast: true }); };
   addEventListener('resize', avAcomoda);
   // la red de seguridad: un aviso flotante con botón y sin ✕ recibe su ✕
   function esAviso(el) {
@@ -819,6 +973,29 @@
     } catch (e) { /* navegador viejo: sin la red */ }
   }
   vigilaAvisos();
+  /* ---- Soltar un archivo donde no va (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de trabajo: al
+     soltar un PDF sobre «DOCUMENTOS» el navegador abrió el PDF y lo sacó de la ficha; «2. A»: en todo el CRM; «sí, así
+     es»). Si se suelta un archivo donde la pantalla no lo recibe, el navegador ya no lo abre ni saca a nadie del CRM: sale
+     el aviso con qué hacer. Lo que sí recibe archivos (el Chat, Clientes › Expedientes, SuperConta, Reclasificación de
+     activo fijo, Documentos de la ficha del Panel de trabajo) sigue igual: esta red va en window, después de las
+     pantallas (que escuchan en su elemento o en document), y solo actúa si ninguna lo atendió. No toca lo que no son
+     archivos (un texto que se arrastra) ni un campo para escoger archivos. Una pantalla nueva que reciba archivos los
+     atiende en su elemento o en document con preventDefault; nunca en window. construir.py (exige_soltar_archivos()) lo
+     cuida y herramientas/pruebas/pantallas/prueba_soltar_archivos.py lo comprueba. */
+  (function () {
+    function conArchivos(ev) { var t = ev.dataTransfer && ev.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+    function campo(ev) { var t = ev.target; return !!(t && t.closest && t.closest('input[type=file]')); }
+    addEventListener('dragover', function (ev) {
+      if (ev.defaultPrevented || !conArchivos(ev) || campo(ev)) return;
+      ev.preventDefault();
+    });
+    addEventListener('drop', function (ev) {
+      if (ev.defaultPrevented || !conArchivos(ev) || campo(ev)) return;
+      ev.preventDefault();
+      P.avisoChico({ id: 'pa-suelta', texto: 'Aquí no se puede soltar un archivo',
+        detalle: 'Qué hacer: súbelo con el botón de esta pantalla para subir archivos o suéltalo en su recuadro «Arrastra aquí…», si lo tiene.', ms: 9000 });
+    });
+  })();
   /* ---- Sin conexión (11-nov-2026, auditoría externa, H-09; Héctor Daniel Nava: «hagamos lo que sí recomiendas»).
      Si el equipo se queda sin internet, abajo sale «Sin conexión a internet» con desde qué hora, para que nadie crea que
      guardó algo que no llegó; se queda hasta que regresa la conexión y entonces dice «Ya hay conexión otra vez». Solo en la
@@ -835,13 +1012,13 @@
       var h = '';
       try { h = window.PROFASE_HORA.hora(new Date()); } catch (e) { h = ''; }
       av = P.avisoChico({ id: 'pa-sin-red', texto: 'Sin conexión a internet',
-        detalle: (h ? 'Desde las ' + h + '. ' : '') + 'Lo que guardes ahorita no va a llegar; espera a que regrese.', ms: 0 });
+        detalle: (h ? 'Desde las ' + h + '. ' : '') + 'Qué hacer: revisa tu internet y espera a que regrese; lo que guardes ahorita no va a llegar.', ms: 0 });
     }
     function con() {
       if (!av) return;
       try { av.cierra(); } catch (e) { /* nada */ }
       av = null;
-      P.avisoChico({ id: 'pa-sin-red', texto: 'Ya hay conexión otra vez', ms: 5000 });
+      P.avisoChico({ id: 'pa-sin-red', texto: 'Ya hay conexión otra vez', ms: 5000, tipo: 'bien' });
     }
     addEventListener('offline', sin);
     addEventListener('online', con);
@@ -2046,7 +2223,7 @@
         if (b && b.getAttribute('data-pba') === 'si') {
           navigator.share({ files: [f] }).then(cierra, function (er) {
             if (er && er.name === 'AbortError') return;   // cerró la hoja: la ventanita se queda por si quiere otra vez
-            P.toast('No se pudo abrir Compartir. Intenta otra vez.');
+            P.toast('No se pudo abrir Compartir. Qué hacer: intenta otra vez.');
           });
         }
       });
@@ -2900,7 +3077,7 @@
       var ok = $('pu-ok'); ok.disabled = true; ok.textContent = 'Guardando…';
       var r = await sb.auth.updateUser({ password: a });
       ok.disabled = false; ok.textContent = 'Guardar';
-      if (r.error) { m.className = 'dmsg bad'; m.textContent = /different/i.test(r.error.message) ? 'Escribe una contraseña distinta a la actual.' : 'No se pudo cambiar. Vuelve a intentar.'; return; }
+      if (r.error) { m.className = 'dmsg bad'; m.textContent = /different/i.test(r.error.message) ? 'Escribe una contraseña distinta a la actual.' : 'No se pudo cambiar. Qué hacer: vuelve a intentar.'; return; }
       m.className = 'dmsg ok'; m.textContent = 'Listo: tu contraseña quedó cambiada.';
       P.registrar('clave', P.pagina());
       setTimeout(cerrar, 1400);
@@ -3018,7 +3195,7 @@
         IMG = im; base = Math.max(cv.width / im.width, cv.height / im.height); zm = 1; Z.value = 1; ox = 0; oy = 0;
         dibuja(); msg('pf-msg'); $('pf-ver').hidden = true; $('pf-rec').hidden = false;
       };
-      im.onerror = function () { URL.revokeObjectURL(u); msg('pf-msg', 'No se pudo leer esa imagen. Prueba con una foto JPG o PNG.', 'warn'); };
+      im.onerror = function () { URL.revokeObjectURL(u); msg('pf-msg', 'No se pudo leer esa imagen. Qué hacer: prueba con una foto JPG o PNG.', 'warn'); };
       im.src = u;
     };
     function limita() {
@@ -3043,7 +3220,8 @@
     })();
     function falla(id, r) {
       var t = String((r && (r.message || r.error)) || '');
-      msg(id, /bucket|not found|no existe/i.test(t) ? 'Las fotos todavía no están activadas en la base. Avísale a Fernando Cadengo.' : 'No se pudo guardar. Vuelve a intentar en un momento.', 'bad');
+      if (/bucket|not found|no existe/i.test(t)) P.fallaAnota('Fotos: la cubeta no existe', '');
+      msg(id, /bucket|not found|no existe/i.test(t) ? 'Las fotos todavía no están activadas; es de nuestro lado y ya quedó avisado. Qué hacer: vuelve a intentar más tarde.' : P.falla(r, 'No se pudo guardar tu foto'), 'bad');
     }
     // Guarda solo el círculo, en 256 x 256 JPG (unos 20 KB), aunque la foto original pese varios MB
     $('pf-ok').onclick = function () {
@@ -3353,7 +3531,9 @@
       var q = await sb.rpc('solicitar_actualizacion');
       if (q.error) {
         b.disabled = false; texto('Actualizar');
-        aviso(/llave/i.test(q.error.message) ? 'El botón todavía no está conectado. Avísale a Daniel.' : 'No se pudo pedir la actualización. Vuelve a intentar en un momento.', 6000);
+        if (/llave/i.test(q.error.message)) P.fallaAnota('Actualizar: falta la llave', q.error.code);
+        P.toast(/llave/i.test(q.error.message) ? 'El botón todavía no está conectado; es de nuestro lado y ya quedó avisado. Qué hacer: mientras, los datos se ponen al día solos cada 3 horas.'
+          : P.falla(q.error, 'No se pudo pedir la actualización'));
         return;
       }
       aviso(q.data && q.data.yaEnCurso ? 'Ya hay una actualización en camino; en un par de minutos se ven los datos nuevos.'

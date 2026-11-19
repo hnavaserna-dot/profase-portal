@@ -131,6 +131,8 @@
     { k: 'cen', t: 'Centauro', d: 'Los XML de cada cliente tal cual los entrega el SAT, las canceladas contra QUO, la lista 69-B y sus reportes.', subs: [
       // 385 (12-nov-2026; Héctor Daniel Nava: «quiero ver qué ha hecho; qué no ha hecho; cómo vamos avanzando»)
       { k: 'centauro-comovamos', v: 'cenq', t: 'Cómo vamos', d: 'Lo que ha hecho el robot con cada cliente, lo que le falta y por qué, y cómo va avanzando.' },
+      // 430 (18-nov-2026; Héctor Daniel Nava: «que cuando centauro encuentre algo; digas el motivo y hagas una mini auditoria»)
+      { k: 'centauro-hallazgos', v: 'cenh', t: 'Hallazgos', d: 'Lo que no cuadra con el SAT, cada uno con su mini auditoría: qué dice el SAT, qué dice el WorkFlow y qué hacer.' },
       { k: 'centauro-semaforo', v: 'cenx', t: 'Semáforo', d: 'Cada cliente mes por mes: lo que hay que corregir (rojo) y revisar (amarillo).' },
       { k: 'centauro-riesgos', v: 'cenf', t: 'Riesgos fiscales', d: 'Lo que encontró la revisión fiscal de las declaraciones, de todos los clientes en una sola lista.' },
       { k: 'centauro-declaraciones', v: 'cend', t: 'Declaraciones', d: 'Las declaraciones de cada cliente que el robot baja del portal del SAT, con su acuse.' },
@@ -288,7 +290,7 @@
     + 'body.pm-mini .pm-mod{margin-bottom:6px}'
     + 'body.pm-mini .pm-mb{flex-direction:column;justify-content:center;gap:5px;padding:10px 0 8px;border-radius:14px}'
     + 'body.pm-mini .pm-mb .pm-ic{width:26px;height:26px}'
-    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#A9BBD8;white-space:normal;overflow:visible;text-overflow:clip;text-align:center;line-height:1.25;padding:0 2px}'
+    + 'body.pm-mini .pm-mb .pm-lbl{flex:none;max-width:100%;font-size:10px;font-weight:800;letter-spacing:0;text-transform:uppercase;color:#A9BBD8;white-space:normal;overflow:visible;text-overflow:clip;text-align:center;line-height:1.25;padding:0 1px}'
     + 'body.pm-mini .pm-mb .pm-lbl .pm-lg{display:none}body.pm-mini .pm-mb .pm-lbl .pm-ct{display:inline}'
     + 'body.pm-mini .pm-mod.on>.pm-mb{background:rgba(240,122,30,.18);box-shadow:inset 3px 0 0 var(--accent,#F07A1E)}body.pm-mini .pm-mod.on>.pm-mb .pm-lbl{color:#fff}'
     + 'body.pm-mini .pm-mod.con-aviso>.pm-mb::after{left:auto;right:14px;top:8px}'
@@ -498,6 +500,7 @@
       var sl = ab && ab.querySelector('.pm-sl'), st = sl ? sl.scrollTop : 0, rs = lista.scrollTop;
       lista.innerHTML = h; hecho = h; sobre = null;
       lista.scrollTop = rs;
+      cabeRiel();
       var nm = km ? lista.querySelector('.pm-mod[data-m="' + km + '"]') : null;
       if (nm) {
         nm.classList.add('fly'); side.classList.add('pm-fly-on');
@@ -515,6 +518,22 @@
     }
   }
   function luego() { if (!pendiente) pendiente = requestAnimationFrame(pinta); }
+
+  /* El nombre corto de cada módulo en el riel (en mayúsculas, como «SUPERCONTA (IA)») se lee completo con cualquier letra:
+     si una palabra no cabe en su botón con la letra de ese equipo (otro sistema u otra fuente: la revisión de pantallas
+     del 18-nov-2026 lo vio con la de Ubuntu, 90 px en un lugar de 88), se le baja la letra poco a poco solo a ese nombre
+     (nunca «…» ni a media palabra; regla «Menús y submenús siempre a la vista»). */
+  function cabeRiel() {
+    if (!lista || !document.body.classList.contains('pm-mini')) return;
+    Array.prototype.forEach.call(lista.querySelectorAll('.pm-mb .pm-ct'), function (c) {
+      var l = c.parentNode;
+      c.style.fontSize = '';
+      if (!l || !c.getClientRects().length) return;
+      var cabe = function () { return c.getBoundingClientRect().width <= l.clientWidth + 0.5 && l.scrollWidth <= l.clientWidth + 1; };
+      for (var px = (parseFloat(getComputedStyle(c).fontSize) || 10) - 0.5; px >= 8 && !cabe(); px -= 0.5) c.style.fontSize = px + 'px';
+    });
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { cabeRiel(); });
 
   // Inicio: la casita del menú; si la persona no tiene Inicio, la primera opción de su menú
   function inicio() { if (aLaVista(boton(INI.v))) return INI; var m = modulos()[0]; return m ? m.subs[0] : null; }
@@ -569,6 +588,7 @@
     if (v !== undefined) store.set('portal.menu.mini', v ? '1' : '0');
     var on = estaMini();
     document.body.classList.toggle('pm-mini', on);
+    cabeRiel();
     var l = side.querySelector('.pm-pmini .pm-lbl');
     if (l) l.textContent = on ? 'Mostrar menú' : 'Ocultar menú';
     side.querySelector('.pm-pmini').setAttribute('aria-label', on ? 'Mostrar menú' : 'Ocultar menú');

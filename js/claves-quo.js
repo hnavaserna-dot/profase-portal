@@ -72,10 +72,9 @@
     if (document.getElementById('cqo-css')) return;
     var s = document.createElement('style'); s.id = 'cqo-css'; s.textContent = CSS; document.head.appendChild(s);
   }
-  function falla(e) {
-    var m = String((e && (e.message || e.msg)) || '').replace(/^.*?ERROR:\s*/, '');
-    if (/sin permiso/i.test(m)) return 'no tienes permiso para este cliente';
-    return m || 'vuelve a intentar en un momento';
+  function falla(e, que) {   // la pieza común: por qué y qué hacer (js/portal.js)
+    if (window.PORTAL && PORTAL.falla) return PORTAL.falla(e, que);
+    return (que ? que + ': ' : '') + (String((e && (e.message || e.msg)) || '') || 'vuelve a intentar en un momento');
   }
   function vivo(S) { return !!(S.donde && document.contains(S.donde)); }
 
@@ -147,7 +146,7 @@
       if (S.val) { S.val = null; clearTimeout(S.t); avisa(''); pinta(); return; }
       b.disabled = true;
       try { S.val = await trae(); avisa(''); cuentaVer(); }
-      catch (e) { avisa('No se pudo ver: ' + falla(e) + '.', 'mal'); }
+      catch (e) { avisa(falla(e, 'No se pudo ver'), 'mal'); }
       pinta();
     }
     async function cambia(b) {
@@ -157,7 +156,7 @@
         S.orig = S.R && S.R.quo ? (S.val || await trae()) : { quo_uc: '', quo_pc: '', quo_uf: '', quo_pf: '' };
         S.forma = true; avisa('');
         cuentaForma();
-      } catch (e) { avisa('No se pudo abrir: ' + falla(e) + '.', 'mal'); }
+      } catch (e) { avisa(falla(e, 'No se pudo abrir'), 'mal'); }
       pinta();
       try { var i = S.donde.querySelector('[data-cqcampo]'); if (i) i.focus(); } catch (e) {}
     }
@@ -183,7 +182,7 @@
         avisa('Guardado.', 'bien');
         pinta();
       } catch (e) {
-        if (m) { m.className = 'cqo-m mal'; m.textContent = 'No se guardó: ' + falla(e) + '.'; }
+        if (m) { m.className = 'cqo-m mal'; m.textContent = falla(e, 'No se guardó'); }
         b.disabled = false;
       }
       S.ocupado = false;

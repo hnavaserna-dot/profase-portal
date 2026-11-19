@@ -379,7 +379,7 @@
         });
         S.mas = !!(r && r.mas);
       } catch (e) {
-        S.filas = []; S.error = 'No se pudo cargar la bitácora' + (e && e.message ? ': ' + e.message : '') + '. Pica «Actualizar».';
+        S.filas = []; S.error = window.PORTAL && PORTAL.falla ? PORTAL.falla(e, 'No se pudo cargar la bitácora') : 'No se pudo cargar la bitácora. Qué hacer: pica «Actualizar».';
       }
       S.cargando = false; pinta();
     }
