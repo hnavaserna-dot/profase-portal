@@ -819,6 +819,29 @@
     } catch (e) { /* navegador viejo: sin la red */ }
   }
   vigilaAvisos();
+  /* ---- Soltar un archivo donde no va (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de trabajo: al
+     soltar un PDF sobre «DOCUMENTOS» el navegador abrió el PDF y lo sacó de la ficha; «2. A»: en todo el CRM; «sí, así
+     es»). Si se suelta un archivo donde la pantalla no lo recibe, el navegador ya no lo abre ni saca a nadie del CRM: sale
+     el aviso con qué hacer. Lo que sí recibe archivos (el Chat, Clientes › Expedientes, SuperConta, Reclasificación de
+     activo fijo, Documentos de la ficha del Panel de trabajo) sigue igual: esta red va en window, después de las
+     pantallas (que escuchan en su elemento o en document), y solo actúa si ninguna lo atendió. No toca lo que no son
+     archivos (un texto que se arrastra) ni un campo para escoger archivos. Una pantalla nueva que reciba archivos los
+     atiende en su elemento o en document con preventDefault; nunca en window. construir.py (exige_soltar_archivos()) lo
+     cuida y herramientas/pruebas/pantallas/prueba_soltar_archivos.py lo comprueba. */
+  (function () {
+    function conArchivos(ev) { var t = ev.dataTransfer && ev.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+    function campo(ev) { var t = ev.target; return !!(t && t.closest && t.closest('input[type=file]')); }
+    addEventListener('dragover', function (ev) {
+      if (ev.defaultPrevented || !conArchivos(ev) || campo(ev)) return;
+      ev.preventDefault();
+    });
+    addEventListener('drop', function (ev) {
+      if (ev.defaultPrevented || !conArchivos(ev) || campo(ev)) return;
+      ev.preventDefault();
+      P.avisoChico({ id: 'pa-suelta', texto: 'Aquí no se puede soltar un archivo',
+        detalle: 'Qué hacer: súbelo con el botón de esta pantalla para subir archivos o suéltalo en su recuadro «Arrastra aquí…», si lo tiene.', ms: 9000 });
+    });
+  })();
   /* ---- Sin conexión (11-nov-2026, auditoría externa, H-09; Héctor Daniel Nava: «hagamos lo que sí recomiendas»).
      Si el equipo se queda sin internet, abajo sale «Sin conexión a internet» con desde qué hora, para que nadie crea que
      guardó algo que no llegó; se queda hasta que regresa la conexión y entonces dice «Ya hay conexión otra vez». Solo en la

@@ -47,6 +47,10 @@
      platica: {..., titulo: 'Comentarios', pie: 'texto bajo el cuadro', oculto: 'texto en lugar de la plática'},
      alEsc: function () { return true si la página ya usó el Esc (una ventana suya encima) }
    y además: v.platica({hilo, puede, yo, oculto}) para ponerla cuando llega; v.pestana('id'); v.cual(); v.sucio().
+   Una pestaña que recibe archivos (18-nov-2026, pedido de Fernando Cadengo): su zona para soltarlos lleva
+   data-suelta="Arrastra aquí tus archivos" (lo que dice la zona). Con eso, al dejar un archivo arrastrado medio segundo
+   sobre el nombre de la pestaña, se abre sola, la zona se ilumina mientras se arrastra y, si se suelta fuera de la zona,
+   sale el aviso con qué hacer (soltarEnPestana() en abre()). Subir lo que se suelta en la zona sigue siendo de la página.
 
    La misma ficha ancha en las demás pantallas de trabajo (11-nov-2026, Héctor Daniel Nava: «2,3,4 y 5»: Estrategias
    fiscales, Centauro › Semáforo y Riesgos fiscales, Clientes › Buzón tributario y Administración › IMPI). Las piezas que
@@ -310,6 +314,12 @@
     + '.segv .sg-tab[aria-selected="true"]{color:var(--sg-ink);border-bottom-color:var(--sg-na)}'
     + '.segv .sg-tab i{font-style:normal;font-weight:600;letter-spacing:0;color:var(--sg-ink4)}'
     + '.segv .sg-tab i:empty{display:none}'
+    // arrastrar un archivo a la pestaña que lo recibe (18-nov-2026): la pestaña que se va a abrir y la zona para soltarlo
+    + '.segv .sg-tab.sg-tab-va{color:var(--sg-ink);border-bottom-color:var(--sg-na);background:var(--sg-nas);border-radius:6px 6px 0 0}'
+    + '.segv[data-arrastra] [data-suelta]{border-color:var(--sg-na);background:var(--sg-nas);color:var(--sg-ink)}'
+    + '.segv [data-suelta].sg-suelta-aqui{animation:sg-suelta .45s ease-in-out 3}'
+    + '@keyframes sg-suelta{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 5px var(--sg-nab)}}'
+    + '@media (prefers-reduced-motion:reduce){.segv [data-suelta].sg-suelta-aqui{animation:none;box-shadow:0 0 0 4px var(--sg-nab)}}'
     + '.segv .sg-pan{padding-top:14px}'
     + '.segv .sg-pan>.seg-sec:first-child{margin-top:0}'
     + '@media (min-width:900px){.sg-modal.sg-ancho.sg-fijo{height:min(90vh,880px)}'
@@ -639,6 +649,58 @@
     }
     arrancaTic();
     if (TODAS) scrim.addEventListener('click', function (ev) { var b = ev.target.closest('[data-tab]'); if (b && scrim.contains(b)) pestana(b.getAttribute('data-tab')); });
+    if (TODAS) soltarEnPestana();
+    /* Arrastrar un archivo a la pestaña que lo recibe (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de
+       trabajo: «que al momento de colocarlo sobre la palabra DOCUMENTOS, cambie a esa pestaña»; «1. B»; «sí, así es»).
+       La pestaña cuyo panel trae una zona para soltar archivos (data-suelta="<lo que dice la zona>") se abre sola si se
+       deja un archivo arrastrado medio segundo sobre su nombre; mientras se arrastra, la zona se ilumina. Lo que se suelta
+       en la zona lo sube la página, como siempre. Soltarlo en otra parte de la ficha (también sobre el nombre de la pestaña:
+       «1. B») no sube nada ni deja que el navegador abra el archivo: sale el aviso con qué hacer, se abre esa pestaña y la
+       zona parpadea. Sin zona (quien no sube documentos), no hace nada y queda la red de js/portal.js. */
+    function soltarEnPestana() {
+      var SUELTA_MS = 500, sTab = null, sReloj = 0, sFin = 0;
+      function conArchivos(ev) { var t = ev.dataTransfer && ev.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+      function zonas() { return [].slice.call(scrim.querySelectorAll('[data-pan] [data-suelta]')); }
+      function panDe(z) { var p = z.closest('[data-pan]'); return p ? p.getAttribute('data-pan') : ''; }
+      function enZona(t) { return !!(t && t.closest && t.closest('[data-suelta]')); }
+      function quitaTab() { clearTimeout(sReloj); sReloj = 0; if (sTab) sTab.classList.remove('sg-tab-va'); sTab = null; }
+      function termina() { quitaTab(); clearTimeout(sFin); scrim.removeAttribute('data-arrastra'); }
+      // mientras dure el arrastre el navegador repite «dragover» (aunque el puntero no se mueva); si deja de llegar, terminó
+      function sigue() { scrim.setAttribute('data-arrastra', ''); clearTimeout(sFin); sFin = setTimeout(termina, 1200); }
+      function sobre(ev) {
+        if (cerrado || !conArchivos(ev)) return;
+        var Z = zonas(); if (!Z.length) return;
+        sigue();
+        var t = ev.target && ev.target.closest ? ev.target : null, tab = t && t.closest('[data-tab]'), id = tab && tab.getAttribute('data-tab');
+        if (id && id !== cual() && Z.some(function (z) { return panDe(z) === id; })) {
+          if (sTab !== tab) {
+            quitaTab(); sTab = tab; tab.classList.add('sg-tab-va');
+            sReloj = setTimeout(function () { var i = sTab && sTab.getAttribute('data-tab'); quitaTab(); if (i && !cerrado) pestana(i); }, SUELTA_MS);
+          }
+        } else if (sTab) quitaTab();
+        // fuera de la zona la ficha lo recibe, para decir qué hacer (y que el navegador no abra el archivo)
+        if (!enZona(t)) { ev.preventDefault(); try { ev.dataTransfer.dropEffect = 'copy'; } catch (e) { /* nada */ } }
+      }
+      scrim.addEventListener('dragenter', sobre);
+      scrim.addEventListener('dragover', sobre);
+      scrim.addEventListener('drop', function (ev) {
+        if (cerrado || !conArchivos(ev)) return;
+        var Z = zonas(); termina();
+        if (!Z.length || enZona(ev.target)) return;   // en la zona: lo sube la página
+        ev.preventDefault();
+        var z = Z.filter(function (x) { return panDe(x) === cual(); })[0] || Z[0], id = panDe(z);
+        if (id && id !== cual()) pestana(id);
+        var tb = q('[data-tab="' + id + '"]'), nom = tb && tb.firstChild && tb.firstChild.nodeType === 3 ? tb.firstChild.nodeValue.trim() : '';
+        var dice = z.getAttribute('data-suelta') || 'Arrastra aquí tus archivos';
+        z.classList.remove('sg-suelta-aqui'); void z.offsetWidth; z.classList.add('sg-suelta-aqui');
+        setTimeout(function () { z.classList.remove('sg-suelta-aqui'); }, 1600);
+        try { z.scrollIntoView({ block: 'center' }); } catch (e) { /* nada */ }
+        if (window.PORTAL && window.PORTAL.avisoChico) {
+          window.PORTAL.avisoChico({ id: 'sg-suelta', texto: 'Ahí no se sube el archivo',
+            detalle: 'Qué hacer: suéltalo en el recuadro «' + dice + '»' + (nom ? ' de la pestaña ' + nom : '') + '.', ms: 9000 });
+        }
+      });
+    }
     hiloBox.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-todos]')) { todos = true; pintaHilo(); return; }
       var caja = ev.target.closest('.seg-c'); if (!caja) return;
