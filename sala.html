@@ -76,7 +76,7 @@
        dentro: una sola versión). Nadie la graba.
      - Signo PROFASE oficial (img/signo.png, nunca redibujado); claro u oscuro como el dispositivo; horas de 24. -->
 <script src="js/supabase.js?v=bb37eb706b"></script>
-<script src="js/portal.js?v=076cd06123"></script>
+<script src="js/portal.js?v=861b1dbb07"></script>
 <style>
 :root{
   --bg:#F4F6FA; --card:#FFFFFF; --ink:#0E1A2E; --muted:#5A6577; --line:#C9D1DE; --line-2:#DCE2EB;
@@ -347,10 +347,10 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
   }
   function errTxt(err){
     const m=String((err&&(err.message||err.error_description))||err||'');
-    if(/NotAllowed|Permission|denied/i.test(err&&err.name||m))return 'El navegador no dio permiso para el micrófono o la cámara. Dale permiso al portal en los ajustes del navegador.';
-    if(/NotFound|DevicesNotFound/i.test(err&&err.name||m))return 'No encontré micrófono o cámara en este equipo.';
-    if(/NotReadable|TrackStart/i.test(err&&err.name||m))return 'El micrófono o la cámara los está usando otra aplicación.';
-    return m||'No se pudo';
+    if(/NotAllowed|Permission|denied/i.test(err&&err.name||m))return 'El navegador no dio permiso para el micrófono o la cámara. Qué hacer: dale permiso al portal en los ajustes del navegador (el candado junto a la dirección) y vuelve a llamar.';
+    if(/NotFound|DevicesNotFound/i.test(err&&err.name||m))return 'No encontré micrófono o cámara en este equipo. Qué hacer: conecta unos audífonos con micrófono (o una cámara) y vuelve a llamar, o entra desde tu celular.';
+    if(/NotReadable|TrackStart/i.test(err&&err.name||m))return 'El micrófono o la cámara los está usando otra aplicación. Qué hacer: cierra la otra aplicación (Zoom, Teams, FaceTime…) y vuelve a llamar.';
+    return window.PORTAL&&PORTAL.falla?PORTAL.falla(err):(m||'No se pudo. Qué hacer: vuelve a intentar en un momento.');
   }
   const rpc=async(n,a)=>{const r=await P.sb.rpc(n,a||{});if(r.error)throw new Error(r.error.message||'No se pudo');return r.data};
 
@@ -685,7 +685,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
       try{L.pantTrack.contentHint='detail'}catch(err){}
       L.pantTrack.onended=()=>{if(L&&L.pantTrack){L.pantTrack=null;cambiaVideo()}};
       cambiaVideo();
-    }catch(err){if(!/NotAllowed|Abort/i.test(err&&err.name||''))aviso('No se pudo compartir la pantalla.')}
+    }catch(err){if(!/NotAllowed|Abort/i.test(err&&err.name||''))aviso('No se pudo compartir la pantalla. Qué hacer: dale permiso al navegador para compartir la pantalla (en la Mac: Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla) y vuelve a picar «Compartir pantalla».',9000)}
   }
 
   /* --- entrar y salir --- */
@@ -802,7 +802,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
     try{info=await rpc('chat_llamada_inicia',{p_conv:conv,p_tipo:tipo==='video'?'video':'voz',p_invitados:invitados||null})}
     catch(err){
       if(/Escoge/.test(err.message)){return escoge(conv,tipo)}
-      aviso(err.message,5000);return;
+      aviso(errTxt(err),9000);return;
     }
     if(info&&info.ya){return une(info.id,tipo)}
     await entra(info,tipo,true);token();
@@ -812,7 +812,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
     if(L){if(L.id===id){minimiza(false);return}aviso('Ya estás en una llamada.');return}
     cierraEntrante();
     let info;
-    try{info=await rpc('chat_llamada_une',{p_id:id})}catch(err){aviso(err.message,5000);revisa();return}
+    try{info=await rpc('chat_llamada_une',{p_id:id})}catch(err){aviso(errTxt(err),9000);revisa();return}
     await entra(info,tipo||info.tipo,false);token();
   }
   async function rechaza(id){
@@ -823,7 +823,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
 
   /* --- escoger a quién llamar en un grupo grande (hasta 9; caben 10) --- */
   async function escoge(conv,tipo){
-    let inf;try{inf=await rpc('chat_conv_info',{p_conv:conv})}catch(err){aviso(err.message);return}
+    let inf;try{inf=await rpc('chat_conv_info',{p_conv:conv})}catch(err){aviso(errTxt(err),9000);return}
     const ms=((inf&&inf.miembros)||[]).filter(m=>m.usuario!==YO&&m.registrado!==false);
     const v=document.createElement('div');v.className='ll-esc';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','¿A quién llamas?');
     v.innerHTML='<div class="dlg"><h2>¿A quién llamas?</h2><div class="nota">En una llamada caben 10: escoge hasta 9 personas de «'+e(inf&&inf.nombre||'')+'».</div><div class="ls" data-ls></div>'
@@ -970,7 +970,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
   async function admite(inv,si){
     if(!L||!L.sala)return;
     try{const j=await rpc('chat_sala_admite',{p_id:L.sala.id,p_invitado:inv,p_si:!!si});infoSala(j);if(si)setTimeout(()=>{if(L)sincroniza()},2500)}
-    catch(err){aviso(err.message,4000);try{infoSala(await rpc('chat_sala_info',{p_id:L.sala.id}))}catch(x){}}
+    catch(err){aviso(errTxt(err),9000);try{infoSala(await rpc('chat_sala_info',{p_id:L.sala.id}))}catch(x){}}
   }
   async function sacaDeSala(m){
     if(!L||!L.sala||!m.g)return;
@@ -979,18 +979,18 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
     if(!L||!L.sala)return;
     try{manda({t:'fuera',g:m.g});const j=await rpc('chat_sala_saca',{p_id:L.sala.id,p_invitado:m.g});
       L.peers.forEach((q,k)=>{if(q.meta&&q.meta.g===m.g){try{q.pc.close()}catch(err){}L.peers['delete'](k)}});pintaTodo();infoSala(j);aviso(n+' ya no está en la reunión')}
-    catch(err){aviso(err.message,4000)}
+    catch(err){aviso(errTxt(err),9000)}
   }
   async function cierraSala(){
     if(!L||!L.sala)return;
-    try{infoSala(await rpc('chat_sala_cierra',{p_id:L.sala.id,p_cerrada:!L.sala.cerrada}));aviso(L&&L.sala.cerrada?'La sala ya no recibe a nadie más':'La sala vuelve a recibir peticiones')}catch(err){aviso(err.message,4000)}
+    try{infoSala(await rpc('chat_sala_cierra',{p_id:L.sala.id,p_cerrada:!L.sala.cerrada}));aviso(L&&L.sala.cerrada?'La sala ya no recibe a nadie más':'La sala vuelve a recibir peticiones')}catch(err){aviso(errTxt(err),9000)}
   }
   async function terminaSala(){
     if(!L||!L.sala)return;
     if(!(await pregunta('¿Terminar la reunión para todos?','Se cuelga para todos y la liga deja de servir.','Terminar')))return;
     if(!L||!L.sala)return;
     const id=L.sala.id;
-    try{manda({t:'adios'});await rpc('chat_sala_termina',{p_id:id});termina('Terminaste la reunión',false)}catch(err){aviso(err.message,4000)}
+    try{manda({t:'adios'});await rpc('chat_sala_termina',{p_id:id});termina('Terminaste la reunión',false)}catch(err){aviso(errTxt(err),9000)}
   }
   async function copia(t,ok){
     if(!t){aviso('La reunión ya no tiene liga');return}
@@ -1020,7 +1020,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
     if(!PUEDE){aviso('Este navegador no hace llamadas. Usa Chrome, Safari o Edge actualizados.',5000);return}
     if(L){if(L.sala&&L.sala.id===id){minimiza(false);if(admitir)admite(admitir,true);return}aviso('Ya estás en una llamada.');return}
     quitaToast(id);
-    let j;try{j=await rpc('chat_sala_entra',{p_id:id})}catch(err){aviso(err.message,5000);return}
+    let j;try{j=await rpc('chat_sala_entra',{p_id:id})}catch(err){aviso(errTxt(err),9000);return}
     if(!MI_FOTO)try{const f=await P.fotosDe([UID]);MI_FOTO=(UID&&f[UID])||''}catch(err){}
     await arranca(cfgSala(j));token();
     if(admitir)admite(admitir,true);
@@ -1313,7 +1313,7 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
       guarda(YO);
       try{ localStorage.setItem('profase-sala-nombre', n); }catch(e){}
       paraPrevia(); espera();
-    }catch(e){ er.textContent=e.message||'No se pudo; intenta otra vez.'; b.disabled=false; }
+    }catch(e){ er.textContent=e&&/Qué hacer/.test(e.message||'')?e.message:'No se pudo. Qué hacer: intenta otra vez en un momento; si sigue igual, avísale a quien te invitó.'; b.disabled=false; }
   };
   function espera(){
     seccion('s-espera');
@@ -1338,8 +1338,8 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
   function fin(estado){
     guarda(null);
     var otra=[{t:'Volver a pedir entrar',pri:true,f:function(){ YO=null; muestraPide(); }}];
-    if(estado==='rechazado') mensaje('No te admitieron en esta reunión','Si crees que es un error, avísale a quien te invitó.',otra);
-    else if(estado==='fuera') mensaje('Te sacaron de la reunión','Ya no puedes volver a entrar con esta liga.');
+    if(estado==='rechazado') mensaje('No te admitieron en esta reunión','Qué hacer: si crees que es un error, avísale a quien te invitó.',otra);
+    else if(estado==='fuera') mensaje('Te sacaron de la reunión','Ya no puedes volver a entrar con esta liga. Qué hacer: si necesitas volver, pídele una liga nueva a quien te invitó.');
     else if(estado==='terminada') mensaje(T('La reunión terminó','La llamada terminó'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'));
     else if(estado==='salio') mensaje(T('Saliste de la reunión','Saliste de la llamada'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'),otra);
     else mensaje(T('La reunión terminó','La llamada terminó'),T('Gracias por reunirte con PROFASE.','Gracias por llamar al soporte de Quo.'));
@@ -1404,19 +1404,19 @@ html[data-marca="quo"] body{background:linear-gradient(#FFFFFF,#E9EEF6)}
     pintaToggles(); seccion('s-pide');
   }
   async function arranca(){
-    if(!/^[A-Za-z0-9_-]{32,64}$/.test(LIGA)){ mensaje('Esta liga no está completa','Revisa que la copiaste completa o pide una nueva a quien te invitó.'); return; }
+    if(!/^[A-Za-z0-9_-]{32,64}$/.test(LIGA)){ mensaje('Esta liga no está completa','Qué hacer: revisa que la copiaste completa o pide una nueva a quien te invitó.'); return; }
     try{ history.replaceState(null,'',location.pathname+(QUO?'?marca=quo'+(Q_SIS?'&s='+Q_SIS:''):'')+location.hash); }catch(e){}
-    if(!window.supabase||!P||!P.sb){ mensaje('No pudimos abrir la reunión','Revisa tu internet y vuelve a abrir la liga.',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
+    if(!window.supabase||!P||!P.sb){ mensaje('No pudimos abrir la reunión','Qué hacer: revisa tu internet y pica «Intentar de nuevo».',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
     // su propio cliente, siempre sin sesión (aunque en este navegador alguien tenga el portal abierto)
     SB=window.supabase.createClient(P.sb.supabaseUrl, P.sb.supabaseKey, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'profase-sala-invitado'}});
     try{ INFO=await rpc('chat_sala_publica',{p_liga:LIGA}); }
-    catch(e){ mensaje('No pudimos abrir la reunión','Revisa tu internet y vuelve a abrir la liga.',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
+    catch(e){ mensaje('No pudimos abrir la reunión','Qué hacer: revisa tu internet y pica «Intentar de nuevo».',[{t:'Intentar de nuevo',pri:true,f:function(){ location.reload(); }}]); return; }
     var e=INFO&&INFO.estado;
-    if(e==='no'){ mensaje('Esta liga no es válida','Pide una nueva a quien te invitó.'); return; }
-    if(e==='terminada'){ mensaje('Esta reunión ya terminó','Si necesitas otra, pídele una liga nueva a quien te invitó.'); return; }
-    if(e==='vencida'){ mensaje('Esta liga ya venció','Las ligas sirven solo el día de la reunión. Pide una nueva a quien te invitó.'); return; }
+    if(e==='no'){ mensaje('Esta liga no es válida','Qué hacer: pide una nueva a quien te invitó.'); return; }
+    if(e==='terminada'){ mensaje('Esta reunión ya terminó','Qué hacer: si necesitas otra, pídele una liga nueva a quien te invitó.'); return; }
+    if(e==='vencida'){ mensaje('Esta liga ya venció','Las ligas sirven solo el día de la reunión. Qué hacer: pide una nueva a quien te invitó.'); return; }
     if(e==='pronto'){ mensaje(INFO.titulo,'Tu reunión es el '+dia(INFO.dia)+(INFO.hora?' a las '+INFO.hora:'')+'. Abre esta misma liga ese día; antes todavía no se puede entrar.'); return; }
-    if(e==='cerrada'){ mensaje('La reunión ya no recibe a más personas','Si necesitas entrar, avísale a quien te invitó.'); return; }
+    if(e==='cerrada'){ mensaje('La reunión ya no recibe a más personas','Qué hacer: si necesitas entrar, avísale a quien te invitó.'); return; }
     // si se recargó la página mientras esperaba, sigue esperando
     YO=leeGuardado();
     if(YO){ espera(); return; }

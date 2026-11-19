@@ -76,10 +76,9 @@
     if (r.error) throw r.error;
     return r.data;
   }
-  function falla(e) {
-    var m = (e && (e.message || e.msg)) || String(e || '');
-    if (/fetch|network|Failed/i.test(m)) return 'No hay conexión. Vuelve a intentar en un momento.';
-    return m || 'No se pudo guardar. Vuelve a intentar.';
+  function falla(e) {   // la pieza común: por qué y qué hacer (js/portal.js)
+    if (window.PORTAL && PORTAL.falla) return PORTAL.falla(e, 'No se pudo guardar');
+    return (e && (e.message || e.msg)) || 'No se pudo guardar. Qué hacer: vuelve a intentar en un momento.';
   }
   function estilos() {
     if (document.getElementById('poc-css')) return;

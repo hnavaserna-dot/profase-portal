@@ -58,15 +58,12 @@
   function folioTxt(q) { return (q.prefijo || 'DEC') + ' - ' + (q.folio == null ? '____' : q.folio); }
   function nombreArchivo(t) { return String(t).replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim(); }
   var toastT;
-  function toast(msg, ms) { var t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, ms || 3400); }
+  function toast(msg, ms) { if (window.PORTAL && PORTAL.esError && PORTAL.esError(msg)) { PORTAL.toast(msg); return; } var t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, ms || 3400); }
   function setSync(s, txt) { var e = $('#sync'); e.dataset.s = s; e.textContent = txt; }
-  function mensajeError(e, def) {
-    var m = (e && e.message) || '';
-    if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
-    if (e && e.code === '23505') return 'Ya existe un registro con ese dato (por ejemplo, el mismo RFC).';
-    if (e && (e.code === '42501' || /permission denied|row-level/i.test(m))) return 'Tu usuario no tiene permiso para hacer esto.';
-    if (e && e.code === 'P0001' && m) return m;
-    return def || 'No se pudo completar. Intenta de nuevo.';
+  function mensajeError(e, def) {   // la pieza común: por qué y qué hacer (js/portal.js)
+    if (e && e.code === '23505') return 'Ya existe un registro con ese dato (por ejemplo, el mismo RFC). Qué hacer: búscalo en la lista y úsalo, o corrige el dato y vuelve a guardar.';
+    if (window.PORTAL && PORTAL.falla) return PORTAL.falla(e, def);
+    return (e && e.message) || def || 'No se pudo completar. Qué hacer: vuelve a intentar en un momento.';
   }
   function bajar(blob, nombre) {
     var u = URL.createObjectURL(blob), a = document.createElement('a');
@@ -743,7 +740,7 @@
       if (ligada) { REN_HECHA = true; pintaRenBanner(); }
     } catch (e) {
       console.error(e);
-      var m = mensajeError(e, 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.');
+      var m = mensajeError(e, 'No se pudo guardar. Qué hacer: revisa tu conexión e intenta de nuevo.');
       mostrarMsgs([m], []); toast(m, 5000);
     } finally { saving = false; renderActions(); }
   }
@@ -782,7 +779,7 @@
     todos.forEach(function (x) { x = x.toLowerCase(); if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) && l.indexOf(x) < 0) l.push(x); });
     return l.slice(0, 5);
   }
-  function msgCorreo(clase, t) { var m = $('#mail-msg'); m.className = 'dmsg' + (clase ? ' ' + clase : ''); m.textContent = t || ''; }
+  function msgCorreo(clase, t) { if (clase === 'bad' && t && window.PORTAL && PORTAL.conQueHacer) t = PORTAL.conQueHacer(t); var m = $('#mail-msg'); m.className = 'dmsg' + (clase ? ' ' + clase : ''); m.textContent = t || ''; }
   function cierraCorreo() { $('#mail-ov').hidden = true; MAIL = null; }
   async function abreCorreo(q) {
     if (!puedeMandar(q)) return;
@@ -813,7 +810,7 @@
       else if (!d.manda) msgCorreo('warn', 'Tu usuario no manda cotizaciones por correo.');
       else if (efectivo(q) === 'vencida') msgCorreo('warn', 'Ojo: esta cotización ya venció (' + fdate(addDays(q.fecha, q.vigencia)) + ').');
       $('#mail-ok').disabled = !d.manda || d.modo === 'apagado';
-    } catch (e) { if (MAIL === q) msgCorreo('bad', mensajeError(e, 'No se pudo revisar. Revisa tu conexión e intenta de nuevo.')); }
+    } catch (e) { if (MAIL === q) msgCorreo('bad', mensajeError(e, 'No se pudo revisar. Qué hacer: revisa tu conexión e intenta de nuevo.')); }
   }
   async function mandaCorreo() {
     var q = MAIL; if (!q) return;
@@ -838,7 +835,7 @@
     } catch (e) {
       if (MAIL !== q) return;
       var m = (e && e.message) || '';
-      msgCorreo('bad', 'No se mandó: ' + (/Failed to fetch|NetworkError|network/i.test(m) || !m ? 'revisa tu conexión y vuelve a intentar.' : m));
+      msgCorreo('bad', window.PORTAL && PORTAL.falla ? PORTAL.falla(e, 'No se mandó') : 'No se mandó. Qué hacer: revisa tu conexión y vuelve a intentar.');
       $('#mail-ok').disabled = false;
     }
   }
@@ -1253,7 +1250,7 @@
       toast('Respaldo listo: ' + nombre);
       await logEv('bk.descarga', '', cots.length + ' cotizaciones, ' + clientes.length + ' clientes, ' + bit.length + ' registros de bitácora');
       cargaUltimoRespaldo();
-    } catch (e) { console.error(e); toast('No se pudo generar el respaldo. Intenta de nuevo.'); }
+    } catch (e) { console.error(e); toast('No se pudo generar el respaldo. Qué hacer: intenta de nuevo.'); }
     finally { respaldando = false; if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = txt; } }
   }
 
