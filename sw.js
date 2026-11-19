@@ -15,6 +15,9 @@
      (tag sala-…) y los recordatorios de las citas (tag cita-…). El de la sala, con el portal al frente, no se repite:
      se le avisa a la página para que lo enseñe al momento; los recordatorios de citas se enseñan siempre. Al picarlos
      abren la reunión o la cita.
+   - Q Chat (19-nov-2026, 447_qchat_fila_avisos.sql; Héctor Daniel Nava: «Sí, así es»): lo que avisa la campanita de Q Chat
+     (un cliente en la fila, «te tocó un chat», una llamada…) llega igual al celular de quien atiende o supervisa; al
+     picarlo abre QUO › Conversaciones (o Tickets a desarrollo): si el portal está abierto se le manda «qch-abre».
    - Picar el aviso de un mensaje abre la conversación de quien lo mandó (Héctor Daniel Nava, 9-nov-2026: «no te abre el
      Chat automáticamente con la persona que te lo mandó; te abre el Chat completo»). Si el portal está abierto, se le
      manda «chat-abre» con la conversación y un número (id); si no, se abre con ?chat=<conversación>. Y por si la página no
@@ -49,7 +52,9 @@ self.addEventListener('push', function (e) {
     renotify: true,
     data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/', conv: d.conv || null,
             rcd: typeof d.rcd === 'number' ? d.rcd : null,
-            sala: typeof d.sala === 'string' && /^[0-9a-f-]{36}$/i.test(d.sala) ? d.sala : null }
+            sala: typeof d.sala === 'string' && /^[0-9a-f-]{36}$/i.test(d.sala) ? d.sala : null,
+            // Q Chat (447_qchat_fila_avisos.sql, 19-nov-2026): lo que avisa la campanita de Q Chat, también al celular
+            qch: typeof d.qch === 'string' && /^qchat(-tickets)?$/.test(d.qch) ? d.qch : null }
   };
   if (op.data.rcd) op.requireInteraction = true;   // un recordatorio se queda hasta que lo piquen (el ícono chico sigue siendo el globito)
   var cita = /[?&]cita=([0-9a-f-]{36})/i.exec(op.data.url); op.data.cita = cita ? cita[1] : null;
@@ -78,7 +83,7 @@ self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   var data = e.notification.data || {}, url = new URL(data.url || '/', self.location.origin).href;
   // el de un mensaje del chat: se queda en la memoria hasta que la página lo abra (o un minuto); mientras, este archivo sigue vivo
-  var chat = !data.rcd && !data.sala && !data.cita && typeof data.conv === 'string' && /^[0-9a-f-]{36}$/i.test(data.conv);
+  var chat = !data.rcd && !data.sala && !data.cita && !data.qch && typeof data.conv === 'string' && /^[0-9a-f-]{36}$/i.test(data.conv);
   var id = chat ? Date.now().toString(36) + Math.random().toString(36).slice(2, 8) : null, espera = null;
   if (chat) {
     var p = { conv: data.conv, id: id, t: Date.now(), listo: null };
@@ -92,6 +97,7 @@ self.addEventListener('notificationclick', function (e) {
         if (data.rcd) w.postMessage({ tipo: 'rcd-abre', aviso: data.rcd });
         else if (data.sala) w.postMessage({ tipo: 'sala-abre', sala: data.sala });
         else if (data.cita) w.postMessage({ tipo: 'cita-abre', cita: data.cita });
+        else if (data.qch) w.postMessage({ tipo: 'qch-abre', liga: data.qch });
         else w.postMessage({ tipo: 'chat-abre', conv: data.conv || null, id: id });
         return w.focus ? Promise.resolve(w.focus()).catch(function () {}) : null;
       }
