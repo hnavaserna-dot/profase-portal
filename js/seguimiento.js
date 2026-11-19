@@ -899,6 +899,10 @@
   }
 
   window.PROFASE_SEG = {
+    // los estilos de la ventana, desde ya (19-nov-2026, revisión nocturna): una pantalla con miles de renglones los pide al
+    // empezar, así abrir su primera ficha no vuelve a calcular los estilos ni a acomodar y pintar toda la página. Solo son
+    // reglas de la ventana: no cambian nada de lo que se ve fuera de ella.
+    prepara: cssUnaVez,
     pasos: pasos, falta: falta,
     pasoEst: pasoEst, faltaRev: faltaRev,
     abre: abre, ESTATUS: ESTATUS, AYUDA: AYUDA, MSJ: MSJ, MIN: MIN,
