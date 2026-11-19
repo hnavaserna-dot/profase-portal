@@ -1,0 +1,440 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  // Nadie de fuera mete el CRM dentro de su página (auditoría externa del 11-nov-2026, H-04; Héctor Daniel Nava: «3 A»).
+  // GitHub Pages no deja poner la protección del navegador (X-Frame-Options / frame-ancestors), así que se hace aquí,
+  // antes que todo: si la página va en un marco de otro sitio, no se enseña ni se carga nada más. Los marcos del mismo
+  // portal (las pantallas dentro de su vista) sí. Única excepción: la llamada del soporte de Quo (sala.html?marca=quo),
+  // que va dentro de la burbuja de los sistemas Quo.
+  if (window.top !== window.self && !(/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search))) {
+    var mismo = false;
+    try { mismo = window.top.location.host === location.host; } catch (e) { mismo = false; }
+    if (!mismo) {
+      try { var st = document.createElement('style'); st.textContent = 'html{display:none!important}'; (document.head || document.documentElement).appendChild(st); } catch (e) { /* nada */ }
+      try { window.stop(); } catch (e) { /* navegador viejo */ }
+      return;
+    }
+  }
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Auditoría SAT vs WF</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=7ec8828657"></script><script src="js/tabla-pegada.js?v=c408286b46"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/paginas.js?v=6ea2a01361"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=f576fcf525"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script>
+<style>
+/* Portal PROFASE · Workflow › Auditoría SAT vs WF (442, 19-nov-2026; Héctor Daniel Nava: «para encontrar resultados
+   exclusivamente de esto… Llamado algo como "Auditoría SAT vs WF"… que todos los gerentes podamos ver esto y también dirección;
+   y los contadores y responsables asignados de cada cliente»). Lo que no cuadra entre el SAT y el WorkFlow, cada uno con su
+   mini auditoría (antes Centauro › Hallazgos, 430). Solo lee (cen_hall_lista): la dirección y los gerentes, todos los
+   clientes; cada contador, los suyos (donde es responsable, autoriza o contador asignado). Se trabaja en la tarea. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#14233F}
+.btn:focus-visible,select:focus-visible,input:focus-visible,.tabla tr.fila:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+#wa-bar{margin:16px 0 12px}
+#dlg .ppl-nav{margin-right:auto}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.caja .sub{color:var(--muted);font-size:12.5px}
+.desliza{overflow-x:auto;position:relative}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .cli{font-weight:700;min-width:180px}
+.tabla .que{min-width:240px}
+.tabla .idea{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:70ch;margin-top:4px}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.vacio{padding:20px 16px;color:var(--muted)}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+.aud{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:8px 14px;margin:0}
+.aud dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.aud dd{margin:0;overflow-wrap:anywhere;white-space:pre-line}
+@media (max-width:760px){
+  .tabla thead{display:none}
+  .tabla,.tabla tbody,.tabla tr,.tabla td{display:block;width:100%}
+  .tabla tr.fila{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla td{border:0;padding:2px 0}
+  .tabla .cli,.tabla .que{min-width:0}
+  .tabla .idea{max-width:none}
+}
+@media (max-width:700px){
+  input,select,textarea{font-size:16px}
+  .band h1{font-size:22px}
+  .aud{grid-template-columns:minmax(0,1fr)}
+  .aud dt{margin-top:4px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Workflow</div>
+      <h1>Auditoría SAT vs WF</h1>
+      <p>Lo que no cuadra entre el SAT y el WorkFlow, cada uno con su mini auditoría: qué dice el SAT, qué dice el WorkFlow, el diagnóstico y qué hacer.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <!-- UX PROFASE: la barra (buscar, FILTROS, «Más ▾» y Excel con su PDF), «Tu trabajo» y la lista por páginas -->
+    <div id="wa-bar">
+      <input type="search" id="f-q" placeholder="Razón social, grupo, RFC, responsable o qué pasó" autocomplete="off" aria-label="Buscar">
+      <button class="btn" type="button" data-excel id="x-lista">Excel</button>
+    </div>
+    <div hidden><select id="f-tipo" aria-label="Qué es"></select><select id="f-mes" aria-label="Mes"></select><select id="f-resp" aria-label="Responsable"></select></div>
+    <section id="kpis" aria-label="Qué ver"></section>
+    <section class="caja" id="caja-lista">
+      <header><div><h2 id="t-lista">Abiertos</h2><div class="sub" id="t-sub"></div></div></header>
+      <div class="desliza"><table class="tabla" id="tabla">
+        <thead><tr><th>Cliente</th><th>Mes</th><th>Qué pasó</th><th>La tarea</th><th>Cómo va</th></tr></thead>
+        <tbody id="lista"></tbody>
+      </table></div>
+      <div class="vacio" id="lista-vacia" hidden></div>
+      <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+    </section>
+    <div id="como" hidden>
+      <p class="pie">Cada hora, el CRM compara lo que bajó Centauro del portal del SAT con el WorkFlow. Si una «Presentar DYP» terminada no está en el SAT (ya pasó su vencimiento y Centauro revisó al cliente después de que se cerró), sale aquí. También salen las tareas terminadas con un PDF de otra razón social o de otro mes (el CRM lee cada PDF) y las opiniones de cumplimiento negativas con su motivo (las omisiones que dice el SAT).</p>
+      <p class="pie">Cada uno trae qué dice el SAT, qué dice el WorkFlow (quién la cerró, cuándo y con qué documento), el diagnóstico, qué hacer, quién y qué pasa si no se corrige. Lo que el SAT no tiene regresa a «Rechazada» con todo eso en su plática, y a quien la trabaja le llega el aviso. Se corrige en la tarea: cuando la declaración aparece en el SAT, se quita el documento equivocado o la opinión sale positiva, pasa solo a «Ya quedó». La comisión no cambia.</p>
+      <p class="pie">Lo ven la dirección y los gerentes (todos los clientes) y cada contador lo de sus clientes: donde es responsable, autoriza o es el contador asignado. «Te toca» es lo de las tareas donde tú eres responsable o autorizas.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var DATOS = null, CONSULTA = false, VISTA = 'abierto', TIPO = '', MES = '', RESP = '', Q = '', SEL = null, PAG = null, BAR = null, LISTA = [], COLA = [], VI = null;
+  // qué es cada hallazgo (los de 430 y los de la revisión proactiva)
+  var TIPOS = {
+    wf_sin_sat: 'La DyP está terminada y el SAT no la tiene',
+    acuse_otro: 'PDF de otra razón social o de otro mes',
+    opinion_negativa: 'Opinión de cumplimiento negativa',
+    por_vencer: 'Por vencer y no está presentada',
+    vencida: 'Se venció sin presentar',
+    sin_terminar: 'Ya está en el SAT y la tarea sigue abierta',
+    rev_xml: 'La declaración no cuadra con los XML del mes',
+    oblig_sin_tarea: 'Obligación sin tarea en el WorkFlow'
+  };
+  var CORTO = { wf_sin_sat: 'El SAT no la tiene', acuse_otro: 'PDF de otro', opinion_negativa: 'Opinión negativa', por_vencer: 'Por vencer sin presentar',
+    vencida: 'Vencida sin presentar', sin_terminar: 'Presentada sin terminar', rev_xml: 'No cuadra con los XML', oblig_sin_tarea: 'Obligación sin tarea' };
+  var TONO_T = { wf_sin_sat: 'rojo', acuse_otro: 'naranja', opinion_negativa: 'ambar', por_vencer: 'ambar', vencida: 'rojo', sin_terminar: 'azul', rev_xml: 'naranja', oblig_sin_tarea: 'ambar' };
+  var ESTATUS = { 2: 'Terminada', 3: 'Rechazada', 4: 'En proceso', 5: 'Por iniciar', 6: 'No aplica' };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : fecha(s); } catch (e) { return fecha(s); } }
+  function falla(e, que) { return window.PORTAL && PORTAL.falla ? PORTAL.falla(e, que) : (String((e && (e.message || e.error_description || e.msg)) || '').replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); }
+  function error(t) { t = window.PORTAL && PORTAL.conQueHacer ? PORTAL.conQueHacer(t) : t; $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, /Qué hacer/.test(t) ? 30000 : 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function items() { return (DATOS && DATOS.items) || []; }
+  function mesTxt(h) { return /anual/i.test(h.actividad || '') ? 'Anual de ' + h.ejercicio : h.mes ? MESES_L[h.mes - 1] + ' de ' + h.ejercicio : String(h.ejercicio || ''); }
+  function per(h) { return h.ejercicio + '-' + String(h.mes || 1).padStart(2, '0'); }
+  function abierto(h) { return h.estado === 'abierto'; }
+  function como(h) {
+    if (!abierto(h)) return chip('Ya quedó · ' + fecha(h.resuelto), 'ok');
+    if (h.reabrio) return chip('Regresó a Rechazada', 'mal');
+    if (h.tipo === 'por_vencer' || h.tipo === 'sin_terminar') return chip('Por atender', 'ojo');
+    return chip('Abierto', 'mal');
+  }
+
+  /* ---------- «Tu trabajo» (UX PROFASE): las pilas filtran; «Empezar a revisar» abre el primero y su ficha trae ‹ › ---------- */
+  var VISTAS = [
+    ['toca', 'Te toca', function (h) { return abierto(h) && h.mio; }, 'naranja', 'De las tareas donde eres responsable o autorizas'],
+    ['abierto', 'Abiertos', abierto, 'rojo', 'Todo lo que falta corregir'],
+    ['reabrio', 'Regresados a Rechazada', function (h) { return abierto(h) && h.reabrio; }, 'rojo', 'La tarea regresó para hacerse bien']
+  ].concat(Object.keys(TIPOS).map(function (k) {
+    return ['t:' + k, CORTO[k], function (h) { return abierto(h) && h.tipo === k; }, TONO_T[k] || 'azul', TIPOS[k]];
+  })).concat([['corregido', 'Ya quedaron', function (h) { return !abierto(h); }, 'verde', 'Los últimos 90 días']]);
+  function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0] || VISTAS[1]; }
+  function cuenta(k) { return items().filter(vista(k)[2]).length; }
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('wa-bar'), { caja: true, buscar: $('f-q'),
+      filtros: d ? { grupos: [{ t: 'HALLAZGOS', campos: [d($('f-tipo'), { t: 'QUÉ PASÓ' }), d($('f-mes'), { t: 'MES' }), d($('f-resp'), { t: 'RESPONSABLE' })] }],
+        limpiar: function () { ['f-tipo', 'f-mes', 'f-resp'].forEach(function (id) { var x = $(id); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' hallazgo' : ' hallazgos'); } } : null,
+      botones: [$('x-lista')], mas: [[
+        masBoton('Cómo se lee', 'Qué se revisa, quién lo ve y cómo se corrige', function () {
+          $('como').hidden = !$('como').hidden; if (!$('como').hidden) try { $('como').scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} }),
+        masBoton('Traer lo último', 'Vuelve a preguntar lo que encontró la revisión', function () { carga().catch(function (e) { error(falla(e)); }); })]] });
+  }
+  function masBoton(t, title, fn) { var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = t; b.title = title; b.onclick = fn; return b; }
+  function pintaKpis() {
+    barra();
+    if (!window.PROFASE_PILAS) return;
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · lo que no cuadra con el SAT',
+      meta: DATOS && DATOS.vuelta ? 'Revisado el ' + fechaHora(DATOS.vuelta) : '',
+      pilas: VISTAS.filter(function (v) { return v[0] === 'abierto' || v[0] === 'corregido' || cuenta(v[0]) > 0; }).map(function (v) {
+        var n = cuenta(v[0]);
+        return { k: v[0], t: v[1], d: v[4], n: n, tono: v[3], on: VISTA === v[0], tag: '' };
+      }),
+      alPicar: function (k) { VISTA = VISTA === k ? 'abierto' : k; if (PAG) PAG.inicio(); pinta(); },
+      boton: { t: 'Empezar a revisar', n: LISTA.length, alPicar: function () { if (!LISTA.length) return; COLA = LISTA.map(function (h) { return h.id; }); ficha(COLA[0]); } },
+      nota: 'Abre el primero de «' + vista(VISTA)[1] + '»; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
+    if (BAR && BAR.f) BAR.f.pinta();
+  }
+  function pintaFiltros() {
+    var t = {}, m = {}, r = {};
+    items().forEach(function (h) {
+      t[h.tipo] = (t[h.tipo] || 0) + 1;
+      if (h.mes) m[per(h)] = (m[per(h)] || 0) + 1;
+      [h.resp, h.aut].forEach(function (x) { if (x) r[x] = (r[x] || 0) + 1; });
+    });
+    $('f-tipo').innerHTML = '<option value="">Todo</option>' + Object.keys(TIPOS).filter(function (k) { return t[k]; })
+      .map(function (k) { return '<option value="' + k + '"' + (TIPO === k ? ' selected' : '') + '>' + esc(CORTO[k]) + ' (' + t[k] + ')</option>'; }).join('');
+    $('f-mes').innerHTML = '<option value="">Todos los meses</option>' + Object.keys(m).sort().reverse()
+      .map(function (k) { var p = k.split('-'); return '<option value="' + k + '"' + (MES === k ? ' selected' : '') + '>' + esc(MESES_L[+p[1] - 1] + ' ' + p[0]) + ' (' + m[k] + ')</option>'; }).join('');
+    $('f-resp').innerHTML = '<option value="">Todos</option>' + Object.keys(r).sort(function (a, b) { return a.localeCompare(b, 'es'); })
+      .map(function (k) { return '<option value="' + esc(k) + '"' + (RESP === k ? ' selected' : '') + '>' + esc(k) + '</option>'; }).join('');
+  }
+  function filtradas() {
+    var fn = vista(VISTA)[2], q = norm(Q).split(/\s+/).filter(Boolean);
+    return items().filter(function (h) {
+      if (!fn(h)) return false;
+      if (TIPO && h.tipo !== TIPO) return false;
+      if (MES && per(h) !== MES) return false;
+      if (RESP && h.resp !== RESP && h.aut !== RESP) return false;
+      if (!q.length) return true;
+      var t = norm([h.rs, h.rfc, h.grupo, h.resp, h.aut, h.quien, h.actividad, h.diagnostico, TIPOS[h.tipo] || ''].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function pinta() {
+    var v = vista(VISTA), l = filtradas(); LISTA = l;
+    pintaKpis();
+    $('t-lista').textContent = v[1];
+    $('t-sub').textContent = l.length + (l.length === 1 ? ' hallazgo' : ' hallazgos');
+    var pag = PAG ? PAG.corta(l) : l;
+    $('lista').innerHTML = pag.map(function (h) {
+      return '<tr class="fila' + (SEL === h.id ? ' sel' : '') + '" tabindex="0" data-id="' + h.id + '">'
+        + '<td class="cli">' + esc(h.rs || h.rfc) + '<div class="mut">' + esc(h.rfc) + (h.grupo ? ' · ' + esc(h.grupo) : '') + '</div></td>'
+        + '<td class="num">' + esc(mesTxt(h)) + '</td>'
+        + '<td class="que">' + chip(CORTO[h.tipo] || h.tipo, h.tipo === 'wf_sin_sat' || h.tipo === 'vencida' ? 'mal' : h.tipo === 'sin_terminar' ? 'az' : 'ojo')
+        + '<div class="idea">' + esc(h.diagnostico || '') + '</div></td>'
+        + '<td>' + (h.actividad ? esc(h.actividad) + '<div class="mut">' + esc([h.resp ? 'Responsable: ' + h.resp : '', h.aut ? 'Autoriza: ' + h.aut : ''].filter(Boolean).join(' · ')) + '</div>' : '<span class="mut">Del cliente</span>') + '</td>'
+        + '<td>' + como(h) + (h.mio && abierto(h) ? ' ' + chip('Te toca', 'na') : '') + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = l.length > 0;
+    $('lista-vacia').textContent = (Q || TIPO || MES || RESP) ? 'Nada coincide con tu búsqueda.'
+      : VISTA === 'toca' ? 'No tienes nada pendiente aquí.' : VISTA === 'corregido' ? 'En los últimos 90 días no se ha corregido nada.' : 'Todo cuadra con el SAT: no hay nada abierto.';
+  }
+
+  /* ---------- la ficha de un hallazgo (la ventana común ancha de js/seguimiento.js; sin comentarios: se trabaja en la tarea) ---------- */
+  function abreTarea(h) {
+    try { var A = window.top.PROFASE_ABRE; if (A && A['workflow-trabajo'] && A['workflow-trabajo']('act:' + h.act + ':' + per(h))) return true; } catch (e) { /* sigue */ }
+    error('No se pudo abrir la tarea desde aquí. Qué hacer: ábrela en Workflow › Panel de trabajo (búscala por el cliente y el mes).');
+    return false;
+  }
+  function ficha(id) {
+    var h = items().filter(function (x) { return x.id === id; })[0];
+    if (!h) return;
+    SEL = id;
+    if (VI) { var v0 = VI; VI = null; try { v0.cerrar(); } catch (e) {} }
+    var ab = abierto(h);
+    var pasos = window.PROFASE_SEG.pasos({ titulo: 'Cómo va', lista: [
+      { t: 'Lo encontró la revisión', est: 'ok', marca: '✓', title: 'El ' + fechaHora(h.creado) },
+      { t: h.reabrio ? 'Regresó a Rechazada' : h.act ? 'En la tarea' : 'Del cliente', est: h.reabrio ? 'mal' : ab ? 'na' : 'ok', marca: h.reabrio ? '!' : ab ? '2' : '✓',
+        title: h.reabrio ? 'El ' + fechaHora(h.reabrio_en) : h.actividad || 'Sin tarea' },
+      { t: 'Ya quedó', est: ab ? '' : 'ok', marca: ab ? '3' : '✓', title: ab ? 'Todavía no' : 'El ' + fecha(h.resuelto) }] });
+    var L = [];
+    if (ab) L.push(['no', esc(h.que_hacer || '') + (h.quien ? ' <b>Quién:</b> ' + esc(h.quien) + '.' : '')]);
+    else L.push(['si', 'Ya quedó el ' + esc(fecha(h.resuelto)) + '.']);
+    if (ab && h.consecuencia) L.push(['va', 'Si no se corrige: ' + esc(h.consecuencia)]);
+    if (ab && h.act) L.push(['va', 'Se corrige en la tarea; al quedar, este hallazgo pasa solo a «Ya quedó».']);
+    var aud = '<dl class="aud">'
+      + '<dt>Qué dice el SAT</dt><dd>' + esc(h.sat_dice || '') + '</dd>'
+      + '<dt>Qué dice el WorkFlow</dt><dd>' + esc(h.wf_dice || '') + '</dd>'
+      + '<dt>Diagnóstico</dt><dd>' + esc(h.diagnostico || '') + '</dd>'
+      + '<dt>Qué hacer</dt><dd>' + esc(h.que_hacer || '') + (h.quien ? '\nQuién: ' + esc(h.quien) + '.' : '') + '</dd>'
+      + '<dt>Si no se corrige</dt><dd>' + esc(h.consecuencia || '') + '</dd></dl>';
+    var tarea = h.act ? '<dl class="aud">'
+      + '<dt>Actividad</dt><dd>' + esc(h.actividad || '') + '</dd>'
+      + '<dt>Mes contable</dt><dd>' + esc(mesTxt(h)) + '</dd>'
+      + (h.resp ? '<dt>Responsable</dt><dd>' + esc(h.resp) + '</dd>' : '')
+      + (h.aut ? '<dt>Autoriza</dt><dd>' + esc(h.aut) + '</dd>' : '')
+      + '<dt>Cómo está</dt><dd>' + esc(ESTATUS[h.estatus] || '') + '</dd>'
+      + (h.ven_sat ? '<dt>Vence en el SAT</dt><dd>' + esc(fecha(h.ven_sat)) + '</dd>' : '') + '</dl>'
+      : '<p class="mut">Es del cliente, no de una sola tarea.</p>';
+    var idx = COLA.indexOf(h.id);
+    var inst = window.PROFASE_SEG.abre({
+      ancho: true, sinPlatica: true,
+      kick: 'Auditoría SAT vs WF · ' + (CORTO[h.tipo] || ''),
+      titulo: h.rs || h.rfc,
+      nav: idx >= 0 && COLA.length > 1 ? { pos: idx + 1, total: COLA.length, donde: 'en «' + vista(VISTA)[1] + '»', ant: idx > 0, sig: idx < COLA.length - 1,
+        ir: function (d) { var nx = COLA[idx + d]; if (nx != null) ficha(nx); } } : null,
+      resumen: '<div class="r1"><h3>' + esc(mesTxt(h)) + '</h3></div>'
+        + '<p><b>' + esc(TIPOS[h.tipo] || h.tipo) + '</b></p>'
+        + '<p>' + esc(h.rfc) + (h.grupo ? ' · ' + esc(h.grupo) : '') + '</p>'
+        + '<p>' + esc(h.diagnostico || '') + '</p>'
+        + '<div class="seg-chips">' + como(h) + (h.mio && ab ? ' ' + chip('Te toca', 'na') : '') + '</div>',
+      bajoResumen: pasos + window.PROFASE_SEG.falta(ab ? 'Qué hacer' : 'Cómo quedó', L),
+      despues: h.act ? '<div class="sg-fila"><button class="btn acento" type="button" id="f-tarea">Abrir la tarea en el Panel de trabajo</button></div>' : '',
+      pestanas: [{ id: 'aud', t: 'Mini auditoría', html: aud }, { id: 'tarea', t: 'La tarea', html: tarea }],
+      alCerrar: function () { if (VI !== inst) return; VI = null; pinta(); },
+      enlaza: function (scrim) { var b = scrim.querySelector('#f-tarea'); if (b) b.onclick = function () { abreTarea(h); }; }
+    });
+    VI = inst;
+    pinta();
+  }
+
+  /* ---------- Excel y PDF de la lista (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = filtradas(), titulo = 'Auditoría SAT vs WF · ' + vista(VISTA)[1];
+      var head = ['Cliente', 'RFC', 'Grupo', 'Mes', 'Qué pasó', 'Cómo va', 'Tarea', 'Responsable', 'Autoriza', 'Qué dice el SAT', 'Qué dice el WorkFlow', 'Diagnóstico', 'Qué hacer', 'Quién', 'Si no se corrige', 'Desde'];
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Auditoría SAT vs WF');
+      ws.columns = [30, 15, 20, 16, 26, 18, 28, 22, 22, 50, 60, 50, 50, 20, 40, 12].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' hallazgo' : ' hallazgos') + (Q ? ' · búsqueda: ' + Q : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (h, i) {
+        var r = ws.getRow(f0 + 1 + i);
+        r.values = [h.rs || h.rfc, h.rfc, h.grupo || '', mesTxt(h), TIPOS[h.tipo] || '', !abierto(h) ? 'Ya quedó' : h.reabrio ? 'Regresó a Rechazada' : 'Abierto',
+          h.actividad || 'Del cliente', h.resp || '', h.aut || '', h.sat_dice || '', h.wf_dice || '', h.diagnostico || '', h.que_hacer || '', h.quien || '', h.consecuencia || '', fecha(h.creado)];
+        [10, 11, 12, 13, 15].forEach(function (c) { r.getCell(c).alignment = { wrapText: true, vertical: 'top' }; });
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Auditoria SAT vs WF ' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- traer ---------- */
+  async function carga() {
+    DATOS = await rpc('cen_hall_lista', { p: {} }) || {};
+    if (!DATOS.ve) throw new Error('Esta pantalla sale a quien trabaja clientes en el WorkFlow. Qué hacer: si la necesitas para tu trabajo, pídele a tu gerente que te asigne los clientes.');
+    pintaFiltros(); pinta();
+    $('todo').hidden = false;
+  }
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
+  $('f-tipo').onchange = function () { TIPO = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-mes').onchange = function () { MES = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-resp').onchange = function () { RESP = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { COLA = LISTA.map(function (h) { return h.id; }); ficha(+tr.getAttribute('data-id')); } });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); COLA = LISTA.map(function (h) { return h.id; }); ficha(+tr.getAttribute('data-id')); } });
+  // la campanita o el Inicio: abre un hallazgo («hall:<id>»)
+  window.__wfaAbre = function (que) {
+    var m = /^(?:hall:)?(\d{1,12})$/.exec(String(que || ''));
+    if (!m || !DATOS) return false;
+    var id = +m[1], h = items().filter(function (x) { return x.id === id; })[0];
+    if (!h) return false;
+    VISTA = vista(VISTA)[2](h) ? VISTA : abierto(h) ? 'abierto' : 'corregido'; TIPO = MES = RESP = Q = ''; $('f-q').value = '';
+    pintaFiltros(); pinta(); COLA = LISTA.map(function (x) { return x.id; }); ficha(id);
+    return true;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base. Qué hacer: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      CONSULTA = !!P.consulta; $('consulta').hidden = !CONSULTA;
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'wf.auditoria', nombre: 'Hallazgos', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      await carga();
+      // abre en lo que le toca a quien entra; si no tiene nada suyo, en todo lo abierto
+      VISTA = cuenta('toca') ? 'toca' : 'abierto';
+      var ab = null; try { ab = sessionStorage.getItem('wfa-abre'); sessionStorage.removeItem('wfa-abre'); } catch (e) { /* sin memoria */ }
+      if (!(ab && window.__wfaAbre(ab))) pinta();
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && DATOS && DATOS.ve && !VI) carga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>
