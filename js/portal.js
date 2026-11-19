@@ -704,12 +704,13 @@
     });
     // ni con los botones de abajo de una ventana abierta (la ventana común de js/seguimiento.js), aquí o en una pantalla
     // en su marco: en el celular el aviso tapaba «Guardar» (11-nov-2026, al pasar los paneles a la ventana común)
-    [].forEach.call(document.querySelectorAll('.segv .sg-foot'), function (x) { cosas.push(x.getBoundingClientRect()); });
+    // y el pie de cualquier otra ventana que lo pida con data-pie-ventana (el seguimiento de la opinión, js/opinion-seg.js, 432)
+    [].forEach.call(document.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) { cosas.push(x.getBoundingClientRect()); });
     [].forEach.call(document.querySelectorAll('iframe'), function (f) {
       try {
         if (!f.getClientRects().length || !f.contentDocument) return;
         var fr = f.getBoundingClientRect();
-        [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot'), function (x) {
+        [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) {
           var q = x.getBoundingClientRect();
           cosas.push({ top: fr.top + q.top, bottom: fr.top + q.bottom, left: fr.left + q.left, right: fr.left + q.right, height: q.height });
         });
