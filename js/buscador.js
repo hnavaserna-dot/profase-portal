@@ -3,7 +3,8 @@
    «grupo 1 sola selección, razón social varias o todas»; y «¿Quiénes van?», con varias personas).
    Una sola pieza para todo el portal: un campo donde se escribe parte del nombre y la lista se va acortando sola (sin
    importar acentos, mayúsculas ni el orden de las palabras), con flechas y Enter en la computadora y con el dedo en el
-   celular. Va dentro de la forma (la lista empuja lo de abajo, no flota), así cabe en cualquier ventana y en cualquier
+   celular. Primero sale lo que empieza con lo escrito y después lo que lo trae a la mitad de una palabra (19-nov-2026:
+   «vent» da Ventas antes que Inventario). Va dentro de la forma (la lista empuja lo de abajo, no flota), así cabe en cualquier ventana y en cualquier
    pantalla, y nunca se corta con «…»: lo largo pasa completo al siguiente renglón.
 
    var b = PROFASE_BUSCA.crea({
@@ -107,6 +108,20 @@
     var t = o._n || (o._n = norm(o.t + ' ' + (o.buscar || '')));
     return q.split(' ').every(function (p) { return t.indexOf(p) >= 0; });
   }
+  // Primero lo que empieza con lo escrito (19-nov-2026, Fernando Cadengo, con la captura de la ficha de una factura de
+  // Quo Contabilita › Tablero QUO › «Cambiar la cuenta»: escribía «vent» para Ventas y salían primero todas las de
+  // in-VENT-ario, porque la lista seguía el orden del catálogo). Cada palabra escrita que empieza una palabra del nombre
+  // (o de su número) pesa más que la que va a la mitad de una palabra; con el mismo peso, el orden de siempre. Lo que lo
+  // trae a la mitad sigue saliendo, abajo: no se pierde nada. Vale para todas las listas de esta pieza.
+  function ordena(lista, q) {
+    if (!q || lista.length < 2) return lista;
+    var ps = q.split(' ');
+    return lista.map(function (o, i) {
+      var t = ' ' + (o._n || (o._n = norm(o.t + ' ' + (o.buscar || '')))), n = 0;
+      for (var k = 0; k < ps.length; k++) if (t.indexOf(' ' + ps[k]) < 0) n++;
+      return { o: o, n: n, i: i };
+    }).sort(function (a, b) { return a.n - b.n || a.i - b.i; }).map(function (z) { return z.o; });
+  }
   var LUPA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
   var NUM = 0;
 
@@ -140,7 +155,7 @@
 
     function filas() {
       var qq = q();
-      vistos = ops.filter(function (o) { return coincide(o, qq) && !(varios && !abierta && sel.indexOf(o.v) >= 0); });
+      vistos = ordena(ops.filter(function (o) { return coincide(o, qq) && !(varios && !abierta && sel.indexOf(o.v) >= 0); }), qq);
       var h = '';
       if (varios && cfg.todos && !qq) h += '<button type="button" class="pb-it pb-todos" role="option" data-todos aria-selected="' + (sel.length === 0) + '"><span class="pb-bx" aria-hidden="true"></span><span class="pb-t">' + esc(cfg.todos) + '</span></button>';
       h += vistos.map(function (o, i) {
