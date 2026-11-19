@@ -1728,7 +1728,13 @@ table.reg tr.editando{background:var(--sky-soft)}
       var P = window.PORTAL, p = P && P.perfil;
       if (!p) return;
       var ruta = p.rol === 'director' ? 'director/acc_cli' : p.rol === 'gerente' ? 'access/cli_equipo' : 'access/cli_' + p.usuario;
-      db.doc(ruta).get().then(function(d){
+      // solo la razón social y el RFC de cada empresa (439, revisión nocturna del 19-nov-2026: el documento completo pesa
+      // ~1.6 MB y tardaba 1.8 s); si la base no la tiene o el documento no viene «al instante», se lee completo como antes
+      P.sb.rpc('acc_cli_nombres', { p_ruta: ruta }).then(function(r){
+        if (r && !r.error && Array.isArray(r.data)) { IC.acc = r.data; return; }
+        return completo();
+      }, completo);
+      function completo(){ return db.doc(ruta).get().then(function(d){
         var x = d && d.exists ? d.data() : null;
         // al instante (portal/sql/99_clientes_vivo.sql) viene sin comprimir, en «json»
         if (x && x.json) { IC.acc = (x.json.empresas || []).map(function(e){ return { rs: e.rs, rfc: e.rfc }; }); return; }
@@ -1736,7 +1742,7 @@ table.reg tr.editando{background:var(--sky-soft)}
         return fetch('data:application/octet-stream;base64,' + x.b64).then(function(r){
           return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).json();
         }).then(function(j){ IC.acc = (j && j.empresas || []).map(function(e){ return { rs: e.rs, rfc: e.rfc }; }); });
-      }).catch(function(){});
+      }).catch(function(){}); }
     }).catch(function(){});
   }
 
