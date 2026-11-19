@@ -17,7 +17,11 @@
    pg.corta(lista)   // la página que toca de esa lista (y pinta los controles)
    pg.inicio()       // regresa a la página 1 (al buscar o filtrar)
    pg.nombre('Clientes')   // (11-nov-2026) cambia lo que cuenta, cuando la misma tabla se ve de otra forma (WorkFlow › Panel
-                           // de trabajo: «Ver: Por cliente / Por actividad») */
+                           // de trabajo: «Ver: Por cliente / Por actividad»)
+
+   Ordenar al picar el título de una columna (19-nov-2026, Héctor Daniel Nava: «y si lo haces en todas las tablas?»): cada
+   paginador se liga a la tabla de arriba (o a «tabla: elemento», si la pantalla la dice) con js/ordenar.js, que ordena la
+   lista completa antes de cortar la página. La pantalla no tiene que hacer nada. */
 (function () {
   'use strict';
   if (window.PROFASE_PAGINAS) return;
@@ -53,6 +57,10 @@
     if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', 'Páginas de ' + String(o.nombre || 'la tabla').toLowerCase());
     el.hidden = true;
 
+    // ordenar al picar un título (js/ordenar.js): la lista completa, antes de cortar la página
+    var ORD = window.PROFASE_ORDEN && window.PROFASE_ORDEN.paginador ? window.PROFASE_ORDEN.paginador({
+      donde: el, tabla: o.tabla || null, inicio: function () { p = 1; }, repinta: o.cambio ? function () { o.cambio(); } : null }) : null;
+
     function paginas() { return Math.max(1, Math.ceil(total / tam)); }
     function pinta() {
       el.hidden = total <= TAMS[0];
@@ -67,6 +75,11 @@
         }).join('') + '</select></label>';
     }
     function corta(lista) {
+      if (ORD) {
+        var r = ORD.corta(lista || []);
+        if (r.completa) return r.lista;     // para leer lo que dice cada renglón (no se ve: se vuelve a pintar enseguida)
+        lista = r.lista;
+      }
       total = lista.length;
       var tot = paginas(); if (p > tot) p = tot; if (p < 1) p = 1;
       pinta();
