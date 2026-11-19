@@ -726,7 +726,7 @@
       Promise.resolve(okC ? o.corrige(cid, nuevo) : o.borra(cid)).then(function (r) {
         if (typeof r === 'string') { msg.textContent = r; return; }
         pintaHilo(); if (o.alCambiar) o.alCambiar();
-      }, function () { msg.textContent = 'No se pudo. Intenta de nuevo.'; });
+      }, function () { msg.textContent = 'No se pudo. Qué hacer: intenta de nuevo.'; });
     });
     var qb = q('[data-ayuda]'), qt = q('[data-ayuda-txt]');
     if (qb && qt) qb.addEventListener('click', function () { qt.hidden = !qt.hidden; qb.setAttribute('aria-expanded', String(!qt.hidden)); });
@@ -761,11 +761,11 @@
       var cambia = est && elegido !== actual;
       Promise.resolve(o.guarda({estatus: cambia ? elegido : undefined, de: actual, texto: txt ? txt.value.trim() : ''})).then(function (r) {
         ocupado = false;
-        if (r !== true) { av.textContent = typeof r === 'string' ? r : 'No se pudo guardar. Intenta de nuevo.'; [ok, sg].forEach(function (b) { if (b) b.disabled = false; }); return; }
+        if (r !== true) { av.textContent = typeof r === 'string' ? r : 'No se pudo guardar. Qué hacer: intenta de nuevo.'; [ok, sg].forEach(function (b) { if (b) b.disabled = false; }); return; }
         cerrar(); if (o.alGuardar) o.alGuardar();
         if (siguiente && nav && nav.ir) nav.ir(1);
       }, function () {
-        ocupado = false; av.textContent = 'No se pudo guardar. Intenta de nuevo.';
+        ocupado = false; av.textContent = 'No se pudo guardar. Qué hacer: intenta de nuevo.';
         [ok, sg].forEach(function (b) { if (b) b.disabled = false; });
       });
     }

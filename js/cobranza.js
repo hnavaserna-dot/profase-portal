@@ -810,7 +810,7 @@
         var p2 = function (n) { return String(n).padStart(2, '0'); };
         await MK.guardar(wb, 'Cobranza' + (S.cia ? ' ' + S.cia : '') + ' ' + hoy.getFullYear() + '-' + p2(hoy.getMonth() + 1) + '-' + p2(hoy.getDate()) + '.xlsx', opPdf);
       } catch (err) {
-        try { if (window.PORTAL && window.PORTAL.toast) window.PORTAL.toast('No se pudo bajar el archivo. Vuelve a intentarlo.'); } catch (e) { /* nada */ }
+        try { if (window.PORTAL && window.PORTAL.toast) window.PORTAL.toast('No se pudo bajar el archivo. Qué hacer: vuelve a intentarlo.'); } catch (e) { /* nada */ }
       } finally { btn.disabled = false; }
     }
 

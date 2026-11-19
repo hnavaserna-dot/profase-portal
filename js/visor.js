@@ -184,6 +184,11 @@
     // hasta 3 intentos (la página decide cómo traerlo en cada uno: op.trae(d, intento)); si los 3 fallan, el error
     // lleva el detalle de cada uno para enseñarlo y saber qué pasó
     var INTENTOS = 3, ESPERAS = [0, 400, 1200];
+    // lo que dice el botón que no pudo (al pasar el ratón): por qué y qué hacer, con la pieza común (js/portal.js)
+    function falla(e) {
+      var t = window.PORTAL && PORTAL.falla ? PORTAL.falla(e, 'No se pudo bajar') : 'No se pudo bajar. Qué hacer: vuelve a intentar en un momento.';
+      return t;
+    }
     function detalle(e) {
       if (!e) return 'sin detalle';
       var t = String(e.message || e.error || e.name || e);
@@ -257,7 +262,7 @@
         guardaArchivo(cual(b, orig), d, btn);
         try { if (op.alBajar) op.alBajar(d, orig); } catch (e) { /* la descarga ya salió */ }
         if (btn) btn.textContent = 'Listo';
-      }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); } }).then(function () {
+      }).catch(function (e) { if (btn) { btn.textContent = 'No se pudo'; btn.title = falla(e); } }).then(function () {
         clearTimeout(aviso);
         if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1200);
       });
@@ -320,7 +325,7 @@
         if (btn) btn.textContent = fallas.length ? 'Faltaron ' + fallas.length : 'Listo';
         return { ok: true, n: sal.length, fallas: fallas };
       } catch (e) {
-        if (btn) { btn.textContent = 'No se pudo'; btn.title = 'Detalle: ' + detalle(e); }
+        if (btn) { btn.textContent = 'No se pudo'; btn.title = falla(e); }
         throw e;
       } finally {
         if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1600);
@@ -472,13 +477,15 @@
         return conHojas(c, b).catch(function () {
           if (c.cerrada) return;
           if (navigator.pdfViewerEnabled !== false) conLector(c, b);   // sin PDF.js: el lector del navegador
-          else mensaje(c, 'No se pudo mostrar aquí. Usa «Bajar» para abrirlo en tu equipo.');
+          else mensaje(c, 'No se pudo mostrar aquí. Qué hacer: usa «Bajar» para abrirlo en tu equipo.');
         });
       }).catch(function (e) {
         if (c.cerrada) return;
-        c.cuerpo.innerHTML = '<div class="pv-msg" role="alert"><div>No se pudo abrir el documento.</div>'
-          + '<button type="button" class="pv-otra" data-pv="otra">Intentar de nuevo</button>'
-          + '<div class="pv-det">Detalle para Claude: ' + esc(detalle(e)) + '</div></div>';
+        // el detalle técnico ya no se enseña: queda avisado solo (PORTAL.fallaAnota, «todo error dice qué hacer», 18-nov-2026)
+        try { if (window.PORTAL && PORTAL.fallaAnota) PORTAL.fallaAnota('visor: ' + detalle(e), ''); } catch (x) { /* nada */ }
+        c.cuerpo.innerHTML = '<div class="pv-msg" role="alert"><div>No se pudo abrir el documento; ya quedó avisado.</div>'
+          + '<div class="pv-det">Qué hacer: pica «Intentar de nuevo»; si sigue igual, usa «Bajar» para abrirlo en tu equipo.</div>'
+          + '<button type="button" class="pv-otra" data-pv="otra">Intentar de nuevo</button></div>';
         var b = c.cuerpo.querySelector('[data-pv="otra"]');
         if (b) b.onclick = function (ev) { ev.stopPropagation(); ver(d, c.antes); };
       });

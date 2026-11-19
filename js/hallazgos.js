@@ -192,7 +192,7 @@
     if (q.error && (q.error.code === 'PGRST202' || /rep_hallazgos/.test(q.error.message || ''))) {
       return 'El Excel de hallazgos se está terminando de instalar; vuelve a intentar en un rato';
     }
-    if (q.error || !q.data || !q.data.ok) return 'No se pudo leer los casos; vuelve a intentar en unos minutos';
+    if (q.error || !q.data || !q.data.ok) return 'No se pudo leer los casos. Qué hacer: vuelve a intentar en unos minutos';
     var D = q.data, E = D.empresas || {};
     // los clientes ocultos de quien entró no salen (salvo con «Verlos por ahora»), como en la lista
     var OC = window.PROFASE_OCULTOS, ocultos = new Set();
