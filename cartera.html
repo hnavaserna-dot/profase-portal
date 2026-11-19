@@ -4477,7 +4477,22 @@ function aplEmp(ci){
   rels.forEach(rl=>{ if(rl.on||rl.pc||rl.dec||rl.tipo==='conf') return;
     const F2=qF(rl.fac); if(F2.queda-F2.pcM>0.01) return;
     const por=F2.apl.filter(o=>o!==rl).concat(F2.pc&&F2.pc!==rl?[F2.pc]:[]); if(por.length) rl.cubiertaPor=por; });
-  const separa=X=>{ X.todas=X.rels; X.usadas=relsOrden(X.rels.filter(rl=>rl.usadaEn||rl.cubiertaPor)); X.rels=X.rels.filter(rl=>!rl.usadaEn&&!rl.cubiertaPor); };
+  /* lo confirmado por el XML que no se aplica (19-nov-2026, Fernando Cadengo, con su Excel de aplicaciones: «porque las que
+     dicen confirmada, y se aplica 0, dice no se aplica, confunde que diga confirmada»; «Que se quede como confirmada las que
+     si están aplicadas y las que no, que diga sin relación»; «1. A 2. A»; «Si así es»): al anticipo o nota ya no le queda
+     saldo (se usó completo en otra de sus facturas) o la factura ya quedó cubierta con otros. Ya no cuenta como relación: sale
+     de «rels» como las sugerencias usadas (las listas, los Excel, el Resumen, las pilas y FILTROS dicen «Sin relación») y
+     queda en «usadas», en gris, en el detalle, con lo que dice su XML y por qué no se aplica (aplConfSin). Solo «Confirmada
+     (CFDI)» la que sí se aplica. Sigue sin ofrecerse a otra factura: su XML dice de cuál es. */
+  rels.forEach(rl=>{ if(rl.tipo!=='conf'||rl.on||rl.pc||rl.dec) return;
+    rl.confSin=true;
+    const por=[];
+    rl.docs.forEach(d=>{ if(disp(d)>0.01) return;
+      qD(d).rels.forEach(o=>{ if(o!==rl&&((o.on&&o.parte.has(d))||(o.pc&&o.pcParte.has(d)))&&o.fac!==rl.fac&&!por.includes(o)) por.push(o); }); });
+    if(por.length){ rl.usadaEn=por; return; }
+    const F2=qF(rl.fac), cub=F2.apl.filter(o=>o!==rl).concat(F2.pc&&F2.pc!==rl?[F2.pc]:[]); if(cub.length) rl.cubiertaPor=cub; });
+  const fuera=rl=>rl.usadaEn||rl.cubiertaPor||rl.confSin;
+  const separa=X=>{ X.todas=X.rels; X.usadas=relsOrden(X.rels.filter(fuera)); X.rels=X.rels.filter(rl=>!fuera(rl)); };
   R.fac.forEach(separa); R.doc.forEach(separa);
   // pcEst: cómo quedaría la factura si se confirma su sugerencia («se netearía» o «se reduciría»)
   R.fac.forEach(F2=>{ F2.queda=Math.max(0,F2.queda); F2.est=F2.aplicado>0.005?(F2.queda<=0.01?'cancela':'reduce'):null;
@@ -4492,6 +4507,8 @@ const aplF=r=>esFacApl(r)?(aplEmp(r.cli).fac.get(r)||null):null;
 const aplD=r=>esDocApl(r)?(aplEmp(r.cli).doc.get(r)||null):null;
 const aplX=r=>aplF(r)||aplD(r);
 const aplHay=ci=>{ const R=aplEmp(ci); for(const F2 of R.fac.values()) if(F2.rels.length) return true; return false; };
+// la relación confirmada por el XML que no se aplica (19-nov-2026): ya no es relación («Sin relación»), solo se enseña
+const aplConfSin=rl=>!!(rl&&rl.confSin);
 // los estados de las relaciones en que está un documento (para FILTROS › Aplicaciones)
 function aplEstados(r){ const X=aplX(r), s=new Set(); if(X) X.rels.forEach(rl=>s.add(relFiltro(rl))); return s; }
 function pasaApl(r){
@@ -4572,7 +4589,8 @@ function tarjetaRel(rl,desde){
   const cub=!us&&rl.cubiertaPor||null;
   const w=el('div','aplr'+(rl.on?' on':'')+(rl.pc?' pc':'')+(t==='quit'?' quit':'')+(us||cub?' usada':'')); w.dataset.rel=rl.id;
   const h=el('div','t');
-  h.appendChild(el('span','pill '+APL_C[t],APL_T[t]));
+  // lo confirmado por el XML que no se aplica ya no dice «Confirmada (CFDI)» (19-nov-2026): solo que su XML la relaciona
+  h.appendChild(el('span','pill '+(aplConfSin(rl)?'p-cl':APL_C[t]),aplConfSin(rl)?'Relacionada en su XML':APL_T[t]));
   const usPc=!!(us&&us.every(o=>o.pc&&!o.on));   // solo sugerido ahí, por confirmar (19-nov-2026)
   if(us) h.appendChild(el('span','pill p-cl',(usPc?'Ya se sugiere en la factura ':'Ya se usa en la factura ')+usEn));
   else if(cub) h.appendChild(el('span','pill p-cl','La factura ya está cubierta'));
@@ -4676,20 +4694,34 @@ function bloqueRel(d){
   s.appendChild(el('span','dm','demostrativo')); box.appendChild(s);
   if(!X.rels.length&&!X.usadas.length){ box.appendChild(el('div','l',fac?'Sin relación: no hay anticipos ni notas de crédito a favor de este cliente o proveedor.'
     :'Sin relación: no hay facturas con saldo de este cliente o proveedor.')); return box; }
-  if(!X.rels.length) box.appendChild(el('div','l',fac?'Sin relación: sus anticipos o notas de crédito posibles ya se usan completos en otra factura y ya no queda ninguno con saldo de este cliente o proveedor.'
+  // (19-nov-2026: si lo único que tenía es lo que relaciona su XML y no se aplica, lo dice así)
+  const soloConf=X.usadas.length>0&&X.usadas.every(aplConfSin);
+  if(!X.rels.length) box.appendChild(el('div','l',soloConf?(fac?'Sin relación: lo que relaciona su XML ya se usa completo en otra de sus facturas (abajo, cuál).'
+      :'Sin relación: la factura que relaciona su XML ya queda cubierta con otros anticipos o notas (abajo, cuáles).')
+    :fac?'Sin relación: sus anticipos o notas de crédito posibles ya se usan completos en otra factura y ya no queda ninguno con saldo de este cliente o proveedor.'
     :'Sin relación: las facturas donde podía ir ya quedan cubiertas con otros anticipos o notas.'));
   X.orden.forEach(rl=>box.appendChild(tarjetaRel(rl,d)));
   // 5-nov-2026 (Fernando, la A): lo que ya se usa completo en otra factura no es sugerencia; se ve aquí por si se prefiere aquí
   if(X.usadas.length){
     const u=el('div','aplus'); u.id='aplus';
-    const conCub=X.usadas.some(rl=>rl.cubiertaPor&&!rl.usadaEn), conUs=X.usadas.some(rl=>rl.usadaEn);
-    u.appendChild(el('div','k',fac?(conCub&&!conUs?'Esta factura ya está cubierta':conCub?'Ya está cubierta o se usan en otra factura':'Ya se usan en otra factura')
+    // lo confirmado por el XML que no se aplica (19-nov-2026) va con su propia explicación: no es una sugerencia
+    const otras=X.usadas.filter(rl=>!aplConfSin(rl)), confU=X.usadas.filter(aplConfSin);
+    const conCub=otras.some(rl=>rl.cubiertaPor&&!rl.usadaEn), conUs=otras.some(rl=>rl.usadaEn);
+    u.appendChild(el('div','k',!otras.length?'Lo que relaciona su XML (no se aplica)'
+      :fac?(conCub&&!conUs?'Esta factura ya está cubierta':conCub?'Ya está cubierta o se usan en otra factura':'Ya se usan en otra factura')
       :(conCub&&!conUs?'Facturas que ya están cubiertas':'Otras facturas donde podría ir')));
     const yo=yoApl(), ya=docNom(d)==='anticipo'?'este anticipo ya se usa completo':'esta nota de crédito ya se usa completa';
-    u.appendChild(el('div','qn',fac?'Ya no cuentan como sugerencia: '+(conCub?'la factura ya queda cubierta con lo que se le aplica'+(conUs?' o ':''):'')+(conUs?'se usan completos en otra factura':'')+'.'
+    if(otras.length) u.appendChild(el('div','qn',fac?'Ya no cuentan como sugerencia: '+(conCub?'la factura ya queda cubierta con lo que se le aplica'+(conUs?' o ':''):'')+(conUs?'se usan completos en otra factura':'')+'.'
         +(yo&&conUs?' Si prefieres aplicar uno aquí, pica «✓ Aplicar».':'')
       :'Ya no cuentan como sugerencia: '+(conUs?ya:'')+(conUs&&conCub?'; o ':'')+(conCub?'esas facturas ya quedan cubiertas por otros anticipos o notas':'')+'.'
         +(yo&&conUs?' Si prefieres una de estas facturas, pica «✓ Aplicar» en ella.':'')));
+    if(confU.length){
+      const cU=confU.some(rl=>rl.usadaEn), cC=confU.some(rl=>!rl.usadaEn&&rl.cubiertaPor);
+      const por=fac?[cU?'ese anticipo o nota ya se usa completo en otra de sus facturas':'',cC?'la factura ya queda cubierta con lo que se le aplica':'']
+        :[cU?ya+' en otra factura':'',cC?(confU.length>1?'esas facturas ya quedan cubiertas':'esa factura ya queda cubierta')+' con otros anticipos o notas':''];
+      u.appendChild(el('div','qn','Lo dice su XML, pero no se aplica'+(por.some(Boolean)?': '+por.filter(Boolean).join('; o '):'')
+        +'. Ya no cuenta como relación: solo dice «Confirmada (CFDI)» la que sí se aplica.'));
+    }
     X.usadas.forEach(rl=>u.appendChild(tarjetaRel(rl,d)));
     box.appendChild(u);
   }
@@ -5302,7 +5334,8 @@ window.__carHallApl=async function(lista,avance){
     if(fr) o.saldo=cent(fr.saldo);
     if(dr) o.total=cent(Math.abs(dr.total||0));
     const F2=fr?aplF(fr):null, X=dr?aplD(dr):null, todas=F2?(F2.todas||F2.rels):[];
-    const rl=dr?(todas.find(x=>x.dec==='aplicada'&&x.docs.includes(dr))||todas.find(x=>x.docs.includes(dr))||null):null;
+    // (19-nov-2026: lo confirmado por el XML que no se aplica ya no es relación: «Sin relación»)
+    const rl=dr?(todas.find(x=>x.dec==='aplicada'&&x.docs.includes(dr))||todas.find(x=>x.docs.includes(dr)&&!aplConfSin(x))||null):null;
     if(rl){
       const t=relTipo(rl);
       o.rel=APL_T[t];
