@@ -337,8 +337,10 @@
     + '.segv .sg-pasos{margin:16px 0 0}'
     + '.segv .sg-pasos .t{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sg-ink3);margin-bottom:8px}'
     + '.segv .sg-pasos ol{list-style:none;margin:0;padding:0 0 2px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin}'
-    + '.segv .sg-pasos li{flex:1 0 74px;min-width:74px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}'
-    + '.segv .sg-pasos.chico li{flex-basis:38px;min-width:38px}'
+    // cada paso mide al menos lo que su palabra más larga: el nombre pasa entero al siguiente renglón, nunca a media palabra
+    // («Opinión de cumplimient·o» en el celular; revisión de pantallas del 18-nov-2026)
+    + '.segv .sg-pasos li{flex:1 0 74px;min-width:min-content;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}'
+    + '.segv .sg-pasos.chico li{flex-basis:38px;min-width:min-content}'
     + '.segv .sg-pasos li+li::before{content:"";position:absolute;top:14px;left:-50%;width:100%;height:2px;background:var(--sg-ln2);z-index:0}'
     + '.segv .sg-pasos button{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;padding:0 2px;font:inherit;color:var(--sg-ink2);cursor:pointer}'
     + '.segv .sg-pasos button[disabled]{cursor:default}'
@@ -350,7 +352,10 @@
     + '.segv .sg-pasos li.az b{background:var(--sg-ac);color:#fff}'
     + '.segv .sg-pasos li.off b{background:var(--sg-sf3);color:var(--sg-ink4);text-decoration:line-through}'
     + '.segv .sg-pasos li.aqui b{box-shadow:0 0 0 3px var(--sg-nab)}'
-    + '.segv .sg-pasos span{font-size:11px;line-height:1.25;overflow-wrap:anywhere}'
+    + '.segv .sg-pasos span{font-size:11px;line-height:1.25;overflow-wrap:normal;word-break:normal;display:flex;flex-direction:column}'
+    // el mismo nombre en negritas, invisible y sin alto: el paso ya mide lo de su nombre en negritas, así que escogerlo (negritas)
+    // no cambia el ancho de la línea ni la mueve
+    + '.segv .sg-pasos span::after{content:attr(data-t);font-weight:700;visibility:hidden;height:0;overflow:hidden;pointer-events:none;speak:never}'
     + '.segv .sg-pasos li.aqui span{font-weight:700;color:var(--sg-ink)}'
     + '.segv .sg-falta{margin-top:14px;border-radius:12px;border:1px solid var(--sg-nab);border-left:4px solid #F07A1E;background:var(--sg-nas);padding:10px 14px;font-size:12.5px;line-height:1.5;color:var(--sg-ink)}'
     + '.segv .sg-falta>b{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--sg-na2);margin-bottom:4px}'
@@ -822,7 +827,7 @@
       + '<ol>' + L.map(function (x, i) {
         var aqui = !!x.aqui, pica = !aqui && x.id != null && x.id !== '';
         return '<li class="' + esc(x.est || '') + (aqui ? ' aqui' : '') + '" data-k="' + esc(x.id != null && x.id !== '' ? x.id : '#' + i) + '"><button type="button"' + (aqui ? ' disabled aria-current="step"' : pica ? ' data-paso="' + esc(x.id) + '"' : ' disabled')
-          + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span>' + esc(x.t || '') + '</span></button></li>';
+          + (x.title ? ' title="' + esc(x.title) + '"' : '') + '><b>' + esc(x.marca == null ? '·' : x.marca) + '</b><span data-t="' + esc(x.t || '') + '">' + esc(x.t || '') + '</span></button></li>';
       }).join('') + '</ol></div>';
   }
   /* La línea de pasos se queda donde la dejaste (18-nov-2026, pedido de Fernando Cadengo con un video del Panel de trabajo:
