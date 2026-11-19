@@ -367,7 +367,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       </div>
       <div hidden>
         <select id="t-sis" aria-label="Sistema"><option value="">Todos los sistemas</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option><option value="casa">Sistemas Quo</option></select>
-        <select id="t-tipo" aria-label="Tipo"><option value="">Fallas y mejoras</option><option value="falla">Fallas</option><option value="mejora">Mejoras</option></select>
+        <select id="t-tipo" aria-label="Tipo"><option value="">Todos</option><option value="falla">Fallas</option><option value="mejora">Mejoras</option><option value="propuesta">Propuestas del despacho</option></select>
         <select id="t-quien" aria-label="Lo pasó"><option value="">Cualquiera</option></select>
       </div>
       <section id="tk-kpis" aria-label="Tickets" hidden></section>
@@ -443,7 +443,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   var LISTA = [], COLA = [], ABIERTO = null, CV = null, SALAS = [], TAB = 'conv', VISTO = {}, ULT_CLI = {}, PRIMERA = true;
   var TK = null, TKL = [], TKV = '', TQ = '', TPAG = null, TKBAR = null, TKA = null, TKCOLA = [], AUTO = {}, AVLL = {};
   var IMGS = {}, IMGC = {}, DESC = {}, SUGT = null;   // las capturas (solo en la memoria de la página), el borrador descartado
-  var TK_TXT = { revisar: 'Por revisar', proceso: 'En proceso', listo: 'Ya quedó', no_procede: 'No procede' };
+  var TK_TXT = { autorizar: 'Por autorizar', revisar: 'Por revisar', proceso: 'En proceso', listo: 'Ya quedó', no_procede: 'No procede' };
   var REPO = { contabilita: 'hnavaserna-dot/quocontabilita-crm (contabilita.quosistemas.com)', facturita: 'hnavaserna-dot/quofacturita-crm (facturita.quosistemas.com)',
                nominita: 'hnavaserna-dot/quonominita-crm (nominita.quosistemas.com)', casa: 'hnavaserna-dot/sistemasquo-crm (www.quosistemas.com)' };
   var SIS_TXT = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita', casa: 'Sistemas Quo' };
@@ -1140,14 +1140,17 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
 
   /* ---------- Tickets a desarrollo ---------- */
   function sup() { return YO && YO.papel === 'supervisa' && !CONSULTA; }
-  function tkEst(t) { return chip(TK_TXT[t.estado] || t.estado, { revisar: 'mal', proceso: 'ojo', listo: 'ok', no_procede: '' }[t.estado] || ''); }
-  function tkTipo(t) { return chip(t.tipo === 'mejora' ? 'Mejora' : 'Falla', t.tipo === 'mejora' ? 'az' : 'na'); }
+  function tkEst(t) { return chip(TK_TXT[t.estado] || t.estado, { autorizar: 'mal', revisar: 'mal', proceso: 'ojo', listo: 'ok', no_procede: '' }[t.estado] || ''); }
+  // 19-nov-2026: las propuestas de la gente del despacho («Proponer un cambio» de la burbuja); las autoriza o no quien supervisa
+  function tkTipoTxt(t) { return t.tipo === 'propuesta' ? 'Propuesta' : t.tipo === 'mejora' ? 'Mejora' : 'Falla'; }
+  function tkTipo(t) { return chip(tkTipoTxt(t), t.tipo === 'propuesta' ? 'ok' : t.tipo === 'mejora' ? 'az' : 'na'); }
   function cuentaTk(c) {
-    var n = (c && ((c.revisar || 0) + (c.proceso || 0))) || 0;
+    var n = (c && ((c.autorizar || 0) + (c.revisar || 0) + (c.proceso || 0))) || 0;
     $('tk-cnt').textContent = n > 99 ? '99+' : String(n); $('tk-cnt').hidden = !n;
   }
   function tickets() { return (TK && TK.tickets) || []; }
   var TKVISTAS = [
+    ['autorizar', 'Por autorizar', function (t) { return t.estado === 'autorizar'; }, 'rojo'],
     ['revisar', 'Por revisar', function (t) { return t.estado === 'revisar'; }, 'rojo'],
     ['proceso', 'En proceso', function (t) { return t.estado === 'proceso'; }, 'ambar'],
     ['listo', 'Ya quedó', function (t) { return t.estado === 'listo'; }, 'verde'],
@@ -1198,11 +1201,13 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       meta: YO && YO.papel === 'atiende' ? 'Los que pasaste tú' : 'Todos',
       pilas: TKVISTAS.filter(function (x) { return x[0] !== 'mios' || (YO && YO.papel !== 'consulta'); }).map(function (x) {
         var n = b.filter(x[2]).length;
-        return { k: x[0], t: x[1], n: n, tono: x[3], on: TKV === x[0], tag: sup() && x[0] === 'revisar' && n ? 'Te toca' : '' };
+        return { k: x[0], t: x[1], n: n, tono: x[3], on: TKV === x[0],
+          tag: sup() && n && (x[0] === 'revisar' || (x[0] === 'autorizar' && YO.usuario === 'fernando.cadengo')) ? 'Te toca'
+            : sup() && n && x[0] === 'autorizar' ? 'Si Fernando Cadengo tarda' : '' };
       }),
       alPicar: function (k) { TKV = TKV === k ? '' : k; if (TPAG) TPAG.inicio(); pintaTk(); },
       boton: { t: 'Empezar a revisar', n: TKL.length, alPicar: function () { if (!TKL.length) return; TKCOLA = TKL.map(function (t) { return t.id; }); abreTk(TKCOLA[0]); } },
-      nota: sup() ? 'Los más viejos sin cerrar van primero. En cada uno: «Copiar para mi Claude».' : 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.'
+      nota: sup() ? 'Primero las propuestas por autorizar y luego lo que sigue sin cerrar. En cada uno: «Copiar para mi Claude».' : 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.'
     });
     $('t-tk').textContent = v ? v[1] : 'Tickets a desarrollo';
     $('t-tkc').textContent = F0.format(TKL.length) + (TKL.length === 1 ? ' ticket' : ' tickets');
@@ -1234,9 +1239,12 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   function pintaTkFicha() {
     var t = TKA;
     var h = VTK && VTK.scrim.querySelector('.sg-head h2'); if (h) h.textContent = t.folio + ' · ' + t.titulo;
-    $('tk-sub').innerHTML = chipSis(t.sistema) + ' ' + tkEst(t) + ' ' + tkTipo(t) + ' · lo pasó ' + esc(t.creo_nombre || t.creo) + ' el ' + esc(fechaHora(t.creado));
+    var prop = t.tipo === 'propuesta';
+    $('tk-sub').innerHTML = chipSis(t.sistema) + ' ' + tkEst(t) + ' ' + tkTipo(t) + ' · ' + (prop ? 'la propuso ' : 'lo pasó ') + esc(t.creo_nombre || t.creo) + ' el ' + esc(fechaHora(t.creado));
     var a = [];
-    if (sup()) {
+    if (sup() && t.estado === 'autorizar') {
+      a.push('<button class="btn ok" type="button" data-t="aut-si">Autorizar</button>', '<button class="btn" type="button" data-t="aut-no">No autorizar</button>');
+    } else if (sup()) {
       if (t.estado === 'revisar') a.push('<button class="btn acento" type="button" data-t="proceso">Tomarlo (en proceso)</button>');
       if (t.estado === 'revisar' || t.estado === 'proceso') a.push('<button class="btn ok" type="button" data-t="listo">Ya quedó</button>', '<button class="btn" type="button" data-t="no_procede">No procede</button>');
       if (t.estado === 'proceso') a.push('<button class="btn" type="button" data-t="revisar">Regresar a «Por revisar»</button>');
@@ -1246,11 +1254,13 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     if (t.conv) a.push('<button class="btn" type="button" data-t="conv">Ver la conversación</button>');
     $('tk-acc').innerHTML = a.join('');
     var dd = function (k, v) { return v ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : ''; };
-    $('tk-cuerpo').innerHTML = '<section><h4>Qué pasa</h4><p class="tk-det">' + esc(t.detalle) + '</p></section>'
-      + '<dl class="dl">' + dd('Cliente', esc(t.cliente || '') + (t.cuenta ? ' · ' + esc(t.cuenta) : '') + (t.usuario ? ' · ' + esc(t.usuario) : ''))
-      + dd('Pantalla', esc(t.pantalla || '')) + dd('Lo trabaja', t.trabaja_nombre ? esc(t.trabaja_nombre) + (t.tomado ? ' · desde el ' + esc(fechaHora(t.tomado)) : '') : '')
-      + dd(t.estado === 'listo' ? 'Quedó' : 'Se cerró', t.cerrado ? esc(t.cerro_nombre || t.cerro || '') + ' · ' + esc(fechaHora(t.cerrado)) : '')
-      + dd('Al cliente le dijimos', t.nota ? esc(t.nota) : '')
+    $('tk-cuerpo').innerHTML = (prop && t.estado === 'autorizar' ? '<div class="nota info">Es una propuesta de la gente del despacho: la decide Fernando Cadengo y, si tarda, Héctor Daniel Nava. '
+        + 'Antes de autorizarla, revisa que no toque sueldos, quién ve qué, timbrar ni cómo se calcula algo: eso lo decide Héctor Daniel Nava.</div>' : '')
+      + '<section><h4>' + (prop ? 'Lo que platicamos' : 'Qué pasa') + '</h4><p class="tk-det">' + esc(t.detalle) + '</p></section>'
+      + '<dl class="dl">' + dd(prop ? 'Cuenta' : 'Cliente', [t.cliente, t.cuenta, t.usuario].filter(Boolean).map(esc).join(' · '))
+      + dd('Pantalla', esc(t.pantalla || '')) + dd('Se autorizó', t.autorizado ? esc(t.autorizo_nombre || t.autorizo || '') + ' · ' + esc(fechaHora(t.autorizado)) : '') + dd('Lo trabaja', t.trabaja_nombre ? esc(t.trabaja_nombre) + (t.tomado ? ' · desde el ' + esc(fechaHora(t.tomado)) : '') : '')
+      + dd(t.estado === 'listo' ? 'Quedó' : prop && !t.autorizado ? 'No se autorizó' : 'Se cerró', t.cerrado ? esc(t.cerro_nombre || t.cerro || '') + ' · ' + esc(fechaHora(t.cerrado)) : '')
+      + dd(prop ? 'Le dijimos a quien la propuso' : 'Al cliente le dijimos', t.nota ? esc(t.nota) : '')
       + dd('Correo al cliente', t.correo ? esc(t.correo) : '')
       + dd('Clientes con esto', t.clientes > 1 ? F0.format(t.clientes) + ' (los demás se ligaron con «Ligar a este»)' : '')
       + dd(t.clientes > 1 ? 'Ya lo vieron' : 'El cliente ya lo vio', t.cerrado ? (t.clientes > 1 ? F0.format(t.vieron || 0) + ' de ' + F0.format(t.clientes) : (t.visto_cliente ? esc(fechaHora(t.visto_cliente)) : 'Todavía no')) : '') + '</dl>'
@@ -1269,6 +1279,19 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   }
   function textoClaude(t) {
     var a = limpioClaude(t.titulo), b = limpioClaude(t.detalle), c = limpioClaude(t.pantalla || '');
+    if (t.tipo === 'propuesta') {
+      return 'Propuesta ' + t.folio + ' de ' + (SIS_TXT[t.sistema] || 'Quo') + ' (la propuso ' + (t.creo_nombre || t.creo) + ', de la gente del despacho, el ' + fechaHora(t.creado)
+        + (t.autorizado ? '; la autorizó ' + (t.autorizo_nombre || t.autorizo) + ' el ' + fechaHora(t.autorizado) : '; todavía no se autoriza') + '), de Q Chat, el soporte de los sistemas Quo.\n'
+        + 'Repositorio: ' + (REPO[t.sistema] || '') + '.\n'
+        + 'Título: ' + a.t + '\n'
+        + (c.t ? 'Pantalla: ' + c.t + '\n' : '')
+        + 'Lo que platicó con su Claude:\n' + b.t + '\n\n'
+        + 'Trabájala con las reglas del CLAUDE.md de ese repositorio: primero dime qué entendiste y el antes y el después en pantalla, '
+        + 'y espera mi «sí, así es». Si toca sueldos, quién ve qué, timbrar o cómo se calcula algo, eso lo decide Héctor Daniel Nava. Sin datos de clientes. '
+        + 'Cuando quede, pon al día la guía «dónde está cada cosa» de ese sistema (en «LO NUEVO», con «lo pidió ' + (t.creo_nombre || t.creo) + '»), y yo la marco «Ya quedó» '
+        + 'en QUO › Tickets a desarrollo del CRM: a quien la propuso le llega el aviso.'
+        + (a.n + b.n + c.n ? '\n(Se quitaron ' + (a.n + b.n + c.n) + ' datos que parecían de un cliente.)' : '');
+    }
     return 'Ticket ' + t.folio + ' de ' + (SIS_TXT[t.sistema] || 'Quo') + ' (' + (t.tipo === 'mejora' ? 'una mejora' : 'una falla') + '), de Q Chat, el soporte de los sistemas Quo.\n'
       + 'Repositorio: ' + (REPO[t.sistema] || '') + '.\n'
       + 'Título: ' + a.t + '\n'
@@ -1288,8 +1311,33 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     setTimeout(function () { try { $('tk-cl').focus(); $('tk-cl').select(); } catch (e) {} }, 40);
   }
   // «Ya quedó» (con lo que le decimos al cliente, si se quiere) y «No procede» (con el porqué, obligatorio)
+  // Autorizar o no una propuesta (19-nov-2026): «No autorizar» pide el porqué (lo lee quien la propuso)
+  function autorizaTk(si) {
+    var t = TKA; if (!t) return;
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">' + (si ? 'Autorizar: ' : 'No autorizar: ') + esc(t.folio) + '</h3>'
+      + '<p>' + (si ? 'Pasa a «Por revisar» para trabajarla con tu Claude («Copiar para mi Claude»). A quien la propuso le llega el aviso.'
+        : 'A quien la propuso le llega el aviso con lo que escribas aquí.') + '</p>'
+      + '<label class="campo"><span>' + (si ? 'Algo para quien la propuso (opcional)' : 'Por qué no se autoriza (lo lee quien la propuso)') + '</span>'
+      + '<textarea id="tk-nota" maxlength="1000" placeholder="' + (si ? 'Por ejemplo: la hacemos esta semana.' : 'Por ejemplo: eso ya se hace desde…') + '"></textarea></label>'
+      + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cancelar</button><button class="btn ' + (si ? 'ok' : 'peligro') + '" type="button" data-i="1">' + (si ? 'Autorizar' : 'No autorizar') + '</button></div>';
+    $('dlg').hidden = false;
+    setTimeout(function () { try { $('tk-nota').focus(); } catch (e) {} }, 40);
+    $('dlg-c').onclick = async function (e) {
+      var b = e.target.closest('button[data-i]'); if (!b) return;
+      if (b.getAttribute('data-i') === '-1') { $('dlg').hidden = true; return; }
+      var n = $('tk-nota').value.trim();
+      if (!si && n.length < 5) { error('Falta el porqué. Qué hacer: escribe por qué no se autoriza; lo lee quien la propuso.'); return; }
+      b.disabled = true;
+      try {
+        TKA = await qc('ticket_autoriza', { ticket: t.id, si: si, nota: n });
+        $('dlg').hidden = true; pintaTkFicha(); cargaTk().catch(function () {});
+        avisa(si ? 'Listo: ' + TKA.folio + ' quedó autorizada y pasa a «Por revisar».' : 'Listo: a quien la propuso le llega que no se autorizó y por qué.');
+      } catch (e2) { b.disabled = false; error(falla(e2)); }
+    };
+  }
   function cambiaTk(estado) {
     var t = TKA; if (!t) return;
+    if (estado === 'aut-si' || estado === 'aut-no') { autorizaTk(estado === 'aut-si'); return; }
     if (estado === 'proceso' || estado === 'revisar') { guardaTk(estado, ''); return; }
     var no = estado === 'no_procede';
     $('dlg-c').innerHTML = '<h3 id="dlg-t">' + (no ? 'No procede: ' : 'Ya quedó: ') + esc(t.folio) + '</h3>'
@@ -1363,7 +1411,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' ticket' : ' tickets') + (TQ ? ' · búsqueda: ' + TQ : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
       ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
       L.forEach(function (t, i) {
-        ws.getRow(f0 + 1 + i).values = [t.folio, SIS_TXT[t.sistema] || t.sistema, t.tipo === 'mejora' ? 'Mejora' : 'Falla', t.titulo, t.detalle || '', t.pantalla || '', t.cliente || '', t.cuenta || '',
+        ws.getRow(f0 + 1 + i).values = [t.folio, SIS_TXT[t.sistema] || t.sistema, tkTipoTxt(t), t.titulo, t.detalle || '', t.pantalla || '', t.cliente || '', t.cuenta || '',
           t.creo_nombre || t.creo, fechaHora(t.creado), TK_TXT[t.estado] || t.estado, t.trabaja_nombre || '', t.cerrado ? fechaHora(t.cerrado) : '', t.nota || '', t.dias || 0];
       });
       if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
