@@ -222,6 +222,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     <div id="como" hidden>
       <p class="pie">Cada hora, el CRM compara lo que bajó Centauro del portal del SAT con el WorkFlow. Si una «Presentar DYP» terminada no está en el SAT (ya pasó su vencimiento y Centauro revisó al cliente después de que se cerró), sale aquí. También salen las tareas terminadas con un PDF de otra razón social o de otro mes (el CRM lee cada PDF) y las opiniones de cumplimiento negativas con su motivo (las omisiones que dice el SAT).</p>
       <p class="pie">Desde el 20 de noviembre de 2026 también: la línea de captura de cada mes (3 días hábiles antes de que venza, si el SAT todavía no tiene su pago; si vence sin pago; si la «Línea Pagada» se terminó y el SAT no tiene el pago; y un aviso si se pagó después del vencimiento, porque lleva recargos), el timbrado de nómina (si se terminó y en los XML del SAT no hay recibos de esas fechas de pago; y un aviso si los trabajadores bajaron a menos de la mitad que el mes anterior), el reporte de facturas canceladas (si se terminó y en QUO siguen facturas de ese mes que ya estaban canceladas) y la opinión de cumplimiento del IMSS que se sube a su tarea (si es negativa).</p>
+      <p class="pie">«Esperando al cliente» va aparte (no es algo que esté mal): la DyP que se presentó en ceros porque el cliente no ha mandado su información o no ha autorizado, marcada en su ficha con la prueba de que se le pidió antes del vencimiento. Primero la confirma su gerente; con su sí, al cliente le llega un correo con lo que falta, la DyP no cuenta como vencida y queda abierta hasta la complementaria, que va a más tardar 3 días hábiles después de que llegue la información. No sale en «Abiertos» ni en «Te toca»; se ve en su propia pila.</p>
       <p class="pie">Cada uno trae qué dice el SAT, qué dice el WorkFlow (quién la cerró, cuándo y con qué documento), el diagnóstico, qué hacer, quién y qué pasa si no se corrige. Lo que el SAT no tiene regresa a «Rechazada» con todo eso en su plática, y a quien la trabaja le llega el aviso. Se corrige en la tarea: cuando la declaración aparece en el SAT, se quita el documento equivocado o la opinión sale positiva, pasa solo a «Ya quedó». La comisión no cambia.</p>
       <p class="pie">«Vence» es la fecha en que vence ante el SAT la tarea del WorkFlow; en lo abierto dice cuántos días faltan o hace cuántos venció. Para ordenar la lista, pica el nombre de una columna: la primera vez de la A a la Z (▲), otra vez de la Z a la A (▼) y otra más para dejarla como venía; el mes y el vencimiento se ordenan por fecha y lo que no trae fecha de vencimiento se va al final. En el celular se ordena desde FILTROS › ORDENAR. El Excel sale en el mismo orden.</p>
       <p class="pie">Lo ven la dirección y los gerentes (todos los clientes) y cada contador lo de sus clientes: donde es responsable, autoriza o es el contador asignado. «Te toca» es lo de las tareas donde tú eres responsable o autorizas.</p>
@@ -252,14 +253,17 @@ button,select,input,textarea{font:inherit;color:inherit}
     linea_sin_pago: '«Línea Pagada» terminada y el SAT sin el pago',
     nomina_sin_sat: 'Timbrado de nómina terminado sin recibos en el SAT',
     canceladas_activas: 'Reporte de canceladas terminado y siguen en QUO',
-    imss_negativa: 'Opinión de cumplimiento del IMSS negativa'
+    imss_negativa: 'Opinión de cumplimiento del IMSS negativa',
+    // 471: la DyP «Presenté en ceros, espero al cliente» (aparte: no es algo que esté mal)
+    ceros_espera: 'Se presentó en ceros y espera al cliente'
   };
   var CORTO = { wf_sin_sat: 'El SAT no la tiene', acuse_otro: 'PDF de otro', opinion_negativa: 'Opinión negativa', por_vencer: 'Por vencer sin presentar',
     vencida: 'Vencida sin presentar', sin_terminar: 'Presentada sin terminar', rev_xml: 'Lo presentado no cuadra', oblig_sin_tarea: 'Obligación sin tarea',
     linea_por_vencer: 'Línea por vencer sin pago', linea_vencida: 'Línea vencida sin pago', linea_sin_pago: 'Línea sin pago en el SAT',
-    nomina_sin_sat: 'Nómina sin recibos en el SAT', canceladas_activas: 'Canceladas siguen en QUO', imss_negativa: 'Opinión IMSS negativa' };
+    nomina_sin_sat: 'Nómina sin recibos en el SAT', canceladas_activas: 'Canceladas siguen en QUO', imss_negativa: 'Opinión IMSS negativa',
+    ceros_espera: 'Esperando al cliente' };
   var TONO_T = { wf_sin_sat: 'rojo', acuse_otro: 'naranja', opinion_negativa: 'ambar', por_vencer: 'ambar', vencida: 'rojo', sin_terminar: 'azul', rev_xml: 'naranja', oblig_sin_tarea: 'ambar',
-    linea_por_vencer: 'ambar', linea_vencida: 'rojo', linea_sin_pago: 'rojo', nomina_sin_sat: 'rojo', canceladas_activas: 'naranja', imss_negativa: 'ambar' };
+    linea_por_vencer: 'ambar', linea_vencida: 'rojo', linea_sin_pago: 'rojo', nomina_sin_sat: 'rojo', canceladas_activas: 'naranja', imss_negativa: 'ambar', ceros_espera: 'gris' };
   // lo que todavía se puede atender a tiempo (no es un error: es un aviso de que se acerca)
   var POR_ATENDER = { por_vencer: 1, sin_terminar: 1, linea_por_vencer: 1 };
   // lo que ya salió mal (rojo en la lista)
@@ -281,10 +285,14 @@ button,select,input,textarea{font:inherit;color:inherit}
   function mesTxt(h) { return /anual/i.test(h.actividad || '') || h.diag_clave === 'obl_anual' ? 'Anual de ' + h.ejercicio : h.mes ? MESES_L[h.mes - 1] + ' de ' + h.ejercicio : String(h.ejercicio || ''); }
   function per(h) { return h.ejercicio + '-' + String(h.mes || 1).padStart(2, '0'); }
   function abierto(h) { return h.estado === 'abierto'; }
+  // lo que está mal o por vencer (sin «Esperando al cliente», que va aparte: 471)
+  function malo(h) { return abierto(h) && h.tipo !== 'ceros_espera'; }
+  function czEstado(h) { return h.ceros && h.ceros.estado === 'por_confirmar' ? 'Falta que su gerente lo confirme' : h.ceros && h.ceros.info ? 'Llegó la información' : 'Esperando al cliente'; }
   function como(h) {
     if (h.estado === 'descartado' && h.no_aplica) return chip('No le toca al despacho · ' + fecha(h.resuelto), 'az');
     if (!abierto(h)) return chip('Ya quedó · ' + fecha(h.resuelto), 'ok');
     if (h.reabrio) return chip('Regresó a Rechazada', 'mal');
+    if (h.tipo === 'ceros_espera') return chip(czEstado(h), 'az');
     if (POR_ATENDER[h.tipo]) return chip('Por atender', 'ojo');
     return chip('Abierto', 'mal');
   }
@@ -293,6 +301,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (h.estado === 'descartado' && h.no_aplica) return 'No le toca al despacho';
     if (!abierto(h)) return 'Ya quedó';
     if (h.reabrio) return 'Regresó a Rechazada';
+    if (h.tipo === 'ceros_espera') return czEstado(h);
     if (POR_ATENDER[h.tipo]) return 'Por atender';
     return 'Abierto';
   }
@@ -359,8 +368,8 @@ button,select,input,textarea{font:inherit;color:inherit}
 
   /* ---------- «Tu trabajo» (UX PROFASE): las pilas filtran; «Empezar a revisar» abre el primero y su ficha trae ‹ › ---------- */
   var VISTAS = [
-    ['toca', 'Te toca', function (h) { return abierto(h) && h.mio; }, 'naranja', 'De las tareas donde eres responsable o autorizas'],
-    ['abierto', 'Abiertos', abierto, 'rojo', 'Todo lo que falta corregir'],
+    ['toca', 'Te toca', function (h) { return malo(h) && h.mio; }, 'naranja', 'De las tareas donde eres responsable o autorizas'],
+    ['abierto', 'Abiertos', malo, 'rojo', 'Todo lo que falta corregir'],
     ['reabrio', 'Regresados a Rechazada', function (h) { return abierto(h) && h.reabrio; }, 'rojo', 'La tarea regresó para hacerse bien']
   ].concat(Object.keys(TIPOS).map(function (k) {
     return ['t:' + k, CORTO[k], function (h) { return abierto(h) && h.tipo === k; }, TONO_T[k] || 'azul', TIPOS[k]];
@@ -447,7 +456,7 @@ button,select,input,textarea{font:inherit;color:inherit}
         + '<td class="cli">' + esc(h.rs || h.rfc) + '<div class="mut">' + esc(h.rfc) + (h.grupo ? ' · ' + esc(h.grupo) : '') + '</div></td>'
         + '<td class="num">' + esc(mesTxt(h)) + '</td>'
         + venceCelda(h)
-        + '<td class="que">' + chip(CORTO[h.tipo] || h.tipo, MAL_T[h.tipo] ? 'mal' : h.tipo === 'sin_terminar' ? 'az' : 'ojo')
+        + '<td class="que">' + chip(CORTO[h.tipo] || h.tipo, MAL_T[h.tipo] ? 'mal' : h.tipo === 'sin_terminar' || h.tipo === 'ceros_espera' ? 'az' : 'ojo')
         + '<div class="idea">' + esc(h.diagnostico || '') + '</div></td>'
         + '<td>' + (h.actividad ? esc(h.actividad) + '<div class="mut">' + esc([h.resp ? 'Responsable: ' + h.resp : '', h.aut ? 'Autoriza: ' + h.aut : ''].filter(Boolean).join(' · ')) + '</div>' : '<span class="mut">Del cliente</span>') + '</td>'
         + '<td>' + como(h) + (h.mio && abierto(h) ? ' ' + chip('Te toca', 'na') : '') + '</td></tr>';
