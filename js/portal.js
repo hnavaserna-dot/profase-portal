@@ -266,6 +266,59 @@
     return el;
   };
 
+  /* ---- Todo chat se queda hasta abajo, también en Safari (Héctor Daniel Nava, 20-nov-2026, 10:53: «desde la app en
+     safari descargada a mi mac; al escribir en el chat; le pongo enter y no se actualiza yéndose abajo… tengo que bajar
+     con el mouse para ver lo que se mandó»). Safari, el iPhone y el iPad (el motor de Apple) no acomodan solos lo que se
+     ve cuando algo de arriba cambia de alto (Chrome sí: «scroll anchoring»): una lista que se pinta otra vez y se manda
+     hasta abajo, y luego sus fotos toman su alto un momento después, se queda unos cientos de px arriba de lo último.
+     P.pegadoAbajo(caja, op) lo arregla, para lo de hoy y lo nuevo: mientras estés hasta abajo (cerca: op.cerca, 90 px),
+     te quedas hasta abajo cuando algo cambia de alto (una foto o un video que termina de cargar, la caja de escribir que
+     crece, la ventanita que cambia de tamaño, un mensaje que se agrega). Si tú subes a leer (la rueda, el dedo, la barra o
+     el teclado), ya no te mueve; bajar hasta abajo lo vuelve a prender. Que scrollTop baje solo (al repintar la lista
+     mide menos un momento) no cuenta como subir. Regresa { pegado(), set(v), pega(), suelta(), alFondo() }: pega() te
+     lleva abajo y te deja pegado; suelta() deja de seguir (abrir «Ver todo», ir a un mensaje). Se llama una vez por caja
+     (si ya tiene, regresa la misma); op.activo() dice si toca (p. ej., hay una conversación abierta). Lo usan el chat
+     interno, QUO › Q Chat y SuperConta; una lista nueva que se va hasta abajo (un chat) la usa, no hace otra.
+     construir.py (exige_pegado_abajo()) lo cuida y herramientas/pruebas/pantallas/prueba_chat_abajo.py (en
+     profase-datos) lo comprueba portándose como Safari; con el motor de Safari de verdad, herramientas/pruebas/webkit/. ---- */
+  P.pegadoAbajo = function (caja, op) {
+    if (!caja) return null;
+    if (caja.__ptAbajo) return caja.__ptAbajo;
+    op = op || {};
+    var cerca = +op.cerca || 90, pegado = true, toco = 0, ultTop = caja.scrollTop, ro = null;
+    function esCerca() { return caja.scrollHeight - caja.scrollTop - caja.clientHeight < cerca; }
+    function activo() { try { return !op.activo || !!op.activo(); } catch (e) { return false; } }
+    function alFondo() { if (caja.getClientRects().length) caja.scrollTop = caja.scrollHeight; ultTop = caja.scrollTop; }
+    function sigue() { if (pegado && activo()) alFondo(); }
+    ['wheel', 'touchmove', 'pointerdown', 'keydown'].forEach(function (t) { caja.addEventListener(t, function () { toco = Date.now(); }, { passive: true }); });
+    caja.addEventListener('scroll', function () {
+      var st = caja.scrollTop;
+      if (esCerca()) pegado = true;
+      else if (st < ultTop - 1 && Date.now() - toco < 1500) pegado = false;   // solo si tú subiste
+      ultTop = st;
+    }, { passive: true });
+    // lo que cambia de alto: la caja misma y cada cosa de adentro (lo que se agrega o se vuelve a pintar se vigila solo)
+    function vigila() {
+      if (!window.ResizeObserver) return;
+      try {
+        if (!ro) ro = new ResizeObserver(sigue);
+        ro.disconnect(); ro.observe(caja);
+        Array.prototype.forEach.call(caja.children, function (el) { ro.observe(el); });
+      } catch (e) { /* sin él, como antes */ }
+    }
+    vigila();
+    try { new MutationObserver(vigila).observe(caja, { childList: true }); } catch (e) { /* sin él, solo la caja */ }
+    var api = {
+      pegado: function () { return pegado; },
+      set: function (v) { pegado = !!v; ultTop = caja.scrollTop; },
+      pega: function () { pegado = true; alFondo(); },
+      suelta: function () { pegado = false; },
+      alFondo: alFondo
+    };
+    caja.__ptAbajo = api;
+    return api;
+  };
+
   /* ---- Confeti, una sola pieza (Héctor Daniel Nava, 12-nov-2026, 11:07: «hay manera que pongas confetti al aviso?», de la
      ventana de cumpleaños de las 9:00). Nació en la bienvenida «¡Adiós Access, hola CRM!» (adios_access_tab.js, 31-oct-2026)
      y desde ese día vive aquí: la usan esa bienvenida y la ventana de cumpleaños (cal_tab.js); lo nuevo que quiera confeti

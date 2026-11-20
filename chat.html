@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600;700&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=02a0f73889"></script><script src="js/tabla-pegada.js?v=c408286b46"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/visor.js?v=32a51754a1"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=fcf4552bf2"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=7208427bad"></script><script src="js/tabla-pegada.js?v=c408286b46"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/visor.js?v=32a51754a1"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=fcf4552bf2"></script>
 <style>
 /* Portal PROFASE · Chat interno (30-oct-2026, pedido de Daniel: «Quiero hacer un chat interno para nosotros; donde se
    pueda mandar mensaje, archivos, lectura y demás»). Decisiones de Daniel:
@@ -325,6 +325,16 @@ img.av{background:var(--surface-3);overflow:hidden}
    foto), que le ganaba a las opciones (Héctor Daniel Nava, 9-nov-2026: «no puedo eliminar desde el chat iphone»). Para
    copiar, «Copiar el texto» de las opciones. En la computadora se selecciona como siempre. */
 @media (hover:none){.m[data-id] .bur,.m[data-id] .bur *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.m[data-id] .bur img{-webkit-user-drag:none}}
+/* Y nada de lo de atrás se pinta de azul (Héctor Daniel Nava, 20-nov-2026, 11:51, con la captura de su iPhone Duo: «al
+   dejar presionado en ipad y mi iphone duo un mensaje… se selecciona la parte de atrás»): si el globito no se puede
+   seleccionar, el iPhone y el iPad seleccionan lo más cercano que sí, y eso era toda la conversación (el encabezado, los
+   mensajes y donde se escribe, en azul). Con el dedo nada de la pantalla del chat se selecciona; donde se escribe y los
+   buscadores sí. Vale con el dedo aunque el iPad tenga teclado y trackpad (la clase chat-dedo la pone el primer toque y la
+   quita el trackpad o el mouse); en la computadora se selecciona como siempre. */
+@media (hover:none){body,body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}}
+html.chat-dedo body,html.chat-dedo body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+@media (hover:none){input,textarea,select,[contenteditable="true"],[contenteditable="true"] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}}
+html.chat-dedo input,html.chat-dedo textarea,html.chat-dedo select,html.chat-dedo [contenteditable="true"],html.chat-dedo [contenteditable="true"] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 .m-reac{display:flex;flex-wrap:wrap;gap:4px;margin-top:-4px;position:relative;z-index:1}
 .m.yo .m-reac{justify-content:flex-end}
 .m-col{display:flex;flex-direction:column;min-width:0;max-width:min(620px,78%)}
@@ -1344,9 +1354,18 @@ audio.ad-med{width:280px;max-width:100%}
       if (el) { el.scrollIntoView({ block: op.divisor ? 'start' : 'center' }); if (!op.divisor) brilla(op.ir); }
       else caja.scrollTop = caja.scrollHeight;
     } else if (op.antes) caja.scrollTop = caja.scrollHeight - desdeAbajo;
-    else if (op.abajo || estaba) caja.scrollTop = caja.scrollHeight;
+    else if (op.abajo || estaba || pegado()) caja.scrollTop = caja.scrollHeight;
+    if (ABAJO) ABAJO.set(op.ir ? cerca() : op.antes ? false : !!(op.abajo || estaba || pegado()));
     revisaAbajo();
   }
+  /* Pegado abajo (Héctor Daniel Nava, 20-nov-2026, 10:53: «desde la app en safari descargada a mi mac; al escribir en el
+     chat; le pongo enter y no se actualiza yéndose abajo… tengo que bajar con el mouse para ver lo que se mandó»).
+     Safari, el iPhone y el iPad no acomodan solos lo que se ve cuando algo de arriba cambia de alto (Chrome sí): al
+     repintar la conversación las fotos toman su alto un momento después y la lista quedaba casi 200 px arriba de lo
+     último. Lo arregla la pieza común PORTAL.pegadoAbajo (js/portal.js): si estás hasta abajo, ahí te quedas cuando algo
+     cambia de alto; si subes a leer, ya no te mueve. */
+  var ABAJO = window.PORTAL && PORTAL.pegadoAbajo ? PORTAL.pegadoAbajo($('#msgs'), { activo: function () { return !!ACT; } }) : null;
+  function pegado() { return !!(ABAJO && ABAJO.pegado()); }
   function brilla(id) {
     var el = $('#msgs').querySelector('.m[data-id="' + id + '"]');
     if (!el) return;
@@ -1418,6 +1437,10 @@ audio.ad-med{width:280px;max-width:100%}
   }
   async function cargaMedios(raiz) {
     var els = Array.prototype.slice.call(raiz.querySelectorAll('img[data-ruta]:not([src]),video[data-ruta]:not([src]),audio[data-ruta]:not([src])'));
+    if (!els.length) return;
+    // lo que ya tiene su liga se pone en ese mismo momento (sin esperar): al repintar, la foto ya trae su alto cuando se
+    // acomoda la lista y Safari no la deja unos instantes más corta (20-nov-2026; ver «Pegado abajo»)
+    els = els.filter(function (e) { var c = URLS.get(e.getAttribute('data-ruta')); if (c && c.vence >= Date.now()) { e.src = c.url; return false; } return true; });
     if (!els.length) return;
     var u = await urlsDe(els.map(function (e) { return e.getAttribute('data-ruta'); }));
     els.forEach(function (e) { var x = u[e.getAttribute('data-ruta')]; if (x) e.src = x; });
@@ -1768,6 +1791,7 @@ audio.ad-med{width:280px;max-width:100%}
     if (!m || !bur) return;
     var abrir = !ABIERTOS[String(id)];
     ABIERTOS[String(id)] = abrir;
+    if (abrir && ABAJO) ABAJO.suelta();   // abrir «Ver todo» no te lleva hasta abajo: se queda donde empieza el mensaje
     var tmp = document.createElement('div'); tmp.innerHTML = textoHTML(m);
     var nuevos = Array.prototype.slice.call(tmp.children), tx = bur.querySelector('.m-largo'), mas = bur.querySelector('.m-mas');
     if (tx && mas && nuevos.length === 2) { tx.replaceWith(nuevos[0]); mas.replaceWith(nuevos[1]); }
@@ -1782,15 +1806,32 @@ audio.ad-med{width:280px;max-width:100%}
   var LP = { t: 0, x0: 0, y0: 0, fue: false, fin: 0 };
   (function () {
     var NO = 'video,audio,.vz-ondas,input,textarea,select';
+    // con el dedo nada de atrás se selecciona (ver la regla de html.chat-dedo en los estilos): el primer toque pone la
+    // clase y el trackpad o el mouse la quitan (un iPad con teclado sigue seleccionando con el trackpad)
+    var H = document.documentElement;
+    try { if (matchMedia('(hover:none)').matches) H.classList.add('chat-dedo'); } catch (e) { /* sin media */ }
+    document.addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType === 'touch' || ev.pointerType === 'pen') H.classList.add('chat-dedo');
+      else if (ev.pointerType === 'mouse') H.classList.remove('chat-dedo');
+    }, true);
+    document.addEventListener('touchstart', function () { H.classList.add('chat-dedo'); }, { capture: true, passive: true });
+    function enCampo(n) { var e = n && (n.nodeType === 1 ? n : n.parentElement); return !!(e && e.closest && e.closest('input,textarea,select,[contenteditable="true"]')); }
+    function sinSel() {
+      try { var s = getSelection(); if (s && s.rangeCount && !s.isCollapsed && !enCampo(s.anchorNode)) s.removeAllRanges(); } catch (e) { /* sin selección */ }
+    }
+    // mientras el dedo abre (o acaba de abrir) las opciones, el navegador no empieza a seleccionar nada
+    document.addEventListener('selectstart', function (ev) {
+      if ((LP.t || LP.fue || Date.now() - LP.fin < 600) && !enCampo(ev.target)) ev.preventDefault();
+    }, true);
     function fuera() { if (LP.t) { clearTimeout(LP.t); LP.t = 0; } }
-    function suelta(ev) { fuera(); if (LP.fue) { LP.fue = false; LP.fin = Date.now(); if (ev && ev.cancelable) ev.preventDefault(); } }
+    function suelta(ev) { fuera(); if (LP.fue) { LP.fue = false; LP.fin = Date.now(); sinSel(); if (ev && ev.cancelable) ev.preventDefault(); } }
     $('#msgs').addEventListener('touchstart', function (ev) {
       fuera(); LP.fue = false;
       if (ev.touches.length !== 1) return;
       var b = ev.target.closest('.m[data-id] .bur'); if (!b || ev.target.closest(NO)) return;
       var el = b.closest('.m'), m = ACT && ACT.msgs.get(+el.dataset.id); if (!m || m.borrado) return;
       LP.x0 = ev.touches[0].clientX; LP.y0 = ev.touches[0].clientY;
-      LP.t = setTimeout(function () { LP.t = 0; LP.fue = true; try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* sin vibrar */ } menuMsg(m, b); }, 450);
+      LP.t = setTimeout(function () { LP.t = 0; LP.fue = true; try { navigator.vibrate && navigator.vibrate(10); } catch (e) { /* sin vibrar */ } sinSel(); menuMsg(m, b); setTimeout(sinSel, 120); }, 450);
     }, { passive: true });
     $('#msgs').addEventListener('touchmove', function (ev) { if (LP.t && (Math.abs(ev.touches[0].clientX - LP.x0) > 10 || Math.abs(ev.touches[0].clientY - LP.y0) > 10)) fuera(); }, { passive: true });
     $('#msgs').addEventListener('touchend', suelta, { passive: false });
@@ -1807,7 +1848,7 @@ audio.ad-med{width:280px;max-width:100%}
   })();
   async function irA(id) {
     if (!ACT) return;
-    if (ACT.msgs.has(id)) { var el = $('#msgs').querySelector('.m[data-id="' + id + '"]'); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); brilla(id); } return; }
+    if (ACT.msgs.has(id)) { var el = $('#msgs').querySelector('.m[data-id="' + id + '"]'); if (el) { if (ABAJO) ABAJO.suelta(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); brilla(id); } return; }
     try {
       var r = await rpc('chat_mensajes_de', { p_conv: ACT.id, p_antes: null, p_limite: 60, p_desde: Math.max(1, id - 30) });
       if (!r || !ACT) return;
