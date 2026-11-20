@@ -471,7 +471,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       <!-- 261 (4-nov-2026): el pago de la comisión de cada mes, cuándo y quién lo marcó, y los meses del año -->
       <div id="c-blk-pago" hidden>
         <div class="in phdn" id="phdn-est"><span class="mut">Cargando…</span></div>
-        <div class="tabla"><table class="resp" id="t-phdn"><thead><tr><th>Mes</th><th class="monto">Comisión</th><th class="monto">Pagado</th><th>Fecha de pago</th><th class="monto">Por pagar</th><th>Cómo va</th></tr></thead><tbody></tbody></table></div>
+        <div class="tabla"><table class="resp" id="t-phdn"><thead><tr><th>Mes</th><th class="monto">Comisión (cerrada)</th><th class="monto">Pagado</th><th>Fecha de pago</th><th class="monto">Por pagar</th><th>Cómo va</th></tr></thead><tbody></tbody></table></div>
         <div class="suma" id="phdn-suma-f" hidden><span class="l" id="phdn-suma-l">Por pagar en total</span><span class="num" id="phdn-suma">–</span></div>
       </div>
     </section>
@@ -793,10 +793,12 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var ptxt = !px ? '' : px.estado === 'pagada' ? 'Pagada el ' + fecha((pv[pv.length - 1] || {}).fecha) : px.estado === 'diferencia' ? 'Diferencia por pagar ' + dinero(px.por_pagar)
       : px.estado === 'por_pagar' ? (px.en_curso ? 'Mes en curso' : 'Por pagar') : px.estado === 'de_mas' ? 'Se pagó de más' : '';
     var aPagar = ptxt && px.estado !== 'pagada' && !px.en_curso && CAPTURA;
+    var cc = rc ? comCien(rc.comision_hdn) : null;
     h += pila({ l: (T.l_comision || 'Comisión HDN') + ' · ' + mes, acento: true, ir: 'com', sub: aPagar ? 'pagar' : 'cuenta', ir_t: aPagar ? 'Pagar' : 'Ver cómo se forma',
-      v: rc ? esc(dinero(rc.comision_hdn)) : '…',
+      v: cc != null ? esc(dinero(cc)) : '…',
       d: (ptxt ? '<span class="chip ' + pe[1] + '">' + esc(ptxt) + '</span> ' : '')
-        + (rc ? 'Pagos ' + esc(dinero(rc.comisiones)) + ' · reembolsos ' + esc(dinero(rc.reembolsos)) + ' · deducciones ' + esc(dinero(rc.deducciones)) : '') });
+        + (rc ? 'Pagos ' + esc(dinero(rc.comisiones)) + ' · reembolsos ' + esc(dinero(rc.reembolsos)) + ' · deducciones ' + esc(dinero(rc.deducciones))
+             + (cc != null && Number(cc) !== Number(rc.comision_hdn) ? ' · cerrada ' + aCierre((px || {}).cierre) : '') : '') });
     // 2. las facturas del mes
     var tt = (RES.clave === perK() && RES.fac && RES.fac.totales) || null, nd = tt ? ((tt.disponibles || {}).n || 0) : null, ti = tt ? (tt.incluidas || {}) : {};
     h += pila({ l: 'Facturas ' + (T.b_facturas || '') + ' · ' + mes, ir: 'fac', sub: nd ? 'disponible' : 'incluida', ir_t: nd ? 'Decidir' : 'Ver',
@@ -1123,14 +1125,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var d = COM.d || { pagos: [], reembolsos: [], resumen: {} }, r = d.resumen || {}, mes = mesTxt(PER.anio, PER.mes);
     var R = d.reembolsos || [], nr = R.filter(function (x) { return x.tipo === 1; }).length, nd = R.filter(function (x) { return x.tipo === 2; }).length;
     var np = (d.pagos || []).length, x = mesP(), pend = PHDN.d && PHDN.d.pendiente ? PHDN.d.pendiente : null, hay = !!COM.d, k = COM.tab;
-    var est = x ? estP(x) : null, cl = function (n) { return hay ? dineroH(n) : '…'; };
+    var est = x ? estP(x) : null, cl = function (n) { return hay && n != null ? dineroH(n) : '…'; };
+    var cc = hay ? comCien(r.comision_hdn) : null, cien = cc != null && Number(cc) !== Number(r.comision_hdn);
     $('c-cuenta').innerHTML = pilaT({ attr: 'data-ct="pagos"', on: k === 'pagos', l: 'Comisión de los pagos', v: cl(r.comisiones), d: hay ? esc(plural(np, 'pago', 'pagos')) + ' de facturas incluidas' : '' })
       + pilaT({ attr: 'data-ct="reembolso"', on: k === 'reembolso', l: '+ Reembolsos', v: cl(r.reembolsos), d: hay ? esc(plural(nr, 'renglón', 'renglones')) + ' · suman' : '' })
       + pilaT({ attr: 'data-ct="deduccion"', on: k === 'deduccion', l: '− Deducciones', v: cl(r.deducciones), d: hay ? 'Anticipos y descuentos · ' + esc(plural(nd, 'renglón', 'renglones')) : '' })
-      + pilaT({ attr: 'data-ct="cuenta"', on: k === 'cuenta', acento: true, l: '= ' + (T.l_comision || 'Comisión HDN'), v: cl(r.comision_hdn),
-                d: esc(mes) + (est ? ' · <span class="chip ' + est[1] + '">' + esc(est[0]) + '</span>' : ''), ir: 'Ver la cuenta' })
+      + pilaT({ attr: 'data-ct="cuenta"', on: k === 'cuenta', acento: true, l: '= ' + (T.l_comision || 'Comisión HDN'), v: cl(cc),
+                d: esc(mes) + (est ? ' · <span class="chip ' + est[1] + '">' + esc(est[0]) + '</span>' : '') + (cien ? ' · cerrada ' + aCierre((x || {}).cierre) : ''), ir: 'Ver la cuenta' })
       + pilaT({ attr: 'data-ct="pagar"', on: k === 'pagar', l: 'Por pagar', v: pend ? dineroH(pend.monto) : '…',
-                d: pend ? (pend.meses ? esc(plural(pend.meses, 'mes', 'meses')) + ' · cerrada a cientos' : 'Al corriente') : '', ojo: !!(pend && pend.meses), ir: 'Ver los meses' });
+                d: pend ? (pend.meses ? esc(plural(pend.meses, 'mes', 'meses')) + ' · cerrada ' + aCierre(pend.cierre) : 'Al corriente') : '', ojo: !!(pend && pend.meses), ir: 'Ver los meses' });
     // la barra: capturar siempre a la vista; «Pagar» solo si el mes escogido tiene algo por pagar; y cómo va el pago del mes
     $('c-ded').hidden = !CAPTURA; $('c-ree').hidden = !CAPTURA;
     var puede = !!x && CAPTURA && Number(x.por_pagar) > 0 && (x.estado === 'por_pagar' || x.estado === 'diferencia');
@@ -1143,16 +1146,16 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (k === 'cuenta') {
       $('h-com').textContent = (T.l_comision || 'Comisión HDN') + ' de ' + mes.toLowerCase() + ': cómo se forma';
       $('com-sub').textContent = 'La de los pagos de las facturas incluidas, más los reembolsos, menos las deducciones';
-      $('com-ayuda').textContent = 'Lo calcula el sistema con lo de las otras pilas. «Pagar» paga el resultado, cerrado a cientos como tu Excel.';
+      $('com-ayuda').textContent = 'Lo calcula el sistema con lo de las otras pilas y la cierra ' + aCierre((x || {}).cierre) + ': eso es lo que se paga.';
       $('r-com').innerHTML = fila('Comisión de los pagos', r.comisiones) + fila('+ Reembolsos', r.reembolsos) + fila('− Deducciones', r.deducciones)
-        + fila('= ' + (T.l_comision || 'Comisión HDN'), r.comision_hdn, true)
-        + (x && x.estado !== 'antes' && x.a_pagar != null ? fila('Se paga cerrada a cientos', x.a_pagar) : '');
+        + (cien ? fila('Da la cuenta', r.comision_hdn) + fila('= ' + (T.l_comision || 'Comisión HDN') + ', cerrada ' + aCierre((x || {}).cierre), cc, true)
+                : fila('= ' + (T.l_comision || 'Comisión HDN'), cc != null ? cc : r.comision_hdn, true));
       return;
     }
     if (k === 'pagar') {
       $('h-com').textContent = 'El pago de la comisión';
       $('com-sub').textContent = pend ? (pend.meses ? 'Por pagar en total: ' + dinero(pend.monto) + ' (' + plural(pend.meses, 'mes', 'meses') + ')' : 'Al corriente: no hay comisión por pagar') : ' ';
-      $('com-ayuda').textContent = 'Cada mes se paga completo y cerrado a cientos; el monto lo pone el sistema. Pica un mes para verlo.';
+      $('com-ayuda').textContent = 'Cada mes se paga completo y cerrado: a miles desde octubre de 2026 (hasta septiembre, a cientos); el monto lo pone el sistema. Pica un mes para verlo.';
       pintaPHdn();
       return;
     }
@@ -1212,15 +1215,34 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function estP(x) { return x.en_curso && x.estado === 'por_pagar' ? EST_P.curso : (EST_P[x.estado] || [x.estado, '']); }
   async function cargaPHdn() {
     var n = ++PHDN.pide, a = PER.anio;
+    if (PHDN.anio !== a) PHDN.err = false;
     if (PHDN.anio === a && PHDN.d && VISTA === 'com') pintaCom();
     try {
       var d = await rpc('cdir_pago_hdn', { p_anio: a });
       if (n !== PHDN.pide) return;
-      PHDN.d = d; PHDN.anio = a;
+      PHDN.d = d; PHDN.anio = a; PHDN.err = false;
       if (VISTA === 'com') pintaCom(); else if (VISTA === 'res') pintaRes();   // 5-nov-2026: la pila «Por pagar» y la barra también
-    } catch (e) { if (n === PHDN.pide && VISTA === 'com') { $('phdn-est').innerHTML = '<span class="mut">' + esc(falla(e, 'No se pudo leer el pago')) + '</span>'; } }
+    } catch (e) {
+      if (n !== PHDN.pide) return;
+      PHDN.err = true;   // 20-nov-2026: sin el pago del mes, las pilas enseñan lo exacto en lugar de quedarse en «…»
+      if (VISTA === 'com') { pintaCom(); $('phdn-est').innerHTML = '<span class="mut">' + esc(falla(e, 'No se pudo leer el pago')) + '</span>'; }
+      else if (VISTA === 'res') pintaRes();
+    }
   }
   function mesP() { return PHDN.anio === PER.anio && PHDN.d ? (PHDN.d.meses || []).filter(function (x) { return x.mes === PER.mes; })[0] || null : null; }
+  /* 20-nov-2026 (Héctor Daniel Nava, con las pilas de octubre que decían $380,854.23: «de preferencia siempre cerrados a
+     cienes; te acuerdas? corrígelo»; y a las 14:10: «mejor todo ciérralo ya a miles… octubre y noviembre y en adelante»): la
+     Comisión HDN de un mes se enseña cerrada, la misma que se paga (a miles desde octubre de 2026, a cientos antes: 470). El
+     número y a cuánto se cierra los pone la base (a_pagar y cierre de cdir_pago_hdn, con cdir_hdn_a_pagar: una sola regla);
+     la página no redondea. Lo exacto solo
+     sale en «Cómo se forma», como «Da la cuenta». Mientras llega el pago del mes, «…»; si no se pudo leer, lo exacto. */
+  function comCien(exacta) {
+    var x = mesP();
+    if (x && x.a_pagar != null) return x.a_pagar;
+    return (PHDN.anio === PER.anio && PHDN.d) || PHDN.err ? exacta : null;
+  }
+  function comMes(m) { return m && m.a_pagar != null ? m.a_pagar : m ? m.comision : null; }
+  function aCierre(c) { return Number(c) === 1000 ? 'a miles' : 'a cientos'; }   // 470: el cierre de cada mes lo dice la base
   function mesNom(x) { return MESES_L[x.mes - 1].toLowerCase(); }
   function pintaPHdn() {
     var d = PHDN.d, x = mesP(), mes = mesTxt(PER.anio, PER.mes), h = '';
@@ -1230,15 +1252,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       h = '<span class="mut">' + esc(perK() > hoyK ? mes + ' todavía no empieza.' : 'Sin datos de ' + mes.toLowerCase() + '.') + '</span>';
     } else {
       var e = estP(x), vivos = (x.pagos || []).filter(function (q) { return !q.regresado; }), ult = vivos[vivos.length - 1];
-      h += '<div class="acciones" style="justify-content:flex-start"><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span><span class="mut">Comisión de ' + esc(mes.toLowerCase()) + ': ' + dineroH(x.comision) + '</span>'
-        + (x.estado !== 'antes' && x.a_pagar != null && Number(x.a_pagar) !== Number(x.comision) ? '<span class="mut">· se paga cerrada a cientos, como tu Excel: ' + dineroH(x.a_pagar) + '</span>' : '') + '</div>';
+      h += '<div class="acciones" style="justify-content:flex-start"><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span><span class="mut">Comisión de ' + esc(mes.toLowerCase())
+        + (x.a_pagar != null && Number(x.a_pagar) !== Number(x.comision) ? ', cerrada ' + aCierre(x.cierre) : '') + ': ' + dineroH(comMes(x)) + '</span></div>';
       if (x.estado === 'antes') h += '<p class="mut" style="margin:0">Antes de ' + esc(fechaMes(desde)) + ' tu comisión se llevaba en tu Excel; aquí no se marca su pago.</p>';
       else if (x.estado === 'sin') h += '<p class="mut" style="margin:0">Este mes no hay comisión por pagar.</p>';
       else if (x.estado === 'por_pagar') h += '<div class="grande">' + esc(dinero(x.por_pagar)) + '</div><p class="mut" style="margin:0">' + esc(x.en_curso ? 'Mes en curso: se va sumando hasta el corte del mes. ' : '') + 'Al picar «Pagar» se escoge la fecha en que se pagó; el monto lo pone el sistema.</p>';
       else if (x.estado === 'pagada') h += '<div class="grande">Pagada el ' + esc(fecha(ult && ult.fecha)) + '</div>';
       else if (x.estado === 'cerrada') h += '<div class="grande">Pagada</div>';
       else if (x.estado === 'diferencia') h += '<div class="grande">Diferencia por pagar: ' + esc(dinero(x.por_pagar)) + '</div><p class="mut" style="margin:0">Se pagaron ' + esc(dinero(x.pagado)) + ' y después cambió la comisión del mes (una factura, un costo o un pago que entró después).</p>';
-      else if (x.estado === 'de_mas') h += '<div class="grande">Se pagaron ' + esc(dinero(-x.por_pagar)) + ' de más</div><p class="mut" style="margin:0">Se pagaron ' + esc(dinero(x.pagado)) + ' y hoy la comisión del mes es ' + esc(dinero(x.comision)) + '. Solo se informa: no se marca nada.</p>';
+      else if (x.estado === 'de_mas') h += '<div class="grande">Se pagaron ' + esc(dinero(-x.por_pagar)) + ' de más</div><p class="mut" style="margin:0">Se pagaron ' + esc(dinero(x.pagado)) + ' y hoy la comisión del mes, cerrada ' + aCierre(x.cierre) + ', es ' + esc(dinero(comMes(x))) + '. Solo se informa: no se marca nada.</p>';
       if (x.cerrado) h += '<p class="mut" style="margin:0">Mes cerrado: hasta ' + esc(mesAntes(d.cerrado_hasta)) + ' todo quedó pagado y ya no sale nada por pagar, aunque la comisión del mes cambie.</p>';
       if ((x.pagos || []).length) h += '<ul class="pagos">' + x.pagos.map(function (q) {
         return '<li class="' + (q.regresado ? 'reg' : '') + '"><span class="m">' + esc(dinero(q.monto)) + '</span><span>' + esc((q.diferencia ? 'Diferencia pagada el ' : 'Pagada el ') + fecha(q.fecha)) + '</span>'
@@ -1255,7 +1277,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('t-phdn').tBodies[0].innerHTML = M.map(function (m) {
       var e = estP(m), vivos = (m.pagos || []).filter(function (q) { return !q.regresado; });
       return '<tr class="click' + (m.mes === PER.mes ? ' sel' : '') + '" tabindex="0" data-phmes="' + esc(m.mes) + '"><td data-l="Mes"><strong>' + esc(MESES_L[m.mes - 1]) + '</strong></td>'
-        + '<td class="monto" data-l="Comisión">' + dineroH(m.comision) + '</td><td class="monto" data-l="Pagado">' + (Number(m.pagado) ? esc(dinero(m.pagado)) : '<span class="mut">–</span>') + '</td>'
+        + '<td class="monto" data-l="Comisión (cerrada)">' + dineroH(comMes(m)) + '</td><td class="monto" data-l="Pagado">' + (Number(m.pagado) ? esc(dinero(m.pagado)) : '<span class="mut">–</span>') + '</td>'
         + '<td data-l="Fecha de pago">' + (vivos.length ? esc(vivos.map(function (q) { return fecha(q.fecha); }).join(' · ')) : '<span class="mut">–</span>') + '</td>'
         + '<td class="monto" data-l="Por pagar">' + (Number(m.por_pagar) > 0 ? '<strong>' + esc(dinero(m.por_pagar)) + '</strong>' : '<span class="mut">–</span>') + '</td>'
         + '<td data-l="Cómo va"><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span></td></tr>';
@@ -1311,11 +1333,12 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function excelPHdn(b) {
     var d = PHDN.d || {}, M = d.meses || [];
-    excel(b, 'Pagos de la comision ' + PER.anio + ' PROFASE', 'Pagos de la comisión', [(T.t_comisiones || ''), 'Año: ' + PER.anio, (d.pendiente && d.pendiente.meses ? 'Por pagar en total: ' + dinero(d.pendiente.monto) : 'Sin comisión por pagar')],
-      ['Mes', 'Comisión', 'Pagado', 'Fecha de pago', 'Cómo se pagó', 'Lo marcó', 'Por pagar', 'Cómo va'],
+    excel(b, 'Pagos de la comision ' + PER.anio + ' PROFASE', 'Pagos de la comisión', [(T.t_comisiones || ''), 'Año: ' + PER.anio, (d.pendiente && d.pendiente.meses ? 'Por pagar en total: ' + dinero(d.pendiente.monto) : 'Sin comisión por pagar'),
+      'Cada mes, la comisión cerrada: a miles desde octubre de 2026 y a cientos antes'],
+      ['Mes', 'Comisión (cerrada)', 'Pagado', 'Fecha de pago', 'Cómo se pagó', 'Lo marcó', 'Por pagar', 'Cómo va'],
       M.map(function (m) {
         var v = (m.pagos || []).filter(function (q) { return !q.regresado; });
-        return [MESES_L[m.mes - 1], m.comision, m.pagado, v.map(function (q) { return fecha(q.fecha); }).join(' · '), v.map(function (q) { return METODO_P[q.metodo] || ''; }).filter(Boolean).join(' · '),
+        return [MESES_L[m.mes - 1], comMes(m), m.pagado, v.map(function (q) { return fecha(q.fecha); }).join(' · '), v.map(function (q) { return METODO_P[q.metodo] || ''; }).filter(Boolean).join(' · '),
                 v.map(function (q) { return q.marco; }).join(' · '), Math.max(0, Number(m.por_pagar) || 0), estP(m)[0]];
       }), [2, 3, 7], [14, 15, 15, 22, 16, 24, 15, 20]);
   }
@@ -2361,7 +2384,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       + campo('sv-nota', 'Nota (opcional)', '<textarea id="sv-nota" maxlength="600" placeholder="A quién se le entregó, la referencia…"></textarea>', true)
       + '</div>'
       + sec('Las devoluciones de este pago', listaSv(EP, false, { monto: paga, cientos: true })
-            + '<p class="sg-hint" style="margin-top:8px">Lo de SV de cada devolución se cierra a cientos y entre todas suman lo que se le paga, como tu Comisión HDN. Lo que se redondea queda en lo de PROFASE de cada una y en el costo de su factura; no pasa al siguiente pago.</p>')
+            + '<p class="sg-hint" style="margin-top:8px">Lo de SV de cada devolución se cierra a cientos y entre todas suman lo que se le paga. Lo que se redondea queda en lo de PROFASE de cada una y en el costo de su factura; no pasa al siguiente pago.</p>')
       + '<div class="msg" id="v-msg" hidden></div>',
       acciones: [bot('sv-reg-ok', 'Registrar')] });
     svFecLabel();
@@ -2556,9 +2579,11 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     }
   }
   function excelRCom(b) {
-    var r = (COM.d || {}).resumen || {}, per = mesTxt(PER.anio, PER.mes);
+    var r = (COM.d || {}).resumen || {}, per = mesTxt(PER.anio, PER.mes), cc = comCien(r.comision_hdn);
+    var fin = cc != null && Number(cc) !== Number(r.comision_hdn)   // 20-nov-2026: también aquí, cerrada (470: a miles desde octubre)
+      ? [['Da la cuenta', r.comision_hdn], [(T.l_comision || 'Comisión HDN') + ' (cerrada ' + aCierre((mesP() || {}).cierre) + ')', cc]] : [[T.l_comision || 'Comisión HDN', r.comision_hdn]];
     excel(b, 'Resumen de comisiones ' + per + ' PROFASE', 'Resumen del periodo', [(T.t_comisiones || ''), 'Periodo: ' + per], ['Concepto', 'Monto'],
-      [['Comisión de los pagos', r.comisiones], ['Reembolsos', r.reembolsos], ['Deducciones', r.deducciones], [T.l_comision || 'Comisión HDN', r.comision_hdn]], [2], [36, 18]);
+      [['Comisión de los pagos', r.comisiones], ['Reembolsos', r.reembolsos], ['Deducciones', r.deducciones]].concat(fin), [2], [36, 18]);
   }
   function excelUti(b) {
     if (UTI.tab === 'rdir') { excelRdir(b); return; }   // 288
