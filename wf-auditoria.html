@@ -52,6 +52,23 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
 <script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=7ec8828657"></script><script src="js/tabla-pegada.js?v=c408286b46"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=f576fcf525"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script>
 <style>
+/* «Por persona» (453) */
+#caja-pers{margin-top:16px}
+#caja-pers .pie{padding:10px 16px 0}
+#caja-pers header{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.pers-acc{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#tabla-pers td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#tabla-pers td.n.mal b{color:var(--red)}
+#tabla-pers th,#tabla-pers th *{white-space:normal}
+#tabla-pers th{vertical-align:bottom;min-width:86px;text-align:right}
+#tabla-pers th:first-child{text-align:left;min-width:190px}
+#tabla-pers td.pn{min-width:190px;font-weight:600}
+@media (max-width:760px){
+  #tabla-pers tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 16px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  #tabla-pers td.pn{grid-column:1/-1;padding:0 0 4px;min-width:0}
+  #tabla-pers td.n{display:flex;justify-content:space-between;align-items:baseline;gap:8px;white-space:normal}
+  #tabla-pers td.n::before{content:attr(data-l);color:var(--muted);font-size:12.5px;text-align:left}
+}
 /* Portal PROFASE · Workflow › Auditoría SAT vs WF (442, 19-nov-2026; Héctor Daniel Nava: «para encontrar resultados
    exclusivamente de esto… Llamado algo como "Auditoría SAT vs WF"… que todos los gerentes podamos ver esto y también dirección;
    y los contadores y responsables asignados de cada cliente»). Lo que no cuadra entre el SAT y el WorkFlow, cada uno con su
@@ -183,7 +200,7 @@ button,select,input,textarea{font:inherit;color:inherit}
       <input type="search" id="f-q" placeholder="Razón social, grupo, RFC, responsable o qué pasó" autocomplete="off" aria-label="Buscar">
       <button class="btn" type="button" data-excel id="x-lista">Excel</button>
     </div>
-    <div hidden><select id="f-tipo" aria-label="Qué es"></select><select id="f-mes" aria-label="Mes"></select><select id="f-resp" aria-label="Responsable"></select><select id="f-orden" aria-label="Ordenar por"></select></div>
+    <div hidden><select id="f-tipo" aria-label="Qué es"></select><select id="f-mes" aria-label="Mes"></select><select id="f-resp" aria-label="Responsable"></select><select id="f-orden" aria-label="Ordenar por"></select><select id="f-pmes" aria-label="Mes contable" hidden></select></div>
     <section id="kpis" aria-label="Qué ver"></section>
     <section class="caja" id="caja-lista">
       <header><div><h2 id="t-lista">Abiertos</h2><div class="sub" id="t-sub"></div></div></header>
@@ -193,6 +210,14 @@ button,select,input,textarea{font:inherit;color:inherit}
       </table></div>
       <div class="vacio" id="lista-vacia" hidden></div>
       <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+    </section>
+    <!-- 453 (19-nov-2026; Héctor Daniel Nava: «gerentes de su equipo y dirección»): cómo va cada quien, mes por mes, contra el SAT -->
+    <section class="caja" id="caja-pers" hidden>
+      <header><div><h2 id="t-pers">Por persona: cómo va cada quien contra el SAT</h2><div class="sub" id="pers-sub"></div></div>
+        <div class="pers-acc"><button class="btn" type="button" data-excel id="x-pers">Excel</button></div></header>
+      <div class="desliza"><table class="tabla" id="tabla-pers"><thead><tr><th scope="col">Persona</th><th scope="col">Terminadas</th><th scope="col">Confirmadas en el SAT</th><th scope="col">A tiempo según el SAT</th><th scope="col">Tarde según el SAT</th><th scope="col">A tiempo en el WorkFlow y no en el SAT</th><th scope="col">El SAT no la tiene</th><th scope="col">Falta que el SAT la confirme</th><th scope="col">Hallazgos abiertos</th></tr></thead><tbody id="lista-pers"></tbody></table></div>
+      <div class="vacio" id="pers-vacia" hidden>Nada en ese mes.</div>
+      <p class="pie">La DyP, la declaración anual y la línea pagada terminadas de los clientes que revisa Centauro, por responsable y mes contable. «A tiempo según el SAT» quiere decir que el SAT la recibió antes de su fecha Profase; desde el mes contable de noviembre de 2026 es lo que cuenta en el Panel y para el bono del 5 %. La ven la dirección y, cada gerente, la de su equipo.</p>
     </section>
     <div id="como" hidden>
       <p class="pie">Cada hora, el CRM compara lo que bajó Centauro del portal del SAT con el WorkFlow. Si una «Presentar DYP» terminada no está en el SAT (ya pasó su vencimiento y Centauro revisó al cliente después de que se cerró), sale aquí. También salen las tareas terminadas con un PDF de otra razón social o de otro mes (el CRM lee cada PDF) y las opiniones de cumplimiento negativas con su motivo (las omisiones que dice el SAT).</p>
@@ -333,11 +358,14 @@ button,select,input,textarea{font:inherit;color:inherit}
     var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
     BAR = PROFASE_PILAS.barra($('wa-bar'), { caja: true, buscar: $('f-q'),
       filtros: d ? { grupos: [{ t: 'HALLAZGOS', campos: [d($('f-tipo'), { t: 'QUÉ PASÓ' }), d($('f-mes'), { t: 'MES' }), d($('f-resp'), { t: 'RESPONSABLE' })] },
+          // 453: el mes de «Por persona» (solo sale a quien lo ve: la dirección y los gerentes)
+          { t: 'POR PERSONA', campos: [d($('f-pmes'), { t: 'MES CONTABLE', defecto: function () { return PERS_DEF; } })] },
           { t: 'ORDENAR', campos: [d($('f-orden'), { t: 'ORDENAR POR',
             // ordenar no es un filtro: lo escogido siempre es «lo suyo» (defecto), así no sale como etiqueta arriba de la lista
             // ni la empuja hacia abajo al picar un encabezado; el orden se lee en las flechas y abajo del título de la lista
             defecto: function () { return $('f-orden').value; } })] }],
-        limpiar: function () { ['f-tipo', 'f-mes', 'f-resp'].forEach(function (id) { var x = $(id); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        limpiar: function () { ['f-tipo', 'f-mes', 'f-resp'].forEach(function (id) { var x = $(id); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } });
+          var pm = $('f-pmes'); if (pm.value !== PERS_DEF) { pm.value = PERS_DEF; pm.dispatchEvent(new Event('change', { bubbles: true })); } },
         resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' hallazgo' : ' hallazgos'); } } : null,
       botones: [$('x-lista')], mas: [[
         masBoton('Cómo se lee', 'Qué se revisa, quién lo ve y cómo se corrige', function () {
@@ -533,12 +561,70 @@ button,select,input,textarea{font:inherit;color:inherit}
     b.disabled = false;
   };
 
+  /* ---------- Por persona (453): la dirección, todo; cada gerente, su equipo; sin dinero (wf_sat_por_persona) ---------- */
+  var PERS = null, PERS_DEF = '';
+  async function cargaPers() {
+    try { PERS = await rpc('wf_sat_por_persona', { p_desde: null }); } catch (e) { PERS = null; }
+    $('caja-pers').hidden = !(PERS && PERS.ve);
+    $('f-pmes').hidden = !(PERS && PERS.ve);   // sin esto, su campo de FILTROS no sale
+    if (!PERS || !PERS.ve) return;
+    var yms = {}; (PERS.filas || []).forEach(function (f) { yms[f.ym] = 1; });
+    var Y = Object.keys(yms).map(Number).sort(function (a, b) { return b - a; }), cur = $('f-pmes').value;
+    $('f-pmes').innerHTML = '<option value="">Todos los meses</option>' + Y.map(function (ym) { return '<option value="' + ym + '">' + esc(MESES_L[(ym % 100) - 1] + ' ' + Math.floor(ym / 100)) + '</option>'; }).join('');
+    PERS_DEF = Y.length ? String(Y[0]) : '';
+    $('f-pmes').value = cur && yms[cur] ? cur : PERS_DEF;
+    pintaPers();
+    if (BAR && BAR.f) BAR.f.pinta();
+  }
+  function persFiltradas() {
+    var ym = +$('f-pmes').value || 0, G = {}, orden = [];
+    ((PERS && PERS.filas) || []).forEach(function (f) {
+      if (ym && f.ym !== ym) return;
+      var g = G[f.p]; if (!g) { g = G[f.p] = { n: f.n, tot: 0, conf: 0, sat_ok: 0, sat_tarde: 0, difiere: 0, no: 0, esp: 0, hall: 0 }; orden.push(f.p); }
+      ['tot', 'conf', 'sat_ok', 'sat_tarde', 'difiere', 'no', 'esp', 'hall'].forEach(function (k) { g[k] += +f[k] || 0; });
+    });
+    return orden.map(function (k) { return G[k]; }).sort(function (a, b) { return cmpTxt(a.n, b.n); });
+  }
+  function pintaPers() {
+    var L = persFiltradas(), t = 0, ok = 0, ym = +$('f-pmes').value || 0;
+    L.forEach(function (g) { t += g.tot; ok += g.sat_ok; });
+    $('pers-sub').textContent = (ym ? MESES_L[(ym % 100) - 1] + ' ' + Math.floor(ym / 100) : 'Todos los meses') + ' (cámbialo en FILTROS) · ' + L.length + (L.length === 1 ? ' persona' : ' personas') + ' · ' + t + (t === 1 ? ' tarea' : ' tareas') + (t ? ' · ' + Math.round(ok / t * 100) + ' % a tiempo según el SAT' : '');
+    // data-l: en el celular cada persona es una tarjeta con su etiqueta en cada número
+    var n = function (v, l, malo) { return '<td class="n' + (malo && v ? ' mal' : '') + '" data-l="' + l + '">' + (v ? '<b>' + v + '</b>' : '<span class="mut">0</span>') + '</td>'; };
+    $('lista-pers').innerHTML = L.map(function (g) {
+      return '<tr><td class="pn">' + esc(g.n) + '</td>' + n(g.tot, 'Terminadas') + n(g.conf, 'Confirmadas en el SAT') + n(g.sat_ok, 'A tiempo según el SAT')
+        + n(g.sat_tarde, 'Tarde según el SAT', true) + n(g.difiere, 'A tiempo en el WorkFlow y no en el SAT', true) + n(g.no, 'El SAT no la tiene', true)
+        + n(g.esp, 'Falta que el SAT la confirme') + n(g.hall, 'Hallazgos abiertos', true) + '</tr>';
+    }).join('');
+    $('pers-vacia').hidden = L.length > 0;
+  }
+  $('f-pmes').onchange = pintaPers;
+  $('x-pers').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = persFiltradas(), ym = +$('f-pmes').value || 0, titulo = 'Por persona contra el SAT · ' + (ym ? MESES_L[(ym % 100) - 1] + ' ' + Math.floor(ym / 100) : 'todos los meses');
+      var head = ['Persona', 'Terminadas', 'Confirmadas en el SAT', 'A tiempo según el SAT', 'Tarde según el SAT', 'A tiempo en el WorkFlow y no en el SAT', 'El SAT no la tiene', 'Falta que el SAT la confirme', 'Hallazgos abiertos'];
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Por persona');
+      ws.columns = [32, 12, 14, 14, 14, 18, 14, 16, 14].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' persona' : ' personas'), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      if (window.PROFASE_ORDEN) L = PROFASE_ORDEN.lista($('tabla-pers'), L);   // el mismo orden que la tabla
+      L.forEach(function (g, i) { ws.getRow(f0 + 1 + i).values = [g.n, g.tot, g.conf, g.sat_ok, g.sat_tarde, g.difiere, g.no, g.esp, g.hall]; });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Por persona contra el SAT ' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
   /* ---------- traer ---------- */
   async function carga() {
     DATOS = await rpc('cen_hall_lista', { p: {} }) || {};
     if (!DATOS.ve) throw new Error('Esta pantalla sale a quien trabaja clientes en el WorkFlow. Qué hacer: si la necesitas para tu trabajo, pídele a tu gerente que te asigne los clientes.');
     pintaFiltros(); pinta();
     $('todo').hidden = false;
+    cargaPers();
   }
   $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
   $('f-tipo').onchange = function () { TIPO = this.value; if (PAG) PAG.inicio(); pinta(); };
