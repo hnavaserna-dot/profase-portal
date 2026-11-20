@@ -120,8 +120,7 @@
       { k: 'tes-prestamos', v: 'tpre', t: 'Préstamos por entregar', d: 'Préstamos al personal ya autorizados, por entregar.' },   // Dora y la dirección
       { k: 'tes-reportes', v: 'trep', t: 'Reportes de cobranza', d: 'Cobranza por cliente y facturas del periodo.' },
       { k: 'tes-estado-cuenta', v: 'tbc', t: 'Estado de cuenta bancario', d: 'El Excel de saldos de Tesorería y la revisión de los depósitos.' },   // solo la dirección y Eva (Daniel, 2-nov-2026)
-      { k: 'tes-tdc', v: 'tdc', t: 'TDC DECOMSA', d: 'Los cargos de la tarjeta de crédito de DECOMSA y a quién va cada gasto.' },   // la dirección, Eva y Dora (Héctor Daniel Nava, 4-nov-2026; 248)
-      { k: 'access-facturas', v: 'axfac', t: 'Facturas del Access', d: 'Facturas, pagos y recordatorios como quedaron en el Access, para consultar.' }] },   // antes Access › Facturas
+      { k: 'tes-tdc', v: 'tdc', t: 'TDC DECOMSA', d: 'Los cargos de la tarjeta de crédito de DECOMSA y a quién va cada gasto.' }] },   // la dirección, Eva y Dora (Héctor Daniel Nava, 4-nov-2026; 248) · Facturas del Access: quitado del menú para todos el 20-nov-2026 (Héctor Daniel Nava: «y si quitamos eso de facturas del access? al cabo ya ni se usa»; «dale!»); sus facturas, pagos y recordatorios ya están en Facturación, Pagos, Recordatorios de pago y Reportes de cobranza
     { k: 'rep', t: 'Reportes', d: 'Los reportes para revisar los números del despacho.', subs: [
       { k: 'cartera', v: 'car', t: 'Depuración de CxC / CxP', d: 'Saldos por cobrar y por pagar de los clientes, según su Quo (antes «Cartera»).' },
       { k: 'variaciones', v: 'var', t: 'Variaciones / Movimientos', d: 'Variaciones contables mes a mes (antes «Variaciones»).' },
