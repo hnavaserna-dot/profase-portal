@@ -169,6 +169,21 @@
   var P = { sb: sb, DOMINIO: DOMINIO, perfil: null, uid: null, consulta: false };
   window.PORTAL = P;
 
+  /* ---- ¿El marco de una pantalla se está viendo? (revisión nocturna del 20-nov-2026) Una sola regla para todo el portal:
+     tiene caja en la página y el navegador lo pinta. Así vale igual si su pantalla se esconde del todo (display:none) o si
+     se esconde guardando lo ya acomodado (content-visibility:hidden y data-escondida en su marco, como Variaciones /
+     Movimientos desde ese día: al regresar, el navegador ya no vuelve a acomodar sus miles de renglones). ---- */
+  function marcoSeVe(f) {
+    if (!f || !f.getClientRects().length) return false;
+    // la pantalla que se esconde guardando lo acomodado marca su marco (data-escondida; también para los navegadores sin
+    // checkVisibility). La ventanita del chat escondida por un recorrido (visibility) sigue contando como que se ve: el chat
+    // no cambia en nada.
+    if (f.hasAttribute && f.hasAttribute('data-escondida')) return false;
+    try { if (f.checkVisibility && !f.checkVisibility()) return false; } catch (e) { /* navegador viejo */ }
+    return true;
+  }
+  P.marcoSeVe = marcoSeVe;
+
   /* ---- Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026, 16:40: «corrige este tipo de errores; que no se
      entrelapen»; el menú de la foto salía encima de la campanita abierta). Cada menú o lista que se despliega (el de la
      foto, la campanita, las tarjetas del menú, los filtros, «Con marca / Original», las opciones de un mensaje del
@@ -708,7 +723,7 @@
     [].forEach.call(document.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) { cosas.push(x.getBoundingClientRect()); });
     [].forEach.call(document.querySelectorAll('iframe'), function (f) {
       try {
-        if (!f.getClientRects().length || !f.contentDocument) return;
+        if (!marcoSeVe(f) || !f.contentDocument) return;
         var fr = f.getBoundingClientRect();
         [].forEach.call(f.contentDocument.querySelectorAll('.segv .sg-foot, [data-pie-ventana]'), function (x) {
           var q = x.getBoundingClientRect();
@@ -1263,7 +1278,7 @@
       for (var w = window, n = 0; n < 4; n++) {
         var p = null, fe = null;
         try { p = w.parent; fe = w.frameElement; } catch (e) { return; }   // otro origen: no se toca
-        if (!p || p === w || !fe || !fe.getClientRects().length) return;
+        if (!p || p === w || !fe || !marcoSeVe(fe)) return;
         var r = fe.getBoundingClientRect(), alto = p.innerHeight, tope = topeFijo(p.document);
         if (r.bottom > alto + 1 && r.top > tope + 1) {
           try { p.scrollBy(0, Math.min(r.top - tope, r.bottom - alto)); } catch (e) { /* nada */ }
@@ -2887,13 +2902,15 @@
   var dormida = false;
   function aLaVista() {
     if (document.hidden) return false;
-    try { var fe = window.frameElement; if (fe && !fe.getClientRects().length) return false; } catch (e) { /* otro origen: pregunta */ }
+    try { var fe = window.frameElement; if (fe && !marcoSeVe(fe)) return false; } catch (e) { /* otro origen: pregunta */ }
     return true;
   }
   // La misma regla para los relojes propios de cada pantalla (revisión de la noche del 10-nov-2026: Accesos, Cambios al
   // portal, la Cartera y el Cotizador seguían preguntando con su marco escondido): una sola versión.
   P.aLaVista = aLaVista;
   function despierta() { if (dormida && aLaVista()) { dormida = false; vuelta(); } }
+  // la pantalla que se esconde guardando lo acomodado no cambia de tamaño al volver: quien la enseña la despierta (20-nov-2026)
+  P.despierta = despierta;
   function arranca() {
     if (reloj) return;
     reloj = setInterval(function () { if (aLaVista()) { dormida = false; vuelta(); } else dormida = true; }, CADA);
