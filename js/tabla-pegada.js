@@ -221,12 +221,23 @@
         x.pag.forEach(function (c) { c[0].classList.add('tp-clip'); if (c[1]) c[0].classList.add('tp-fr'); });
       }
       x.tb.classList.add('tp-pega');   // también si la tabla de ese recuadro se volvió a pintar
-      var v = [m.a, m.mx, m.b, x.fondo].join('|');
-      if (v !== x.v) {
-        x.v = v; var s = x.w.style;
-        s.setProperty('--tp-b', m.b + 'px'); s.setProperty('--tp-a', m.a + 'px'); s.setProperty('--tp-z', (m.a + m.mx) + 'px'); s.setProperty('--tp-m', m.mx + 'px');
-        if (x.fondo) { x.tb.classList.add('tp-fondo'); s.setProperty('--tp-fondo', x.fondo); }
-        else { x.tb.classList.remove('tp-fondo'); s.removeProperty('--tp-fondo'); }
+      // 21-nov-2026 (revisión nocturna): lo que solo usa el renglón de los títulos (dónde empieza y acaba de moverse, cuánto y
+      // su fondo) va en ese renglón y no en el recuadro: una variable puesta en el recuadro la heredan todos los renglones de
+      // la tabla y, cada vez que la tabla crecía (Variaciones › «Resueltas» agrega sus miles de renglones por partes), el
+      // navegador volvía a calcular los estilos de toda la tabla (hasta 1.4 s trabado en «Comprobar real»). En el recuadro
+      // solo se queda --tp-b (el alto de la barra), que usa su view-timeline-inset, y solo se escribe si cambia.
+      var tr0 = x.tb.tHead && x.tb.tHead.rows[0];
+      var v = [m.a, m.mx, m.b, x.fondo, !!tr0].join('|');
+      if (v !== x.v || (tr0 && x.vr !== tr0)) {
+        var s = x.w.style, rs = tr0 ? tr0.style : s;
+        if (x.vb !== m.b) { x.vb = m.b; s.setProperty('--tp-b', m.b + 'px'); }
+        if (tr0 && x.vr !== tr0) {   // un renglón nuevo (la tabla se volvió a pintar) o la primera vez: lo de antes, fuera del recuadro
+          x.vr = tr0; s.removeProperty('--tp-a'); s.removeProperty('--tp-z'); s.removeProperty('--tp-m'); s.removeProperty('--tp-fondo');
+        }
+        x.v = v;
+        rs.setProperty('--tp-a', m.a + 'px'); rs.setProperty('--tp-z', (m.a + m.mx) + 'px'); rs.setProperty('--tp-m', m.mx + 'px');
+        if (x.fondo) { x.tb.classList.add('tp-fondo'); rs.setProperty('--tp-fondo', x.fondo); }
+        else { x.tb.classList.remove('tp-fondo'); rs.removeProperty('--tp-fondo'); }
         if (x.b && x.fondoB) x.b.style.setProperty('--tp-fondo', x.fondoB);
       }
     });
