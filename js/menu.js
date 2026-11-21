@@ -198,9 +198,12 @@
        (p; el botón de la vista dice cuál está abierta con data-sub, lo pone qch_tab.js). Solo a quien la base deja
        (qchat_estado(), 326_qchat.sql); el cotizador y las membresías, a quien ya los tiene (es_quo()). La clave «qchat» no
        cambió (las ligas de la campanita y los recorridos siguen igual). */
-    { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: cotizaciones, membresías y su soporte (Q Chat).', subs: [
+    /* «Clientes Quo» (21-nov-2026; Héctor Daniel Nava: «en el CRM… en el menú QUO»; «súper fácil de administrar»): antes
+       «Control de membresías»; la misma clave (quo-membresias) y la misma página, que ahora abre en cada cliente de los
+       sistemas Quo con su membresía, su cuenta, sus usuarios y lo de Gold. Va primero. */
+    { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: sus clientes, cotizaciones y su soporte (Q Chat).', subs: [
+      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Clientes Quo', d: 'Cada cliente de los sistemas Quo: su membresía y sus pagos, su cuenta, sus usuarios y lo de Gold.' },
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
-      { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Control de membresías', d: 'Membresías y sus pagos.' },
       { k: 'qchat', v: 'qch', p: 'conv', t: 'Conversaciones', d: 'Q Chat: la fila, lo que contesta la asistente y lo que atiende el equipo, por chat o llamada.' },
       { k: 'qchat-tickets', v: 'qch', p: 'tk', t: 'Tickets a desarrollo', d: 'Q Chat: lo que solo se arregla cambiando el sistema, con su folio para el cliente.' },
       { k: 'qchat-eficiencia', v: 'qch', p: 'efi', t: 'Eficiencia del soporte', d: 'Q Chat: lo que resolvió la asistente, lo que atendió cada persona y la espera.' }] },

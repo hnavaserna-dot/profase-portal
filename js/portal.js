@@ -1599,7 +1599,7 @@
      si la base no responde en 1.5 s, sigue sin anotar. */
   var NOMBRE_PAG = { director: 'Dirección', gerentes: 'Vista del equipo', contadores: 'Mi WorkFlow', cartera: 'Depuración de CxC / CxP',
     cajachica: 'Caja chica', variaciones: 'Variaciones / Movimientos', activofijo: 'Reclasificación de activo fijo', 'quo-cotizador': 'Cotizador QUO',
-    'quo-membresias': 'Membresías QUO', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos', calendario: 'Calendario', cambios: 'Cambios al portal', chat: 'Chat' };
+    'quo-membresias': 'Clientes Quo', cotizador: 'Cotizador DECOMSA', accesos: 'Accesos', calendario: 'Calendario', cambios: 'Cambios al portal', chat: 'Chat' };
   P.pagina = function () {
     var n = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
     return NOMBRE_PAG[n] || n || 'Portal';
