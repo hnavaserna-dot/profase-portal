@@ -518,6 +518,9 @@ tr.fila:hover td{background:var(--navy-soft)}
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var ROL = '', RREAL = '', YO = '', CONSULTA = false, MODO = 'practica', VEO_RES = false;
+  // 474: quien coordina la operación (ini_coordino(), la lista de 461; hoy Elisa Mata) quita el PDF que el CRM marcó como de
+  // otra razón social o de otro mes y sube el correcto en una tarea rechazada o con un PDF marcado (la base lo vuelve a revisar)
+  var COORD = false;
   var A = [], POR_ID = {}, ASIG = {}, ASIGU = {}, mostrar = PAGINA, ABIERTA = null, DOCS = {};
   // 441: también el timbrado de nómina (los recibos y la lista de raya de Quo Nominita); la base lo decide igual (env_preparar)
   var ENV = { visible: false, modo: 'apagado' }, ENVIABLES = { 22: 1, 19: 1, 37: 1, 129: 1, 151: 1, 152: 1, 153: 1, 149: 1, 155: 1, 156: 1, 164: 1 }, ENVD = {}, ENV_IDS = [], ENV_TODOS = [];
@@ -595,8 +598,11 @@ tr.fila:hover td{background:var(--navy-soft)}
         // 407: las empresas que ve solo para consultar (auditoría); a quien no es del equipo de auditoría, vacío
         RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_aud_mis_empresas').then(null, nada) : Promise.resolve({ data: [] }),
         // 415: las actividades que ve solo para consultar («También consulta»: el Cálculo de impuestos del cliente de su DyP…)
-        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_tc_mis_acts').then(null, nada) : Promise.resolve({ data: [] })]);
-      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7], au = R0[8], tc = R0[9];
+        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('wf_tc_mis_acts').then(null, nada) : Promise.resolve({ data: [] }),
+        // 474: ¿coordina la operación? (solo a los contadores; la dirección y los gerentes ya pueden todo)
+        RREAL === 'contador' && !CONSULTA ? P.sb.rpc('ini_coordino').then(null, nada) : Promise.resolve({ data: false })]);
+      var v = R0[1], es = R0[2], ce = R0[3], cm = R0[4], de = R0[5], pe = R0[6], ra = R0[7], au = R0[8], tc = R0[9], co = R0[10];
+      COORD = !co.error && co.data === true;
       AUDS = {}; if (!au.error && Array.isArray(au.data)) au.data.forEach(function (x) { AUDS[x] = 1; });
       HAY_AUD = Object.keys(AUDS).length > 0;
       TCS = {}; if (!tc.error && Array.isArray(tc.data)) tc.data.forEach(function (x) { TCS[+x] = 1; });
@@ -1044,6 +1050,8 @@ tr.fila:hover td{background:var(--navy-soft)}
   function verVista(k) { if (k === 'aud' ? !HAY_AUD : !HAY_TC) return; $('f-aud').value = k; opciones(); mostrar = PAGINA; pinta(); if (BAR && BAR.f) BAR.f.pinta(); }
   window.__verAud = function () { verVista('aud'); };
   window.__verTc = function () { verVista('tc'); };
+  // 474: quien coordina sube en una tarea rechazada (o, al pintar los documentos, en una con un PDF marcado: candPinta)
+  function coordSube(a) { return COORD && !CONSULTA && !soloVer(a) && a.estatus === 3; }
   function cierra2(a) { return a.aut_nombre ? soyAut(a) : soyResp(a); }   // quien termina o rechaza (además de gerentes y dirección)
   // las mismas reglas que la base (portal/sql/44_wf_trabajo_ajustes.sql); la base es la que manda
   function puedeEstatus(a, e) {
@@ -1162,7 +1170,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     var pidePz = RREAL === 'contador' && !CONSULTA && !cerrada(a) && !aud;
     var envia = ENV.visible && !CONSULTA && ENVIABLES[a.actividad_id] && !aud;
     var emes = CONF.edita && !CONSULTA;
-    var sube = edita && (!a.reservado || VEO_RES);
+    var sube = (edita || coordSube(a)) && (!a.reservado || VEO_RES);
     var oculta = a.reservado && !VEO_RES;
     // lo de abajo del estatus: el aviso de lo que se guarda, «Pedir autorización» y la pausa del contador
     var d = document.createElement('div');
@@ -1192,8 +1200,7 @@ tr.fila:hover td{background:var(--navy-soft)}
         return '<div class="wfs-pl"><b>' + esc(tit) + '</b>' + plaLista(L.slice()) + '</div>';
       }).join('');
     var docsTab = '<div id="docs-in"><div class="vacio">Revisando…</div></div>'
-      + (sube ? '<div class="drop" id="fe-drop" data-suelta="Arrastra aquí tus archivos"><b>Arrastra aquí tus archivos</b>o<br><button class="sg-b2" type="button" id="fe-escoge">Escoger archivos</button>'
-        + '<input type="file" id="fe-arch" multiple hidden aria-label="Escoger documentos"><small id="fe-sube-msg">PDF, Excel, XML, fotos o lo que pida la actividad</small></div>' : '');
+      + (sube ? dropHtml() : '');
     var tabs = [];
     if (a.dev_caso && !aud) tabs.push({ id: 'dev', t: 'Devolución', html: '<span id="dev-n" hidden></span><div id="dev-in"><div class="vacio">Revisando…</div></div>' });
     if (a.proy_caso && !aud) tabs.push({ id: 'proy', t: 'Proyecto', html: '<div id="proy-in"><div class="vacio">Revisando…</div></div>' });
@@ -2374,7 +2381,8 @@ tr.fila:hover td{background:var(--navy-soft)}
     var c;
     try { c = await candDe(a); } catch (e) { return; }
     if (ABIERTA !== a.id || !c || !c.tipo || !$('docs-in')) return;
-    var por = {}; (c.docs || []).forEach(function (x) { por[x.doc] = x; });
+    var por = {}, hayMalo = (c.docs || []).some(function (x) { return x.ok === false; });
+    (c.docs || []).forEach(function (x) { por[x.doc] = x; });
     (L || []).forEach(function (d) {
       var el = document.querySelector('[data-cand="' + d.id + '"]'), x = por[d.id]; if (!el) return;
       el.innerHTML = !x ? (esPdf(d) && d.en_portal ? '<span class="tag">Revisando contra el SAT…</span>' : '')
@@ -2382,14 +2390,18 @@ tr.fila:hover td{background:var(--navy-soft)}
         : x.ok === false ? '<span class="tag cno">✗ ' + esc(x.motivo || 'No es de este cliente o de este mes') + '</span>'
         : (x.motivo ? '<span class="tag">' + esc(x.motivo) + '</span>' : (x.resumen ? '<span class="tag">' + esc(x.resumen) + '</span>' : ''));
       // el PDF que el CRM marcó como de otra razón social o de otro mes se quita aunque haya venido del Access (436: lo quitan
-      // la dirección, un gerente, el responsable, quien autoriza o quien lo cubre; la base lo vuelve a revisar)
+      // la dirección, un gerente, el responsable, quien autoriza o quien lo cubre; desde 474, también quien coordina la
+      // operación; la base lo vuelve a revisar). Si ya trae su «Borrar» (el del portal que subió o un gerente), no se repite.
       var acc = el.closest('.doc') && el.closest('.doc').querySelector('.acc');
-      if (x && x.ok === false && d.origen !== 'portal' && !CONSULTA && (jefe() || soyResp(a) || soyAut(a))
+      if (x && x.ok === false && !CONSULTA && !soloVer(a) && (jefe() || soyResp(a) || soyAut(a) || COORD)
           && acc && !acc.querySelector('[data-dborra]')) {
         acc.insertAdjacentHTML('beforeend', '<button class="btn peligro" type="button" data-dborra="' + esc(d.id)
           + '" title="No es de este cliente o de este mes: quítalo de la tarea">Borrar</button>');
       }
     });
+    // 474: quien coordina, en una tarea con un PDF marcado (aunque no esté rechazada), también sube el correcto; ya puesta, la
+    // zona se queda mientras la ficha esté abierta (aunque quite el marcado). La base lo vuelve a revisar (wf_doc_nuevo).
+    if (hayMalo && COORD && !CONSULTA && !soloVer(a) && (!a.reservado || VEO_RES) && !$('fe-drop')) $('docs-in').insertAdjacentHTML('afterend', dropHtml());
     var caja = '';
     if (c.hallazgo) caja = '<div class="cand mal"><b>Centauro:</b> ' + esc(c.hallazgo.diagnostico) + ' <b>Qué hacer:</b> ' + esc(c.hallazgo.que_hacer) + '</div>';
     else if (c.sat && c.sat.estado === 'confirmada') caja = '<div class="cand bien"><b>Confirmada en el SAT</b>' + (c.sat.numero ? ' · número de operación ' + esc(c.sat.numero) : '')
@@ -2423,6 +2435,11 @@ tr.fila:hover td{background:var(--navy-soft)}
       }
       if (ABIERTA === a.id) candPinta(a, L);
     }
+  }
+  // «Arrastra aquí tus archivos» de Documentos (una sola pieza: la ficha y, para quien coordina, candPinta)
+  function dropHtml() {
+    return '<div class="drop" id="fe-drop" data-suelta="Arrastra aquí tus archivos"><b>Arrastra aquí tus archivos</b>o<br><button class="sg-b2" type="button" id="fe-escoge">Escoger archivos</button>'
+      + '<input type="file" id="fe-arch" multiple hidden aria-label="Escoger documentos"><small id="fe-sube-msg">PDF, Excel, XML, fotos o lo que pida la actividad</small></div>';
   }
   function esPdf(d) { return /\.pdf$/i.test(d.nombre || ''); }
   // Excel, CSV, XML y texto: la misma vista en grande del chat (js/vista-archivos.js, PROFASE_VISTA; una sola versión)
