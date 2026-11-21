@@ -1,0 +1,564 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  // Nadie de fuera mete el CRM dentro de su página (auditoría externa del 11-nov-2026, H-04; Héctor Daniel Nava: «3 A»).
+  // GitHub Pages no deja poner la protección del navegador (X-Frame-Options / frame-ancestors), así que se hace aquí,
+  // antes que todo: si la página va en un marco de otro sitio, no se enseña ni se carga nada más. Los marcos del mismo
+  // portal (las pantallas dentro de su vista) sí. Única excepción: la llamada del soporte de Quo (sala.html?marca=quo),
+  // que va dentro de la burbuja de los sistemas Quo.
+  if (window.top !== window.self && !(/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search))) {
+    var mismo = false;
+    try { mismo = window.top.location.host === location.host; } catch (e) { mismo = false; }
+    if (!mismo) {
+      try { var st = document.createElement('style'); st.textContent = 'html{display:none!important}'; (document.head || document.documentElement).appendChild(st); } catch (e) { /* nada */ }
+      try { window.stop(); } catch (e) { /* navegador viejo */ }
+      return;
+    }
+  }
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Vigía fiscal QUO</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=237b899c6f"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=f576fcf525"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script>
+<style>
+/* Portal PROFASE · QUO › Vigía fiscal (Héctor Daniel Nava, 21-nov-2026: «quiero que me ayudes a que siempre esté actualizado quo
+   sistemas; noticias relevantes y además que afectan de forma directa e indirecta a nuestro sistema, por ejemplo de forma fiscal
+   y demás para que siempre estemos a la vanguardia»; «también a cadengo»; «también a Frank y HNR»). Cada noche el vigía revisa
+   los cambios fiscales, laborales y legales, los compara con el código de los sistemas Quo y los deja aquí: qué cambió, a qué
+   sistema le pega, si es iniciativa, publicado o vigente, su fecha límite, si el código ya lo cumple y el pedido de cambio para
+   quien desarrolla. Lo ven Héctor Daniel Nava, Fernando Cadengo, Francisco Rivera y Héctor Nava Ramos (solo consulta); marcan
+   «Atendido» o «Descartado» los tres primeros (vq_estado(), portal/sql/483_vigia_quo.sql). La página solo llama sus funciones
+   vq_*: nunca lee ni escribe tablas y nunca carga nada (eso lo hace la acción con la llave secreta). */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+a{color:var(--navy)}:root[data-theme="dark"] a{color:#9CC0F2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) a{color:#9CC0F2}}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:760px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#14233F}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.peligro{color:var(--red);border-color:var(--red)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabla tr.fila:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+/* cuándo revisó el vigía */
+.tab{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:16px 0;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.tab .dat{display:flex;flex-wrap:wrap;gap:6px 18px;min-width:0}
+.tab .dat div{min-width:0}
+.tab .dat b{display:block;font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.tab .dat span{font-weight:600;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .tit{font-weight:700}
+.tabla .idea{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:70ch}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums}
+#vq-bar{margin:0 0 12px}
+.vacio{padding:20px 16px;color:var(--muted)}
+.fechas{list-style:none;margin:0;padding:4px 16px 10px;display:grid;gap:0}
+.fechas li{border-bottom:1px solid var(--line);padding:10px 0;display:grid;grid-template-columns:minmax(96px,max-content) minmax(0,1fr);gap:4px 14px;min-width:0}
+.fechas li:last-child{border-bottom:0}
+.fechas .f{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fechas .q{min-width:0;overflow-wrap:anywhere}
+.pedido{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px;font-size:13.5px}
+.fuentes{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.fuentes li{overflow-wrap:anywhere}
+@media (max-width:760px){
+  .tabla thead{display:none}
+  .tabla,.tabla tbody,.tabla tr,.tabla td{display:block;width:100%}
+  .tabla tr.fila{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla td{border:0;padding:2px 0}
+  .tabla .idea{max-width:none}
+  .fechas li{grid-template-columns:minmax(0,1fr)}
+}
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:640px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:19px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+.pregunta>div>.acciones:last-child{position:sticky;bottom:-18px;z-index:2;background:var(--surface);margin:16px -18px -18px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.campo{display:grid;gap:4px;margin:0 0 10px;min-width:0}
+.campo label{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0;width:100%;min-height:110px;resize:vertical;line-height:1.45}
+.msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere;margin:0 0 10px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.bit{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.bit li{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.bit b{color:var(--ink);font-weight:600}
+details.hist{margin:0 0 24px}
+details.hist summary{cursor:pointer;font-weight:700;padding:6px 0}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:700px){
+  input,select,textarea,.campo textarea{font-size:16px}
+  .band h1{font-size:22px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">QUO</div>
+      <h1>Vigía fiscal</h1>
+      <p>Los cambios de ley que piden ajustar los sistemas Quo: qué cambió, a cuál le pega, si el código ya lo cumple y su fecha límite.</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="nota" id="consulta" hidden>Solo consulta: puedes ver todo, pero no cambiar nada.</div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <section class="tab" id="tablero" aria-label="Cuándo revisó el vigía">
+      <div class="dat" id="tab-dat"></div>
+    </section>
+    <div class="nota info" id="vacio" hidden>Todavía no hay asuntos. Cada noche, a las 22:23, el vigía revisa el DOF, el SAT, el IMSS, el INFONAVIT, el salario mínimo, la UMA y las reformas, y lo que afecte a los sistemas Quo entra aquí solo, con su pedido de cambio.</div>
+
+    <div id="vq-bar" hidden>
+      <input type="search" id="f-q" placeholder="Busca por lo que cambió, el sistema o la ley" aria-label="Buscar">
+      <button class="btn" type="button" data-excel id="x-lista">Excel</button>
+    </div>
+    <div hidden><select id="f-sis" aria-label="Qué sistema"></select><select id="f-norma" aria-label="Cómo va la norma"></select></div>
+    <section id="kpis" aria-label="Qué ver" hidden></section>
+    <section class="caja" id="caja-lista">
+      <header><h2 id="t-lista">Por atender</h2></header>
+      <div class="desliza"><table class="tabla" id="tabla">
+        <thead><tr><th>Impacto</th><th>Sistema</th><th>Qué cambió</th><th>Cómo va</th><th>Fecha límite</th><th>En el código</th></tr></thead>
+        <tbody id="lista"></tbody>
+      </table></div>
+      <div class="vacio" id="lista-vacia" hidden></div>
+      <nav class="pgn" id="pag" aria-label="Páginas"></nav>
+    </section>
+
+    <section class="caja" id="caja-fechas" aria-labelledby="t-fechas">
+      <header><h2 id="t-fechas">Lo que viene</h2></header>
+      <ul class="fechas" id="fechas"></ul>
+      <div class="vacio" id="fechas-vacia" hidden>Todavía no hay fechas en el calendario.</div>
+    </section>
+
+    <details class="hist" id="hist"><summary>Revisiones del vigía</summary><div id="hist-c"></div></details>
+    <p class="pie">El vigía no cambia nada en los sistemas Quo: solo lee su código para decir si ya se cumple. Lo que encontró trae su fuente; si solo hay notas de prensa, dice «sin fuente oficial». Una iniciativa todavía no obliga: se vigila hasta que se publique.</p>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, CONSULTA = false, PUEDE = false, DATOS = null, VISTA = 'atender', SIS = '', NORMA = '', Q = '', SEL = null, PAG = null, ABIERTO = null;
+  var SISTEMAS = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita', sistemasquo: 'Sistemas QUO', varios: 'Varios sistemas Quo' };
+  var NORMAS = { iniciativa: 'Iniciativa', publicado: 'Publicado', vigente: 'Vigente' };
+  var NIVELES = { alto: 'Impacto alto', medio: 'Impacto medio', bajo: 'Impacto bajo' };
+  var abierto = function (a) { return a.estado === 'abierto'; };
+  var VISTAS = [
+    ['atender', 'Por atender', function (a) { return abierto(a) && a.nivel !== 'bajo'; }, 'naranja'],
+    ['alto', 'Impacto alto', function (a) { return abierto(a) && a.nivel === 'alto'; }, 'rojo'],
+    ['pronto', 'Vencen en 30 días', function (a) { return abierto(a) && a.dias != null && a.dias <= 30; }, 'ambar'],
+    ['falta', 'El código no lo cumple', function (a) { return abierto(a) && a.cumple === 'no'; }, 'rojo'],
+    ['iniciativas', 'Iniciativas en vigilancia', function (a) { return abierto(a) && a.norma === 'iniciativa'; }, 'azul'],
+    ['bajo', 'Contexto (impacto bajo)', function (a) { return abierto(a) && a.nivel === 'bajo'; }, 'gris'],
+    ['atendidos', 'Atendidos', function (a) { return a.estado === 'atendido'; }, 'verde'],
+    ['descartados', 'Descartados', function (a) { return a.estado === 'descartado'; }, 'gris'],
+    ['todos', 'Todos', function () { return true; }, 'gris']
+  ];
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fecha(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p.length < 3 ? String(s) : (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function diaSem(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return DIAS[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
+  function fechaHora(s) { if (!s) return ''; try { return window.PROFASE_HORA ? window.PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function falla(e, que) { return window.PORTAL && PORTAL.falla ? PORTAL.falla(e, que) : (String((e && (e.message || e.error_description || e.msg)) || '').replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 8000); avisa.ult = { t: t, en: Date.now() }; try { if (VI) VI.pie(t); } catch (e) {} }
+  function error(t) { t = window.PORTAL && PORTAL.conQueHacer ? PORTAL.conQueHacer(t) : t; $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, /Qué hacer/.test(t) ? 30000 : 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function asuntos() { return (DATOS && DATOS.asuntos) || []; }
+  function vista(k) { return VISTAS.filter(function (v) { return v[0] === k; })[0] || VISTAS[0]; }
+
+  // en palabras: el impacto, cómo va la norma, la fecha límite y si el código ya lo cumple
+  function nivel(a) { return chip(NIVELES[a.nivel] || a.nivel, a.nivel === 'alto' ? 'mal' : a.nivel === 'medio' ? 'na' : ''); }
+  function norma(a) {
+    return chip(NORMAS[a.norma] || a.norma, a.norma === 'vigente' ? 'mal' : a.norma === 'publicado' ? 'na' : 'az')
+      + (a.vigor ? '<div class="mut">' + (a.norma === 'vigente' ? 'Vigente desde el ' : 'Entra en vigor el ') + esc(fecha(a.vigor)) + '</div>' : '')
+      + (a.oficial ? '' : '<div class="mut">Sin fuente oficial todavía</div>');
+  }
+  function limite(a) {
+    if (!a.limite) return chip('Sin fecha límite', '');
+    if (a.estado !== 'abierto') return '<span class="mut">' + esc(fecha(a.limite)) + '</span>';
+    var d = a.dias, c = d < 0 ? 'mal' : d <= 15 ? 'mal' : d <= 30 ? 'ojo' : 'az';
+    return chip(d < 0 ? (d === -1 ? 'Venció ayer' : 'Venció hace ' + (-d) + ' días') : d === 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : 'Vence en ' + d + ' días', c)
+      + '<div class="mut">' + esc(fecha(a.limite)) + ' · ' + esc(diaSem(a.limite)) + '</div>';
+  }
+  function cumple(a) {
+    if (a.estado === 'atendido') return chip('Atendido', 'ok');
+    if (a.estado === 'descartado') return chip('Descartado', '');
+    return a.cumple === 'si' ? chip('Ya lo contempla', 'ok') : a.cumple === 'no' ? chip('Todavía no', 'mal') : chip('No se pudo confirmar', 'ojo');
+  }
+
+  /* ---------- pintar ---------- */
+  function cuenta(k) { var fn = vista(k)[2]; return asuntos().filter(fn).length; }
+  var BAR = null, LISTA = [], COLA = [];
+  function barra() {
+    if (BAR || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BAR = PROFASE_PILAS.barra($('vq-bar'), { caja: true, buscar: $('f-q'),
+      filtros: d ? { grupos: [{ t: 'ASUNTOS', campos: [d($('f-sis'), { t: 'QUÉ SISTEMA' }), d($('f-norma'), { t: 'CÓMO VA LA NORMA' })] }],
+        limpiar: function () { ['f-sis', 'f-norma'].forEach(function (id) { var x = $(id); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + LISTA.length + (LISTA.length === 1 ? ' asunto' : ' asuntos'); } } : null,
+      botones: [$('x-lista')] });
+  }
+  function pintaKpis() {
+    barra();
+    if (!window.PROFASE_PILAS) return;
+    PROFASE_PILAS.pinta($('kpis'), {
+      titulo: 'Tu trabajo · vigía fiscal de los sistemas Quo',
+      pilas: VISTAS.filter(function (v) { return v[0] === 'atender' || v[0] === 'todos' || cuenta(v[0]); }).map(function (v) {
+        var n = cuenta(v[0]);
+        return { k: v[0], t: v[1], n: n, tono: v[3], on: VISTA === v[0], tag: PUEDE && n && (v[0] === 'atender' || v[0] === 'pronto') ? 'Te toca' : '' };
+      }),
+      alPicar: function (k) { VISTA = VISTA === k ? 'atender' : k; if (PAG) PAG.inicio(); pinta(); },
+      boton: { t: 'Empezar a revisar', n: LISTA.length, alPicar: function () { if (!LISTA.length) return; COLA = LISTA.map(function (a) { return a.id; }); ficha(COLA[0]); } },
+      nota: 'Abre el primero de «' + vista(VISTA)[1] + '»; en su ficha, «Siguiente ›» pasa al que sigue.'
+    });
+    if (BAR && BAR.f) BAR.f.pinta();
+  }
+  function pintaOpciones() {
+    var hs = {}, hn = {};
+    asuntos().forEach(function (a) { hs[a.sistema] = (hs[a.sistema] || 0) + 1; hn[a.norma] = (hn[a.norma] || 0) + 1; });
+    $('f-sis').innerHTML = '<option value="">Todos los sistemas</option>' + Object.keys(SISTEMAS).filter(function (k) { return hs[k]; })
+      .map(function (k) { return '<option value="' + k + '"' + (SIS === k ? ' selected' : '') + '>' + esc(SISTEMAS[k]) + ' (' + hs[k] + ')</option>'; }).join('');
+    $('f-norma').innerHTML = '<option value="">Como vaya la norma</option>' + Object.keys(NORMAS).filter(function (k) { return hn[k]; })
+      .map(function (k) { return '<option value="' + k + '"' + (NORMA === k ? ' selected' : '') + '>' + esc(NORMAS[k]) + ' (' + hn[k] + ')</option>'; }).join('');
+  }
+  function filtradas() {
+    var fn = vista(VISTA)[2], q = norm(Q).split(/\s+/).filter(Boolean);
+    return asuntos().filter(function (a) {
+      if (!fn(a)) return false;
+      if (SIS && a.sistema !== SIS) return false;
+      if (NORMA && a.norma !== NORMA) return false;
+      if (!q.length) return true;
+      var t = norm([a.titulo, a.que_cambio, a.impacto, a.pedido, SISTEMAS[a.sistema] || '', NORMAS[a.norma] || ''].join(' '));
+      return q.every(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+  function pintaTablero() {
+    var c = (DATOS.corridas || [])[0], h = [];
+    h.push('<div><b>Última revisión</b><span>' + (c ? esc(fechaHora(c.hora)) : 'Todavía no') + '</span><div class="mut">Revisa sola cada noche a las 22:23</div></div>');
+    if (c) h.push('<div><b>En esa revisión</b><span>' + esc(c.nuevos) + (c.nuevos === 1 ? ' nuevo' : ' nuevos') + ' · ' + esc(c.cambios) + (c.cambios === 1 ? ' cambio' : ' cambios') + '</span>' + (c.nota ? '<div class="mut">' + esc(c.nota) + '</div>' : '') + '</div>');
+    var abiertos = asuntos().filter(abierto).length;
+    h.push('<div><b>Abiertos</b><span>' + abiertos + (abiertos === 1 ? ' asunto' : ' asuntos') + '</span></div>');
+    $('tab-dat').innerHTML = h.join('');
+  }
+  function pinta() {
+    var v = vista(VISTA), l = filtradas(); LISTA = l;
+    pintaKpis();
+    $('t-lista').textContent = v[1];
+    var pag = PAG ? PAG.corta(l) : l;
+    $('lista').innerHTML = pag.map(function (a) {
+      return '<tr class="fila' + (SEL === a.id ? ' sel' : '') + '" tabindex="0" data-id="' + a.id + '">'
+        + '<td>' + nivel(a) + '</td>'
+        + '<td>' + esc(SISTEMAS[a.sistema] || a.sistema) + '</td>'
+        + '<td><div class="tit">' + esc(a.titulo) + '</div><div class="idea">' + esc(a.que_cambio) + '</div></td>'
+        + '<td>' + norma(a) + '</td>'
+        + '<td class="num">' + limite(a) + '</td>'
+        + '<td>' + cumple(a) + '</td></tr>';
+    }).join('');
+    $('lista-vacia').hidden = l.length > 0;
+    $('lista-vacia').textContent = (Q || SIS || NORMA) ? 'Nada coincide con tu búsqueda.' : { atender: 'No hay nada por atender: los sistemas Quo están al día con lo que ha encontrado el vigía.',
+      pronto: 'Nada vence en los próximos 30 días.', falta: 'No hay nada que el código no cumpla.', atendidos: 'Todavía no se marca nada como atendido.' }[VISTA] || 'No hay asuntos aquí.';
+  }
+  function pintaFechas() {
+    var f = DATOS.fechas || [];
+    $('fechas-vacia').hidden = f.length > 0;
+    $('fechas').innerHTML = f.map(function (x) {
+      return '<li><span class="f">' + esc(fecha(x.fecha)) + '<div class="mut">' + (x.dias < 0 ? 'Ya pasó' : x.dias === 0 ? 'Hoy' : x.dias === 1 ? 'Mañana' : 'En ' + x.dias + ' días') + '</div></span>'
+        + '<span class="q">' + esc(x.que) + '<div class="mut">' + esc(SISTEMAS[x.sistema] || '') + (x.fuente ? ' · <a href="' + esc(x.fuente) + '" target="_blank" rel="noopener noreferrer">Fuente</a>' : '') + '</div></span></li>';
+    }).join('');
+  }
+  function pintaHist() {
+    var c = DATOS.corridas || [];
+    $('hist').hidden = !c.length;
+    $('hist-c').innerHTML = '<ul class="bit">' + c.map(function (x) {
+      return '<li><b>' + esc(fechaHora(x.hora)) + '</b> · ' + esc(x.nuevos) + ' nuevos · ' + esc(x.cambios) + ' cambios · ' + esc(x.avisos) + ' avisos' + (x.nota ? '<br>' + esc(x.nota) : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  /* ---------- ventanas ---------- */
+  var antes = null;
+  function abre(html, foco) {
+    antes = document.activeElement;
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    var tecl = true; try { tecl = P.conTeclado ? !!P.conTeclado() : true; } catch (e) {}
+    try { (foco && tecl ? $(foco) : $('dlg-c').querySelector('button')).focus({ preventScroll: true }); } catch (e) {}
+    try { $('dlg-c').scrollTop = 0; } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('vigia', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = ''; ABIERTO = null;
+    try { if (P.escribiendo) P.escribiendo('vigia', false); } catch (e) {}
+    try { if (antes) antes.focus(); } catch (e) {}
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) cierra(); });
+
+  /* ---------- la ficha de un asunto (la ventana común ancha de js/seguimiento.js) ---------- */
+  var VI = null;
+  async function ficha(id) {
+    try { var a = await rpc('vq_ficha', { p_id: id }); ABIERTO = id; SEL = id; pintaFicha(a); }
+    catch (e) { error(falla(e)); }
+  }
+  function dlgFuera() { if (!$('dlg').hidden) { $('dlg').hidden = true; $('dlg-c').innerHTML = ''; } }
+  function fichaFuera() { if (VI) { var v = VI; VI = null; try { v.cerrar(); } catch (e) {} } }
+  function aVentana(fn) { return function () { fichaFuera(); fn(); }; }
+  function pintaFicha(a) {
+    dlgFuera(); fichaFuera();
+    var sis = SISTEMAS[a.sistema] || a.sistema, reciente = avisa.ult && Date.now() - avisa.ult.en < 6000 ? avisa.ult.t : '';
+    var vencido = a.estado === 'abierto' && a.dias != null && a.dias < 0;
+    var pasos = window.PROFASE_SEG.pasos({ titulo: 'Cómo va el asunto', lista: [
+      { t: 'Lo encontró el vigía', est: 'ok', marca: '✓', title: 'El ' + fecha(a.creado) },
+      { t: NORMAS[a.norma] || a.norma, est: a.norma === 'iniciativa' ? 'off' : a.norma === 'vigente' ? 'mal' : 'na', marca: a.norma === 'iniciativa' ? '…' : '!',
+        title: a.norma === 'iniciativa' ? 'Todavía no obliga: se vigila' : a.vigor ? 'En vigor el ' + fecha(a.vigor) : 'Ya publicado' },
+      { t: a.cumple === 'si' ? 'El código lo contempla' : a.cumple === 'no' ? 'El código no lo cumple' : 'Código sin confirmar', est: a.cumple === 'si' ? 'ok' : a.cumple === 'no' ? 'mal' : 'am', marca: a.cumple === 'si' ? '✓' : a.cumple === 'no' ? '✕' : '?' },
+      { t: a.estado === 'atendido' ? 'Atendido' : a.estado === 'descartado' ? 'Descartado' : 'Por atender', est: a.estado === 'atendido' ? 'ok' : a.estado === 'descartado' ? 'off' : vencido ? 'mal' : '', marca: a.estado === 'atendido' ? '✓' : a.estado === 'descartado' ? '—' : '4',
+        title: a.estado !== 'abierto' ? (a.estado_por || '') + ' · ' + fecha(a.estado_en) : a.limite ? 'Fecha límite: ' + fecha(a.limite) : 'Sin fecha límite' }] });
+    var L = [];
+    if (a.estado === 'atendido') L.push(['si', 'Atendido por ' + esc(a.estado_por || '') + ' el ' + esc(fecha(a.estado_en)) + '.' + (a.estado_nota ? ' ' + esc(a.estado_nota) : '')]);
+    if (a.estado === 'descartado') L.push(['va', 'Descartado por ' + esc(a.estado_por || '') + ' el ' + esc(fecha(a.estado_en)) + '.' + (a.estado_nota ? ' ' + esc(a.estado_nota) : '')]);
+    if (a.estado === 'abierto') {
+      if (a.norma === 'iniciativa') L.push(['va', 'Es una iniciativa: todavía no obliga. El vigía avisa si se publica.']);
+      if (a.cumple === 'no') L.push(['no', 'El código de ' + esc(sis) + ' todavía no lo contempla. Qué hacer: copia el pedido de cambio, mándaselo a quien desarrolla y, cuando quede, márcalo «Atendido».']);
+      else if (a.cumple === 'si') L.push(['si', 'El código de ' + esc(sis) + ' ya lo contempla. Qué hacer: revisa que esté bien y márcalo «Atendido».']);
+      else L.push(['va', 'No se pudo confirmar en el código de ' + esc(sis) + '. Qué hacer: que quien desarrolla lo revise con el pedido de cambio.']);
+      if (a.limite) L.push([vencido ? 'no' : 'va', (vencido ? 'Venció el ' : 'Tiene que quedar antes del ') + esc(fecha(a.limite)) + ' (' + esc(diaSem(a.limite)) + ').']);
+    }
+    if (!a.oficial) L.push(['va', 'Todavía sin fuente oficial: lo que se sabe viene de notas de prensa.']);
+    var bs = [];
+    if (a.pedido) bs.push('<button class="btn acento" type="button" id="f-copia">Copiar el pedido de cambio</button>');
+    if (PUEDE) {
+      if (a.estado === 'abierto') bs.push('<button class="btn bien" type="button" id="f-atiende">Marcar atendido</button><button class="btn" type="button" id="f-descarta">Descartar</button>');
+      else bs.push('<button class="btn" type="button" id="f-reabre">Regresar a por atender</button>');
+    }
+    var asunto = '<dl class="sg-dl" style="margin-top:0">'
+      + '<dt>Sistema</dt><dd>' + esc(sis) + '</dd>'
+      + '<dt>Qué cambió</dt><dd>' + esc(a.que_cambio) + '</dd>'
+      + (a.impacto ? '<dt>Por qué importa</dt><dd>' + esc(a.impacto) + '</dd>' : '')
+      + '<dt>Cómo va la norma</dt><dd>' + esc(NORMAS[a.norma] || a.norma) + (a.vigor ? ' · en vigor el ' + esc(fecha(a.vigor)) : '') + '</dd>'
+      + '<dt>Fecha límite</dt><dd>' + (a.limite ? esc(fecha(a.limite)) + ' (' + esc(diaSem(a.limite)) + ')' : 'Sin fecha límite') + '</dd>'
+      + '<dt>En el código</dt><dd>' + (a.cumple === 'si' ? 'Ya lo contempla' : a.cumple === 'no' ? 'Todavía no lo contempla' : 'No se pudo confirmar') + (a.cumple_nota ? '<div class="mut">' + esc(a.cumple_nota) + '</div>' : '') + '</dd>'
+      + '</dl>';
+    var tabs = [{ id: 'asu', t: 'El asunto', html: asunto }];
+    tabs.push({ id: 'ped', t: 'Pedido de cambio', html: a.pedido ? '<div class="pedido" id="f-pedido">' + esc(a.pedido) + '</div><p class="sg-hint">Para quien desarrolla ' + esc(sis) + '. «Copiar el pedido de cambio» lo copia con su fuente.</p>' : '<p class="sg-hint">No hace falta cambiar el sistema.</p>' });
+    tabs.push({ id: 'fue', t: 'Fuentes', n: (a.fuentes || []).length, html: (a.fuentes || []).length ? '<ul class="fuentes">' + a.fuentes.map(function (f) {
+      return '<li><a href="' + esc(f.u) + '" target="_blank" rel="noopener noreferrer">' + esc(f.t || f.u) + '</a></li>'; }).join('') + '</ul>' : '<p class="sg-hint">Sin fuentes.</p>' });
+    tabs.push({ id: 'bit', t: 'Bitácora', n: (a.bitacora || []).length, html: (a.bitacora || []).length ? '<ul class="bit">' + a.bitacora.map(function (b) {
+      return '<li><b>' + esc(b.que) + '</b> · ' + esc(b.quien) + ' · ' + esc(fechaHora(b.hora)) + (b.texto ? '<br>' + esc(b.texto) : '') + '</li>'; }).join('') + '</ul>' : '<p class="sg-hint">Todavía no hay movimientos.</p>' });
+    var idx = COLA.indexOf(a.id);
+    var inst = window.PROFASE_SEG.abre({
+      ancho: true, sinPlatica: true,
+      kick: 'Vigía fiscal · ' + sis,
+      titulo: a.titulo,
+      nav: idx >= 0 && COLA.length > 1 ? { pos: idx + 1, total: COLA.length, donde: 'en «' + vista(VISTA)[1] + '»', ant: idx > 0, sig: idx < COLA.length - 1,
+        ir: function (d) { var nx = COLA[idx + d]; if (nx != null) ficha(nx); } } : null,
+      nota: reciente,
+      resumen: '<div class="r1"><h3>' + esc(sis) + '</h3><span class="big">' + nivel(a) + '</span></div>'
+        + '<p>' + esc(a.que_cambio) + '</p>'
+        + '<div class="r2"><span>Norma <b>' + esc(NORMAS[a.norma] || a.norma) + '</b></span>'
+        + (a.limite ? '<span>Fecha límite <b' + (vencido ? ' class="mal"' : '') + '>' + esc(fecha(a.limite)) + '</b></span>' : '')
+        + '<span>Encontrado <b>' + esc(fecha(a.creado)) + '</b></span></div>'
+        + '<div class="seg-chips">' + limite(a) + ' ' + cumple(a) + '</div>',
+      bajoResumen: pasos + window.PROFASE_SEG.falta(a.estado === 'abierto' ? 'Qué falta' : 'Cómo quedó', L),
+      despues: bs.length ? '<div class="sg-fila">' + bs.join('') + '</div>' : '',
+      pestanas: tabs,
+      alCerrar: function () {
+        if (VI !== inst) return;
+        VI = null; ABIERTO = null;
+        try { if (P.escribiendo) P.escribiendo('vigia', false); } catch (e) {}
+        pinta();
+      },
+      enlaza: function (scrim) {
+        var q = function (id) { return scrim.querySelector('#' + id); };
+        if (q('f-copia')) q('f-copia').onclick = async function () {
+          var t = a.titulo + ' (' + sis + ')\n\n' + a.pedido + ((a.fuentes || []).length ? '\n\nFuente: ' + a.fuentes.map(function (f) { return (f.t ? f.t + ': ' : '') + f.u; }).join('\n') : '')
+            + (a.limite ? '\nFecha límite: ' + fecha(a.limite) : '');
+          try { await navigator.clipboard.writeText(t); avisa('Listo: el pedido de cambio quedó copiado. Pégalo donde se lo mandes a quien desarrolla.'); }
+          catch (e) { avisa('No se pudo copiar solo: ábrelo en la pestaña «Pedido de cambio» y cópialo de ahí.'); }
+        };
+        if (q('f-atiende')) q('f-atiende').onclick = aVentana(function () { marca(a, 'atendido'); });
+        if (q('f-descarta')) q('f-descarta').onclick = aVentana(function () { marca(a, 'descartado'); });
+        if (q('f-reabre')) q('f-reabre').onclick = aVentana(function () { marca(a, 'abierto'); });
+      }
+    });
+    VI = inst;
+    try { if (P.escribiendo) P.escribiendo('vigia', true); } catch (e) {}
+    pinta();
+  }
+  function marca(a, est) {
+    var T = { atendido: ['Marcar atendido', 'Qué se hizo (por ejemplo: ya se subió el catálogo nuevo a Facturita)', 'bien'],
+              descartado: ['Descartar', 'Por qué no aplica a los sistemas Quo', ''],
+              abierto: ['Regresar a por atender', 'Por qué se vuelve a abrir', ''] }[est];
+    abre('<h3 id="dlg-t">' + esc(T[0]) + ' · ' + esc(a.titulo) + '</h3>'
+      + '<p>' + (est === 'abierto' ? 'Vuelve a salir en «Por atender».' : 'Queda en la bitácora con tu nombre y tu nota; el vigía ya no avisa de este asunto.') + '</p>'
+      + '<div class="campo"><label for="m-n">' + esc(T[1]) + '</label><textarea id="m-n" maxlength="1500"></textarea></div>'
+      + '<div class="msg mal" id="m-e" hidden></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="m-no">Cancelar</button><button class="btn ' + T[2] + '" type="button" id="m-si">' + esc(T[0]) + '</button></div>', 'm-n');
+    $('m-no').onclick = function () { ficha(a.id); };
+    $('m-si').onclick = async function () {
+      this.disabled = true;
+      try { await rpc('vq_marca', { p_id: a.id, p_estado: est, p_nota: $('m-n').value }); avisa(est === 'atendido' ? 'Listo: quedó atendido.' : est === 'descartado' ? 'Listo: quedó descartado.' : 'Regresó a por atender.'); await carga(); ficha(a.id); }
+      catch (e) { $('m-e').textContent = falla(e); $('m-e').hidden = false; this.disabled = false; }
+    };
+  }
+
+  /* ---------- Excel y PDF de la lista (con la marca PROFASE; el PDF sale del mismo libro) ---------- */
+  $('x-lista').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = PROFASE_ORDEN.lista($('lista').closest('table'), filtradas()), titulo = 'Vigía fiscal QUO · ' + vista(VISTA)[1];
+      var head = ['Impacto', 'Sistema', 'Asunto', 'Qué cambió', 'Norma', 'En vigor', 'Fecha límite', 'En el código', 'Estado', 'Pedido de cambio', 'Fuente'];
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet('Vigía fiscal');
+      ws.columns = [14, 18, 34, 60, 12, 14, 14, 20, 14, 60, 40].map(function (w) { return { width: w }; });
+      var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: [L.length + (L.length === 1 ? ' asunto' : ' asuntos') + (Q ? ' · búsqueda: ' + Q : ''), 'Exportado el ' + fechaHora(new Date().toISOString())] });
+      ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+      L.forEach(function (a, i) {
+        var r = ws.getRow(f0 + 1 + i);
+        r.values = [NIVELES[a.nivel] || a.nivel, SISTEMAS[a.sistema] || a.sistema, a.titulo, a.que_cambio, NORMAS[a.norma] || a.norma, a.vigor ? fecha(a.vigor) : '',
+          a.limite ? fecha(a.limite) : '', a.cumple === 'si' ? 'Ya lo contempla' : a.cumple === 'no' ? 'Todavía no' : 'Sin confirmar',
+          a.estado === 'abierto' ? 'Por atender' : a.estado === 'atendido' ? 'Atendido' : 'Descartado', a.pedido || '', (a.fuentes || []).map(function (f) { return f.u; }).join('\n')];
+        [3, 4, 10, 11].forEach(function (c) { r.getCell(c).alignment = { wrapText: true, vertical: 'top' }; });
+      });
+      if (L.length) MK.cuerpo(ws, f0 + 1, f0 + L.length, 1, head.length);
+      ws.views = [{ state: 'frozen', ySplit: f0 }];
+      MK.impresion(ws, { repetir: f0 });
+      await MK.guardar(wb, 'Vigía fiscal QUO ' + vista(VISTA)[1] + ' ' + DATOS.hoy + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- traer ---------- */
+  async function carga() {
+    DATOS = await rpc('vq_lista');
+    PUEDE = !!DATOS.puede && !CONSULTA;
+    $('vacio').hidden = asuntos().length > 0; $('todo').hidden = false;
+    pintaTablero(); pintaOpciones(); pinta(); pintaFechas(); pintaHist();
+  }
+  $('f-q').addEventListener('input', function () { Q = this.value; if (PAG) PAG.inicio(); pinta(); });
+  $('f-sis').onchange = function () { SIS = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('f-norma').onchange = function () { NORMA = this.value; if (PAG) PAG.inicio(); pinta(); };
+  $('lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { COLA = LISTA.map(function (a) { return a.id; }); ficha(+tr.getAttribute('data-id')); } });
+  $('lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); ficha(+tr.getAttribute('data-id')); } });
+  // la campanita o el Inicio: abre el asunto del que avisa («vq:<id>» o el id) o el calendario («fechas»)
+  window.__vqAbre = function (que) {
+    var s = String(que || '').replace(/^(ver|vq):/, '');
+    if (!DATOS) return false;
+    if (s === 'fechas') { try { $('caja-fechas').scrollIntoView({ block: 'start' }); } catch (e) {} return true; }
+    var id = +s, a = asuntos().filter(function (x) { return x.id === id; })[0];
+    if (!a) return false;
+    if (!vista(VISTA)[2](a)) VISTA = a.estado === 'atendido' ? 'atendidos' : a.estado === 'descartado' ? 'descartados' : a.nivel === 'bajo' ? 'bajo' : 'atender';
+    SEL = id; pinta(); ficha(id);
+    return true;
+  };
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base. Qué hacer: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('vq_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla es solo para quien lleva los sistemas Quo. Qué hacer: si la necesitas, pídesela a Héctor Daniel Nava.');
+      CONSULTA = !!P.consulta || !!EST.consulta; $('consulta').hidden = !CONSULTA;
+      PAG = window.PROFASE_PAGINAS.crea({ donde: $('pag'), clave: 'vigia.asuntos', nombre: 'Asuntos', arriba: $('caja-lista'), cambio: function () { pinta(); } });
+      await carga();
+      if (!cuenta('atender') && asuntos().length) VISTA = 'todos';
+      pinta();
+      $('cargando').hidden = true;
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden && !VI) carga().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>

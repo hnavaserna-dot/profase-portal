@@ -201,12 +201,16 @@
     /* «Clientes Quo» (21-nov-2026; Héctor Daniel Nava: «en el CRM… en el menú QUO»; «súper fácil de administrar»): antes
        «Control de membresías»; la misma clave (quo-membresias) y la misma página, que ahora abre en cada cliente de los
        sistemas Quo con su membresía, su cuenta, sus usuarios y lo de Gold. Va primero. */
-    { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: sus clientes, cotizaciones y su soporte (Q Chat).', subs: [
+    { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: sus clientes, cotizaciones, su soporte (Q Chat) y el vigía fiscal.', subs: [
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Clientes Quo', d: 'Cada cliente de los sistemas Quo: su membresía y sus pagos, su cuenta, sus usuarios y lo de Gold.' },
       { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
       { k: 'qchat', v: 'qch', p: 'conv', t: 'Conversaciones', d: 'Q Chat: la fila, lo que contesta la asistente y lo que atiende el equipo, por chat o llamada.' },
       { k: 'qchat-tickets', v: 'qch', p: 'tk', t: 'Tickets a desarrollo', d: 'Q Chat: lo que solo se arregla cambiando el sistema, con su folio para el cliente.' },
-      { k: 'qchat-eficiencia', v: 'qch', p: 'efi', t: 'Eficiencia del soporte', d: 'Q Chat: lo que resolvió la asistente, lo que atendió cada persona y la espera.' }] },
+      { k: 'qchat-eficiencia', v: 'qch', p: 'efi', t: 'Eficiencia del soporte', d: 'Q Chat: lo que resolvió la asistente, lo que atendió cada persona y la espera.' },
+      // Vigía fiscal (21-nov-2026, Héctor Daniel Nava): los cambios de ley que piden ajustar los sistemas Quo; lo revisa cada noche
+      // la tarea del vigía. Lo ven Héctor Daniel Nava, Fernando Cadengo, Francisco Rivera y Héctor Nava Ramos (vq_estado(),
+      // portal/sql/483_vigia_quo.sql; bloque vqf_tab.js)
+      { k: 'quo-vigia', v: 'vqf', t: 'Vigía fiscal', d: 'Los cambios de ley que piden ajustar los sistemas Quo: qué cambió, si el código ya lo cumple y su fecha límite.' }] },
     // Multinacional (2-nov-2026, Héctor Daniel, 12:01 a 12:20): la comercializadora de la dirección; no tiene que ver con
     // las compañías que facturan el despacho. Solo la ven Mónica Pedraza (sube las facturas), Eva Rangel (marca las
     // cobradas) y la dirección (mul_estado(), portal/sql/136_multinacional.sql; bloque mul_tab.js)
