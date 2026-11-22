@@ -184,6 +184,39 @@
   }
   P.marcoSeVe = marcoSeVe;
 
+  /* ---- Una pantalla en su marco que se esconde guardando lo ya acomodado (22-nov-2026, revisión nocturna; la forma que
+     nació para Variaciones / Movimientos el 20-nov-2026, ahora una sola pieza para todas las que la usen: Variaciones /
+     Movimientos y Reportes › Carga de Quo). Con display:none, al regresar a la pantalla el navegador vuelve a acomodar y a
+     calcular los estilos de toda su página («Comprobar real», 22-nov-2026: regresar a la Carga de Quo trababa la pantalla
+     0.7 a 0.8 s). Mientras no se ve, su caja se queda fuera de la página con el mismo tamaño que tenía (--vv-w y --vv-h),
+     invisible, sin recibir clics y sin pintarse (content-visibility:hidden): al regresar ya está acomodada. Para el portal
+     sigue «escondida» (data-escondida en su marco: marcoSeVe, arriba, no la cuenta ni deja que pregunte a la base) y al
+     regresar se pone al día en ese momento (PORTAL.despierta de su página). vista: el data-view del body que la enseña. ---- */
+  function escondeGuardando(caja, marco, vista) {
+    if (!caja || !marco || !caja.id || !vista) return false;
+    var st = document.createElement('style');
+    st.textContent = 'body:not([data-view="' + vista + '"]) #' + caja.id + '{position:fixed!important;left:0!important;top:0!important;'
+      + 'width:var(--vv-w,100%)!important;height:var(--vv-h,0px)!important;margin:0!important;visibility:hidden!important;'
+      + 'content-visibility:hidden;pointer-events:none!important;z-index:-1!important;overflow:hidden!important}';
+    document.head.appendChild(st);
+    var marca = function () {
+      var esc = document.body.getAttribute('data-view') !== vista, antes = marco.hasAttribute('data-escondida');
+      marco.toggleAttribute('data-escondida', esc);
+      // al volver no cambia de tamaño (no le llega «resize»): se pone al día en ese momento, como las demás
+      if (antes && !esc) { try { var w = marco.contentWindow; if (w && w.PORTAL && w.PORTAL.despierta) w.PORTAL.despierta(); } catch (e) { /* sin marco */ } }
+    };
+    marca();
+    new MutationObserver(marca).observe(document.body, { attributes: true, attributeFilter: ['data-view'] });
+    // el tamaño que tiene mientras se ve (para que, escondida, se quede igual y su página no se vuelva a acomodar)
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      if (document.body.getAttribute('data-view') !== vista) return;
+      var r = caja.getBoundingClientRect(); if (!r.width || !r.height) return;
+      caja.style.setProperty('--vv-w', r.width + 'px'); caja.style.setProperty('--vv-h', r.height + 'px');
+    }).observe(caja);
+    return true;
+  }
+  P.escondeGuardando = escondeGuardando;
+
   /* ---- Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026, 16:40: «corrige este tipo de errores; que no se
      entrelapen»; el menú de la foto salía encima de la campanita abierta). Cada menú o lista que se despliega (el de la
      foto, la campanita, las tarjetas del menú, los filtros, «Con marca / Original», las opciones de un mensaje del

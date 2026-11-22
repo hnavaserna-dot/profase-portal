@@ -327,6 +327,10 @@
       o.mas.forEach(function (g) { r.mas.pon(Array.isArray(g) ? g : [g]); });
       donde.appendChild(r.mas.w);
     }
+    // el «PDF» de al lado de un Excel (js/marca.js) se mueve con él en este mismo momento (revisión nocturna del
+    // 22-nov-2026): si no, se quedaba un cuadro arriba de la barra, en el lugar de antes del Excel, y al acomodarse sola
+    // la barra empujaba todo 52 px en el celular (Panel de trabajo: 0.31 de «se mueve al cargar»)
+    try { if (window.PROFASE_MARCA && window.PROFASE_MARCA.empareja) window.PROFASE_MARCA.empareja(); } catch (e) { /* lo empareja su vigilancia */ }
     return r;
   }
 
