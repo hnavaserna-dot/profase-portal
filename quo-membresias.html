@@ -910,6 +910,9 @@ tr.total-row td{border-top:1px solid var(--line);font-weight:700;color:var(--ink
 .segv .cq-liga label{font-size:.66rem;font-weight:650;color:var(--ink)}
 .segv .cq-liga select{min-width:0;max-width:100%;flex:1 1 220px;height:2.2rem;border-radius:.5rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:.7rem;padding:0 .5rem}
 .segv .cq-gold + .cq-gold{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.segv .cq-acc{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0 0}
+.segv .cq-acc .cq-mu{flex:1 1 220px}
+.segv td .btn.sm{white-space:nowrap}
 .segv .cq-msj{white-space:pre-wrap;line-height:1.6;color:var(--ink)}
 .segv .cq-rs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
 @media (max-width:700px){.segv .cq-liga select{font-size:16px}}
@@ -4601,7 +4604,7 @@ const CQ_EST={vencido:'Vencido', porvencer:'Por vencer', activo:'Al corriente', 
    en el radar y cobrarle después. Lo mismo que enseñaba Contabilita › Administración › Cuentas maestras, que se pasó aquí. */
 const GQ_EST={vencida:['Vencida en Gold','bad'], por_vencer:['Vence pronto en Gold','warn'], vigente:['Vigente en Gold','ok'], sin_fecha:['Sin fecha en Gold','neutral'], gratis:['Gratis','neutral']};
 const GQ_ROL={admin:'Administra su cuenta', contador:'Contador', tesoreria:'Tesorería', lector:'Consulta'};
-const GQ_UEST={sin_acceso:'Sin acceso todavía', invitado:'Invitado', activo:'Ya entra', del_despacho:'Del despacho'};
+const GQ_UEST={sin_acceso:'Sin acceso todavía', invitado:'Se le dio acceso; todavía no entra', activo:'Ya entra', del_despacho:'Del despacho'};
 function gqEstado(g){
   if(!g) return null;
   if(g.gratis) return 'gratis';
@@ -4936,14 +4939,41 @@ function cqTabUsuarios(r){
   }
   if(!CQ.d) return h+'<p class="cq-mu">'+(CQ.err?esc(CQ.err):'Trayendo lo de Quo…')+'</p>';
   if(!r.a) return h+'<p class="cq-mu">Sin cuenta de Quo ligada: aquí salen sus usuarios de Contabilita, Facturita y Nominita en cuanto se ligue.</p>';
-  const us=r.a.usuarios||[];
+  const us=r.a.usuarios||[], mv=cqMueve() && !cqEsCasa(r.a);
   h+='<h4 class="cq-h">Usuarios en los sistemas Quo · '+us.length+'</h4>';
-  h+=us.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Usuario</th>'+CQ_SIS.map(function(s){ return '<th>'+s[1]+'</th>'; }).join('')+'<th>Último acceso</th></tr></thead><tbody>'
-    +us.map(function(u){ return '<tr><td><b>'+esc(u.nombre||u.usuario)+'</b><div class="cq-mu">'+esc(u.usuario)+(u.estado==='invitado'?' · invitado, todavía no entra':'')+(u.entra_crm?' · entra con el CRM':'')+'</div></td>'
+  h+=us.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Usuario</th>'+CQ_SIS.map(function(s){ return '<th>'+s[1]+'</th>'; }).join('')+'<th>Último acceso</th>'+(mv?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
+    +us.map(function(u){ return '<tr><td><b>'+esc(u.nombre||u.usuario)+'</b><div class="cq-mu">'+esc(u.usuario)+(u.estado==='invitado'?' · se le dio acceso, todavía no entra':'')+(u.entra_crm?' · entra con el CRM':'')+'</div></td>'
       +CQ_SIS.map(function(s){ return '<td>'+(u[s[0]]?esc(u[s[0]]):'<span class="cq-mu">—</span>')+'</td>'; }).join('')
-      +'<td>'+(u.ultimo?esc(cqCuando(u.ultimo)):'<span class="cq-mu">Nunca</span>')+'</td></tr>'; }).join('')+'</tbody></table></div>'
+      +'<td>'+(u.ultimo?esc(cqCuando(u.ultimo)):'<span class="cq-mu">Nunca</span>')+'</td>'
+      +(mv?'<td>'+(u.entra_crm?'<span class="cq-mu">Se le quita a mano</span>'
+          :u.nominita?'<span class="cq-mu">Entra a Nominita: se le quita con tu Claude</span>'
+          :'<button type="button" class="btn sm" data-cq-quita="'+esc(u.usuario)+'">Quitar acceso</button>')+'</td>':'')+'</tr>'; }).join('')+'</tbody></table></div>'
     :'<p class="cq-mu">Todavía no tiene usuarios en los sistemas Quo.</p>';
-  if(cqGoldDe(r.a.id).some(function(g){ return (g.usuarios||[]).length; })) h+='<p class="cq-mu">Los que tenía en Quo Gold, en la pestaña «Lo de Gold».</p>';
+  h+=cqGoldAcceso(r);
+  return h;
+}
+/* los usuarios que el cliente tenía en Quo Gold, con «Darle acceso» uno por uno (21-nov-2026: Héctor Daniel Nava, Fernando
+   Cadengo y Gabriel Cavazos; quo_clientes_yo().mueve). Lo de cada uno lo revisa otra vez la base de Quo (qs_canal_mueve). */
+function cqGoldAcceso(r){
+  const vistos={}, l=[];
+  cqGoldDe(r.a.id).forEach(function(g){ (g.usuarios||[]).forEach(function(u){
+    const k=String(u.correo||'').toLowerCase(); if(u.interno || !k || vistos[k]) return; vistos[k]=1; l.push(u); }); });
+  if(!l.length) return '';
+  const mv=cqMueve() && !cqEsCasa(r.a);
+  const nota=!mv?'':!r.a.activa?'La cuenta está suspendida: reactívala en la pestaña «Cuenta» para darles acceso.'
+    :!r.a.contabilita?'La cuenta no tiene Quo Contabilita: se prende con tu Claude en la Consola Quo antes de darles acceso.':'';
+  let h='<h4 class="cq-h">Los que tenía en Quo Gold · '+l.length+'</h4>'
+    +'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Quién</th><th>Aquí sería</th><th>Cómo está</th>'+(mv?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
+    +l.map(function(u){
+      const puede=mv && !nota && u.estado==='sin_acceso';
+      return '<tr><td><b>'+esc(u.nombre||u.correo)+'</b><div class="cq-mu">'+esc(u.correo||'')+'</div></td>'
+        +'<td>'+esc(GQ_ROL[u.rol]||u.rol||'')+'</td>'
+        +'<td>'+esc(GQ_UEST[u.estado]||u.estado||'')+(u.usuario&&u.estado!=='sin_acceso'?'<div class="cq-mu">'+esc(u.usuario)+'</div>':'')+'</td>'
+        +(mv?'<td>'+(puede?'<button type="button" class="btn sm" data-cq-acceso="'+esc(u.correo)+'">Darle acceso</button>':'<span class="cq-mu">—</span>')+'</td>':'')+'</tr>';
+    }).join('')+'</tbody></table></div>';
+  if(nota) h+='<p class="cq-mu">'+nota+'</p>';
+  else if(mv) h+='<p class="cq-mu">«Darle acceso» le da Quo Contabilita de esta cuenta y le manda su código a su correo desde acceso@quosistemas.com; con él crea su contraseña. Es uno por uno: nada se manda solo.</p>';
+  else if(!cqEsCasa(r.a)) h+='<p class="cq-mu">Darles acceso lo hace, uno por uno, quien tiene ese permiso en Clientes Quo.</p>';
   return h;
 }
 function cqTabCuenta(r){
@@ -4958,6 +4988,14 @@ function cqTabCuenta(r){
   h+='<h4 class="cq-h">Sus RFC en Contabilita · '+rf.length+'</h4>';
   h+=rf.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>RFC</th><th>Razón social</th></tr></thead><tbody>'
     +rf.map(function(x){ return '<tr><td>'+esc(x.rfc)+'</td><td>'+esc(x.nombre||'')+'</td></tr>'; }).join('')+'</tbody></table></div>':'<p class="cq-mu">Sin RFC activos.</p>';
+  if(!a.activa && a.motivo) h+='<p class="cq-aviso">Se suspendió por: '+esc(a.motivo)+'</p>';
+  if(cqEsCasa(a)) h+='<p class="cq-mu">Es una cuenta de la casa: nunca se suspende y su gente entra con su usuario del CRM.</p>';
+  else if(cqMueve()){
+    if(!a.contabilita && !a.facturita) h+='<p class="cq-mu">Solo tiene Quo Nominita: se suspende con tu Claude en la Consola Quo.</p>';
+    else h+='<div class="cq-acc">'+(a.activa
+      ?'<button type="button" class="btn sm" data-cq-cuenta="suspende">Suspender la cuenta</button><span class="cq-mu">Su gente deja de entrar a Contabilita y Facturita en ese momento; nada se borra.</span>'
+      :'<button type="button" class="btn sm" data-cq-cuenta="reactiva">Reactivar la cuenta</button><span class="cq-mu">Su gente vuelve a entrar con sus mismos usuarios.</span>')+'</div>';
+  }
   return h;
 }
 function gqUsuario(u){
@@ -4993,7 +5031,7 @@ function cqTabGold(r){
         :'<p class="cq-mu">Gold no trae lo que tenía comprado.</p>')
       +gqUsuarios('Usuarios del cliente en Gold', us.filter(function(u){ return !u.interno; }), 'En Gold no tiene usuarios propios.')
       +gqUsuarios('Del despacho', us.filter(function(u){ return u.interno; }), 'Nadie del despacho entraba con un usuario de esta cuenta.')
-      +'<p class="cq-mu">Los usuarios del cliente todavía no entran ni se les mandó nada. Darles acceso es otro paso, con el «sí» de la dirección. Nada de aquí cobra, avisa ni suspende.</p></div>';
+      +'<p class="cq-mu">El acceso de cada usuario del cliente se da en la pestaña «Usuarios», uno por uno. Nada de aquí cobra, avisa ni suspende solo.</p></div>';
   }).join('');
 }
 function cqTabCots(r){
@@ -5006,9 +5044,12 @@ function cqTabCots(r){
 }
 function cqTabBitacora(r){
   const b=(r.a&&r.a.bitacora)||[];
-  const ACC={alta:'Alta', cambio:'Cambio', suspende:'Suspendida', reactiva:'Reactivada'};
-  return b.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Cuándo</th><th>Qué</th><th>Quién</th><th>Motivo</th></tr></thead><tbody>'
-    +b.map(function(x){ return '<tr><td>'+esc(cqCuando(x.cuando))+'</td><td>'+esc(ACC[x.accion]||x.accion)+'</td><td>'+esc(x.por||'')+'</td><td>'+esc(x.motivo||'')+'</td></tr>'; }).join('')+'</tbody></table></div>'
+  const ACC={alta:'Alta', cambio:'Cambio', suspende:'Suspendida', reactiva:'Reactivada', acceso:'Se le dio acceso', quita:'Se le quitó el acceso'};
+  return b.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Cuándo</th><th>Qué</th><th>Quién lo hizo</th><th>Motivo</th></tr></thead><tbody>'
+    +b.map(function(x){
+      const a=(x.quien||x.usuario)?'<div class="cq-mu">'+esc(x.quien||x.usuario)+(x.quien&&x.usuario?' ('+esc(x.usuario)+')':'')
+        +(x.accion==='acceso'&&x.enviado===false?' · no se le pudo mandar el correo':'')+'</div>':'';
+      return '<tr><td>'+esc(cqCuando(x.cuando))+'</td><td>'+esc(ACC[x.accion]||x.accion)+a+'</td><td>'+esc(x.por||'')+'</td><td>'+esc(x.motivo||'')+'</td></tr>'; }).join('')+'</tbody></table></div>'
     :'<p class="cq-mu">Sin movimientos de su cuenta en Quo.</p>';
 }
 function cqTabSolicitud(r){
@@ -5044,8 +5085,11 @@ function cqFicha(k){
     acciones:acc.length?acc:null, pieTexto:ro?'Solo consulta':'',
     alCerrar:function(){ if(CQV===v) CQV=null; } });
   v.scrim.addEventListener('click', function(ev){
-    const b=ev.target.closest('[data-cq-pago],#cq-ligar'); if(!b) return;
+    const b=ev.target.closest('[data-cq-pago],#cq-ligar,[data-cq-acceso],[data-cq-quita],[data-cq-cuenta]'); if(!b) return;
     if(b.id==='cq-ligar'){ cqLigar(r, b); return; }
+    if(b.hasAttribute('data-cq-acceso')){ cierra(); cqAcceso(r, b.getAttribute('data-cq-acceso')); return; }
+    if(b.hasAttribute('data-cq-quita')){ cierra(); cqQuita(r, b.getAttribute('data-cq-quita')); return; }
+    if(b.hasAttribute('data-cq-cuenta')){ cierra(); cqSuspende(r, b.getAttribute('data-cq-cuenta')==='suspende'); return; }
     const idPago=b.getAttribute('data-cq-pago');
     cierra(); pagoEditando=null; cerrarOverlay(); modalPago(null, idPago);
   });
@@ -5057,6 +5101,123 @@ async function cqLigar(r, b){
   const ok=await guardarDoc('clientes/'+r.c.id, {cuentaQuo:n}, true);
   b.disabled=false; b.textContent='Guardar';
   if(ok){ r.c.cuentaQuo=n; avisar(n?'Quedó ligada a su cuenta de Quo':'Quedó sin ligar'); cqFicha(r.k); }
+}
+/* Dar acceso, quitarlo y suspender o reactivar una cuenta (21-nov-2026, «Sí, así es»; quién: «Tú, Fernando y Gabo»). Uno por
+   uno y nada solo: la pantalla solo junta lo de cada acción; la función «quo-clientes» revisa quién eres y la base de Quo lo
+   revisa todo otra vez y lo anota en la bitácora de la cuenta. El código de acceso nunca pasa por aquí. */
+function cqMueve(){ return !!(CQ.d && CQ.d.yo && CQ.d.yo.mueve===true) && !soloLectura(); }
+function cqEsCasa(a){ return !!(a && (a.propia || a.area)); }
+window.__cqMueve=function(){ return cqMueve(); };   // para el «?» de la pantalla (guia_tab.js)
+function cqUsuarioSugerido(u){
+  const usados={}; cqCuentas().forEach(function(a){ (a.usuarios||[]).forEach(function(x){ usados[String(x.usuario||'').toLowerCase()]=1; }); });
+  const limpia=function(t){ return cqNorm(t).replace(/[^a-z0-9._-]+/g, '.').replace(/^[^a-z]+/, '').replace(/[._-]{2,}/g, '.').replace(/[._-]+$/, '').slice(0, 36); };
+  let base=limpia(String(u.correo||'').split('@')[0]);
+  if(base.length<2) base=limpia(u.nombre||'');
+  if(base.length<2) base='usuario';
+  let x=base, n=2; while(usados[x]) x=base+(n++);
+  return x;
+}
+function cqMvVentana(r, titulo, sub, cuerpo, boton){
+  const k=r.k;
+  const v=VENT=window.PROFASE_SEG.abre({ sinPlatica:true, kick:'Clientes Quo', titulo:titulo,
+    antes:'<p class="mem-sub">'+sub+'</p>', derecha:'<div class="body"><p class="cq-aviso mal" id="cq-mv-err" role="alert" hidden></p>'+cuerpo+'</div>',
+    alCerrar:function(){ if(VENT===v) VENT=null; setTimeout(function(){ if(!CQV && !VENT) cqFicha(k); }, 0); } });
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn" data-cerrar>Cancelar</button><button class="btn accent" id="cq-mv-ok">'+esc(boton)+'</button></div>';
+  return v;
+}
+function cqMvError(v, m){
+  const e=v.scrim.querySelector('#cq-mv-err'); if(!e){ avisar(m); return; }
+  e.textContent=m; e.hidden=false; try{ e.scrollIntoView({block:'nearest'}); }catch(x){}
+}
+// manda una acción a la función; si sale bien, cambia la ventana por lo que pasó y vuelve a traer lo de Quo
+async function cqMvManda(v, btn, cuerpo, que, listo){
+  const t0=btn.textContent; btn.disabled=true; btn.textContent='Un momento…';
+  let d=null;
+  try{
+    const P=window.PORTAL; if(P&&P.listo) await P.listo;
+    const r=await P.sb.functions.invoke('quo-clientes', { body:cuerpo });
+    d=r.data;
+    if(r.error && !d){ try{ d=await r.error.context.json(); }catch(e){ d=null; } }
+    if(!d || d.ok!==true) throw new Error((d&&d.error)||'No se pudo. Qué hacer: vuelve a intentar en un momento.');
+  }catch(e){
+    btn.disabled=false; btn.textContent=t0;
+    cqMvError(v, (window.PORTAL&&PORTAL.falla)?PORTAL.falla(e, que):String((e&&e.message)||e));
+    return;
+  }
+  const body=v.scrim.querySelector('.body'); if(body) body.innerHTML=listo(d);
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn accent" id="cq-mv-listo" disabled>Trayendo lo de Quo…</button></div>';
+  try{
+    for(let i=0; CQ.cargando && i<60; i++) await new Promise(function(ok){ setTimeout(ok, 250); });   // si ya se estaba trayendo, se espera y se vuelve a traer
+    await cqCarga();
+  }catch(e){}
+  const b=v.scrim.querySelector('#cq-mv-listo');
+  if(b){ b.disabled=false; b.textContent='Listo'; b.addEventListener('click', function(){ if(VENT===v) v.cerrar(); }); }
+}
+function cqAcceso(r, correo){
+  if(!cqMueve()||!r.a) return;
+  const k=String(correo||'').toLowerCase();
+  let u=null; cqGoldDe(r.a.id).some(function(g){ return (g.usuarios||[]).some(function(x){ if(String(x.correo||'').toLowerCase()===k && !x.interno){ u=x; return true; } return false; }); });
+  if(!u){ avisar('Ese usuario ya no está en lo que vino de Gold. Qué hacer: vuelve a cargar Clientes Quo.'); cqFicha(r.k); return; }
+  const ops=Object.keys(GQ_ROL).map(function(x){ return '<option value="'+x+'"'+(x===(u.rol||'contador')?' selected':'')+'>'+esc(GQ_ROL[x])+'</option>'; }).join('');
+  const v=cqMvVentana(r, 'Darle acceso', esc(u.nombre||u.correo)+' · '+esc(r.a.nombre||''),
+    campo('Usuario', '<input type="text" id="cq-mv-u" value="'+esc(cqUsuarioSugerido(u))+'" maxlength="41" autocomplete="off" autocapitalize="none" spellcheck="false">',
+      'En minúsculas y sin espacios (por ejemplo, nombre.apellido). Con él entra a www.quosistemas.com.')
+    +campo('Nombre completo', '<input type="text" id="cq-mv-n" value="'+esc(u.nombre||'')+'" maxlength="120">')
+    +campo('Correo donde le llega su código', '<input type="text" inputmode="email" id="cq-mv-c" value="'+esc(u.correo||'')+'" maxlength="160" autocomplete="off" autocapitalize="none" spellcheck="false">',
+      'Le llega desde acceso@quosistemas.com; el código nunca pasa por el CRM.')
+    +campo('Qué tipo de usuario es en Contabilita', '<select id="cq-mv-r">'+ops+'</select>', u.rol?'En Gold era: '+esc(GQ_ROL[u.rol]||u.rol)+'.':'')
+    +'<p class="cq-mu">Entra a Quo Contabilita de esta cuenta, con todos sus RFC; si hay que limitarlo, lo hace quien administra su cuenta en Usuarios.</p>',
+    'Darle acceso');
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const sc=v.scrim, us=String(sc.querySelector('#cq-mv-u').value||'').trim().toLowerCase(), nom=String(sc.querySelector('#cq-mv-n').value||'').replace(/\s+/g,' ').trim(),
+      co=String(sc.querySelector('#cq-mv-c').value||'').trim(), rol=sc.querySelector('#cq-mv-r').value;
+    if(!/^[a-z][a-z0-9._-]{1,40}$/.test(us)){ cqMvError(v, 'El usuario va en minúsculas, sin espacios ni acentos y empieza con una letra (por ejemplo, nombre.apellido). Qué hacer: escríbelo así y vuelve a picar «Darle acceso».'); return; }
+    if(nom.length<3){ cqMvError(v, 'Falta su nombre completo. Qué hacer: escríbelo y vuelve a picar «Darle acceso».'); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(co)){ cqMvError(v, 'Ese correo no se ve completo. Qué hacer: revisa que traiga su @ y su dominio y vuelve a picar «Darle acceso».'); return; }
+    cqMvManda(v, this, { accion:'acceso', cuenta_id:r.a.id, gold:u.correo, usuario:us, nombre:nom, correo:co, rol:rol }, 'darle acceso', function(d){
+      return d.enviado
+        ? '<p class="cq-aviso">Listo: <b>'+esc(nom)+'</b> ya tiene acceso con el usuario <b>'+esc(d.usuario||us)+'</b>. Su código le llegó a '+esc(d.correo||co)+' desde acceso@quosistemas.com; con él crea su contraseña en www.quosistemas.com.</p>'
+          +'<p class="cq-mu">Queda en la bitácora de su cuenta. Si no le llega, que en la entrada pique «¿Primera vez u olvidaste tu contraseña? Usa tu código» y luego «Mándame un código».</p>'
+        : '<p class="cq-aviso mal">Ya tiene acceso con el usuario <b>'+esc(d.usuario||us)+'</b>, pero no se le pudo mandar el correo. Qué hacer: dile que en la entrada de www.quosistemas.com pique «¿Primera vez u olvidaste tu contraseña? Usa tu código» y luego «Mándame un código»; le llega a '+esc(d.correo||co)+'.</p>';
+    });
+  });
+  setTimeout(function(){ const i=v.scrim.querySelector('#cq-mv-u'); if(i) try{ i.focus(); }catch(e){} }, 60);
+}
+function cqQuita(r, usuario){
+  if(!cqMueve()||!r.a) return;
+  const u=(r.a.usuarios||[]).find(function(x){ return x.usuario===usuario; });
+  if(!u){ avisar('Ese usuario ya no está en su cuenta. Qué hacer: vuelve a cargar Clientes Quo.'); cqFicha(r.k); return; }
+  const v=cqMvVentana(r, 'Quitar acceso', esc(u.nombre||u.usuario)+' ('+esc(u.usuario)+') · '+esc(r.a.nombre||''),
+    '<p class="cq-aviso">Deja de entrar a Contabilita y Facturita en ese momento. No se borra nada de lo que hizo.</p>'
+    +campo('Motivo', '<textarea id="cq-mv-m" rows="3" maxlength="300" placeholder="Por qué se le quita (queda en la bitácora de su cuenta)"></textarea>'),
+    'Quitar acceso');
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const m=String(v.scrim.querySelector('#cq-mv-m').value||'').replace(/\s+/g,' ').trim();
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué (cinco letras o más) y vuelve a picar «Quitar acceso».'); return; }
+    cqMvManda(v, this, { accion:'quita', cuenta_id:r.a.id, usuario:u.usuario, motivo:m }, 'quitar el acceso', function(){
+      return '<p class="cq-aviso">Listo: '+esc(u.nombre||u.usuario)+' ya no entra. Queda en la bitácora de su cuenta con tu motivo.</p>';
+    });
+  });
+  setTimeout(function(){ const i=v.scrim.querySelector('#cq-mv-m'); if(i) try{ i.focus(); }catch(e){} }, 60);
+}
+function cqSuspende(r, susp){
+  if(!cqMueve()||!r.a) return;
+  const a=r.a;
+  const v=cqMvVentana(r, susp?'Suspender la cuenta':'Reactivar la cuenta', esc(a.nombre||''),
+    (susp?'<p class="cq-aviso mal">Su gente deja de entrar a Quo Contabilita y Quo Facturita en ese momento. Nada se borra y se puede reactivar cuando quieras.</p>'
+         :'<p class="cq-aviso">Su gente vuelve a entrar con sus mismos usuarios.</p>')
+    +campo('Motivo', '<textarea id="cq-mv-m" rows="3" maxlength="300" placeholder="'+(susp?'Por qué se suspende':'Por qué se reactiva')+' (queda en la bitácora de su cuenta)"></textarea>'),
+    susp?'Suspender la cuenta':'Reactivar la cuenta');
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const m=String(v.scrim.querySelector('#cq-mv-m').value||'').replace(/\s+/g,' ').trim();
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué (cinco letras o más) y vuelve a picar el botón.'); return; }
+    cqMvManda(v, this, { accion:susp?'suspende':'reactiva', cuenta_id:a.id, motivo:m }, susp?'suspender la cuenta':'reactivar la cuenta', function(){
+      return '<p class="cq-aviso">Listo: la cuenta quedó '+(susp?'suspendida':'activa otra vez')+'. Queda en su bitácora con tu motivo.</p>';
+    });
+  });
+  setTimeout(function(){ const i=v.scrim.querySelector('#cq-mv-m'); if(i) try{ i.focus(); }catch(e){} }, 60);
 }
 async function cqAltaDesdeCuenta(a){
   if(!a||soloLectura()) return;
