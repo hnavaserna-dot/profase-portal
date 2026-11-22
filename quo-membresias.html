@@ -2636,6 +2636,8 @@ let cotFiltro='';
 function estCot(c){ const e=c.estatus||'Enviada'; return e==='Aceptada'?'Aprobada':e; }
 function chipCot(e){ return '<span class="chip" style="color:'+COT_COLOR[e]+';border-color:currentColor"><span class="dot"></span>'+esc(e)+'</span>'; }
 function paqueteCot(c){
+  // desde el 22-nov-2026 una cotización puede llevar varios sistemas Quo: su renglón (concepto) ya los nombra a todos
+  if(Array.isArray(c.sistemas) && c.sistemas.length && c.concepto) return c.concepto;
   if(c.linea==='TIMBRES') return 'Solo timbres'+(c.timbres?' · '+Number(c.timbres).toLocaleString('es-MX'):'');
   return [c.linea, c.plan?'Plan '+c.plan:'', c.periodo].filter(Boolean).join(' · ');
 }
@@ -2661,9 +2663,20 @@ function vistaCotizaciones(){
     +'<thead><tr><th style="text-align:left">Folio</th><th style="text-align:left">Fecha</th><th style="text-align:left">Cliente</th><th style="text-align:left">Paquete</th><th style="text-align:right">Total</th><th style="text-align:left">Estatus</th><th style="text-align:left">Asesor</th><th></th></tr></thead>'
     +'<tbody>'+(filas||'<tr><td colspan="8" style="padding:24px;text-align:center;opacity:.7">'+(cotFiltro?'Ninguna cotización '+esc(cotFiltro.toLowerCase())+'.':'Todavía no hay cotizaciones: se guardan desde el Cotizador QUO.')+'</td></tr>')+'</tbody></table></div>';
 }
+/* lo que trae una cotización de los otros sistemas, en palabras, para las notas del cliente (22-nov-2026) */
+function cotOtros(c){
+  const sis=Array.isArray(c.sistemas)?c.sistemas:(c.linea==='TIMBRES'?['facturita']:(['contabilita'].concat(Number(c.timbres)?['facturita']:[])));
+  const o=[];
+  if(sis.indexOf('facturita')>=0 && Number(c.timbres)) o.push('Quo Facturita ('+Number(c.timbres).toLocaleString('es-MX')+' timbres)');
+  const n=c.nominita;
+  if(sis.indexOf('nominita')>=0 && n) o.push('Quo Nominita plan '+n.plan+' '+(n.periodo==='mensual'?'mensual':'anual')
+    +(Number(n.trabajadores)?' con '+n.trabajadores+' trabajadores adicionales':''));
+  return {sis:sis, txt:o.length?' Incluye: '+o.join(' y ')+'.':''};
+}
 async function altaDesdeCotizacion(id){
   const c=cotizaciones.find(x=>x.id===id); if(!c) return;
-  const e=c.estado||{}, timbres=c.linea==='TIMBRES';
+  const otros=cotOtros(c);
+  const e=c.estado||{}, timbres=otros.sis.indexOf('contabilita')<0;
   const anual=(e.periodo||c.periodo)!=='mensual';
   const vig=new Date(); if(anual) vig.setFullYear(vig.getFullYear()+1); else vig.setMonth(vig.getMonth()+1);
   const paquete={ linea:timbres?'':(c.linea||''), plan:timbres?'':((typeof e.plan==='number'?e.plan+1:(parseInt(c.plan,10)||1))+'.0'),
@@ -2672,14 +2685,15 @@ async function altaDesdeCotizacion(id){
   const ya=rfc?clientes.find(x=>String(x.rfc||'').trim().toUpperCase()===rfc):null;
   let id2;
   if(ya && confirm('Ya hay un cliente con el RFC '+rfc+' ('+(ya.nombre||'')+').\n\nAceptar: actualizarlo con el paquete de la cotización '+(c.folio||id)+'.\nCancelar: crear un cliente nuevo.')){
-    const ok=await guardarDoc('clientes/'+ya.id, Object.assign({}, paquete, {notas:((ya.notas||'')+'\nPaquete de la cotización '+(c.folio||id)+'.').trim()}), true);
-    if(!ok) return; id2=ya.id; Object.assign(ya, paquete);
+    const ok=await guardarDoc('clientes/'+ya.id, Object.assign({}, timbres?{}:paquete, {notas:((ya.notas||'')+'\nPaquete de la cotización '+(c.folio||id)+'.'+otros.txt).trim()}), true);
+    if(!ok) return; id2=ya.id; if(!timbres) Object.assign(ya, paquete);
   }else{
     id2=nuevoId('cl');
     const datos={ nombre:c.cliente||'Cliente nuevo', rfc:rfc, tipo:'externo', contacto:c.atencion||'', tel:'',
       correoContacto:c.correo||'', correoPlataforma:'', linea:paquete.linea, plan:paquete.plan, periodicidad:paquete.periodicidad,
       xmlExtra:'0', usuariosExtra:0, responsable:c.asesor||'', estatus:'activo', notas:'Alta desde la cotización '+(c.folio||id)+'.',
       requiereFactura:'si', vigenciaHasta:vig.toISOString().slice(0,10) };
+    datos.notas+=otros.txt;
     const ok=await guardarDoc('clientes/'+id2, datos, false);
     if(!ok) return;
     clientes.push(Object.assign({id:id2},datos));
@@ -5081,7 +5095,7 @@ function cqFicha(k){
                          {t:'Editar datos', tipo:'b2', accion:function(){ cierra(); seleccion=r.c.id; pagoEditando=null; modalFicha(r.c.id); }});
   if(!ro && r.tipo==='cuenta') acc.push({t:'Dar de alta su membresía', accion:function(){ cierra(); cqAltaDesdeCuenta(r.a); }});
   if(!ro && r.x && estCot(r.x)==='Aprobada' && !r.x.clienteId) acc.push({t:'Dar de alta como cliente', accion:function(){ cierra(); altaDesdeCotizacion(r.x.id); }});
-  if(!ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot'}, location.origin); }catch(e){} }});
+  if(!ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot', cliente:cqParaCotizar(r)}, location.origin); }catch(e){} }});
   const v=CQV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo', titulo:r.nombre||'Sin nombre',
     nav: pos>=0 && lista.length>1 ? { pos:pos+1, total:lista.length, donde:'en tu lista', ant:pos>0, sig:pos<lista.length-1,
       ir:function(dir){ const n=lista[pos+(dir<0?-1:1)]; if(n) cqFicha(n); } } : null,
@@ -5097,6 +5111,15 @@ function cqFicha(k){
     const idPago=b.getAttribute('data-cq-pago');
     cierra(); pagoEditando=null; cerrarOverlay(); modalPago(null, idPago);
   });
+}
+/* «Nueva cotización» desde la ficha (22-nov-2026): el cotizador la empieza con su nombre, RFC, contacto y correo y con los
+   sistemas que ya tiene en su cuenta de Quo (si no tiene cuenta, Contabilita) */
+function cqParaCotizar(r){
+  const c=r.c||{}, a=r.a||null, x=r.x||{}, g=(r.g&&r.g.contacto)||{};
+  const rfc=c.rfc || (a&&a.rfcs&&a.rfcs[0]&&a.rfcs[0].rfc) || x.rfc || '';
+  return { nombre: c.nombre || (a&&a.nombre) || x.cliente || r.nombre || '', rfc: rfc,
+    atencion: c.contacto || x.atencion || g.nombre || '', correo: c.correoContacto || c.correoPlataforma || x.correo || g.correo || '',
+    sistemas: a && (a.contabilita||a.facturita||a.nominita) ? {conta:!!a.contabilita, fact:!!a.facturita, nomi:!!a.nominita} : null };
 }
 async function cqLigar(r, b){
   const sel=document.getElementById('cq-cta'); if(!sel||!r.c) return;

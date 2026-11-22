@@ -203,7 +203,7 @@
        sistemas Quo con su membresía, su cuenta, sus usuarios y lo de Gold. Va primero. */
     { k: 'quo', t: 'QUO', d: 'Los sistemas Quo: sus clientes, cotizaciones, su soporte (Q Chat) y el vigía fiscal.', subs: [
       { k: 'quo-membresias', v: 'quo', q: 'mem', t: 'Clientes Quo', d: 'Cada cliente de los sistemas Quo: su membresía y sus pagos, su cuenta, sus usuarios y lo de Gold.' },
-      { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de Quo Contabilita.' },
+      { k: 'quo-cotizador', v: 'quo', q: 'cot', t: 'Cotizador QUO', d: 'Cotizaciones de los sistemas Quo: Contabilita, Facturita y Nominita, juntos en una sola.' },
       { k: 'qchat', v: 'qch', p: 'conv', t: 'Conversaciones', d: 'Q Chat: la fila, lo que contesta la asistente y lo que atiende el equipo, por chat o llamada.' },
       { k: 'qchat-tickets', v: 'qch', p: 'tk', t: 'Tickets a desarrollo', d: 'Q Chat: lo que solo se arregla cambiando el sistema, con su folio para el cliente.' },
       { k: 'qchat-eficiencia', v: 'qch', p: 'efi', t: 'Eficiencia del soporte', d: 'Q Chat: lo que resolvió la asistente, lo que atendió cada persona y la espera.' },
