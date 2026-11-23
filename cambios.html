@@ -864,6 +864,11 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
 
   function estado(p) {
     var aut = ROL === 'autoriza' && puedeEscribir(), rev = p.revision || {}, b = [];
+    // Las que tocan Multinacional las autoriza y las regresa solo H\u00e9ctor Daniel Nava (23-nov-2026: «en estas solo yo»);
+    // la base lo revisa también (498). Deshacer una publicada y marcar el SQL siguen como siempre.
+    var soloDan = rev.solo_daniel === true, decide = aut && (!soloDan || YO === 'daniel.nava');
+    var notaMul = !soloDan ? '' : '<b>Toca Multinacional:</b> ' + (YO === 'daniel.nava' ? 'solo tú la autorizas o la regresas. '
+      : ROL === 'autoriza' ? 'la autoriza y la regresa solo H\u00e9ctor Daniel Nava; tú la puedes ver y comentar. ' : 'la autoriza solo H\u00e9ctor Daniel Nava. ');
     // quien la mandó la puede retirar mientras no esté publicada (2-nov-2026, pedido de Gabriel)
     if (ROL === 'propone' && puedeEscribir() && p.proponente === YO && ['por_autorizar', 'choca', 'error', 'rechazada'].indexOf(p.estado) >= 0)
       b.push('<button class="btn mal" type="button" data-a="retirar">Retirar propuesta</button>');
@@ -875,25 +880,26 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
     switch (p.estado) {
       case 'por_autorizar':
         if (p.semaforo === 'bloqueada') {
-          if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+          if (decide) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
           return caja('rojo', '<b>Bloqueada.</b> ' + esc(SEM_TXT.bloqueada) + (ROL === 'propone' ? ' Si hace falta, pídeselo a Daniel o a Fernando.' : ''), b);
         }
         if (rev.pruebas_ok === false) {
-          if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+          if (decide) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
           return caja('rojo', '<b>No pasa las revisiones automáticas del portal.</b> No se puede autorizar hasta que Gabo la corrija (el detalle está abajo, en «Revisión automática»).', b);
         }
         if (p.semaforo === 'rojo' && !(p.revisada_ok && p.revisada_sha === p.sha)) {
-          if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+          if (decide) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
           var vieja = p.revisada_en && p.revisada_sha !== p.sha;
-          return caja('amarillo', ROL === 'autoriza'
+          return caja('amarillo', notaMul + (ROL === 'autoriza'
             ? '<b>Delicada: antes de autorizarla, pídele a tu Claude «revisa la propuesta #' + p.id + '».</b> ' + (p.revisada_en && !vieja && !p.revisada_ok ? 'Tu Claude ya la revisó y no recomienda autorizarla (abajo está por qué).' : vieja ? 'La revisión que había era de una versión anterior.' : 'Cuando la revise, su dictamen aparece aquí y se habilita «Autorizar».')
-            : '<b>Delicada:</b> espera la revisión técnica del Claude de Daniel o de Fernando.', b, sqlTxt);
+            : '<b>Delicada:</b> espera la revisión técnica del Claude de Daniel o de Fernando.'), b, sqlTxt);
         }
-        if (aut) { b.push('<button class="btn pri" type="button" data-a="autorizar">Autorizar y publicar</button>'); b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>'); }
+        if (decide) { b.push('<button class="btn pri" type="button" data-a="autorizar">Autorizar y publicar</button>'); b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>'); }
+        if (soloDan) return caja('amarillo', notaMul + (decide ? esc(SEM_TXT[p.semaforo] || '') + ' Si la autorizas, se publica sola en alrededor de un minuto.' : ''), b, sqlTxt);
         return caja(p.semaforo === 'rojo' ? 'amarillo' : '', ROL === 'autoriza' ? (RESP.respaldo ? '<b>Espera la revisión de ' + esc(encargados()) + '.</b> Si hace falta, tú también puedes autorizarla o regresarla. ' : '<b>Espera tu revisión.</b> ') + esc(SEM_TXT[p.semaforo] || '') + ' Si la autorizas, se publica sola en alrededor de un minuto.'
           : '<b>Espera a que Daniel o Fernando la revisen.</b>', b, sqlTxt);
       case 'choca':
-        if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+        if (decide) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
         return caja('amarillo', '<b>Choca con cambios que se hicieron después en el portal</b> (' + esc((rev.choques || []).join(', ')) + '). Gabo tiene que pedirle a su Claude que traiga lo último y la vuelva a mandar.', b);
       case 'autorizada':
         return caja('amarillo', '<b>Autorizada por ' + esc(nombre(p.autorizada_por)) + '.</b> Se está publicando; tarda alrededor de un minuto.', b);
@@ -904,9 +910,9 @@ dialog .botones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;mar
       case 'rechazada':
         return caja('rojo', '<b>Rechazada por ' + esc(nombre(p.rechazada_por)) + '</b> (' + esc(hora(p.rechazada_en)) + '): ' + esc(p.motivo || ''), b);
       case 'error':
-        if (aut && p.semaforo !== 'bloqueada' && rev.pruebas_ok !== false && (p.semaforo !== 'rojo' || (p.revisada_ok && p.revisada_sha === p.sha))) b.push('<button class="btn pri" type="button" data-a="autorizar">Volver a intentar</button>');
-        if (aut) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
-        return caja('rojo', '<b>No se pudo publicar.</b> ' + esc(p.resultado || ''), b);
+        if (decide && p.semaforo !== 'bloqueada' && rev.pruebas_ok !== false && (p.semaforo !== 'rojo' || (p.revisada_ok && p.revisada_sha === p.sha))) b.push('<button class="btn pri" type="button" data-a="autorizar">Volver a intentar</button>');
+        if (decide) b.push('<button class="btn mal" type="button" data-a="rechazar">Rechazar</button>');
+        return caja('rojo', notaMul + '<b>No se pudo publicar.</b> ' + esc(p.resultado || ''), b);
       case 'deshaciendo':
         return caja('amarillo', '<b>Se está deshaciendo</b> (lo pidió ' + esc(nombre(p.deshecha_por)) + ').', b);
       case 'deshecha':
