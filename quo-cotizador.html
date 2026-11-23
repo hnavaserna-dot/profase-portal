@@ -184,6 +184,19 @@ details.ajustes summary::before{content:"+ ";font-weight:700;color:var(--sky)}
 details.ajustes[open] summary::before{content:"– "}
 details.ajustes .row2{margin-top:11px}
 details.ajustes .nota{font-size:11.5px;color:var(--ink-soft);margin:10px 0 0;line-height:1.5}
+/* Precios de la tienda en línea */
+/* al final de la página, como el registro (así, al salir, no empuja lo que ya se ve) */
+details.ajustes.tienda-sec{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px}
+.tienda-sec>summary{font-weight:600}
+.tienda-est{font-size:12.5px;margin:10px 0 0;line-height:1.5}
+.tienda-err{font-size:12.5px;margin:10px 0 0;line-height:1.5;color:#B42318;font-weight:600}
+.tienda-l{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.tienda-l li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.tienda-l li.cambia{border-color:#E47C28;background:rgba(228,124,40,.07)}
+.tienda-l .q{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.tienda-l .v{white-space:nowrap;color:var(--ink-soft)}
+.tienda-l .v b{color:var(--ink)}
+.tienda-pie{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 
 /* ---------- documento ---------- */
 .doc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
@@ -668,6 +681,7 @@ table.reg tr.editando{background:var(--sky-soft)}
         </div>
         <p class="nota">Verifica las ligas de redes: las dejé armadas con el nombre Sistemas QUO, pero no tengo forma de comprobar que sean las correctas.</p>
       </details>
+
     </div>
 
     <!-- ================= COTIZACIÓN ================= -->
@@ -784,6 +798,22 @@ table.reg tr.editando{background:var(--sky-soft)}
     <p class="reg-tot" id="reg-tot"></p>
   </section>
 
+  <!-- Precios de la tienda en línea (Héctor Daniel Nava, 22-nov-2026, 17:21: «Precios desde el Cotizador»): los precios de
+       www.quosistemas.com salen de aquí, una sola versión. Solo a quien los ve (quo_clientes_yo().precios); los publican
+       Héctor Daniel Nava y Fernando Cadengo, por la función «quo-clientes» (la base de Quo los vuelve a revisar). -->
+  <details class="ajustes tienda-sec" id="tienda" hidden>
+    <summary>Precios de la tienda en línea</summary>
+    <p class="nota">Los precios que ven los clientes al comprar solos en www.quosistemas.com salen de este cotizador: de los guardados para todos (no de lo que cambies solo para esta cotización).</p>
+    <p class="tienda-est" id="tienda-est" role="status">Ábrelo para compararlos con la tienda.</p>
+    <div id="tienda-lista"></div>
+    <p class="tienda-err" id="tienda-err" role="alert" hidden></p>
+    <div class="tienda-pie" id="tienda-pie" hidden>
+      <button class="btn sec" id="tienda-pub" type="button">Publicar en la tienda</button>
+      <button class="btn sec" id="tienda-no" type="button" hidden>Mejor no</button>
+    </div>
+    <p class="hint">Quien ya pagó sigue con el precio con que compró (su renovación también); lo nuevo vale para lo que se compre desde que lo publicas. Los cobros siguen de prueba hasta que se prendan los de verdad.</p>
+  </details>
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -853,6 +883,10 @@ table.reg tr.editando{background:var(--sky-soft)}
             dtipo:'no', dval:0,
             fm:1.25, fa:1.18, iva:0.16, fc:1.18 };
 
+  /* lo de fábrica (este archivo), antes de que lo cambien la base o quien cotiza: de aquí, con lo guardado para todos en
+     quo_ajustes/cotizador, salen los precios de la tienda (tiendaCatalogo) */
+  var FAB = { fm:S.fm, fa:S.fa, fc:S.fc, nomi:JSON.parse(JSON.stringify(NOMI)) };
+  var AJ_DOC = null;
   var $ = function(id){ return document.getElementById(id); };
   var mx = new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2});
   var nf = new Intl.NumberFormat('es-MX');
@@ -1324,6 +1358,7 @@ table.reg tr.editando{background:var(--sky-soft)}
   var AJ_CAMPOS = ['ben','bco','rfcq','cta','clabe','yt','fb'];
   var ajListo = false, ajTimer = null;
   function aplicarAjustes(a){
+    AJ_DOC = a || null;
     if (a){
       AJ_CAMPOS.forEach(function(id){
         if (typeof a[id] === 'string' && document.activeElement !== $(id)) $(id).value = a[id];
@@ -1343,15 +1378,22 @@ table.reg tr.editando{background:var(--sky-soft)}
   }
   /* los precios de Quo Nominita que trae la base (quo_ajustes/cotizador › nomi): cuatro precios positivos por periodo y el del
      trabajador adicional; lo que no venga bien se queda con el de este archivo */
-  function tomaNomi(n){
-    if (!n || typeof n !== 'object') return;
+  function nomiDe(n, base){
+    var o = JSON.parse(JSON.stringify(base));
+    if (!n || typeof n !== 'object') return o;
     ['mensual','anual'].forEach(function(per){
       var a = n[per];
       if (Array.isArray(a) && a.length === 4 && a.every(function(v){ return Number(v) > 0; }))
-        NOMI[per] = a.map(Number);
+        o[per] = a.map(Number);
     });
-    ['trabM','trabA'].forEach(function(k){ if (Number(n[k]) >= 0 && n[k] !== '' && n[k] !== null) NOMI[k] = Number(n[k]); });
-    if (typeof n.borrador === 'boolean') NOMI.borrador = n.borrador;
+    ['trabM','trabA'].forEach(function(k){ if (Number(n[k]) >= 0 && n[k] !== '' && n[k] !== null) o[k] = Number(n[k]); });
+    if (typeof n.borrador === 'boolean') o.borrador = n.borrador;
+    return o;
+  }
+  function tomaNomi(n){
+    if (!n || typeof n !== 'object') return;
+    var o = nomiDe(n, NOMI);
+    NOMI.mensual = o.mensual; NOMI.anual = o.anual; NOMI.trabM = o.trabM; NOMI.trabA = o.trabA; NOMI.borrador = o.borrador;
     pintarNomiAjustes();
   }
   function pintarNomiAjustes(){
@@ -1826,6 +1868,8 @@ table.reg tr.editando{background:var(--sky-soft)}
   /* empieza otra cotización: sin cliente, sin complementos ni descuento; se quedan los sistemas, el plan y el paquete escogidos */
   function nueva(){
     ['cli','rfc','atn','correocli'].forEach(function(id){ $(id).value = ''; });
+    // de cero: solo Quo Contabilita (lo del cliente anterior, como sus timbres de Facturita, no se queda)
+    S.sis = { conta:true, fact:false, nomi:false }; S.timbres = -1;
     S.usuarios = 0; $('usuarios').value = 0;
     S.almac = -1; S.calcpm = false; $('calcpm').checked = false;
     S.ntrab = 0; $('ntrab').value = 0;
@@ -1991,6 +2035,147 @@ table.reg tr.editando{background:var(--sky-soft)}
     }).catch(function(){});
   }
 
+  /* ================= precios de la tienda en línea ================= */
+  /* Héctor Daniel Nava, 22-nov-2026, 17:21: «Precios desde el Cotizador». Los de www.quosistemas.com salen de aquí, una sola
+     versión: lo de fábrica de este archivo con lo guardado para todos en quo_ajustes/cotizador (fm, fa, fc y nomi), nunca lo
+     que alguien cambió solo para su cotización. Los ven quienes tienen quo_clientes_yo().precios ('publica' o 've') y los
+     publican Héctor Daniel Nava y Fernando Cadengo ('publica'), por la función «quo-clientes»; la base de Quo los vuelve a
+     revisar todos (qs_canal_precios: todo o nada). */
+  var TI = { papel:null, tienda:null, trayendo:false, confirma:false, ocupado:false, listo:'' };
+  var TI_SIS = { contabilita:'Contabilita', facturita:'Facturita', nominita:'Nominita' };
+  var TI_PER = { mensual:'al mes', anual:'al año', paquete:'paquete', cada_cobro:'en cada cobro' };
+  function r2(v){ return Math.round(v * 100) / 100; }
+  function tiendaFactor(id){
+    var v = AJ_DOC ? Number(AJ_DOC[id]) : NaN;
+    return (AJ_DOC && AJ_DOC[id] !== undefined && !isNaN(v) && v > 0) ? v : FAB[id];
+  }
+  function tiendaCatalogo(){
+    var fm = tiendaFactor('fm'), fa = tiendaFactor('fa'), fc = tiendaFactor('fc');
+    var nomi = nomiDe(AJ_DOC && AJ_DOC.nomi, FAB.nomi), l = [];
+    ['LITE','PRO'].forEach(function(lin){
+      ['mensual','anual'].forEach(function(per){
+        BASE[lin][per].forEach(function(p, i){
+          l.push({ sistema:'contabilita', clave:lin.toLowerCase() + '-' + (i + 1), periodo:per,
+                   precio:r2(p * (per === 'mensual' ? fm : fa)), nombre:lin + ' · Plan ' + (i + 1) });
+        });
+      });
+    });
+    l.push({ sistema:'contabilita', clave:'usuario', periodo:'cada_cobro', precio:r2(USUARIO * fc), nombre:'Usuario adicional' });
+    TIMBRES.forEach(function(t){
+      l.push({ sistema:'facturita', clave:'timbres-' + t.n, periodo:'paquete', precio:r2(t.p * fc), nombre:nf.format(t.n) + ' timbres' });
+    });
+    ['mensual','anual'].forEach(function(per){
+      nomi[per].forEach(function(p, i){
+        l.push({ sistema:'nominita', clave:'plan-' + (i + 1), periodo:per, precio:r2(p), nombre:'Plan ' + (i + 1), borrador:!!nomi.borrador });
+      });
+      l.push({ sistema:'nominita', clave:'trabajador', periodo:per, precio:r2(per === 'mensual' ? nomi.trabM : nomi.trabA),
+               nombre:'Trabajador adicional', borrador:!!nomi.borrador });
+    });
+    return l;
+  }
+  function tiendaCompara(){
+    var tienda = {}, vistos = {}, cambia = [], falta = [], igual = 0;
+    (TI.tienda || []).forEach(function(x){ tienda[x.sistema + '|' + x.clave + '|' + x.periodo] = x; });
+    tiendaCatalogo().forEach(function(c){
+      var k = c.sistema + '|' + c.clave + '|' + c.periodo, t = tienda[k];
+      if (!t){ falta.push(c); return; }
+      vistos[k] = true;
+      if (Number(t.precio) !== c.precio || (c.borrador !== undefined && !!t.borrador !== c.borrador)) cambia.push({ c:c, t:t });
+      else igual++;
+    });
+    var solo = (TI.tienda || []).filter(function(x){ return !vistos[x.sistema + '|' + x.clave + '|' + x.periodo]; });
+    return { cambia:cambia, falta:falta, solo:solo, igual:igual };
+  }
+  function tiendaNombre(x){ return (TI_SIS[x.sistema] || x.sistema) + ' · ' + x.nombre + ' · ' + (TI_PER[x.periodo] || x.periodo); }
+  function tiendaNota(t){ var p = document.createElement('p'); p.className = 'nota'; p.textContent = t; return p; }
+  function tiendaPinta(){
+    var est = $('tienda-est'), lista = $('tienda-lista'), pie = $('tienda-pie'), pub = $('tienda-pub'), no = $('tienda-no');
+    lista.textContent = '';
+    if (TI.trayendo && !TI.tienda){ est.textContent = 'Trayendo los precios de la tienda…'; pie.hidden = true; return; }
+    if (!TI.tienda){ est.textContent = 'Ábrelo para compararlos con la tienda.'; pie.hidden = true; return; }
+    var k = tiendaCompara(), n = k.cambia.length;
+    est.textContent = TI.listo ? TI.listo
+      : n ? 'La tienda tiene ' + n + (n === 1 ? ' precio distinto' : ' precios distintos') + ' a los del cotizador (antes del IVA).'
+          : 'La tienda ya tiene los mismos precios que el cotizador (' + k.igual + ').';
+    if (n){
+      var ul = document.createElement('ul'); ul.className = 'tienda-l';
+      k.cambia.forEach(function(x){
+        var li = document.createElement('li'), q = document.createElement('span'), v = document.createElement('span'), b = document.createElement('b');
+        li.className = 'cambia'; q.className = 'q'; v.className = 'v';
+        q.textContent = tiendaNombre(x.c);
+        v.textContent = 'Tienda ' + money(x.t.precio) + (x.t.borrador ? ' (borrador)' : '') + ' → ';
+        b.textContent = money(x.c.precio) + (x.c.borrador ? ' (borrador)' : '');
+        v.appendChild(b); li.appendChild(q); li.appendChild(v); ul.appendChild(li);
+      });
+      lista.appendChild(ul);
+    }
+    if (k.falta.length) lista.appendChild(tiendaNota('El cotizador trae ' + k.falta.length + ' que la tienda no tiene ('
+      + k.falta.map(tiendaNombre).join('; ') + '): esos no se publican. Qué hacer: pídele a tu Claude que los agregue a la tienda; los demás sí se publican.'));
+    if (k.solo.length) lista.appendChild(tiendaNota('La tienda tiene ' + k.solo.length + ' que el cotizador no trae ('
+      + k.solo.map(tiendaNombre).join('; ') + '); esos se quedan como están.'));
+    var puede = TI.papel === 'publica' && !consulta() && n > 0;
+    pie.hidden = !puede;
+    pub.textContent = TI.ocupado ? 'Publicando…'
+      : TI.confirma ? '¿Seguro? Sí, publicar ' + (n === 1 ? 'el cambio' : 'los ' + n + ' cambios')
+      : 'Publicar ' + n + (n === 1 ? ' cambio' : ' cambios') + ' en la tienda';
+    pub.className = TI.confirma ? 'btn' : 'btn sec';
+    pub.disabled = TI.ocupado;
+    no.hidden = !TI.confirma || TI.ocupado;
+  }
+  function tiendaError(e, que){
+    var t = (window.PORTAL && PORTAL.falla) ? PORTAL.falla(e, que) : String((e && e.message) || e);
+    var x = $('tienda-err'); x.textContent = t; x.hidden = false;
+  }
+  function tiendaPide(cuerpo, que){
+    var P = window.PORTAL;
+    return P.listo.then(function(){ return P.sb.functions.invoke('quo-clientes', { body:cuerpo }); }).then(function(r){
+      var d = r.data;
+      var pide = (r.error && !d && r.error.context && r.error.context.json) ? r.error.context.json().catch(function(){ return null; }) : Promise.resolve(d);
+      return pide.then(function(d){
+        if (!d || d.ok !== true) throw new Error((d && d.error) || ('No se pudo ' + que + '. Qué hacer: vuelve a intentar en un momento.'));
+        return d;
+      });
+    });
+  }
+  function tiendaTrae(){
+    if (TI.trayendo) return;
+    TI.trayendo = true; $('tienda-err').hidden = true; tiendaPinta();
+    tiendaPide({ accion:'precios' }, 'traer los precios de la tienda').then(function(d){
+      TI.tienda = d.precios || []; TI.trayendo = false; tiendaPinta();
+    }).catch(function(e){ TI.trayendo = false; tiendaPinta(); tiendaError(e, 'traer los precios de la tienda'); });
+  }
+  function tiendaPublica(){
+    if (TI.ocupado || TI.papel !== 'publica' || consulta()) return;
+    var k = tiendaCompara();
+    if (!k.cambia.length) return;
+    if (!TI.confirma){ TI.confirma = true; TI.listo = ''; tiendaPinta(); return; }
+    TI.ocupado = true; $('tienda-err').hidden = true; tiendaPinta();
+    var l = k.cambia.map(function(x){
+      var o = { sistema:x.c.sistema, clave:x.c.clave, periodo:x.c.periodo, precio:x.c.precio };
+      if (x.c.borrador !== undefined) o.borrador = x.c.borrador;
+      return o;
+    });
+    tiendaPide({ accion:'precios_publica', precios:l }, 'publicar los precios en la tienda').then(function(d){
+      TI.ocupado = false; TI.confirma = false;
+      var c = Number(d.cambiaron) || 0;
+      TI.listo = c ? 'Listo: ' + (c === 1 ? 'cambió 1 precio' : 'cambiaron ' + c + ' precios') + ' en la tienda.' : 'La tienda ya tenía esos precios.';
+      TI.tienda = null; tiendaPinta();
+      return tiendaPide({ accion:'precios' }, 'traer los precios de la tienda').then(function(x){ TI.tienda = x.precios || []; tiendaPinta(); });
+    }).catch(function(e){ TI.ocupado = false; TI.confirma = false; tiendaPinta(); tiendaError(e, 'publicar los precios en la tienda'); });
+  }
+  function tiendaInicia(){
+    var P = window.PORTAL;
+    if (!P || !P.sb) return;
+    P.sb.rpc('quo_clientes_yo').then(function(r){
+      var p = r && r.data && r.data.precios;
+      if (p !== 'publica' && p !== 've') return;
+      TI.papel = p; $('tienda').hidden = false; tiendaPinta();
+    }, function(){});
+    $('tienda').addEventListener('toggle', function(){ if (this.open && !TI.tienda) tiendaTrae(); });
+    $('tienda-pub').addEventListener('click', tiendaPublica);
+    $('tienda-no').addEventListener('click', function(){ TI.confirma = false; tiendaPinta(); });
+  }
+
   function acceso(){
     var P = window.PORTAL;
     if (!P) return Promise.resolve(false);
@@ -2018,7 +2203,7 @@ table.reg tr.editando{background:var(--sky-soft)}
       ['ben','bco','rfcq','cta','clabe','yt','fb','verbanco'].forEach(function(id){ $(id).disabled = true; });
     }
     if (p && !($('asesor').value || '').trim()){ $('asesor').value = p.nombre || ''; render(); }
-    iniciarDB(); icFuentes();
+    iniciarDB(); icFuentes(); tiendaInicia();
   });
 })();
 </script>

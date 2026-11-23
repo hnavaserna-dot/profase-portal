@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Clientes Quo</title><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=15297748d4"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/paginas.js?v=6ea322887b"></script>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Clientes Quo</title><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=15297748d4"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/buscador.js?v=bdda9a797c"></script>
 <script>
 /* Portal PROFASE · Quo Contabilita: lo que esta página pedía a Claude, sobre el portal.
    db: las mismas colecciones con prefijo quo_ (la sección de la compañía QUO en la base).
@@ -900,6 +900,9 @@ tr.total-row td{border-top:1px solid var(--line);font-weight:700;color:var(--ink
 #cq-tb td b{color:var(--ink)}
 .cq-vacio{text-align:center;padding:28px 16px!important;color:var(--tenue)}
 .segv .cq-tw{overflow-x:auto;min-width:0;margin:0 0 12px}
+/* la ventana de los descuentos: su tabla se desliza de lado dentro de su recuadro (nunca lo ensancha) */
+#cq-ds{min-width:0;max-width:100%}
+#cq-ds .cq-tw{overflow-x:auto;min-width:0;max-width:100%;margin:0 0 12px}
 .segv table.cq-mini{min-width:520px;font-size:.66rem}
 .segv table.cq-mini th,.segv table.cq-mini td{padding:.5rem .6rem}
 .segv .cq-h{margin:14px 0 6px;font-size:.72rem;font-weight:700;color:var(--ink)}
@@ -4614,10 +4617,13 @@ const CQ_PILAS=[
   {k:'porvencer', t:'Vencen en 30 días',      d:'Avisarles y cobrar antes de que venza (también lo de Gold).', tono:'ambar', toca:true},
   {k:'sinpago',   t:'Sin comprobante',        d:'Sin pago registrado o un pago sin su comprobante.', tono:'naranja', toca:true},
   {k:'prospecto', t:'Prospectos y cotizaciones', d:'Solicitudes de la página de venta y cotizaciones sin respuesta.', tono:'azul'},
+  {k:'enlinea',   t:'Compraron en línea',     d:'Se registraron solos en www.quosistemas.com: su prueba, su plan y sus pagos con tarjeta.', tono:'violeta'},
   {k:'sinligar',  t:'Sin ligar',              d:'La membresía sin su cuenta de Quo o la cuenta de Quo sin su membresía.', tono:'gris'},
   {k:'activo',    t:'Al corriente',           d:'Con su membresía vigente.', tono:'verde'}];
 const CQ_EST={vencido:'Vencido', porvencer:'Por vencer', activo:'Al corriente', sinfecha:'Sin fecha de pago', pausa:'En pausa', baja:'Baja',
-  gratis:'Gratis', sinmem:'Sin membresía', solicitud:'Solicitud nueva', cotizacion:'Cotización abierta'};
+  gratis:'Gratis', sinmem:'Sin membresía', solicitud:'Solicitud nueva', cotizacion:'Cotización abierta',
+  lprueba:'En prueba (en línea)', lactiva:'Pagando en línea', lgracia:'Su pago no pasó', ldetenida:'Detenida por falta de pago',
+  lvencida:'Prueba vencida sin pagar', lterminada:'Su plan en línea terminó'};
 /* lo de Quo Gold (lo que tenía comprado cada cuenta maestra; 28_gold_maestras.sql de Quo, lo trae «Pasar de Quo»): para tenerlo
    en el radar y cobrarle después. Lo mismo que enseñaba Contabilita › Administración › Cuentas maestras, que se pasó aquí. */
 const GQ_EST={vencida:['Vencida en Gold','bad'], por_vencer:['Vence pronto en Gold','warn'], vigente:['Vigente en Gold','ok'], sin_fecha:['Sin fecha en Gold','neutral'], gratis:['Gratis','neutral']};
@@ -4633,6 +4639,25 @@ function gqEstado(g){
 function gqDias(g){ return g&&g.vence ? diasEntre(HOY, String(g.vence).slice(0,10)) : null; }
 function gqUno(a){ const l=a?cqGoldDe(a.id):[]; return l.slice().sort(function(x, y){ return String(y.vence||'').localeCompare(String(x.vence||'')); })[0]||null; }
 const COT_ABIERTA=['Enviada','En seguimiento'];
+/* La compra en línea (22-nov-2026; Héctor Daniel Nava, 17:21: «Clientes Quo en el CRM»): de las cuentas que se registraron
+   solas en www.quosistemas.com, la base de Quo manda su suscripción de cada sistema y sus pagos en línea (qs_susc_canal de
+   52_qs_stripe.sql; nunca su tarjeta). Se cobra con Stripe y no lleva membresía aquí: solo se ve. */
+const CL_EST={prueba:['En prueba','neutral'], prueba_vencida:['Prueba vencida sin pagar','warn'], activa:['Pagando en línea','ok'],
+  gracia:['Su pago no pasó','bad'], suspendida:['Detenida por falta de pago','bad'], terminada:['Su plan terminó','warn']};
+const CL_ORDEN=['suspendida','gracia','prueba_vencida','terminada','prueba','activa'];
+const CL_KEST={prueba:'lprueba', prueba_vencida:'lvencida', activa:'lactiva', gracia:'lgracia', suspendida:'ldetenida', terminada:'lterminada'};
+function clSus(a){ return (a&&a.suscripciones)||[]; }
+function clEstado(s){ return CL_EST[s.estado]?s.estado:'prueba'; }
+function clPeor(a){ const l=clSus(a).map(clEstado); for(let i=0;i<CL_ORDEN.length;i++) if(l.indexOf(CL_ORDEN[i])>=0) return CL_ORDEN[i]; return 'prueba'; }
+function clFecha(s){ const e=clEstado(s); return e==='gracia'?s.gracia_hasta : (e==='prueba'||e==='prueba_vencida')?s.prueba_hasta : s.vence; }
+function clDias(s){ const f=clFecha(s); return f?diasEntre(HOY, String(f).slice(0,10)):null; }
+function clSisTxt(k){ const x=CQ_SIS.find(function(y){ return y[0]===k; }); return x?x[1]:k; }
+function clPorVencer(a){ return clSus(a).some(function(s){ const e=clEstado(s), d=clDias(s);
+  return d!=null && ((e==='prueba' && d<=7) || (e==='activa' && (s.periodo==='paquete' || !s.renueva) && d<=30)); }); }
+function clDetenida(a){ return clSus(a).some(function(s){ return s.detenida; }); }
+function clPrueba(a){ return clSus(a).some(function(s){ return s.modo==='prueba'; }) || ((a&&a.pagos_linea)||[]).some(function(p){ return p.prueba; }); }
+function clUltPago(a){ return ((a&&a.pagos_linea)||[]).find(function(p){ return p.estado==='pagado'; })||null; }
+function clPeriodo(s){ return {mensual:'mensual', anual:'anual', paquete:'paquete de timbres'}[s.periodo]||''; }
 
 function cqNorm(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
 function cqRfc(s){ return String(s||'').trim().toUpperCase(); }
@@ -4663,6 +4688,7 @@ async function cqCarga(){
     if(r.error && !d){ try{ d=await r.error.context.json(); }catch(e){ d=null; } }
     if(!d || d.ok!==true) throw new Error((d&&d.error)||'No se pudo traer lo de Quo. Qué hacer: vuelve a intentar en un momento.');
     CQ.d=d; CQ.hora=Date.now();
+    const bd=document.getElementById('cq-mas-desc'); if(bd) bd.hidden=!cqDescPapel();
   }catch(e){
     CQ.err=(window.PORTAL&&PORTAL.falla)?PORTAL.falla(e,'traer las cuentas de Quo'):(String((e&&e.message)||e)||'No se pudo traer lo de Quo. Qué hacer: vuelve a intentar en un momento.');
   }
@@ -4715,6 +4741,16 @@ function cqFilas(){
   });
   cqCuentas().forEach(function(a){
     if(a.propia || usadas.has(a.id)) return;
+    if(clSus(a).length){
+      const pe=clPeor(a), p=['enlinea'];
+      if(['suspendida','gracia','prueba_vencida','terminada'].indexOf(pe)>=0) p.push('vencido');
+      else if(clPorVencer(a)) p.push('porvencer');
+      if(pe==='activa') p.push('activo');
+      const ds=clSus(a).map(clDias).filter(function(x){ return x!=null; });
+      filas.push({k:'a:'+a.id, tipo:'cuenta', linea:true, a:a, g:null, ge:null, est:CL_KEST[pe], pe:pe, p:p, cots:[], ab:[], nombre:a.nombre||'',
+        grupo:a.area||'', cartera:'externo', gdias:ds.length?Math.min.apply(null, ds):null, upl:clUltPago(a)});
+      return;
+    }
     const g=gqUno(a), ge=gqEstado(g), p=['sinligar'];
     if(ge==='vencida') p.push('vencido');
     if(ge==='por_vencer') p.push('porvencer');
@@ -4786,6 +4822,8 @@ function cqArmaBarra(){
               mk('Padrón y grupos', ir('clientes'), 'La lista de antes, con sus categorías y los grupos (quién paga por quién)'),
               mk('Todas las cotizaciones', ir('cotizaciones'), 'Las del Cotizador QUO, por estatus')],
              [ro?null:mk('Registrar un pago suelto', function(){ cerrarOverlay(); modalPago(null, null); }, 'Un depósito que todavía no sabes de quién es'),
+              (function(){ const b=mk('Descuentos', function(){ cqDescuentos(); }, 'Los descuentos de la compra en línea: un código como BUENFIN o un precio especial para una cuenta');
+                b.id='cq-mas-desc'; b.hidden=!cqDescPapel(); return b; })(),   // sale cuando la base dice quién los ve (al traer lo de Quo)
               mk('Volver a traer lo de Quo', function(){ cqCarga(); }, 'Las cuentas, usuarios, lo de Gold y las solicitudes, otra vez de la base de Quo'),
               mk('Cómo se lee esta pantalla', cqComoSeLee)].filter(Boolean)];
   CQ.ui=window.PROFASE_PILAS.barra(document.getElementById('cq-barra'), {
@@ -4846,6 +4884,7 @@ function cqRevisar(filas){
 }
 function cqPlan(r){
   if(r.c) return esc(servicioTexto(r.c));
+  if(r.linea) return clSus(r.a).map(function(s){ return esc(clSisTxt(s.sistema))+': '+esc(s.plan_txt||s.plan); }).join('<br>')+'<div class="cq-mu">en línea</div>';
   if(r.tipo==='cuenta'){ if(!r.g) return '<span class="cq-mu">Sin membresía</span>'; if(r.g.gratis) return 'Gratis';
     const pq=(r.g.paquetes||[]).filter(function(x){ return String(x.estado||'').toUpperCase()==='ACTIVO'; })[0]||(r.g.paquetes||[])[0];
     return (pq?esc(pq.producto||'')+(pq.paquete?' · '+esc(pq.paquete):''):'Lo de Gold')+'<div class="cq-mu">en Gold</div>'; }
@@ -4856,6 +4895,9 @@ function cqPlan(r){
 function cqVence(r){
   if(r.c){ if(!r.c.vigenciaHasta) return '<span class="cq-mu">Sin fecha</span>';
     const d=r.e&&r.e.dias; return esc(cqFecha(r.c.vigenciaHasta))+(d!=null?'<div class="cq-mu">'+(d<0?'hace '+(-d)+' días':d===0?'hoy':'en '+d+' días')+'</div>':''); }
+  if(r.linea){ const s=clSus(r.a).slice().sort(function(x, y){ const a=clDias(x), b=clDias(y); return (a==null?1e6:a)-(b==null?1e6:b); })[0];
+    const f=s&&clFecha(s), d=s?clDias(s):null; if(!f) return '<span class="cq-mu">—</span>';
+    return esc(cqFecha(f))+'<div class="cq-mu">'+(clEstado(s)==='gracia'?'su gracia':/^prueba/.test(clEstado(s))?'su prueba':'su plan')+' · '+(d<0?'hace '+(-d)+' días':d===0?'hoy':'en '+d+' días')+'</div>'; }
   if(r.tipo==='cuenta'){ if(!r.g||!r.g.vence) return '<span class="cq-mu">'+(r.g&&r.g.gratis?'Gratis':'—')+'</span>'; const d=r.gdias;
     return esc(cqFecha(r.g.vence))+'<div class="cq-mu">en Gold · '+(d<0?'hace '+(-d)+' días':d===0?'hoy':'en '+d+' días')+'</div>'; }
   if(r.x) return r.x.fecha ? esc(cqFecha(r.x.fecha))+'<div class="cq-mu">se cotizó</div>' : '—';
@@ -4864,6 +4906,7 @@ function cqVence(r){
 }
 function cqEstado(r){
   if(r.e && r.c) return chipEstado(r.c);
+  if(r.linea){ const e=CL_EST[r.pe]; return cqChip(e[0], e[1])+(clDetenida(r.a)?' '+cqChip('Solo entra a «Mi suscripción»','bad'):'')+(clPrueba(r.a)?' '+cqChip('Cobros de prueba','neutral'):''); }
   if(r.tipo==='cuenta' && r.ge){ const e=GQ_EST[r.ge]; return cqChip(e[0], e[1])+(r.ge==='gratis'?'':' '+cqChip('Sin membresía','warn'))+(r.g&&r.g.falla?' '+cqChip('Le faltó algo de Gold','warn'):''); }
   return cqChip(CQ_EST[r.est]||'', r.est==='sinmem'?'warn':'neutral');
 }
@@ -4876,7 +4919,7 @@ function cqPintaTabla(){
   tb.innerHTML=pag.map(function(r){
     const up=r.ps&&r.ps[0];
     const sub=r.tipo==='membresia' ? chipTipo(r.c)+(r.grupo?' <span class="cq-mu">'+esc(r.grupo)+'</span>':'')
-      : r.tipo==='cuenta' ? '<span class="cq-mu">Cuenta en Quo'+(r.a.area?' · '+esc(r.a.area):'')+'</span>'
+      : r.tipo==='cuenta' ? '<span class="cq-mu">'+(r.linea?'Se registró sola · compra en línea':'Cuenta en Quo'+(r.a.area?' · '+esc(r.a.area):''))+'</span>'
       : r.tipo==='cotizacion' ? '<span class="cq-mu">Prospecto · cotización '+esc(r.x.folio||'')+'</span>'
       : '<span class="cq-mu">Prospecto · solicitud de la página</span>';
     const nu=r.a ? (r.a.usuarios||[]).length : null;
@@ -4884,7 +4927,8 @@ function cqPintaTabla(){
       +'<td><b>'+esc(r.nombre||'Sin nombre')+'</b><div>'+sub+'</div></td>'
       +'<td>'+(r.tipo==='membresia'||r.tipo==='cuenta'?cqSistemas(r.a):'<span class="cq-mu">—</span>')+'</td>'
       +'<td>'+cqPlan(r)+'</td><td>'+cqVence(r)+'</td>'
-      +'<td>'+(up?esc(cqFecha(up.fecha))+'<div class="cq-mu">'+money(up.monto)+'</div>':'<span class="cq-mu">—</span>')+'</td>'
+      +'<td>'+(up?esc(cqFecha(up.fecha))+'<div class="cq-mu">'+money(up.monto)+'</div>'
+        :r.upl?esc(cqFecha(r.upl.fecha))+'<div class="cq-mu">'+money(r.upl.total)+' · en línea</div>':'<span class="cq-mu">—</span>')+'</td>'
       +'<td class="r">'+(nu==null?'<span class="cq-mu">—</span>':nu)+'</td>'
       +'<td>'+cqEstado(r)+(r.ab&&r.ab.length&&r.tipo==='membresia'?'<div class="cq-mu">'+r.ab.length+' cotización'+(r.ab.length>1?'es':'')+' abierta'+(r.ab.length>1?'s':'')+'</div>':'')+'</td></tr>';
   }).join('');
@@ -4909,9 +4953,21 @@ function cqFalta(r){
   }
   if(CQ.d && (r.tipo==='membresia'||r.tipo==='cuenta')){
     if(!r.a) l.push(['no','No está ligada a su cuenta de Quo. Qué hacer: escoge su cuenta en la pestaña «Usuarios».']);
-    else if(r.tipo==='cuenta') l.push(['no','Su cuenta de Quo no tiene membresía. Qué hacer: «Dar de alta su membresía».']);
+    else if(r.tipo==='cuenta'){ if(!r.linea) l.push(['no','Su cuenta de Quo no tiene membresía. Qué hacer: «Dar de alta su membresía».']); }
     else l.push(['si','Ligada a su cuenta de Quo «'+esc(r.a.nombre)+'» ('+esc(r.como)+').']);
     if(r.a && !r.a.activa) l.push(['no','Su cuenta de Quo está suspendida'+(r.a.motivo?': '+esc(r.a.motivo):'')+'.']);
+  }
+  if(r.a && clSus(r.a).length){
+    clSus(r.a).forEach(function(s){
+      const n=clSisTxt(s.sistema), e=clEstado(s), d=clDias(s), f=clFecha(s);
+      l.push(e==='prueba'?['va','Su prueba de '+n+' termina el '+esc(cqFecha(f))+' ('+(d<=0?'hoy':'en '+d+(d===1?' día':' días'))+'). Qué hacer: nada por ahora; si quiere seguir, él mismo paga en «Mi suscripción».']
+        : e==='prueba_vencida'?['no','Su prueba de '+n+' terminó el '+esc(cqFecha(f))+' y no ha pagado'+(s.detenida?': ya solo entra a «Mi suscripción»':'')+'. Qué hacer: escríbele para ofrecerle su plan'+(cqDescPapel()==='crea'?' o dale un descuento en «Más ▾ › Descuentos»':'')+'.']
+        : e==='gracia'?['no','Su pago de '+n+' no pasó'+(s.falla_desde?' (desde el '+esc(cqFecha(s.falla_desde))+')':'')+'; tiene hasta el '+esc(cqFecha(s.gracia_hasta))+' para pagar. Qué hacer: Stripe lo vuelve a intentar solo; escríbele para que cambie su tarjeta en «Mi suscripción».']
+        : e==='suspendida'?['no',n+' está detenida por falta de pago: solo entra a «Mi suscripción». Qué hacer: escríbele; en cuanto pague, vuelve a entrar en ese momento y no se borró nada.']
+        : e==='terminada'?['va','Su plan de '+n+' terminó. Qué hacer: si quiere volver, él mismo compra en «Mi suscripción».']
+        : ['si',n+': '+esc(s.plan_txt||s.plan)+(f?', pagado hasta el '+esc(cqFecha(f)):'')+(s.periodo==='paquete'?'':s.renueva?' (se renueva solo)':' (no se renueva)')+'.']);
+    });
+    if(clPrueba(r.a)) l.push(['va','Sus cobros son de prueba (Stripe en modo de prueba): todavía no es dinero de verdad. Qué hacer: nada; los cobros de verdad se prenden con los precios finales.']);
   }
   if(r.tipo==='cuenta' && r.ge){
     const d=r.gdias;
@@ -4929,6 +4985,7 @@ function cqResumen(r){
   const up=r.ps&&r.ps[0];
   const partes=[];
   if(r.c){ partes.push(s('Plan', esc(servicioTexto(r.c))), s('Vence', r.c.vigenciaHasta?esc(cqFecha(r.c.vigenciaHasta)):'Sin fecha'), s('Último pago', up?esc(cqFecha(up.fecha))+' · '+money(up.monto):'Ninguno')); }
+  if(r.linea){ const n=clSus(r.a).length; partes.push(s('Compra en línea', n+' sistema'+(n>1?'s':'')), s('Último pago', r.upl?esc(cqFecha(r.upl.fecha))+' · '+money(r.upl.total):'Ninguno')); }
   if(r.tipo==='cuenta' && r.g){ partes.push(s('En Gold', r.g.gratis?'Gratis':(r.g.vence?'vence '+esc(cqFecha(r.g.vence)):'sin fecha'))); }
   if(r.a){ partes.push(s('Cuenta en Quo', esc(r.a.nombre)), s('RFC', r.a.rfc_contabilita||0), s('Usuarios', (r.a.usuarios||[]).length)); }
   if(r.x){ partes.push(s('Folio', esc(r.x.folio||r.x.id)), s('Total', money(r.x.total)), s('Estatus', esc(estCot(r.x)))); }
@@ -4936,7 +4993,7 @@ function cqResumen(r){
   return '<div class="cq-rs">'+cqEstado(r)+(r.a?' '+cqSistemas(r.a):'')+'</div><div class="r2">'+partes.join('')+'</div>';
 }
 function cqTabPagos(r){
-  if(!r.c) return '<p class="cq-mu">'+(r.tipo==='cuenta'?'Todavía no tiene membresía aquí. «Dar de alta su membresía» la crea con lo de su cuenta.':'Es un prospecto: todavía no tiene membresía.')+'</p>';
+  if(!r.c) return '<p class="cq-mu">'+(r.linea?'Paga en línea con su tarjeta, así que no lleva membresía aquí: lo suyo está en la pestaña «Compra en línea».':r.tipo==='cuenta'?'Todavía no tiene membresía aquí. «Dar de alta su membresía» la crea con lo de su cuenta.':'Es un prospecto: todavía no tiene membresía.')+'</p>';
   let h=barraVigencia(r.c);
   const grupo=cuentasDelGrupo(r.c).filter(function(x){ return x.id!==r.c.id; });
   if(grupo.length) h+='<p class="cq-mu">Su pago cubre también: '+grupo.map(function(x){ return esc(x.nombre); }).join(', ')+'.</p>';
@@ -4992,6 +5049,34 @@ function cqGoldAcceso(r){
   if(nota) h+='<p class="cq-mu">'+nota+'</p>';
   else if(mv) h+='<p class="cq-mu">«Darle acceso» le da Quo Contabilita de esta cuenta y le manda su código a su correo desde acceso@quosistemas.com; con él crea su contraseña. Es uno por uno: nada se manda solo.</p>';
   else if(!cqEsCasa(r.a)) h+='<p class="cq-mu">Darles acceso lo hace, uno por uno, quien tiene ese permiso en Clientes Quo.</p>';
+  return h;
+}
+/* la compra en línea de una cuenta que se registró sola: su suscripción de cada sistema y sus pagos con tarjeta (solo se ve) */
+// La factura de un pago en línea: la timbra sola Quo Facturita (su 86_qf_ventas_quo.sql); aquí solo se dice cómo va
+const CQ_FAC_LINEA={ facturada:['Timbrada','ok'], por_facturar:['En camino','neutral'], error:['No salió','bad'] };
+function cqFacLinea(p){
+  if(p.factura) return esc(p.factura)+(p.prueba?'<div class="cq-mu">de prueba (sin validez)</div>':'');
+  const e=CQ_FAC_LINEA[p.factura_estado];
+  if(!e || p.estado!=='pagado') return '<span class="cq-mu">—</span>';
+  return cqChip(e[0], e[1])+(p.factura_estado==='error'?'<div class="cq-mu">Se vuelve a intentar sola</div>':'');
+}
+function cqTabLinea(r){
+  const sus=clSus(r.a), pg=(r.a&&r.a.pagos_linea)||[];
+  let h='<h4 class="cq-h">Su suscripción en cada sistema</h4><div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Sistema</th><th>Plan</th><th>Cómo está</th><th>Desde</th><th>Hasta</th><th>Cobro</th></tr></thead><tbody>'
+    +sus.map(function(s){ const e=CL_EST[clEstado(s)], f=clFecha(s), per=clPeriodo(s);
+      return '<tr><td><b>'+esc(clSisTxt(s.sistema))+'</b></td><td>'+esc(s.plan_txt||s.plan)+(per?'<div class="cq-mu">'+esc(per)+'</div>':'')+'</td>'
+        +'<td>'+cqChip(e[0], e[1])+(s.detenida?'<div class="cq-mu">Solo entra a «Mi suscripción»</div>':'')+(s.por_confirmar?'<div class="cq-mu">Todavía no confirma su correo</div>':'')+'</td>'
+        +'<td>'+esc(cqFecha(s.prueba_desde||s.creada))+'</td><td>'+(f?esc(cqFecha(f)):'—')+'</td>'
+        +'<td>'+(s.cobro_auto?'Automático, con su tarjeta':s.periodo==='paquete'?'Un solo pago':s.plan==='prueba'?'Sin cobro (prueba)':'—')+(s.modo==='prueba'?'<div class="cq-mu">de prueba</div>':'')+'</td></tr>'; }).join('')
+    +'</tbody></table></div>';
+  h+='<h4 class="cq-h">Sus pagos en línea · '+pg.length+'</h4>';
+  h+=pg.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Fecha</th><th>Sistema</th><th>Concepto</th><th class="r">Total</th><th>Cómo quedó</th><th>Factura</th></tr></thead><tbody>'
+    +pg.map(function(p){ return '<tr><td>'+esc(cqFecha(p.fecha))+'</td><td>'+esc(clSisTxt(p.sistema))+'</td><td>'+esc(p.concepto||'')+(Number(p.descuento)>0?'<div class="cq-mu">con '+money(p.descuento)+' de descuento</div>':'')+'</td>'
+      +'<td class="r">'+money(p.total)+'</td><td>'+cqChip({pagado:'Pagado', pendiente:'Pendiente', fallido:'No pasó', reembolsado:'Reembolsado'}[p.estado]||p.estado, p.estado==='pagado'?'ok':p.estado==='fallido'?'bad':'neutral')+(p.prueba?' '+cqChip('De prueba','neutral'):'')+'</td>'
+      +'<td>'+cqFacLinea(p)+'</td></tr>'; }).join('')+'</tbody></table></div>'
+    :'<p class="cq-mu">Todavía no paga nada en línea.</p>';
+  h+='<p class="cq-mu">Lo cobra Stripe: su tarjeta nunca pasa por nuestros sistemas. Su plan lo cambia o lo cancela él mismo en «Mi suscripción»'
+    +(cqDescPapel()==='crea'?'; para darle un precio especial, «Más ▾ › Descuentos».':'.')+'</p>';
   return h;
 }
 function cqTabCuenta(r){
@@ -5083,23 +5168,24 @@ function cqFicha(k){
   const pos=lista.indexOf(k);
   const pest=r.tipo==='solicitud'
     ? [{id:'sol', t:'La solicitud', html:cqTabSolicitud(r)}]
-    : [{id:'pagos', t:'Membresía', html:cqTabPagos(r)},
+    : [{id:'pagos', t:'Membresía', html:cqTabPagos(r)}].concat(r.a && clSus(r.a).length ? [{id:'linea', t:'Compra en línea', html:cqTabLinea(r)}] : [], [
        {id:'usuarios', t:'Usuarios', html:cqTabUsuarios(r)},
        {id:'cuenta', t:'Cuenta', html:cqTabCuenta(r)},
        {id:'cots', t:'Cotizaciones', html:cqTabCots(r)},
        {id:'gold', t:'Lo de Gold', html:cqTabGold(r)},
-       {id:'bit', t:'Bitácora', html:cqTabBitacora(r)}];
+       {id:'bit', t:'Bitácora', html:cqTabBitacora(r)}]);
   const ro=soloLectura(), cierra=function(){ if(CQV===v){ CQV=null; v.cerrar(); } };
   const acc=[];
   if(!ro && r.c) acc.push({t:'Registrar pago', accion:function(){ cierra(); pagoEditando=null; cerrarOverlay(); modalPago(r.c.id, null); }},
                          {t:'Editar datos', tipo:'b2', accion:function(){ cierra(); seleccion=r.c.id; pagoEditando=null; modalFicha(r.c.id); }});
-  if(!ro && r.tipo==='cuenta') acc.push({t:'Dar de alta su membresía', accion:function(){ cierra(); cqAltaDesdeCuenta(r.a); }});
+  if(!ro && r.tipo==='cuenta' && !r.linea) acc.push({t:'Dar de alta su membresía', accion:function(){ cierra(); cqAltaDesdeCuenta(r.a); }});
   if(!ro && r.x && estCot(r.x)==='Aprobada' && !r.x.clienteId) acc.push({t:'Dar de alta como cliente', accion:function(){ cierra(); altaDesdeCotizacion(r.x.id); }});
+  if(r.linea && cqDescPapel()==='crea') acc.push({t:'Darle un descuento', tipo:'b2', accion:function(){ cierra(); cqDescForma(null, r.a.id, r.k); }});
   if(!ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot', cliente:cqParaCotizar(r)}, location.origin); }catch(e){} }});
   const v=CQV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo', titulo:r.nombre||'Sin nombre',
     nav: pos>=0 && lista.length>1 ? { pos:pos+1, total:lista.length, donde:'en tu lista', ant:pos>0, sig:pos<lista.length-1,
       ir:function(dir){ const n=lista[pos+(dir<0?-1:1)]; if(n) cqFicha(n); } } : null,
-    resumen:cqResumen(r), bajoResumen:cqFalta(r), pestanas:pest, pestana:r.tipo==='cuenta'?(r.g?'gold':'usuarios'):pest[0].id,
+    resumen:cqResumen(r), bajoResumen:cqFalta(r), pestanas:pest, pestana:r.linea?'linea':r.tipo==='cuenta'?(r.g?'gold':'usuarios'):pest[0].id,
     acciones:acc.length?acc:null, pieTexto:ro?'Solo consulta':'',
     alCerrar:function(){ if(CQV===v) CQV=null; } });
   v.scrim.addEventListener('click', function(ev){
@@ -5135,6 +5221,7 @@ async function cqLigar(r, b){
 function cqMueve(){ return !!(CQ.d && CQ.d.yo && CQ.d.yo.mueve===true) && !soloLectura(); }
 function cqEsCasa(a){ return !!(a && (a.propia || a.area)); }
 window.__cqMueve=function(){ return cqMueve(); };   // para el «?» de la pantalla (guia_tab.js)
+window.__cqDesc=function(){ return cqDescPapel(); };   // quién ve los descuentos, para el «?» (guia_tab.js)
 function cqUsuarioSugerido(u){
   const usados={}; cqCuentas().forEach(function(a){ (a.usuarios||[]).forEach(function(x){ usados[String(x.usuario||'').toLowerCase()]=1; }); });
   const limpia=function(t){ return cqNorm(t).replace(/[^a-z0-9._-]+/g, '.').replace(/^[^a-z]+/, '').replace(/[._-]{2,}/g, '.').replace(/[._-]+$/, '').slice(0, 36); };
@@ -5261,10 +5348,191 @@ async function cqAltaDesdeCuenta(a){
   avisar('Membresía creada: revisa su plan y su vigencia.');
   seleccion=id; modalFicha(id);
 }
+/* ---------- Los descuentos de la compra en línea (22-nov-2026; Héctor Daniel Nava, 13:08: «de dirección o Hnr o por
+   ejemplo, buen fin»; «Tú y Cadengo»; «Solo el mayor»). Viven en la base de Quo (qs_descuentos de 51_qs_suscripciones.sql)
+   y llegan por la función «quo-clientes»; quién los crea lo decide la base del CRM (quo_desc_quien de
+   487_quo_clientes_descuentos.sql: Héctor Daniel Nava y Fernando Cadengo los crean, Héctor Nava Ramos los ve) y Quo lo
+   vuelve a revisar. Cada uno dice quién lo autorizó; si a un cobro le tocan dos, cuenta solo el mayor. ---------- */
+const DS_AUTORIZA=['Héctor Daniel Nava','Héctor Nava Ramos','Fernando Cadengo'];
+const DS_PER=[['mensual','Mensual'],['anual','Anual'],['paquete','Paquete de timbres']];
+const DS_DUR={una_vez:'Solo el primer cobro', meses:'Varios meses', siempre:'Mientras dure'};
+let DS=null;   // {lista, cargando}
+function cqDescPapel(){ const p=CQ.d&&CQ.d.yo&&CQ.d.yo.descuentos; return p==='crea'&&!soloLectura()?'crea':p?'ve':null; }
+function dsCuanto(d){ return d.pct!=null?Number(d.pct).toLocaleString('es-MX',{maximumFractionDigits:2})+' %':money(d.monto)+' antes de IVA'; }
+function dsPara(d){
+  const s=(d.sistemas&&d.sistemas.length)?d.sistemas.map(clSisTxt).join(', '):'Los tres sistemas';
+  const p=(d.periodos&&d.periodos.length)?d.periodos.map(function(x){ const y=DS_PER.find(function(z){ return z[0]===x; }); return y?y[1].toLowerCase():x==='cada_cobro'?'cada cobro':x; }).join(', '):'';
+  return s+(p?' · '+p:'');
+}
+function dsEstado(d){
+  if(!d.activo) return ['Apagado','neutral'];
+  if(d.usos_max && Number(d.usos)>=Number(d.usos_max)) return ['Se acabaron sus usos','warn'];
+  if(d.desde && String(d.desde).slice(0,10)>HOY) return ['Por empezar','neutral'];
+  if(d.hasta && String(d.hasta).slice(0,10)<HOY) return ['Venció','warn'];
+  return ['Vigente','ok'];
+}
+function dsVentana(titulo, sub){
+  const v=VENT=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo · Descuentos', titulo:titulo,
+    antes:'<p class="mem-sub">'+sub+'</p>', derecha:'<div class="body"><p class="cq-aviso mal" id="cq-mv-err" role="alert" hidden></p><div id="cq-ds"></div></div>',
+    alCerrar:function(){ if(VENT===v) VENT=null; } });
+  return v;
+}
+async function dsPide(cuerpo, que){
+  const P=window.PORTAL; if(P&&P.listo) await P.listo;
+  const r=await P.sb.functions.invoke('quo-clientes', { body:cuerpo });
+  let d=r.data;
+  if(r.error && !d){ try{ d=await r.error.context.json(); }catch(e){ d=null; } }
+  if(!d || d.ok!==true) throw new Error((d&&d.error)||('No se pudo '+que+'. Qué hacer: vuelve a intentar en un momento.'));
+  return d;
+}
+async function cqDescuentos(aviso){
+  const papel=cqDescPapel(); if(!papel) return;
+  cerrarOverlay();
+  const v=dsVentana('Descuentos de la compra en línea', 'Un código que escribe el cliente al pagar (como BUENFIN) o un precio especial para una cuenta. Si a un cobro le tocan dos, cuenta solo el mayor.');
+  const caja=v.scrim.querySelector('#cq-ds');
+  caja.innerHTML='<p class="cq-mu">Trayendo los descuentos de la base de Quo…</p>';
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn" data-cerrar>Cerrar</button>'+(papel==='crea'?'<button class="btn accent" id="cq-ds-nuevo">+ Nuevo descuento</button>':'')+'</div>';
+  const bn=v.scrim.querySelector('#cq-ds-nuevo'); if(bn) bn.addEventListener('click', function(){ cqDescForma(null, null); });
+  let d;
+  try{ d=await dsPide({accion:'descuentos'}, 'traer los descuentos'); }
+  catch(e){ if(VENT===v) cqMvError(v, (window.PORTAL&&PORTAL.falla)?PORTAL.falla(e,'traer los descuentos'):String((e&&e.message)||e)); caja.innerHTML=''; return; }
+  if(VENT!==v) return;
+  DS={lista:d.descuentos||[]};
+  const L=DS.lista;
+  let h=aviso?'<p class="cq-aviso">'+esc(aviso)+'</p>':'';
+  if(!L.length) h+='<p class="cq-mu">Todavía no hay descuentos.'+(papel==='crea'?' Pica «+ Nuevo descuento» para hacer el primero.':'')+'</p>';
+  else h+='<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Descuento</th><th>Cuánto</th><th>Para</th><th>Vigencia</th><th class="r">Usos</th><th>Autorizó</th><th>Cómo está</th>'+(papel==='crea'?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
+    +L.map(function(x){ const e=dsEstado(x);
+      return '<tr><td><b>'+esc(x.nombre)+'</b><div class="cq-mu">'+(x.tipo==='codigo'?'Código '+esc(x.codigo):'Para '+esc(x.cuenta||'una cuenta'))+'</div></td>'
+        +'<td>'+esc(dsCuanto(x))+'<div class="cq-mu">'+esc(x.duracion==='meses'?x.meses+' meses':DS_DUR[x.duracion]||'')+'</div></td>'
+        +'<td>'+esc(dsPara(x))+'</td>'
+        +'<td>'+esc(cqFecha(x.desde))+(x.hasta?'<div class="cq-mu">al '+esc(cqFecha(x.hasta))+'</div>':'<div class="cq-mu">sin fecha de fin</div>')+'</td>'
+        +'<td class="r">'+Number(x.usos||0).toLocaleString('es-MX')+(x.usos_max?' de '+Number(x.usos_max).toLocaleString('es-MX'):'')+'</td>'
+        +'<td>'+esc(x.autorizo||'')+'<div class="cq-mu">lo capturó '+esc(x.creado_por||'')+'</div></td>'
+        +'<td>'+cqChip(e[0], e[1])+(x.motivo?'<div class="cq-mu">'+esc(x.motivo)+'</div>':'')+'</td>'
+        +(papel==='crea'?'<td>'+(x.activo?'<button class="btn" data-ds-edita="'+esc(x.id)+'">Editar</button> <button class="btn" data-ds-apaga="'+esc(x.id)+'">Apagar</button>':'<span class="cq-mu">—</span>')+'</td>':'')
+        +'</tr>'; }).join('')+'</tbody></table></div>';
+  h+='<p class="cq-mu">Los cobros siguen siendo de prueba hasta que se prendan los de verdad: hasta entonces, un descuento solo se ve en la prueba.</p>';
+  caja.innerHTML=h;
+  caja.addEventListener('click', function(ev){
+    const b=ev.target.closest('[data-ds-edita],[data-ds-apaga]'); if(!b) return;
+    const id=b.getAttribute('data-ds-edita')||b.getAttribute('data-ds-apaga');
+    const x=DS.lista.find(function(y){ return String(y.id)===String(id); }); if(!x) return;
+    if(b.hasAttribute('data-ds-edita')) cqDescForma(x, null); else cqDescApaga(x);
+  });
+}
+function dsBotones(nombre, lista, valor, multi){
+  return '<div class="picker" style="--c:var(--azul)" data-ds-grupo="'+nombre+'"'+(multi?' data-multi':'')+'>'+lista.map(function(o){
+    const on=multi?(valor||[]).indexOf(o[0])>=0:valor===o[0];
+    return '<button type="button" data-v="'+esc(o[0])+'" aria-pressed="'+on+'">'+esc(o[1])+'</button>'; }).join('')+'</div>';
+}
+function dsLeeGrupo(raiz, nombre){
+  const g=raiz.querySelector('[data-ds-grupo="'+nombre+'"]'); if(!g) return null;
+  const on=Array.from(g.querySelectorAll('button[aria-pressed="true"]')).map(function(b){ return b.getAttribute('data-v'); });
+  return g.hasAttribute('data-multi')?on:(on[0]||null);
+}
+/* nuevo o para editar; cuentaId: si se abre desde la ficha de una cuenta que compró en línea */
+function cqDescForma(x, cuentaId, volverA){
+  if(cqDescPapel()!=='crea') return;
+  cerrarOverlay();
+  const d=x||{tipo:cuentaId?'cuenta':'codigo', cuenta_id:cuentaId||null, desde:HOY, duracion:'una_vez', sistemas:[], periodos:[]};
+  const usado=x&&Number(x.usos)>0;
+  const ctas=cqCuentas().filter(function(a){ return !a.propia; });
+  const v=dsVentana(x?'Editar el descuento':'Nuevo descuento',
+    x?esc(x.nombre)+(usado?' · ya se usó en '+Number(x.usos).toLocaleString('es-MX')+' cobros: cuánto y el código ya no se cambian':''):'Un código para todos o un precio especial para una cuenta.');
+  const caja=v.scrim.querySelector('#cq-ds');
+  caja.innerHTML='<div class="form-grid">'
+    +campo('Nombre', '<input type="text" id="ds-nombre" maxlength="80" value="'+esc(d.nombre||'')+'" placeholder="Por ejemplo, Buen Fin 2026">', 'Para reconocerlo en la lista y en el recibo del cliente')
+    +'<div class="field wide"><label>¿Para quién?</label>'+dsBotones('tipo', [['codigo','Un código (lo escribe el cliente al pagar)'],['cuenta','Una cuenta en especial']], d.tipo, false)+'</div>'
+    +'<div class="field" data-ds-si="codigo"><label for="ds-codigo">Código</label><input type="text" id="ds-codigo" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" value="'+esc(d.codigo||'')+'" placeholder="BUENFIN"'+(usado?' disabled':'')+'><span class="help">De 3 a 24 letras, números o guiones, sin espacios</span></div>'
+    +'<div class="field wide" data-ds-si="cuenta"><label for="ds-cuenta">La cuenta</label><div id="ds-cuenta-b"></div><span class="help">Las cuentas de Quo de los clientes (la casa no lleva descuentos)</span></div>'
+    +'<div class="field"><label>Cuánto</label>'+dsBotones('forma', [['pct','En %'],['monto','En pesos']], d.monto!=null&&d.pct==null?'monto':'pct', false)
+      +'<input type="number" id="ds-valor" min="0.01" step="0.01" inputmode="decimal" value="'+esc(d.pct!=null?d.pct:d.monto!=null?d.monto:'')+'" placeholder="15"'+(usado?' disabled':'')+'><span class="help">En pesos, antes de IVA</span></div>'
+    +'<div class="field"><label>Cuánto dura</label>'+dsBotones('dur', Object.keys(DS_DUR).map(function(k){ return [k, DS_DUR[k]]; }), d.duracion||'una_vez', false)
+      +'<input type="number" id="ds-meses" min="1" max="36" step="1" value="'+esc(d.meses||'')+'" placeholder="Meses (1 a 36)" data-ds-si-dur="meses"></div>'
+    +'<div class="field wide"><label>Sistemas</label>'+dsBotones('sis', CQ_SIS.map(function(s){ return [s[0], s[1]]; }), d.sistemas||[], true)+'<span class="help">Si no escoges ninguno, vale en los tres</span></div>'
+    +'<div class="field wide"><label>Planes</label>'+dsBotones('per', DS_PER, d.periodos||[], true)+'<span class="help">Si no escoges ninguno, vale en todos</span></div>'
+    +campo('Desde', '<input type="date" id="ds-desde" value="'+esc(String(d.desde||HOY).slice(0,10))+'">')
+    +campo('Hasta', '<input type="date" id="ds-hasta" value="'+esc(d.hasta?String(d.hasta).slice(0,10):'')+'">', 'Vacío: sin fecha de fin')
+    +campo('Usos máximos', '<input type="number" id="ds-usos" min="1" max="100000" step="1" value="'+esc(d.usos_max||'')+'" placeholder="Sin límite">', 'Cuántos cobros en total, entre todos')
+    +'<div class="field wide"><label>¿Quién lo autorizó?</label>'+dsBotones('aut', DS_AUTORIZA.map(function(n){ return [n, n]; }), d.autorizo||null, false)+'</div>'
+    +'<div class="field wide"><label for="ds-motivo">Por qué</label><textarea id="ds-motivo" rows="2" maxlength="300" placeholder="Por ejemplo, campaña del Buen Fin o precio de lanzamiento para este cliente">'+esc(d.motivo||'')+'</textarea></div>'
+    +'</div>';
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn" id="cq-ds-atras">Regresar</button><button class="btn accent" id="cq-ds-ok">'+(x?'Guardar cambios':'Guardar el descuento')+'</button></div>';
+  let busca=null;
+  const caja2=caja.querySelector('#ds-cuenta-b');
+  if(window.PROFASE_BUSCA) busca=window.PROFASE_BUSCA.crea({ donde:caja2, id:'ds-cuenta', varios:false, lista:'al-buscar',
+      opciones:ctas.map(function(a){ return {v:String(a.id), t:a.nombre||('Cuenta '+a.id), nota:clSus(a).length?'compra en línea':''}; }),
+      valor:d.cuenta_id?[String(d.cuenta_id)]:[], marcador:'Escribe parte del nombre', vacio:'No hay coincidencias' });
+  else caja2.innerHTML='<select id="ds-cuenta"><option value="">Escoge la cuenta</option>'+ctas.map(function(a){ return '<option value="'+esc(a.id)+'"'+(String(a.id)===String(d.cuenta_id)?' selected':'')+'>'+esc(a.nombre||a.id)+'</option>'; }).join('')+'</select>';
+  const muestra=function(){
+    const t=dsLeeGrupo(caja, 'tipo'), du=dsLeeGrupo(caja, 'dur');
+    caja.querySelectorAll('[data-ds-si]').forEach(function(n){ n.hidden=n.getAttribute('data-ds-si')!==t; });
+    const m=caja.querySelector('[data-ds-si-dur]'); if(m) m.hidden=du!=='meses';
+  };
+  caja.addEventListener('click', function(ev){
+    const b=ev.target.closest('[data-ds-grupo] button'); if(!b || b.disabled) return;
+    const g=b.parentElement;
+    if(usado && (g.getAttribute('data-ds-grupo')==='forma' || g.getAttribute('data-ds-grupo')==='tipo')) return;   // ya se usó: cuánto y para quién no cambian
+    if(g.hasAttribute('data-multi')) b.setAttribute('aria-pressed', b.getAttribute('aria-pressed')==='true'?'false':'true');
+    else g.querySelectorAll('button').forEach(function(y){ y.setAttribute('aria-pressed', String(y===b)); });
+    muestra();
+  });
+  muestra();
+  v.scrim.querySelector('#cq-ds-atras').addEventListener('click', function(){ if(volverA){ v.cerrar(); setTimeout(function(){ cqFicha(volverA); }, 0); } else cqDescuentos(); });
+  v.scrim.querySelector('#cq-ds-ok').addEventListener('click', function(){
+    const val=function(id){ const n=caja.querySelector('#'+id); return n?String(n.value||'').trim():''; };
+    const tipo=dsLeeGrupo(caja, 'tipo'), forma=dsLeeGrupo(caja, 'forma'), dur=dsLeeGrupo(caja, 'dur'), aut=dsLeeGrupo(caja, 'aut');
+    const cuenta=tipo==='cuenta'?(busca?(busca.valor()[0]||''):val('ds-cuenta')):'';
+    const num=Number(val('ds-valor'));
+    if(val('ds-nombre').length<3){ cqMvError(v, 'Escribe el nombre del descuento. Qué hacer: de 3 a 80 letras y vuelve a guardar.'); return; }
+    if(tipo==='codigo' && !/^[A-Za-z0-9-]{3,24}$/.test(val('ds-codigo'))){ cqMvError(v, 'El código va de 3 a 24 letras, números o guiones, sin espacios (por ejemplo, BUENFIN). Qué hacer: corrígelo y vuelve a guardar.'); return; }
+    if(tipo==='cuenta' && !cuenta){ cqMvError(v, 'Escoge la cuenta del cliente. Qué hacer: escribe parte de su nombre y escógela de la lista.'); return; }
+    if(!(num>0) || (forma==='pct' && num>100)){ cqMvError(v, 'Escribe cuánto: el % va de 0.01 a 100 y los pesos, más de cero. Qué hacer: corrígelo y vuelve a guardar.'); return; }
+    if(dur==='meses' && !(Number(val('ds-meses'))>=1 && Number(val('ds-meses'))<=36)){ cqMvError(v, 'Escribe cuántos meses dura (de 1 a 36). Qué hacer: escríbelo o escoge otra duración.'); return; }
+    if(val('ds-hasta') && val('ds-hasta')<val('ds-desde')){ cqMvError(v, '«Hasta» va después de «Desde». Qué hacer: corrige una de las dos fechas.'); return; }
+    if(!aut){ cqMvError(v, 'Escoge quién lo autorizó. Qué hacer: pica Héctor Daniel Nava, Héctor Nava Ramos o Fernando Cadengo.'); return; }
+    const desc={ id:x?x.id:null, nombre:val('ds-nombre'), tipo:tipo, codigo:tipo==='codigo'?val('ds-codigo').toUpperCase():null, cuenta_id:tipo==='cuenta'?Number(cuenta):null,
+      pct:forma==='pct'?num:null, monto:forma==='monto'?num:null, sistemas:dsLeeGrupo(caja, 'sis'), periodos:dsLeeGrupo(caja, 'per'),
+      desde:val('ds-desde')||HOY, hasta:val('ds-hasta')||null, duracion:dur||'una_vez', meses:dur==='meses'?Number(val('ds-meses')):null,
+      usos_max:val('ds-usos')?Number(val('ds-usos')):null, autorizo:aut, motivo:val('ds-motivo') };
+    const btn=this, t0=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
+    dsPide({accion:'desc_guarda', descuento:desc}, 'guardar el descuento').then(function(){
+      if(VENT!==v) return;
+      cqDescuentos('Listo: el descuento «'+desc.nombre+'» quedó guardado'+(desc.tipo==='codigo'?' con el código '+desc.codigo:'')+'. Queda en la bitácora de Quo con tu nombre.');
+    }).catch(function(e){ btn.disabled=false; btn.textContent=t0; cqMvError(v, (window.PORTAL&&PORTAL.falla)?PORTAL.falla(e,'guardar el descuento'):String((e&&e.message)||e)); });
+  });
+  setTimeout(function(){ const i=caja.querySelector('#ds-nombre'); if(i) try{ i.focus(); }catch(e){} }, 60);
+}
+function cqDescApaga(x){
+  if(cqDescPapel()!=='crea') return;
+  cerrarOverlay();
+  const v=dsVentana('Apagar el descuento', esc(x.nombre)+' · '+(x.tipo==='codigo'?'código '+esc(x.codigo):'para '+esc(x.cuenta||'una cuenta')));
+  const caja=v.scrim.querySelector('#cq-ds');
+  caja.innerHTML='<p class="cq-aviso mal">Desde ese momento ya no se aplica en ningún cobro nuevo. Los cobros que ya lo usaron se quedan como están y nada se borra.</p>'
+    +campo('Motivo', '<textarea id="ds-apaga-m" rows="3" maxlength="300" placeholder="Por qué se apaga (queda en la bitácora de Quo)"></textarea>');
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn" id="cq-ds-atras">Regresar</button><button class="btn accent" id="cq-ds-ok">Apagar el descuento</button></div>';
+  v.scrim.querySelector('#cq-ds-atras').addEventListener('click', function(){ cqDescuentos(); });
+  v.scrim.querySelector('#cq-ds-ok').addEventListener('click', function(){
+    const m=String(v.scrim.querySelector('#ds-apaga-m').value||'').replace(/\s+/g,' ').trim();
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué lo apagas (cinco letras o más) y vuelve a picar el botón.'); return; }
+    const btn=this, t0=btn.textContent; btn.disabled=true; btn.textContent='Un momento…';
+    dsPide({accion:'desc_apaga', id:x.id, motivo:m}, 'apagar el descuento').then(function(){
+      if(VENT!==v) return;
+      cqDescuentos('Listo: «'+x.nombre+'» quedó apagado. Queda en la bitácora de Quo con tu motivo.');
+    }).catch(function(e){ btn.disabled=false; btn.textContent=t0; cqMvError(v, (window.PORTAL&&PORTAL.falla)?PORTAL.falla(e,'apagar el descuento'):String((e&&e.message)||e)); });
+  });
+  setTimeout(function(){ const i=v.scrim.querySelector('#ds-apaga-m'); if(i) try{ i.focus(); }catch(e){} }, 60);
+}
 function cqComoSeLee(){
   abrirModal('Cómo se lee esta pantalla', 'Clientes Quo junta en un solo lugar a cada cliente de los sistemas Quo.',
     '<p><b>Las pilas</b> dicen qué atender hoy: vencidos, los que vencen en 30 días, pagos sin comprobante, prospectos y cotizaciones sin respuesta, lo que falta ligar y los que están al corriente. Pica una para ver solo esos; otra vez, para quitarlo.</p>'
-    +'<p><b>Cada renglón</b> es una membresía (lo que se le cobra), una cuenta de Quo que todavía no tiene membresía, una cotización sin cliente o una solicitud de la página de venta.</p>'
+    +'<p><b>Cada renglón</b> es una membresía (lo que se le cobra), una cuenta de Quo que todavía no tiene membresía, una cuenta que se registró sola y paga en línea, una cotización sin cliente o una solicitud de la página de venta.</p>'
+    +'<p><b>Compraron en línea</b> son los que se registraron solos en www.quosistemas.com: su prueba de 30 días, su plan de cada sistema y sus pagos con tarjeta (los cobra Stripe; aquí solo se ven). Si su pago no pasa, tienen 5 días de gracia y luego solo entran a «Mi suscripción», sin que se borre nada.</p>'
+    +(cqDescPapel()?'<p><b>Más ▾ › Descuentos</b>: los códigos como BUENFIN y los precios especiales para una cuenta. Los crean Héctor Daniel Nava y Fernando Cadengo, cada uno dice quién lo autorizó y, si a un cobro le tocan dos, cuenta solo el mayor.</p>':'')
     +'<p><b>La ficha</b> trae arriba «Qué falta» y abajo sus pestañas: la membresía y sus pagos, sus usuarios de Contabilita, Facturita y Nominita (y los que tenía en Quo Gold), su cuenta con sus RFC, sus cotizaciones, lo que tenía comprado en Gold y la bitácora de su cuenta.</p>'
     +'<p><b>La membresía se liga con su cuenta de Quo</b> sola, por su RFC o por el correo de la plataforma; si no la encuentra, se escoge a mano en la pestaña «Usuarios».</p>'
     +'<p>Lo de Quo se lee directo de la base de Quo cada vez que abres la pantalla. Nada cobra, avisa ni suspende solo: cada acción la hace una persona.</p>',
@@ -5288,15 +5556,29 @@ async function cqExcel(b){
     };
     hoja('Clientes', ['Cliente','Qué es','Cartera','Grupo','Sistemas','Plan','Vence','Último pago','Monto','Usuarios','Cómo está'],
       L.map(function(r){ const up=r.ps&&r.ps[0];
-        return [r.nombre, {membresia:'Membresía', cuenta:'Cuenta sin membresía', cotizacion:'Cotización', solicitud:'Solicitud'}[r.tipo], r.cartera, r.grupo,
-          r.a?CQ_SIS.filter(function(s){ return r.a[s[0]]; }).map(function(s){ return s[1]; }).join(', '):'', r.c?servicioTexto(r.c):'',
-          r.c?(r.c.vigenciaHasta||''):'', up?up.fecha:'', up?Number(up.monto||0):null, r.a?(r.a.usuarios||[]).length:'',
-          r.c?estadoVigencia(r.c).texto:(CQ_EST[r.est]||'')]; }),
+        const ls=r.linea?clSus(r.a):[], lf=ls.map(clFecha).filter(Boolean).map(function(x){ return String(x).slice(0,10); }).sort()[0]||'';
+        return [r.nombre, r.linea?'Compra en línea':{membresia:'Membresía', cuenta:'Cuenta sin membresía', cotizacion:'Cotización', solicitud:'Solicitud'}[r.tipo], r.cartera, r.grupo,
+          r.a?CQ_SIS.filter(function(s){ return r.a[s[0]]; }).map(function(s){ return s[1]; }).join(', '):'',
+          r.c?servicioTexto(r.c):r.linea?ls.map(function(x){ return clSisTxt(x.sistema)+': '+(x.plan_txt||x.plan); }).join('; '):'',
+          r.c?(r.c.vigenciaHasta||''):lf, up?up.fecha:r.upl?String(r.upl.fecha).slice(0,10):'', up?Number(up.monto||0):r.upl?Number(r.upl.total||0):null,
+          r.a?(r.a.usuarios||[]).length:'', r.c?estadoVigencia(r.c).texto:r.linea?CL_EST[r.pe][0]:(CQ_EST[r.est]||'')]; }),
       [36,18,12,22,26,24,14,14,14,10,18], [9]);
     const us=[];
     L.forEach(function(r){ if(r.a && r.tipo!=='solicitud') (r.a.usuarios||[]).forEach(function(u){
       us.push([r.nombre, u.nombre||'', u.usuario, u.contabilita||'', u.facturita||'', u.nominita||'', u.estado==='invitado'?'Invitado':'Activo', u.ultimo?String(u.ultimo).slice(0,10):'']); }); });
     hoja('Usuarios', ['Cliente','Nombre','Usuario','Contabilita','Facturita','Nominita','Cómo está','Último acceso'], us, [32,26,32,14,14,14,12,14]);
+    const cl=[], pl=[], PEST={pagado:'Pagado', pendiente:'Pendiente', fallido:'No pasó', reembolsado:'Reembolsado'};
+    L.forEach(function(r){ if(!r.a || r.tipo==='solicitud') return;
+      clSus(r.a).forEach(function(x){ const f=clFecha(x);
+        cl.push([r.nombre, clSisTxt(x.sistema), x.plan_txt||x.plan, clPeriodo(x), CL_EST[clEstado(x)][0], String(x.prueba_desde||x.creada||'').slice(0,10),
+          f?String(f).slice(0,10):'', x.cobro_auto?'Automático':x.periodo==='paquete'?'Un solo pago':'', x.modo==='prueba'?'Sí':'']); });
+      (r.a.pagos_linea||[]).forEach(function(g){
+        pl.push([r.nombre, String(g.fecha||'').slice(0,10), clSisTxt(g.sistema), g.concepto||'', Number(g.subtotal||0), Number(g.descuento||0), Number(g.iva||0),
+          Number(g.total||0), PEST[g.estado]||g.estado||'', g.factura||(g.estado==='pagado'&&CQ_FAC_LINEA[g.factura_estado]?CQ_FAC_LINEA[g.factura_estado][0]:''), g.prueba?'Sí':'']); }); });
+    if(cl.length){
+      hoja('Compra en línea', ['Cliente','Sistema','Plan','Cada','Cómo está','Desde','Hasta','Cobro','De prueba'], cl, [32,14,26,16,22,12,12,14,10]);
+      hoja('Pagos en línea', ['Cliente','Fecha','Sistema','Concepto','Subtotal','Descuento','IVA','Total','Cómo quedó','Factura','De prueba'], pl, [32,12,14,34,14,14,14,14,14,16,10], [5,6,7,8]);
+    }
     const gc=[], gu=[], gp=[];
     L.forEach(function(r){ if(!r.a || r.tipo==='solicitud') return; cqGoldDe(r.a.id).forEach(function(g){
       const c=g.contacto||{};
