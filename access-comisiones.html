@@ -217,6 +217,10 @@ tr.fila:hover td{background:var(--navy-soft)}
 .barra input,.barra select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 9px;font-size:13px}
 .barra .total{margin-left:auto;font-weight:700}
 .meses{color:var(--muted);font-size:12.5px}
+.meses .mch i{font-style:normal;color:var(--accent-ink);font-weight:600}
+.nota-pp{font-size:12px;color:var(--muted);margin-top:2px}
+.nota-pp.baja{color:var(--ink);font-weight:600}
+#lista-deb tr.junta td{color:var(--muted)}
 .grupo{border-top:1px solid var(--line);padding:10px 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
 .grupo:first-child{border-top:0}
 .grupo .t{font-weight:600;overflow-wrap:anywhere}
@@ -460,7 +464,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
           <button class="btn" type="button" id="x-deb" data-excel>Excel</button>
         </div>
       </header>
-      <div class="tabla"><table id="lista-deb"><thead><tr><th><span class="fila-sel"><input type="checkbox" id="sel-todos" aria-label="Escoger a todos"></span></th><th>Persona</th><th>Qué meses se le deben</th><th class="monto">Por pagar</th></tr></thead><tbody></tbody></table></div>
+      <div class="tabla"><table id="lista-deb"><thead><tr><th><span class="fila-sel"><input type="checkbox" id="sel-todos" aria-label="Escoger a todos"></span></th><th>Persona</th><th>Qué meses se le deben</th><th class="monto">Le toca</th><th class="monto">Se le deposita</th><th class="monto">Queda para el siguiente</th></tr></thead><tbody></tbody></table></div>
       <div class="vacio" id="deb-vacia" hidden>No se le debe nada a nadie.</div>
       <div class="barra" id="barra-pagar" hidden>
         <label>Meses contables hasta <select id="pp-hasta" aria-label="Pagar hasta el mes contable"></select></label>
@@ -469,7 +473,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
         <button class="btn acento" type="button" id="pp-btn">Marcar pagado</button>
       </div>
     </section>
-    <p class="pie">El monto lo pone el sistema: es lo que cada quien tiene por cobrar de esos meses. Nadie lo escribe ni lo cambia; si hace falta otro monto o borrar un pago, lo autoriza Héctor Daniel Nava. Lo que espera a que el SAT confirme la DyP, la anual o la línea pagada (de noviembre de 2026 en adelante) no entra aquí hasta que el SAT la confirma: está en «En espera del SAT».</p>
+    <p class="pie">El monto lo pone el sistema. «Le toca» es lo exacto de esos meses; «Se le deposita» es ese total cerrado a cientos, hacia abajo, y es lo que se anota al marcar pagado: paga completos sus meses más viejos primero y lo que sobra («Queda para el siguiente») se junta para el siguiente reparto. A quien le tocan menos de $100 se le junta hasta que llegue a $100; a quien ya se dio de baja se le paga exacto, con centavos. Nadie lo escribe ni lo cambia; si hace falta otro monto o borrar un pago, lo autoriza Héctor Daniel Nava. Lo que espera a que el SAT confirme la DyP, la anual o la línea pagada (de noviembre de 2026 en adelante) no entra aquí hasta que el SAT la confirma: está en «En espera del SAT».</p>
   </div>
 
   <div id="p-esp" role="tabpanel" aria-labelledby="t-esp" hidden>
@@ -555,6 +559,8 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var ZONA = 'America/Monterrey';
   var E = null, R = [], PAGOS = [], DEBE = [], DET = [], LIG = null, SW = null;
+  // 497 (23-nov-2026): lo que se deposita a cada quien (ceq_pago_vista, la misma regla que anota «Marcar pagado») y quién ya se dio de baja
+  var VPP = null, BAJA = {};
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -588,6 +594,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
       var r = await Promise.all([rpc('ceq_resumen'), rpc('ceq_pagos_lista'), E.todo ? rpc('ceq_por_pagar') : Promise.resolve([])]);
       R = r[0] || []; PAGOS = r[1] || []; DEBE = r[2] || [];
       opciones();
+      await cargaVista();
       $('cargando').hidden = true;
       pintaMeses(); pintaPagos(); pintaDebe();
       muestra('mes');
@@ -652,6 +659,8 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   }
   function estadoGrupo(g) {
     if (g.parte) return '<span class="chip">parte de tu departamento</span>';
+    // 497: lo pendiente de menos de $100 de alguien activo se junta para el siguiente reparto (quien se dio de baja cobra exacto)
+    if (VISTA === 'per' && g.dif >= 1 && g.dif < 100 && !BAJA[g.k]) return '<span class="chip bl">Se junta para el siguiente reparto ' + esc(dinero(g.dif)) + '</span>' + espTxt(g);
     return (g.dif >= 1 ? '<span class="chip pp">Por pagar ' + esc(dinero(g.dif)) + '</span>' : '<span class="chip ok">✓ Al corriente</span>') + espTxt(g);
   }
   /* UX PROFASE (Héctor Daniel Nava, 5-nov-2026): la barra (agrupar, FILTROS y Excel) y las pilas de «Tu trabajo»: la
@@ -661,7 +670,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   function pintaPilas(L, tot, pag, dif, nper, esp) {
     if (!window.PROFASE_PILAS) return;
     if (!BAR) BAR = PROFASE_PILAS.barra($('ceq-bar'), { caja: true, periodo: [$('ceq-bar').querySelector('.seg')], botones: [$('fb-mes'), $('x-mes')] });
-    var pend = $('f-pend').value === '1', ensat = $('f-pend').value === 'esp', tuyo = E && !E.todo, deb = E && E.pagar && E.modo === 'portal' && !$('t-deb').hidden ? debePorPersona().length : 0;
+    var pend = $('f-pend').value === '1', ensat = $('f-pend').value === 'esp', tuyo = E && !E.todo, deb = E && E.pagar && E.modo === 'portal' && !$('t-deb').hidden ? aDepositar().length : 0;
     PROFASE_PILAS.pinta($('kpis'), {
       titulo: 'Tu trabajo · las comisiones' + (tuyo ? ' (lo tuyo)' : ''),
       meta: 'Pagado ' + dineroCorto(pag) + ' · ' + nper + (nper === 1 ? ' persona con comisión' : ' personas con comisión'),
@@ -771,35 +780,56 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
     $('det-vacia').hidden = DET.length > 0;
   }
 
-  /* ---------- Por pagar ---------- */
+  /* ---------- Por pagar ----------
+     497 (Héctor Daniel Nava, 23-nov-2026, petición 20261123-1202-comisiones-a-cientos): lo que se le deposita a cada persona es
+     su total cerrado a cientos, hacia abajo; menos de $100 se junta para el siguiente reparto; quien ya se dio de baja, exacto.
+     La pantalla no calcula nada: enseña lo que dice ceq_pago_vista (la misma regla con la que «Marcar pagado» anota). */
   var SEL = {};
-  function debePorPersona() {
-    var hasta = +$('pp-hasta').value || 999999, O = {};
-    DEBE.forEach(function (x) {
-      if (x.ym > hasta) return;
-      var o = O[x.p] || (O[x.p] = { p: x.p, n: x.n, debe: 0, meses: [] });
-      o.debe += x.debe; o.meses.push({ ym: x.ym, debe: x.debe });
-    });
-    return Object.keys(O).map(function (k) { var o = O[k]; o.meses.sort(function (a, b) { return a.ym - b.ym; }); return o; })
-      .sort(function (a, b) { return String(a.n).localeCompare(String(b.n), 'es'); });
+  async function cargaVista() {
+    if (!E || !E.todo) { VPP = null; return; }
+    var h = +$('pp-hasta').value || 0;
+    try {
+      VPP = await rpc('ceq_pago_vista', { p_hasta: h ? ymDia(h) : null });
+      ((VPP && VPP.personas) || []).forEach(function (o) { BAJA[o.p] = !!o.baja; });
+    } catch (e) { VPP = null; mal(errTxt(e)); }
   }
+  function debePorPersona() {
+    return ((VPP && VPP.personas) || []).map(function (o) {
+      var dep = Number(o.deposita || 0);
+      return { p: o.p, n: o.n, debe: Number(o.exacto || 0), deposita: dep, queda: Number(o.queda || 0), baja: !!o.baja, junta: !o.baja && dep < 0.01,
+               meses: (o.meses || []).map(function (m) { return { ym: +m.ym, debe: Number(m.debe || 0), paga: Number(m.paga || 0) }; }).sort(function (a, b) { return a.ym - b.ym; }) };
+    }).sort(function (a, b) { return String(a.n).localeCompare(String(b.n), 'es'); });
+  }
+  function aDepositar() { return debePorPersona().filter(function (o) { return !o.junta; }); }
+  function notaPago(o) { return o.baja ? 'Último pago, exacto' : o.junta ? 'Se junta para el siguiente reparto' : ''; }
   function mesCorto(ym) { ym = +ym; return MESES[(ym % 100) - 1] + ' ' + Math.floor(ym / 100); }
   function pintaDebe() {
-    var L = debePorPersona(), t = 0, ts = 0, n = 0;
-    L.forEach(function (o) { if (SEL[o.p] === undefined) SEL[o.p] = true; t += o.debe; if (SEL[o.p]) { ts += o.debe; n++; } });
-    $('deb-sub').textContent = (L.length === 1 ? '1 persona' : L.length + ' personas') + ' · ' + dinero(t) + ' · solo lo que ya se cobró y con el trabajo terminado';
+    var L = debePorPersona(), t = 0, td = 0, ts = 0, tq = 0, n = 0, nd = 0;
+    L.forEach(function (o) {
+      if (o.junta) SEL[o.p] = false; else { nd++; if (SEL[o.p] === undefined) SEL[o.p] = true; }
+      t += o.debe; td += o.deposita;
+      if (SEL[o.p]) { ts += o.deposita; tq += o.queda; n++; }
+    });
+    var puede = E.pagar && E.modo === 'portal' && nd > 0;
+    $('deb-sub').textContent = (L.length === 1 ? '1 persona' : L.length + ' personas') + ' · le toca ' + dinero(t) + ' · se deposita ' + dinero(td)
+      + ' · a cientos, hacia abajo; lo demás se junta para el siguiente reparto · solo lo que ya se cobró y con el trabajo terminado';
     $('lista-deb').tBodies[0].innerHTML = L.map(function (o) {
-      return '<tr><td><span class="fila-sel"><input type="checkbox" data-p="' + esc(o.p) + '"' + (SEL[o.p] ? ' checked' : '') + ' aria-label="Escoger a ' + esc(o.n) + '"' + (E.pagar && E.modo === 'portal' ? '' : ' disabled') + '></span></td>'
-        + '<td><div class="rs">' + esc(o.n) + '</div></td>'
-        + '<td data-l="Meses" class="meses">' + o.meses.map(function (m) { return '<span class="mch">' + esc(mesCorto(m.ym)) + ' <b>' + esc(dinero(m.debe)) + '</b></span>'; }).join('') + '</td>'
-        + '<td class="monto" data-l="Por pagar"><b>' + esc(dinero(o.debe)) + '</b></td></tr>';
+      var nota = notaPago(o);
+      return '<tr' + (o.junta ? ' class="junta"' : '') + '><td><span class="fila-sel"><input type="checkbox" data-p="' + esc(o.p) + '"' + (SEL[o.p] ? ' checked' : '') + ' aria-label="Escoger a ' + esc(o.n) + '"' + (puede && !o.junta ? '' : ' disabled') + '></span></td>'
+        + '<td><div class="rs">' + esc(o.n) + '</div>' + (nota ? '<div class="nota-pp' + (o.baja ? ' baja' : '') + '">' + esc(nota) + '</div>' : '') + '</td>'
+        + '<td data-l="Meses" class="meses">' + o.meses.map(function (m) {
+            var q = m.debe - m.paga;
+            return '<span class="mch">' + esc(mesCorto(m.ym)) + ' <b>' + esc(dinero(m.debe)) + '</b>' + (!o.junta && q >= 0.005 ? ' <i>queda ' + esc(dinero(q)) + '</i>' : '') + '</span>';
+          }).join('') + '</td>'
+        + '<td class="monto" data-l="Le toca">' + esc(dinero(o.debe)) + '</td>'
+        + '<td class="monto" data-l="Se le deposita">' + (o.deposita >= 0.01 ? '<b>' + esc(dinero(o.deposita)) + '</b>' : '<span class="nada">—</span>') + '</td>'
+        + '<td class="monto" data-l="Queda para el siguiente">' + (o.queda >= 0.01 ? esc(dinero(o.queda)) : '<span class="nada">—</span>') + '</td></tr>';
     }).join('');
     $('deb-vacia').hidden = L.length > 0;
-    var puede = E.pagar && E.modo === 'portal' && L.length > 0;
     $('barra-pagar').hidden = !puede;
     $('sel-todos').disabled = !puede;
-    $('sel-todos').checked = L.length > 0 && n === L.length;
-    $('pp-total').textContent = n + (n === 1 ? ' persona · ' : ' personas · ') + dinero(ts);
+    $('sel-todos').checked = nd > 0 && n === nd;
+    $('pp-total').textContent = n + (n === 1 ? ' persona · se deposita ' : ' personas · se deposita ') + dinero(ts) + (tq >= 0.01 ? ' · queda ' + dinero(tq) + ' para el siguiente' : '');
     Array.prototype.forEach.call($('lista-deb').querySelectorAll('input[data-p]'), function (c) {
       c.onchange = function () { SEL[c.dataset.p] = c.checked; pintaDebe(); };
     });
@@ -818,16 +848,27 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
     });
   }
   async function pagar() {
-    var L = debePorPersona().filter(function (o) { return SEL[o.p]; });
-    if (!L.length) { mal('Escoge a quién se le pagó.'); return; }
-    var t = 0; L.forEach(function (o) { t += o.debe; });
+    // antes de preguntar, lo último de la base: lo que se va a anotar es lo que dice la pantalla
+    var antes = {}; debePorPersona().forEach(function (o) { antes[o.p] = o.deposita; });
+    await cargaVista();
+    var L = aDepositar().filter(function (o) { return SEL[o.p]; });
+    if (!L.length) { pintaDebe(); mal('Escoge a quién se le pagó. Qué hacer: palomea a las personas en la lista y vuelve a picar «Marcar pagado».'); return; }
+    var cambio = L.some(function (o) { return antes[o.p] === undefined || Math.abs(antes[o.p] - o.deposita) >= 0.005; });
+    pintaDebe();
+    if (cambio) { mal('Lo que se deposita cambió desde que abriste la pantalla (la base volvió a calcular). Qué hacer: revisa la lista y el Excel otra vez y vuelve a picar «Marcar pagado».'); return; }
+    var t = 0, q = 0, bajas = 0; L.forEach(function (o) { t += o.deposita; q += o.queda; if (o.baja) bajas++; });
     var hasta = +$('pp-hasta').value, f = $('pp-fecha').value;
-    var ok = await dialogo('Marcar pagado', 'Se anota como pagado ' + dinero(t) + ' a ' + L.length + (L.length === 1 ? ' persona' : ' personas') + ' (meses contables hasta ' + mesTxt(hasta) + '), con fecha ' + fecha(f) + '. Los montos los pone el sistema.', false, 'Marcar pagado');
+    var ok = await dialogo('Marcar pagado', 'Se anota como pagado lo que se deposita: ' + dinero(t) + ' a ' + L.length + (L.length === 1 ? ' persona' : ' personas')
+      + ' (meses contables hasta ' + mesTxt(hasta) + '), con fecha ' + fecha(f) + '. A cada quien, su total cerrado a cientos, hacia abajo'
+      + (bajas ? ' (a quien ya se dio de baja, exacto)' : '') + '.' + (q >= 0.01 ? ' Quedan ' + dinero(q) + ' para el siguiente reparto.' : '')
+      + ' Los montos los pone el sistema.', false, 'Marcar pagado');
     if (!ok) return;
     var b = $('pp-btn'); b.disabled = true;
     try {
       var r = await rpc('ceq_pagar', { p_personas: L.map(function (o) { return o.p; }), p_hasta: ymDia(hasta), p_fecha: f });
-      bien('Listo: ' + dinero(r && r.total) + ' anotado como pagado.');
+      var tot = Number(r && r.total || 0), qd = Number(r && r.queda || 0);
+      if (Math.abs(tot - t) >= 0.005) mal('Se anotó ' + dinero(tot) + ' y la pantalla decía ' + dinero(t) + ': algo cambió en ese momento. Qué hacer: revisa «Pagos hechos» antes de depositar y, si no cuadra, avísale a la dirección.');
+      else bien('Listo: ' + dinero(tot) + ' anotado como pagado' + (qd >= 0.01 ? '; quedan ' + dinero(qd) + ' para el siguiente reparto.' : '.'));
       await refresca();
     } catch (e) { mal(errTxt(e)); } finally { b.disabled = false; }
   }
@@ -836,6 +877,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
     R = r[0] || []; PAGOS = r[1] || []; DEBE = r[2] || []; SEL = {};
     var h = $('pp-hasta').value, f = $('pp-fecha').value;
     opciones(); if (h) $('pp-hasta').value = h; if (f) $('pp-fecha').value = f;
+    await cargaVista();
     pintaMeses(); pintaPagos(); pintaDebe();
   }
 
@@ -1257,7 +1299,7 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Comisiones');
       if (tipo === 'mes') { var L = mesesFiltrados(); hoja(MK, wb, 'Por persona y mes', 'Comisiones por persona y mes contable', [datosAl(), L.length + ' renglones con los filtros de la pantalla'], ['Persona', 'Mes contable', 'Comisión', 'Bono 5 %', 'Total', 'Pagado', 'Diferencia'], L.map(function (x) { return [x.n + (x.parte ? ' (parte de tu departamento)' : ''), mesTxt(x.ym), x.com, x.com5, x.tot, x.pag, x.dif]; }), [36, 18, 14, 14, 14, 14, 14], [3, 4, 5, 6, 7]); }
       if (tipo === 'det') { hoja(MK, wb, 'De dónde sale', 'De dónde sale · ' + mesTxt($('d-mes').value), [datosAl(), DET.length + ' renglones'], ['Persona', 'Departamento', 'Cliente', 'Trabajo', 'Factura', 'Fecha del pago', 'Pago sin IVA', 'Participación', 'Comisión', 'Bono'], DET.map(function (x) { return [x.n, x.dep, x.rs, x.pl, x.f + (x.ef ? ' (efectivo)' : ''), fecha(x.pf), x.sin, x.t === 2 ? 'monto fijo' : pct(x.porc), x.com, x.bono]; }), [28, 14, 30, 24, 12, 14, 14, 14, 14, 12], [7, 9, 10]); }
-      if (tipo === 'deb') { var D = debePorPersona(); hoja(MK, wb, 'Por pagar', 'Comisiones por pagar', [datosAl(), D.length + ' personas'], ['Persona', 'Meses contables', 'Por pagar'], D.map(function (o) { return [o.n, o.meses.map(function (m) { return mesTxt(m.ym) + ' ' + dinero(m.debe); }).join(', '), o.debe]; }), [32, 50, 16], [3]); }
+      if (tipo === 'deb') { var D = debePorPersona(), sd = 0; D.forEach(function (o) { sd += o.deposita; }); hoja(MK, wb, 'Por pagar', 'Comisiones por pagar', [datosAl(), D.length + ' personas · meses contables hasta ' + mesTxt(+$('pp-hasta').value) + ' · se deposita ' + dinero(sd) + ' (a cientos, hacia abajo)'], ['Persona', 'Meses contables', 'Le toca', 'Se le deposita', 'Queda para el siguiente', 'Nota'], D.map(function (o) { return [o.n, o.meses.map(function (m) { return mesTxt(m.ym) + ' ' + dinero(m.debe); }).join(', '), o.debe, o.deposita, o.queda, notaPago(o)]; }), [32, 46, 15, 15, 17, 30], [3, 4, 5]); }
       if (tipo === 'pag') { var N = pagosFiltrados(); hoja(MK, wb, 'Pagos hechos', 'Pagos de comisión', [datosAl(), N.length + ' pagos · ' + filtrosPagos()], ['Persona', 'Fecha del pago', 'Mes contable', 'Monto', 'Lo marcó'], N.map(function (p) { return [p.n, fecha(p.fecha), mesTxt(p.ym), Number(p.monto), quienMarco(p)]; }), [32, 16, 18, 14, 20], [4]); }
       if (tipo === 'esp') { var X = espFiltradas(); hoja(MK, wb, 'En espera del SAT', 'Comisiones en espera del SAT', [datosAl(), X.length + (X.length === 1 ? ' tarea' : ' tareas')], ['Cliente', 'Grupo', 'Tarea', 'Mes contable', 'Qué dice el SAT', 'Quiénes', 'Comisión que espera', 'Qué se decidió'], X.map(function (f) { return [f.rs, f.grupo || '', f.tarea, mesTxt(f.ym), satTxt(f), (f.personas || []).map(function (q) { return q.n + ' ' + dinero(q.m); }).join(', '), Number(f.monto || 0), decTxt(f)]; }), [34, 22, 26, 16, 34, 40, 16, 44], [7]); }
       if (tipo === 'sw') { var W = swFiltradas(); hoja(MK, wb, 'Servicios de cada plantilla', 'Servicios de cada plantilla', [datosAl(), W.length + (W.length === 1 ? ' plantilla' : ' plantillas')], ['Plantilla', 'Periodicidad', 'Bloque de la factura', 'Servicios de DECOMSA que la cobran'], W.map(function (p) { return [p.nombre, p.per === 12 ? 'Anual' : 'Mensual', p.bloque ? (BLOQUE[p.bloque] || ('Bloque ' + p.bloque)) : 'Sin bloque', p.servicios.map(function (x) { return x.nombre; }).join(', ') || (p.trabajo ? 'Tiene trabajo y ningún servicio' : 'Sin servicio')]; }), [40, 14, 30, 60], []); }
@@ -1299,8 +1341,8 @@ select.blq.n{background:var(--surface-2);color:var(--muted)}
   ['f-anio', 'f-mes', 'f-per', 'f-pend'].forEach(function (k) { $(k).addEventListener('change', pintaMeses); });
   ['f-pper', 'f-pym', 'f-pfr'].forEach(function (k) { $(k).addEventListener('change', pintaPagos); });
   ['d-mes', 'd-per'].forEach(function (k) { $(k).addEventListener('change', cargaDet); });
-  $('pp-hasta').addEventListener('change', function () { SEL = {}; pintaDebe(); });
-  $('sel-todos').addEventListener('change', function () { var v = this.checked; debePorPersona().forEach(function (o) { SEL[o.p] = v; }); pintaDebe(); });
+  $('pp-hasta').addEventListener('change', async function () { SEL = {}; await cargaVista(); pintaDebe(); pintaMeses(); });
+  $('sel-todos').addEventListener('change', function () { var v = this.checked; aDepositar().forEach(function (o) { SEL[o.p] = v; }); pintaDebe(); });
   $('pp-btn').onclick = pagar;
   $('l-mes').addEventListener('change', cargaLig);
   $('l-ver').addEventListener('change', pintaLig);
