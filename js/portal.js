@@ -2906,9 +2906,26 @@
       return obj;
     } };
   }
+  /* mismaQue(otra) (revisión de la noche del 23-nov-2026): dice si otra foto de la colección se armó con los mismos
+     renglones (la misma lista, o renglón por renglón el mismo objeto: colAlDia() solo cambia el objeto de un renglón que
+     cambió). Así una pantalla que ya la pidió con get() no vuelve a leer ni a pintar todo con la primera vuelta de su
+     vigilancia, que le trae lo mismo (Variaciones / Movimientos repintaba sus miles de renglones dos veces más al abrir).
+     Solo dice «sí» cuando es seguro; si no, «no» y la pantalla hace lo de siempre. No se enumera: lo demás no cambia. */
   function fotosCol(filas) {
     var docs = filas.map(fotoTxt);
-    return { docs: docs, size: docs.length, empty: !docs.length };
+    var s = { docs: docs, size: docs.length, empty: !docs.length };
+    try {
+      Object.defineProperty(s, '__filas', { value: filas });
+      Object.defineProperty(s, 'mismaQue', { value: function (otra) {
+        var f = otra && otra.__filas;
+        if (!f) return false;
+        if (f === filas) return true;
+        if (f.length !== filas.length) return false;
+        for (var i = 0; i < f.length; i++) if (f[i] !== filas[i]) return false;
+        return true;
+      } });
+    } catch (e) { /* sin defineProperty: la pantalla hace lo de siempre */ }
+    return s;
   }
 
   /* Vigilancia: la página pide «avísame si cambia»; se revisa la versión y solo se baja lo que cambió */

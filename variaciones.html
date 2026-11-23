@@ -45,7 +45,7 @@
   } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
   try { window.stop(); } catch (e) { /* navegador viejo */ }
   try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=15297748d4"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/bitacora.js?v=14742df021"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/ocultos.js?v=c024042044"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/variaciones-calculo.js?v=e33cdfbc8a"></script><script src="js/hallazgos.js?v=aefcba6d63"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=4fbb334f10"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=aa2e76cc4f"></script><script src="js/bitacora.js?v=14742df021"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/ocultos.js?v=c024042044"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/variaciones-calculo.js?v=e33cdfbc8a"></script><script src="js/hallazgos.js?v=aefcba6d63"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -1005,12 +1005,15 @@ const PRE_P = (async()=>{
     if(!window.claude) return null;
     const db = await claude.use("db"); const P = window.PORTAL || {};
     const est = db.collection("var_est").get(), com = db.collection("var_com").get();
+    // (23-nov-2026, revisión nocturna) y las cuentas excluidas (var_casos), que antes llegaban hasta que su vigilancia daba
+    // su primera vuelta, ya con la pantalla a la vista: volvían a pintar la tabla completa (ver «arranque», abajo)
+    const cas = db.collection("var_casos").get();
     const gc = P.sb ? Promise.resolve(P.sb.rpc("es_gerencia_contable")) : null;
     // (22-nov-2026) y los clientes que quien entró ocultó: js/ocultos.js guarda la misma promesa (carga() una sola vez), así
     // al llegar a ella ya no espera (antes se pedía hasta después de armar la tabla: «Comprobar real», a los ~2 s)
     if(window.PROFASE_OCULTOS) window.PROFASE_OCULTOS.carga();
-    [est, com, gc].forEach(x=>{ if(x) x.catch(()=>{}); });   // se esperan después
-    return { est, com, gc };
+    [est, com, cas, gc].forEach(x=>{ if(x) x.catch(()=>{}); });   // se esperan después
+    return { est, com, cas, gc };
   }catch(e){ return null; }
 })();
 const BASE0 = await cargarDatos();
@@ -4279,19 +4282,26 @@ else { const h1 = document.querySelector("main .titlebar h1"); if(h1) h1.hidden 
   document.getElementById("campana").hidden = false;
   try{ LEIDO = localStorage.getItem("var-leido-"+(userId||"")) || ""; }catch(e){}
   const mapa = s => { const n={}; s.docs.forEach(d=>{ if(d.exists) n[d.id]=d.data(); }); return n; };
+  /* (23-nov-2026, revisión nocturna) Al abrir, la tabla se pintaba cuatro veces: escondida, al llegar lo capturado y otra
+     vez con la primera vuelta de cada vigilancia (var_est, var_com y var_casos), ya a la vista, aunque esas dos primeras
+     trajeran lo mismo que ya había llegado («Comprobar real»: los ~4,400 meses de las cuentas se armaban y se quitaban cuatro
+     veces). Ahora lo capturado y las cuentas excluidas llegan juntos antes de la segunda pintada, y una vuelta que trae lo
+     mismo que ya se tiene (mismaQue() de js/portal.js) no vuelve a leer ni a pintar nada. La misma tabla, con lo mismo. */
+  const ponSil = s => { const n={}; s.docs.forEach(d=>{ if(d.exists){ const v=d.data();
+      if(v && v.caso && v.vig!==null && v.vig!==undefined) n[v.caso]=v; } }); SIL=n; };
+  const igual = (s, antes) => !!(s && antes && typeof s.mismaQue==="function" && s.mismaQue(antes));
+  let fEst = null, fCom = null, fCas = null;
   // primero lo ya capturado, para que una liga directa abra el hallazgo con su estatus
   try{ const [a, b] = await Promise.all([(PRE && PRE.est) || db.collection("var_est").get(), (PRE && PRE.com) || db.collection("var_com").get()]);
-       EST = mapa(a); COMS = mapa(b); juntaRev(); }catch(e){}
-  db.collection("var_est").onSnapshot(s=>{ EST = mapa(s); juntaRev(); pintarLuego(); }, ()=>{});
-  db.collection("var_com").onSnapshot(s=>{ COMS = mapa(s); juntaRev(); pintarLuego(); }, ()=>{});
+       EST = mapa(a); COMS = mapa(b); fEst = a; fCom = b; juntaRev(); }catch(e){}
+  try{ const c = await ((PRE && PRE.cas) || db.collection("var_casos").get()); ponSil(c); fCas = c; }catch(e){}
+  db.collection("var_est").onSnapshot(s=>{ const ya = igual(s, fEst); fEst = s; if(ya) return; EST = mapa(s); juntaRev(); pintarLuego(); }, ()=>{});
+  db.collection("var_com").onSnapshot(s=>{ const ya = igual(s, fCom); fCom = s; if(ya) return; COMS = mapa(s); juntaRev(); pintarLuego(); }, ()=>{});
   db.doc("datos/meta").onSnapshot(d=>{
     const v = d && d.exists ? (d.data().var||"") : "";
     if(v && HORA_DATOS && v!==HORA_DATOS) hayNuevos();
   }, ()=>{});
-  db.collection("var_casos").onSnapshot(s=>{
-    const n={}; s.docs.forEach(d=>{ if(d.exists){ const v=d.data();
-      if(v && v.caso && v.vig!==null && v.vig!==undefined) n[v.caso]=v; } }); SIL=n; pintarLuego();
-  }, ()=>{});
+  db.collection("var_casos").onSnapshot(s=>{ const ya = igual(s, fCas); fCas = s; if(ya) return; ponSil(s); pintarLuego(); }, ()=>{});
   db.collection("var_eventos").onSnapshot(s=>{
     EVENTOS = s.docs.filter(d=>d.exists).map(d=>({id:d.id, ...d.data()}))
       .filter(e=>e && e.ts).sort((a,b)=>b.ts.localeCompare(a.ts));
