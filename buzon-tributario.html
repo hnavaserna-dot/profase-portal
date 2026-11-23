@@ -533,9 +533,32 @@ tr.click:hover td{background:var(--navy-soft)}
         if (asg === '-' && f.asignado) return false;
         if (asg && asg !== '-' && !enAviso(f, asg)) return false;   // (296) el responsable o cualquiera de sus apoyos
       }
-      if (t && norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; }), f.uuids || []).join(' ')).indexOf(t) < 0) return false;
+      if (t && textoDe(f).indexOf(t) < 0) return false;
       return true;
     });
+  }
+  /* Lo que se busca de cada aviso, ya sin acentos, una sola vez por renglón (revisión nocturna del 23-nov-2026: con miles
+     de avisos, cada búsqueda volvía a quitar los acentos de todos y trababa la pantalla ~0.5 s en una laptop lenta). Es el
+     mismo texto de siempre; se guarda junto al renglón que llegó (cada carga trae renglones nuevos) y se prepara de fondo al
+     cargar, de a poco, para que la primera búsqueda tampoco se trabe. */
+  var TXT = (typeof WeakMap === 'function') ? new WeakMap() : null;
+  function textoDe(f) {
+    var t = TXT ? TXT.get(f) : undefined;
+    if (t === undefined) {
+      t = norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; }), f.uuids || []).join(' '));
+      if (TXT) TXT.set(f, t);
+    }
+    return t;
+  }
+  function preparaTextos(filas) {
+    if (!TXT) return;
+    var i = 0, ric = window.requestIdleCallback || function (fn) { return setTimeout(function () { fn({ timeRemaining: function () { return 8; } }); }, 50); };
+    (function tanda(dl) {
+      if (filas !== FILAS) return;   // llegó otra lista: esa prepara la suya
+      var hasta = Date.now() + Math.min(12, Math.max(4, (dl && dl.timeRemaining && dl.timeRemaining()) || 8));
+      while (i < filas.length && Date.now() < hasta) textoDe(filas[i++]);
+      if (i < filas.length) ric(tanda);
+    })();
   }
   function puedeSel() { return EST.asigna && !CONSULTA && PES === 'avisos'; }
   function pinta() {
@@ -607,7 +630,7 @@ tr.click:hover td{background:var(--navy-soft)}
     FILAS = DATOS.filas || [];
     var ids = {}; FILAS.forEach(function (f) { ids[f.id] = 1; });
     Object.keys(SEL).forEach(function (k) { if (!ids[k]) delete SEL[k]; });
-    opcionesFiltros(); pinta();
+    opcionesFiltros(); pinta(); preparaTextos(FILAS);
   }
 
   /* ---------- la ficha de un aviso ---------- */
