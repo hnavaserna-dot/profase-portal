@@ -209,6 +209,9 @@ tr.fila:hover td{background:var(--navy-soft)}
 .subir input[type=file]{max-width:100%;font-size:13px}
 .env-l li .d.mal{color:var(--red)}
 .env-l .para{overflow-wrap:anywhere}
+.env-l li.reb>.t{color:var(--red)}
+.env-l li .d.reb-ojo{background:var(--red-soft);color:var(--ink);border-radius:8px;padding:8px 10px;margin-top:6px;overflow-wrap:anywhere;line-height:1.45}
+.env-l li .d.reb-ojo b{color:var(--red)}
 /* Ventana del contacto que recibe documentos (206_envios_contacto_ventana.sql, 3-nov-2026): sale encima de la ficha
    cuando el cliente no tiene a quién mandarle; en el celular, pantalla completa con sus botones abajo a la vista */
 .velo-cto{position:fixed;inset:0;background:rgba(10,18,32,.5);z-index:70;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -630,7 +633,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       if (!FIJO_OK) { fijoResto(); mostrar = PAGINA; pinta(); }
       $('cargando').hidden = true; $('p-lista').hidden = false; $('pie').hidden = false; armaBarra();
       var hv = /^#ver-([a-z-]{1,40})$/.exec(location.hash || ''); if (hv) verNuevo(hv[1]);
-      var ha = /^#act-(\d{1,12})(?:-(\d{4}-\d{2}))?(-com)?$/.exec(location.hash || ''); if (ha) abreAct(+ha[1], ha[2] || '', ha[3] ? 'com' : '');
+      var ha = /^#act-(\d{1,12})(?:-(\d{4}-\d{2}))?(?:-(com|env))?$/.exec(location.hash || ''); if (ha) abreAct(+ha[1], ha[2] || '', ha[3] || '');
       var hd = /^#dev-(\d{1,12})$/.exec(location.hash || ''); if (hd) abreDevCaso(+hd[1]);
       var hn = /^#devisr-(\d{1,12})-(\d{4})$/.exec(location.hash || ''); if (hn) abreDevNueva({ impuesto: 'isr', empresa: +hn[1], ejercicio: +hn[2] });
       var hp = /^#proy-(\d{1,12})$/.exec(location.hash || ''); if (hp) abreProyCaso(+hp[1]);
@@ -1910,7 +1913,7 @@ tr.fila:hover td{background:var(--navy-soft)}
       $('f-anio').value = per.slice(0, 4); $('f-mes').value = String(+per.slice(5, 7));
       try { await cargaPeriodo(); } catch (e) { return; }
     }
-    if (POR_ID[id]) abre(id, tab === 'com' ? 'com' : '');
+    if (POR_ID[id]) abre(id, tab === 'com' || tab === 'env' ? tab : '');   // 503: «…|env-rebote-<n>» abre la pestaña Envío
     else { $('error').hidden = false; $('error').textContent = 'Esa actividad ya no está en tu lista (pudo cambiar de responsable o de mes).'; }
   }
   window.__abreAct = abreAct;
@@ -2563,11 +2566,25 @@ tr.fila:hover td{background:var(--navy-soft)}
   }
   // el cliente no tiene en su ficha a nadie que reciba documentos (env_preparar, 201): se captura ahí mismo (202)
   function sinContacto(x) { return !!(x && x.error && /contacto que reciba documentos/.test(x.error)); }
+  // 503 (23-nov-2026): los correos de la lista que ya rebotaron, para avisar antes de volver a mandarles (crr_marcas)
+  var REB = {};
+  async function envMarcas(items) {
+    var c = []; (items || []).forEach(function (x) { (x.para || []).forEach(function (k) { k = String(k).toLowerCase().trim(); if (k && c.indexOf(k) < 0) c.push(k); }); });
+    REB = {}; if (!c.length) return;
+    try { var r = await P.sb.rpc('crr_marcas', { p_correos: c.slice(0, 400) }); (r && r.data || []).forEach(function (m) { REB[m.correo] = m; }); } catch (e) { REB = {}; }
+  }
+  function envRebota(x) {
+    var L = (x.para || []).map(function (k) { return REB[String(k).toLowerCase().trim()]; }).filter(Boolean);
+    return L.map(function (m) {
+      return '<div class="d mal reb-ojo"><b>Ojo:</b> ' + esc(m.correo) + ' rebotó el ' + esc(fechaHora(m.cuando)) + ' (' + esc(m.motivo) + '). Qué hacer: '
+        + esc(m.fija ? 'corrígelo antes en Clientes › Base de clientes (o pídeselo a quien edita la Base de clientes); si se manda así, va a volver a rebotar.' : m.hacer + '.') + '</div>';
+    }).join('');
+  }
   function envItem(x, conBoton) {
     return '<li><div class="t">' + esc(x.rs) + '</div><div class="d">' + esc(x.actividad) + ' · ' + esc(mesTxt(x.periodo)) + (x.complementaria ? ' · <span class="tag az">Complementaria</span>' : '') + '</div>'
       + (x.error ? '<div class="d mal">' + esc(x.error) + '</div>'
         + (conBoton && sinContacto(x) && !CONSULTA ? '<div class="cto-b"><button class="btn" type="button" data-cto="' + x.wfra + '">Capturar el contacto</button></div>' : '')
-        : '<div class="d para">Para: ' + esc((x.para || []).join(', ')) + ' · ' + (x.docs || []).length + ' documento' + ((x.docs || []).length === 1 ? '' : 's') + ': ' + esc((x.docs || []).map(function (d) { return d.nombre; }).join(', ')) + '</div>')
+        : '<div class="d para">Para: ' + esc((x.para || []).join(', ')) + ' · ' + (x.docs || []).length + ' documento' + ((x.docs || []).length === 1 ? '' : 's') + ': ' + esc((x.docs || []).map(function (d) { return d.nombre; }).join(', ')) + '</div>' + envRebota(x))
       + '</li>';
   }
   function envResumen(res) {
@@ -2586,9 +2603,40 @@ tr.fila:hover td{background:var(--navy-soft)}
     $('env-hist').innerHTML = !L.length ? '<div class="vacio">Desde el portal todavía no se ha mandado nada de esta actividad.</div>'
       : '<ul class="lista env-l">' + L.map(function (e) {
         var est = e.estado === 'enviado' ? 'Enviado' : e.estado === 'prueba' ? 'Prueba' : 'No se pudo';
-        return '<li><div class="t">' + esc(est) + ' · ' + esc(fechaHora(e.creado)) + ' · ' + esc(e.quien) + '</div><div class="d para">Para: ' + esc((e.para || []).join(', ')) + ' · ' + (e.docs || []).length + ' documento(s)</div>'
-          + (e.detalle ? '<div class="d mal">' + esc((/Qué hacer:/.test(e.detalle) ? e.detalle : 'No se mandó. Qué hacer: vuelve a mandarlo en un rato; lo que no se mandó se queda sin marcar.')) + '</div>' : '') + '</li>';
+        var rb = e.rebotes || [];
+        if (rb.length) est = 'No llegó: rebotó';
+        return '<li' + (rb.length ? ' class="reb"' : '') + '><div class="t">' + esc(est) + ' · ' + esc(fechaHora(e.creado)) + ' · ' + esc(e.quien) + '</div><div class="d para">Para: ' + esc((e.para || []).join(', ')) + ' · ' + (e.docs || []).length + ' documento(s)</div>'
+          + (e.detalle ? '<div class="d mal">' + esc((/Qué hacer:/.test(e.detalle) ? e.detalle : 'No se mandó. Qué hacer: vuelve a mandarlo en un rato; lo que no se mandó se queda sin marcar.')) + '</div>' : '')
+          + rb.map(function (b) { return envRebHtml(b); }).join('') + '</li>';
       }).join('') + '</ul>';
+  }
+  // un rebote del historial: por qué, qué hacer y, ya corregido el correo (o si el correo sí existe), «Volver a mandar»
+  function envRebHtml(b) {
+    var puede = !CONSULTA && envPuedeMandar() && !b.reenviado && (b.corregido || !b.fija);
+    var hacer = b.reenviado ? 'Ya se volvió a mandar el ' + fechaHora(b.reenviado) + '.'
+      : b.fija && !b.corregido ? 'Qué hacer: corrige ese correo en Clientes › Base de clientes (o pídeselo a quien edita la Base de clientes); al corregirlo, aquí sale «Volver a mandar».'
+      : CONSULTA ? (b.fija ? 'Ya se corrigió en la ficha. ' : '') + 'Qué hacer: quien trabaja esta actividad lo vuelve a mandar desde aquí.'
+      : !envPuedeMandar() ? (b.fija ? 'Ya se corrigió en la ficha. ' : '') + 'Qué hacer: el envío al cliente está apagado por ahora; cuando se prenda, aquí sale «Volver a mandar». Mientras, avísale al cliente por otro medio.'
+      : b.fija ? 'Ya se corrigió en la ficha. Qué hacer: pica «Volver a mandar».'
+      : 'Qué hacer: ' + b.hacer + '. Para volver a mandarlo, pica «Volver a mandar».';
+    return '<div class="d mal reb-ojo"><b>No llegó a ' + esc(b.correo || 'un correo') + '</b> (rebotó el ' + esc(fechaHora(b.cuando)) + '): ' + esc(b.motivo)
+      + (b.codigo ? ' · código ' + esc(b.codigo) : '') + '. ' + esc(hacer) + '</div>'
+      + (puede ? '<div class="cto-b"><button class="btn acento" type="button" data-reenv="' + b.id + '">Volver a mandar</button></div>' : '');
+  }
+  async function envReenvia(id, btn) {
+    var a = POR_ID[ABIERTA]; if (!a) return;
+    btn.disabled = true; btn.textContent = 'Preparando…';
+    try {
+      var r = await P.sb.rpc('env_rebote_reenvia', { p_id: id });
+      if (r.error) throw r.error;
+      if (ABIERTA !== a.id) return;
+      pintaDocs(a); pintaEnvios(a);
+      await envUno();
+      try { $('env-uno-res').scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Volver a mandar';
+      if ($('env-uno-res')) $('env-uno-res').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>';
+    }
   }
   async function envUno() {
     var a = POR_ID[ABIERTA]; if (!a) return;
@@ -2596,6 +2644,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     try {
       var it = (await envPrepara([a.id]))[0];
       if (!it) { box.innerHTML = '<div class="vacio">No se encontró la actividad.</div>'; return; }
+      await envMarcas([it]);
       var listo = !it.error && envPuedeMandar();
       box.innerHTML = '<ul class="lista env-l">' + envItem(it, true) + '</ul>'
         + (listo ? '<div class="subir"><label class="env-chk"><input type="checkbox" id="env-uno-junto" checked> En un solo correo</label><button class="btn acento" type="button" id="env-uno-manda">Mandar</button></div>' : '');
@@ -2632,6 +2681,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     var mb = $('env-manda'); if (mb) { mb.hidden = true; mb.disabled = true; }
     try {
       var it = await envPrepara(ENV_TODOS.length ? ENV_TODOS : ENV_IDS), ok = it.filter(function (x) { return !x.error; }), no = it.filter(function (x) { return x.error; });
+      await envMarcas(ok);
       ENV_IDS = ok.map(function (x) { return x.wfra; });
       var h = '<div class="seg-sec"><b>Listas para mandar · ' + ok.length + '</b></div>' + (ok.length ? '<ul class="sg-lista env-l">' + ok.map(function (x) { return envItem(x); }).join('') + '</ul>' : '<p class="sg-hint">Ninguna.</p>');
       if (no.length) h += '<div class="seg-sec"><b>No se mandan · ' + no.length + '</b></div><ul class="sg-lista env-l">' + no.map(function (x) { return envItem(x, true); }).join('') + '</ul>';
@@ -3292,6 +3342,7 @@ tr.fila:hover td{background:var(--navy-soft)}
     if (ev.target.id === 'env-revisa') { envRevisa(ev.target); return; }
     if (ev.target.id === 'env-uno') { envUno(); return; }
     if (ev.target.id === 'env-uno-manda') { envUnoManda(ev.target); return; }
+    var rv = ev.target.closest('[data-reenv]'); if (rv) { envReenvia(+rv.getAttribute('data-reenv'), rv); return; }
     var ct = ev.target.closest('[data-cto]');
     if (ct) { abreContacto(+ct.getAttribute('data-cto'), function () { var rb = $('env-revisa'); if (rb) envRevisa(rb); else envUno(); }); return; }
     if (ev.target.id === 'cto-x' || ev.target.id === 'cto-cancela') { ctoCierra(); return; }

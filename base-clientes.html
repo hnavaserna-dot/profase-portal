@@ -247,6 +247,8 @@ tr.fila:hover td{background:var(--navy-soft)}
 .cto>div:last-child{min-width:0;flex:1}
 .cto .n{font-weight:700;overflow-wrap:anywhere}
 .cto .d{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.cto .d.reb-ojo{background:var(--red-soft);color:var(--ink);border-radius:8px;padding:6px 8px;margin:6px 0 4px;line-height:1.45}
+.cto .d.reb-ojo b{color:var(--red)}
 .recibe{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .recibe span{font-size:11.5px;font-weight:600;border-radius:6px;padding:1px 7px;background:var(--ok-soft);color:var(--ok)}
 .recibe span.no{background:var(--surface-2);color:var(--muted)}
@@ -429,7 +431,7 @@ details.hist>summary{width:auto}
     <div hidden>
       <select id="f-est" aria-label="Estatus"><option value="">Todos los estatus</option><option value="1" selected>Activo</option><option value="2">Incubado</option><option value="0">Inactivo</option></select>
       <select id="f-cia" aria-label="Compañía que la atiende"></select>
-      <select id="f-marca" aria-label="Marcas"><option value="">Marcas: todas</option><option value="alguna">Con alguna marca</option><option value="sincont">Sin contador</option><option value="sindocs">Nadie recibe documentos</option><option value="vence">e.firma o sellos por vencer</option><option value="devcond" hidden>Devoluciones de IVA sin lo que se cobra</option></select>
+      <select id="f-marca" aria-label="Marcas"><option value="">Marcas: todas</option><option value="alguna">Con alguna marca</option><option value="sincont">Sin contador</option><option value="sindocs">Nadie recibe documentos</option><option value="vence">e.firma o sellos por vencer</option><option value="devcond" hidden>Devoluciones de IVA sin lo que se cobra</option><option value="rebote" hidden>Un correo rebotó</option></select>
     </div>
     <section id="kpis" aria-label="Resumen de esta pestaña" hidden></section>
 
@@ -548,7 +550,7 @@ details.hist>summary{width:auto}
       var R = await Promise.all(TABLAS.map(todo));
       TABLAS.forEach(function (t, i) { T[t] = R[i]; });
       indices();
-      await devFaltan();
+      await Promise.all([devFaltan(), rebotes()]);
       opciones(); pinta();
       $('cargando').hidden = true; $('principal').hidden = false;
       // desde un aviso (el contacto que se capturó al mandar, 206): abre la ficha de esa razón social
@@ -572,6 +574,7 @@ details.hist>summary{width:auto}
   async function recarga(tablas) {
     var R = await Promise.all(tablas.map(todo));
     tablas.forEach(function (t, i) { T[t] = R[i]; });
+    if (tablas.indexOf('contactos') >= 0 || tablas.indexOf('contacto_reg') >= 0) await rebotes();   // al corregir el correo, la marca se quita sola
     indices(); contOpciones(); pinta();
     if (ABIERTA) (ABIERTA.tipo === 'emp' ? abreEmpresa : abreGrupo)(ABIERTA.id, true);
   }
@@ -617,6 +620,8 @@ details.hist>summary{width:auto}
     if (!recibe(e, 'recibe_docs')) M.push({ k: 'sindocs', t: 'Nadie recibe documentos', c: 'mal', ir: 'sec-quien' });
     // lo que se cobra en sus devoluciones de IVA, sin capturar (319): solo a quien ve lo que se cobra
     if (DEVF && DEVF.has(e.id)) M.push({ k: 'devcond', t: 'Devoluciones de IVA sin lo que se cobra', c: 'mal', ir: 'sec-dev' });
+    // un correo de sus contactos rebotó (503): se quita sola al corregirlo o cuando un correo nuevo sí llega
+    if (REBF && REBF.has(e.id)) M.push({ k: 'rebote', t: 'Un correo rebotó', c: 'mal', ir: 'sec-quien' });
     [['fiel', 'e.firma', 'vence', 'vencida'], ['sellos', 'Sellos', 'vencen', 'vencidos']].forEach(function (q) {
       var d = e['vence_' + q[0]];
       if (!e['cuenta_' + q[0]] || !d) return;
@@ -686,7 +691,8 @@ details.hist>summary{width:auto}
       var sc = E.filter(function (e) { return marcasDe(e).some(function (x) { return x.k === 'sincont'; }); }).length;
       var pv = E.filter(function (e) { return marcasDe(e).some(function (x) { return x.k === 'vence'; }); }).length;
       var dv = DEVF ? E.filter(function (e) { return DEVF.has(e.id); }).length : 0;
-      var cola = (m === 'sincont' || m === 'vence' || m === 'sindocs' || m === 'alguna' || m === 'devcond') ? filtradas() : [];
+      var rb = REBF ? E.filter(function (e) { return REBF.has(e.id); }).length : 0;
+      var cola = (m === 'sincont' || m === 'vence' || m === 'sindocs' || m === 'alguna' || m === 'devcond' || m === 'rebote') ? filtradas() : [];
       o.titulo = 'Tu trabajo · las empresas'; o.meta = E.length + (E.length === 1 ? ' empresa' : ' empresas') + ' en la base';
       o.pilas = [
         { k: 'e1', t: 'Activas', n: n(1), d: '', tono: 'verde', on: est === '1' },
@@ -697,6 +703,8 @@ details.hist>summary{width:auto}
       // Héctor Daniel Nava, 6-nov-2026, 20:10 («Obliga a chuy»): las que tienen devoluciones de IVA en el WorkFlow y todavía
       // no tienen capturado lo que se cobra (319); se quita sola cuando ya no falta ninguna
       if (DEVF && (dv || m === 'devcond')) o.pilas.push({ k: 'devcond', t: 'Devoluciones sin capturar', n: dv, d: 'Lo que se cobra en sus devoluciones de IVA', tono: 'rojo', on: m === 'devcond', tag: dv && DEVED && !CONSULTA ? 'Te toca' : '' });
+      // 503 (Héctor Daniel Nava, 23-nov-2026: «sí, dale»): los correos que rebotaron; sale solo si hay alguno
+      if (rb || m === 'rebote') o.pilas.push({ k: 'rebote', t: 'Correos que rebotaron', n: rb, d: 'Corrige el correo o captura otro contacto', tono: 'rojo', on: m === 'rebote', tag: rb && edita() ? 'Te toca' : '' });
       o.boton = cola.length ? { t: 'Revisar una por una', n: cola.length, alPicar: function () { ECOLA = cola.map(function (x) { return x.id; }); abreEmpresa(ECOLA[0]); } } : null;
       o.nota = cola.length ? 'Abre la primera; en su ficha, «Siguiente ›» pasa a la que sigue.' : '';
     } else if (VISTA === 'gru') {
@@ -748,7 +756,7 @@ details.hist>summary{width:auto}
   function tituloEmp() {
     var e = $('f-est').value, m = $('f-marca').value;
     var t = e === '1' ? 'Empresas activas' : e === '2' ? 'Empresas incubadas' : e === '0' ? 'Empresas inactivas' : 'Empresas';
-    var mm = { alguna: 'con alguna marca', sincont: 'sin contador', sindocs: 'donde nadie recibe documentos', vence: 'con e.firma o sellos por vencer', devcond: 'con devoluciones de IVA sin lo que se cobra' }[m];
+    var mm = { alguna: 'con alguna marca', sincont: 'sin contador', sindocs: 'donde nadie recibe documentos', vence: 'con e.firma o sellos por vencer', devcond: 'con devoluciones de IVA sin lo que se cobra', rebote: 'con un correo que rebotó' }[m];
     return t + (mm ? ' ' + mm : '');
   }
   function pintaEmpresas() {
@@ -981,6 +989,7 @@ details.hist>summary{width:auto}
           var c = I.cto[a.contacto_id], cor = c ? (a.correo === 2 ? c.correo2 : c.correo1) : '', tel = c ? (c.cel1 || c.tel1 || '') : '';
           return '<div class="cto"><div class="av" aria-hidden="true">' + esc(iniciales(contactoNombre(c))) + '</div><div><div class="n">' + esc(contactoNombre(c)) + '</div>'
             + '<div class="d">' + esc([cor ? cor + ' (correo ' + a.correo + ')' : 'correo ' + a.correo, tel].filter(Boolean).join(' · ')) + '</div>'
+            + rebHtml(a.contacto_id, a.correo === 2 ? 2 : 1)
             + '<div class="recibe"><span' + (a.recibe_docs ? '>✓ ' : ' class="no">') + 'Documentos</span><span' + (a.recibe_recordatorio ? '>✓ ' : ' class="no">') + 'Recordatorios de pago</span></div>'
             + (ed ? '<div class="bts">' + bt('edCre', 'Editar', { id: a.id }) + bt('borra', 'Quitar', { t: 'cli_contacto_reg', id: a.id, q: 'el contacto de esta compañía' }, 'peligro') + '</div>' : '') + '</div></div>';
         }).join('') + (ed ? '<button type="button" class="cto agrega" data-acc="nuevoCre" data-reg="' + r.id + '">+ Agregar contacto</button>' : '')
@@ -1041,6 +1050,23 @@ details.hist>summary{width:auto}
      cli_dev_faltan: solo a quien ve lo que se cobra; Héctor Daniel Nava, 6-nov-2026, 20:10: «Obliga a chuy»). A los demás
      no les sale nada (ni la marca, ni la pila, ni el filtro). */
   var DEVF = null, DEVED = false;
+  /* Los correos que rebotaron (503, crr_ficha: solo a quien ve la Base de clientes y nunca lo de la otra compañía a quien no
+     la ve): la pila, el filtro, la marca de la empresa y, en cada contacto, cuál de sus correos rebotó y qué hacer. */
+  var REBF = null, REBC = {};
+  async function rebotes() {
+    var r = null;
+    try { r = await rpc('crr_ficha'); } catch (e) { r = null; }
+    REBF = r && Array.isArray(r.ids) && r.ids.length ? new Set(r.ids.map(Number)) : null; REBC = {};
+    ((r && r.marcas) || []).forEach(function (m) { REBC[m.contacto_id + '|' + m.cual] = m; });
+    var op = document.querySelector('#f-marca option[value="rebote"]'); if (op) op.hidden = !REBF;
+    if (!REBF && $('f-marca').value === 'rebote') $('f-marca').value = '';
+  }
+  function rebHtml(cid, cual) {
+    var m = REBC[cid + '|' + cual]; if (!m) return '';
+    return '<div class="d reb-ojo"><b>Este correo rebotó</b> el ' + esc(fechaLarga(m.cuando)) + ': ' + esc(m.motivo) + '. Qué hacer: '
+      + esc(m.fija ? 'corrígelo con «Editar» del contacto (o captura otro que reciba documentos); al corregirlo, esta marca se quita sola.' : m.hacer + '; el correo sí existe, no hay que corregirlo.') + '</div>';
+  }
+  function fechaLarga(d) { try { return PROFASE_HORA.fechaHora(d); } catch (e) { return String(d || '').slice(0, 16).replace('T', ' '); } }
   async function devFaltan() {
     var r = null;
     try { r = await rpc('cli_dev_faltan'); } catch (e) { r = null; }
@@ -1142,6 +1168,7 @@ details.hist>summary{width:auto}
       var tels = [c.tel1, c.tel2, c.cel1 ? 'cel. ' + c.cel1 : '', c.cel2 ? 'cel. ' + c.cel2 : ''].filter(Boolean).join(' · ');
       var n = (I.creDeCto[c.id] || []).length;
       return '<div class="cto"><div class="av" aria-hidden="true">' + esc(iniciales(contactoNombre(c))) + '</div><div><div class="n">' + esc(contactoNombre(c)) + '</div><div class="d">' + esc([c.correo1, c.correo2].filter(Boolean).join(' · ')) + '</div>'
+        + rebHtml(c.id, 1) + rebHtml(c.id, 2)
         + '<div class="d">' + esc(tels) + (c.nacimiento ? ' · cumpleaños ' + esc(fecha(c.nacimiento).replace(/ \d{4}$/, '')) : '') + '</div>'
         + '<div class="recibe">' + (n ? '<span>Asignado en ' + n + (n === 1 ? ' empresa y compañía' : ' empresas y compañías') + '</span>' : '<span class="no">Sin asignar</span>') + '</div>'
         + (ed ? '<div class="bts">' + bt('edCto', 'Editar', { id: c.id }) + bt('borra', 'Borrar', { t: 'cli_contactos', id: c.id, q: 'el contacto (y lo que recibía)' }, 'peligro') + '</div>' : '') + '</div></div>';
