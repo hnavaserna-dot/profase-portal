@@ -290,8 +290,11 @@
      paso; el trabajador arma los anotados con pintaRenglones() y escribe con el mismo escritor de ExcelJS 4.4.0: el
      mismo archivo, hoja por hoja. Un libro chico, aquí mismo, como siempre; y si el trabajador no puede (sin red para su
      ExcelJS, un navegador sin trabajadores, algo que no se pudo pasar), aquí mismo, como siempre. op.aparte = true lo
-     manda al trabajador aunque sea chico y op.sinRespaldo = true no lo escribe aquí si falla (las pruebas). */
-  var XLSX_APARTE = 5000;
+     manda al trabajador aunque sea chico y op.sinRespaldo = true no lo escribe aquí si falla (las pruebas).
+     Revisión nocturna del 24-nov-2026: desde 1,000 renglones (antes 5,000). Escribir 2,000 renglones aquí son ~0.5 s sin que
+     la pantalla responda («Comprobar real»: el Excel del Panel de trabajo y el de la Configuración del WorkFlow, trabados 0.7
+     a 1.4 s al bajarlos); en el trabajador, el mismo archivo y la pantalla sigue respondiendo. */
+  var XLSX_APARTE = 1000;
   var TRABAJO_XLSX = "importScripts(" + JSON.stringify(EXCELJS_URL) + ");" + pintaRenglones.toString() + ";var M=null;"
     + "onmessage=async function(e){var d=e.data;try{"
     + "if(d.t==='base'){M=d.m;M.worksheets.forEach(function(w){w.rows=[];w.__b=[];w.__x=[];});return;}"
