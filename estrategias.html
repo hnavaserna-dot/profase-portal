@@ -50,7 +50,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=fd260d43f1"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=76669bb79d"></script><script src="js/visor.js?v=32a51754a1"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=fd260d43f1"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=76669bb79d"></script><script src="js/visor.js?v=de432d6af8"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=c71f7ed9c0"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=23bd345575"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/seguimiento.js?v=b9c19e19f9"></script>
 <style>
 /* Portal PROFASE · Estrategias fiscales (petición de Fernando Barbosa, gerente contable; decisiones de Héctor Daniel Nava del
    9-nov-2026: «1; ok / 2; a) / 3) sí 15% / 4) sí / 5) sí / 6) no; no se pierde / 7) sí»; «que Él lo capture todo»; «sí así
@@ -717,7 +717,7 @@ button.cel{cursor:pointer}
       return '<div class="doc"><div class="cab"><b>' + esc(CLASES[k]) + '</b>' + (PUEDE ? '<button class="btn chico" type="button" data-sube="' + k + '">Subir</button>' : '') + '</div>'
         + (ds.length ? '<ul>' + ds.map(function (x) {
           return '<li><span>' + esc(x.nombre) + '<span class="mut"> · ' + esc(x.por) + ' · ' + esc(fecha(x.subido)) + '</span></span><span class="acciones">'
-            + (esPdf(x) ? '<button class="btn chico" type="button" data-xver="' + x.id + '">Ver</button>' : '') + '<button class="btn chico" type="button" data-xbaja="' + x.id + '">Bajar</button>'
+            + (esPdf(x) || esVista(x) ? '<button class="btn chico" type="button" data-xver="' + x.id + '">Ver</button>' : '') + '<button class="btn chico" type="button" data-xbaja="' + x.id + '">Bajar</button>'
             + (PUEDE ? '<button class="btn chico peligro" type="button" data-xquita="' + x.id + '">Quitar</button>' : '') + '</span></li>';
         }).join('') + '</ul>' : '<div class="mut">Sin archivo</div>') + '</div>';
     }).join('') + '</div><div class="mut" id="doc-msg" role="status"></div>';
@@ -805,7 +805,7 @@ button.cel{cursor:pointer}
         if (q('f-ut')) q('f-ut').onclick = function () { ctl.cerrar(); setTab('ut'); };
         if (q('e-en')) { var ver = function () { scrim.querySelectorAll('.e-ent').forEach(function (z) { z.hidden = q('e-en').value !== 'entregado'; }); }; q('e-en').onchange = ver; ver(); q('e-si').onclick = function () { entrega(a, this); }; }
         scrim.querySelectorAll('[data-sube]').forEach(function (b) { b.onclick = function () { SUBE = { id: a.id, clase: b.getAttribute('data-sube') }; $('doc-arch').value = ''; $('doc-arch').click(); }; });
-        scrim.querySelectorAll('[data-xver]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.ver(DOCS[+b.getAttribute('data-xver')], b); }; });
+        scrim.querySelectorAll('[data-xver]').forEach(function (b) { b.onclick = function () { verDoc(DOCS[+b.getAttribute('data-xver')], b); }; });
         scrim.querySelectorAll('[data-xbaja]').forEach(function (b) { b.onclick = function () { if (VISOR) VISOR.baja(DOCS[+b.getAttribute('data-xbaja')], b); }; });
         scrim.querySelectorAll('[data-xquita]').forEach(function (b) { b.onclick = aVentana(function () { quitaDoc(a, DOCS[+b.getAttribute('data-xquita')]); }); });
         q('x-ficha').onclick = function () { excelFicha(a, this); };
@@ -985,6 +985,18 @@ button.cel{cursor:pointer}
   /* ---------- documentos (cubeta privada «estrategias»: su número es su nombre) ---------- */
   var SUBE = null;
   function esPdf(d) { return /\.pdf$/i.test(d && d.nombre || ''); }
+  // Word, Excel, PowerPoint, XML y texto: la misma vista en grande del chat (js/vista-archivos.js, PROFASE_VISTA; una sola
+  // versión), con «Con marca PROFASE» / «Original (sin marca)» (Héctor Daniel Nava, 24-nov-2026: «Quiero por ver, words
+  // exceles y ppt… ver en original o ver con branding profase»; «Para lo nuevo y lo anterior»). «Bajar», el de siempre.
+  function esVista(d) { return !esPdf(d) && !!(d && window.PROFASE_VISTA && window.PROFASE_VISTA.tipo({ nombre: d.nombre || '' })); }
+  function verDoc(d, b) {
+    if (!d || !VISOR) return;
+    if (!esVista(d)) { VISOR.ver(d, b); return; }
+    try { P.registrar('descarga', 'Estrategias fiscales · ' + d.nombre); } catch (e) {}
+    window.PROFASE_VISTA.ver({ nombre: d.nombre, tam: d.bytes, boton: b, bytes: function () { return VISOR.bytes(d); },
+      alBajar: function (x) { VISOR.baja(d, x); } })
+      .catch(function (e) { error(e && /Qué hacer/.test(e.message || '') ? e.message : falla(e, 'No se pudo abrir aquí')); });
+  }
   async function bytesDoc(d, intento) {
     var b;
     if (intento === 2) {

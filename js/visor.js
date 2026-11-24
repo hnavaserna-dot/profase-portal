@@ -10,7 +10,10 @@
    - «Original» (decisión de Daniel, 30-oct-2026: acuses, estados de cuenta y demás que se entregan o imprimen sin la
      marca, por ejemplo en una auditoría): a quien la base se lo ofrece (PORTAL.originales; hoy el equipo VAX), «Bajar»
      un PDF le pregunta con el menú de js/marca.js: «Con marca PROFASE» o «Original (sin marca)», que es el PDF tal cual
-     se subió (sellaPDF lo guarda junto al sellado). «Ver» siempre enseña el de la marca.
+     se subió (sellaPDF lo guarda junto al sellado). «Ver» abre con la marca y, a quien se le ofrece el «Original» (los
+     mismos de «Bajar»), arriba sale «Con marca PROFASE» / «Original (sin marca)» para verlo de una u otra forma
+     (Héctor Daniel Nava, 24-nov-2026: «ver en original o ver con branding profase»; la misma vista que los Word, Excel y
+     PowerPoint de js/vista-archivos.js). Solo cambia lo que se ve; «Bajar» sigue con su menú.
    - Rápido: al abrir una ficha con PDF ya se prepara la marca (pdf-lib) y se traen los PDF chicos; al pasar el mouse
      o tocar «Ver» o «Bajar» se adelanta la descarga; lo ya traído se guarda mientras la página está abierta, así que
      «Ver» y luego «Bajar» no lo vuelven a pedir.
@@ -20,7 +23,7 @@
    - En el expediente del cliente (expedientes.html) y en el chat interno (chat.html), con la opción originalTodos: true,
      el menú «Con marca» / «Original» sale a todos los que ven el documento (decisiones de Daniel: expediente, 31-oct-2026,
      «dame opción original y branding»; chat, 2-nov-2026, 13:52, «dame la opción dentro del chat; descargar original y
-     descargar»). «Ver» sigue con la marca.
+     descargar»). «Ver» abre con la marca y ahí mismo se cambia a «Original (sin marca)».
    Uso:  var V = PROFASE_VISOR.nuevo({ trae: async (d, intento) => Uint8Array (PDF ya sellado; intento 1 a 3), esPdf: d => bool,
                                        doc: el => d, nombre: d => 'archivo.pdf', alVer: d => {}, alBajar: d => {}, originalTodos });
          V.precarga(lista, sigueAbierta);  V.ver(d, boton);  V.baja(d, boton);
@@ -150,7 +153,16 @@
     // la ✕ (op.tache) y la capa en la página de arriba, encima de toda la pantalla (op.capa; el chat interno, 6-nov-2026)
     + '.pv-acc .pv-x{width:36px;height:36px;padding:0;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.45)}'
     + '.pv-acc .pv-x svg{width:20px;height:20px;display:block}'
-    + '.pv-acc .pv-x:hover{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E)}'
+    + '.pv-acc .pv-x:hover{background:var(--accent,#F07A1E);border-color:var(--accent,#F07A1E);color:#14233F}'
+    // «Con marca PROFASE» / «Original (sin marca)» (24-nov-2026): en el celular baja a su propio renglón
+    + '.pv-cab{flex-wrap:wrap;row-gap:8px}'
+    + '.pv-modo{flex:none;display:inline-flex;border:1px solid rgba(255,255,255,.35);border-radius:8px;overflow:hidden}'
+    + '.pv-modo[hidden]{display:none}'
+    + '.pv-modo button{border:0;margin:0;min-height:0;background:transparent;color:var(--navy-ink,#fff);padding:7px 12px;font:inherit;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}'
+    + '.pv-modo button+button{border-left:1px solid rgba(255,255,255,.35)}'
+    + '.pv-modo button[aria-pressed="true"]{background:var(--accent,#F07A1E);color:#14233F}'
+    + '.pv-modo button:focus-visible{outline:2px solid #fff;outline-offset:-3px}'
+    + '@media (max-width:700px){.pv-modo{order:9;flex:1 1 100%}.pv-modo button{flex:1 1 50%;padding:7px 6px}}'
     + '.pv-velo.pv-arriba{z-index:9000;margin:0;background:rgba(5,10,20,.72);font-size:14.5px;line-height:1.35;-webkit-text-size-adjust:100%;overscroll-behavior:contain;'
     + 'padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}'
     + '.pv-velo.pv-arriba *{box-sizing:border-box}'
@@ -366,15 +378,18 @@
       el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Vista previa de ' + nombre(d));
       if (arriba) { el.setAttribute('data-sin-jalar', ''); copiaVars(el); }
       el.innerHTML = '<div class="pv-caja"><div class="pv-cab"><div class="pv-tit"><b>' + esc(nombre(d)) + '</b><span>Vista previa con la marca PROFASE</span></div>'
+        + '<div class="pv-modo" role="group" aria-label="Cómo verlo" hidden><button type="button" data-pv="modo" data-modo="1" aria-pressed="true">Con marca PROFASE</button>'
+        + '<button type="button" data-pv="modo" data-modo="0" aria-pressed="false">Original (sin marca)</button></div>'
         + '<div class="pv-acc"><button type="button" data-pv="baja" disabled>Bajar</button>'
         + (op.tache ? '<button type="button" class="pv-x" data-pv="cierra" aria-label="Cerrar (Esc)" title="Cerrar (Esc)">' + PV_X + '</button>'
           : '<button type="button" data-pv="cierra" aria-label="Cerrar la vista previa">Cerrar</button>') + '</div></div>'
         + '<div class="pv-cuerpo"><div class="pv-msg" role="status"><div class="pv-gira" aria-hidden="true"></div><div>Abriendo el documento…</div></div></div></div>';
-      var c = { el: el, d: d, D: D, W: D.defaultView || window, cerrada: false, antes: document.activeElement, cuerpo: el.querySelector('.pv-cuerpo'), bBaja: el.querySelector('[data-pv="baja"]') };
+      var c = { el: el, d: d, D: D, W: D.defaultView || window, cerrada: false, antes: document.activeElement, cuerpo: el.querySelector('.pv-cuerpo'), bBaja: el.querySelector('[data-pv="baja"]'), orig: false };
       el.addEventListener('click', function (ev) {
         ev.stopPropagation();   // que la ficha de abajo no se entere
         var b = ev.target.closest('[data-pv]');
         if (ev.target === el || (b && b.getAttribute('data-pv') === 'cierra')) { cierraCapa(); return; }
+        if (b && b.getAttribute('data-pv') === 'modo') { cambiaModo(c, b.getAttribute('data-modo') === '0'); return; }
         if (b && b.getAttribute('data-pv') === 'baja' && c.bytes) {
           var sale = function (orig) {
             guardaArchivo(cual(c.bytes, orig), d, b);
@@ -420,18 +435,21 @@
       c.cuerpo.innerHTML = ''; c.cuerpo.appendChild(fr);
     }
     async function conHojas(c, b) {
+      // cada vez que se pinta (al abrir o al cambiar entre «Con marca» y «Original») lleva su número: lo de una vez
+      // anterior que todavía se estaba dibujando ya no se pone
+      var vez = c.vez, vieja = function () { return c.cerrada || vez !== c.vez; };
       // PDF.js de la página donde va la capa (la de arriba, en el chat), para que las letras del PDF se dibujen ahí
       var L = await pdfjs(c.W);
-      if (c.cerrada) return;
+      if (vieja()) return;
       // copia, hecha en esa misma ventana: PDF.js se queda con el arreglo que le dan, y el original sigue para «Bajar»
       var pdf = await L.getDocument({ data: new c.W.Uint8Array(b), isEvalSupported: false }).promise;
-      if (c.cerrada) { pdf.destroy(); return; }
+      if (vieja()) { pdf.destroy(); return; }
       c.pdf = pdf;
       var caja = c.D.createElement('div'); caja.className = 'pv-hojas'; caja.tabIndex = 0;
       caja.setAttribute('aria-label', 'Hojas del documento (' + pdf.numPages + ')');
       c.cuerpo.innerHTML = ''; c.cuerpo.appendChild(caja);
       var p1 = await pdf.getPage(1);
-      if (c.cerrada) return;
+      if (vieja()) return;
       var v1 = p1.getViewport({ scale: 1 }), prop = v1.height / v1.width;
       var hojas = [];
       for (var i = 1; i <= pdf.numPages; i++) {
@@ -441,11 +459,11 @@
         caja.appendChild(h); hojas.push(h);
       }
       function dibuja(h) {
-        if (h.dataset.lista || c.cerrada) return;
+        if (h.dataset.lista || vieja()) return;
         h.dataset.lista = '1';
         var n = +h.dataset.n;
         (n === 1 ? Promise.resolve(p1) : pdf.getPage(n)).then(function (pg) {
-          if (c.cerrada) return;
+          if (vieja()) return;
           var v = pg.getViewport({ scale: 1 }), ancho = Math.max(200, h.clientWidth || caja.clientWidth - 24);
           var dpr = Math.min(window.devicePixelRatio || 1, 2), esc2 = ancho / v.width * dpr;
           var vp = pg.getViewport({ scale: esc2 }), cv = c.D.createElement('canvas');
@@ -453,7 +471,7 @@
           cv.setAttribute('aria-label', 'Hoja ' + n);
           h.style.aspectRatio = v.width + ' / ' + v.height;
           return pg.render({ canvasContext: cv.getContext('2d', { alpha: false }), viewport: vp }).promise.then(function () {
-            if (!c.cerrada) h.insertBefore(cv, h.firstChild);
+            if (!vieja()) h.insertBefore(cv, h.firstChild);
           });
         }).catch(function () { delete h.dataset.lista; });
       }
@@ -463,22 +481,49 @@
         hojas.forEach(function (h) { c.obs.observe(h); });
       } else hojas.forEach(dibuja);
     }
+    // lo que estaba pintado se suelta antes de pintar otra vez (al cambiar entre «Con marca» y «Original»)
+    function suelta(c) {
+      try { if (c.pdf) c.pdf.destroy(); } catch (e) { /* ya estaba cerrado */ }
+      c.pdf = null;
+      if (c.obs) { c.obs.disconnect(); c.obs = null; }
+      if (c.url) { var W = c.W, u = c.url; c.url = null; setTimeout(function () { try { W.URL.revokeObjectURL(u); } catch (e) { /* ya no está */ } }, 1000); }
+    }
+    // pinta el que toca: con la marca o, si se escogió en «Original (sin marca)», el PDF tal cual se subió
+    function pinta(c) {
+      c.vez = (c.vez || 0) + 1;
+      suelta(c);
+      var b = cual(c.bytes, c.orig);
+      if (nativo()) return conLector(c, b);
+      c.cuerpo.innerHTML = '<div class="pv-msg" role="status"><div class="pv-gira" aria-hidden="true"></div><div>Abriendo el documento…</div></div>';
+      var vez = c.vez;
+      return conHojas(c, b).catch(function () {
+        if (c.cerrada || vez !== c.vez) return;
+        if (navigator.pdfViewerEnabled !== false) conLector(c, b);   // sin PDF.js: el lector del navegador
+        else mensaje(c, 'No se pudo mostrar aquí. Qué hacer: usa «Bajar» para abrirlo en tu equipo.');
+      });
+    }
+    // «Con marca PROFASE» / «Original (sin marca)»: solo a quien se le ofrece el original (los mismos de «Bajar»)
+    function cambiaModo(c, orig) {
+      if (!c.bytes || c.cerrada || c.orig === orig || !(ofrece(c.d) && c.bytes.original)) return;
+      c.orig = orig;
+      Array.prototype.forEach.call(c.el.querySelectorAll('[data-pv="modo"]'), function (x) { x.setAttribute('aria-pressed', (x.getAttribute('data-modo') === '0') === orig ? 'true' : 'false'); });
+      var s = c.el.querySelector('.pv-tit span');
+      if (s) s.textContent = orig ? 'Vista previa del original, sin marca' : 'Vista previa con la marca PROFASE';
+      pinta(c);
+    }
     function ver(d, btn) {
       if (!d) return;
       var c = abreCapa(d);
       if (btn) c.antes = btn;
-      var usaLector = nativo();
-      if (!usaLector) pdfjs(c.W).catch(function () { /* se intenta con el lector del navegador */ });
+      if (!nativo()) pdfjs(c.W).catch(function () { /* se intenta con el lector del navegador */ });
       bytes(d).then(function (b) {
         if (c.cerrada) return;
         c.bytes = b; c.bBaja.disabled = false;
+        // el selector sale si hay original aparte (si no se pudo sellar, lo que se ve ya es el original)
+        var modo = c.el.querySelector('.pv-modo');
+        if (modo && ofrece(d) && b && b.original && b.original !== b) modo.hidden = false;
         try { if (op.alVer) op.alVer(d); } catch (e) { /* ya se ve */ }
-        if (usaLector) return conLector(c, b);
-        return conHojas(c, b).catch(function () {
-          if (c.cerrada) return;
-          if (navigator.pdfViewerEnabled !== false) conLector(c, b);   // sin PDF.js: el lector del navegador
-          else mensaje(c, 'No se pudo mostrar aquí. Qué hacer: usa «Bajar» para abrirlo en tu equipo.');
-        });
+        return pinta(c);
       }).catch(function (e) {
         if (c.cerrada) return;
         // el detalle técnico ya no se enseña: queda avisado solo (PORTAL.fallaAnota, «todo error dice qué hacer», 18-nov-2026)

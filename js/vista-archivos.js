@@ -1,10 +1,27 @@
 /* Portal PROFASE · Vista previa de Excel, CSV, XML (con la ficha del CFDI) y texto, en grande, encima de toda la
    pantalla (11-nov-2026). Una sola versión para el portal: la usan el chat interno (antes vivía dentro de chat.html:
    pedido de Sebastián Sánchez que Daniel aprobó el 30-oct-2026; en grande, como la foto, desde el 6-nov-2026: Héctor
-   Daniel, «Si») y WorkFlow › Panel de trabajo («Ver» en grande también los Excel). Regla de Daniel: «nunca nunca
-   repetir código ni crear 2 versiones»; una pantalla nueva que enseñe estos archivos usa esta pieza.
-     PROFASE_VISTA.tipo(a)     'hojas' (xlsx, xlsm, xls, ods, csv), 'xml', 'texto' (txt, log, json, md) o '' si aquí no se
-                               ve (los PDF, las fotos, los videos y los audios tienen su propia vista); a = {nombre, tipo}
+   Daniel, «Si»), WorkFlow › Panel de trabajo («Ver» en grande también los Excel) y, desde el 24-nov-2026, Clientes ›
+   Expedientes. Regla de Daniel: «nunca nunca repetir código ni crear 2 versiones»; una pantalla nueva que enseñe estos
+   archivos usa esta pieza.
+   Word y PowerPoint, y «Con marca PROFASE» / «Original (sin marca)» al ver (Héctor Daniel Nava, 24-nov-2026, 15:56, con
+   la captura de un Word en el chat que solo traía «Bajar»: «Quiero por ver, words exceles y ppt; así como el
+   visualizador de pdfs; ver en original o ver con branding profase»; «Dale»):
+     - Word (.docx, .docm, .dotx) y PowerPoint (.pptx, .pptm, .ppsx, .potx) se ven aquí mismo, hoja por hoja y lámina por
+       lámina, con docx-preview y pptx-preview guardadas en el portal (js/lib; ver js/lib/LICENCIAS-vista-office.txt).
+       Como el archivo lo mandó alguien más, se dibujan dentro de un marco aislado (iframe con sandbox="allow-scripts", sin
+       «allow-same-origin»): ahí no hay sesión, ni la base, ni el portal, y su CSP solo deja correr esas librerías del
+       portal y sus imágenes de adentro (nada de la red). Habla con esta página solo por mensajes (postMessage) y esta
+       página solo le hace caso a los que vienen de ese marco. Los Word y PowerPoint viejos (.doc, .ppt) no se pueden ver
+       aquí: solo «Bajar».
+     - En Excel, Word y PowerPoint (y en los PDF, con js/visor.js) arriba sale «Con marca PROFASE» / «Original (sin
+       marca)»; se abre con la marca. La marca es la misma de los PDF sellados (PROFASE_MARCA.sellaPDF): la marca de agua
+       al centro (PROFASE_MARCA.marcaAgua, la misma imagen y la misma opacidad) y abajo a la izquierda el signo, «PROFASE»
+       y «Asesoría Contable, Legal y Fiscal», en cada hoja o lámina (en Excel, sobre lo que se ve). Solo cambia cómo se ve:
+       «Bajar» sigue igual (lo hace la página; los Word, Excel y PowerPoint, tal cual se mandaron).
+     PROFASE_VISTA.tipo(a)     'hojas' (xlsx, xlsm, xls, ods, csv), 'word', 'ppt', 'xml', 'texto' (txt, log, json, md) o
+                               '' si aquí no se ve (los PDF, las fotos, los videos y los audios tienen su propia vista);
+                               a = {nombre, tipo}
      PROFASE_VISTA.ver(op)     la abre y regresa una promesa con la ventana (null si el archivo no se ve aquí o ya se está
                                abriendo otro). Si no se puede, la promesa falla con el mensaje en palabras para enseñarlo
                                tal cual (e.message: «Es muy grande para verlo aquí; bájalo.» o «No se pudo abrir aquí: …»).
@@ -30,7 +47,8 @@
   'use strict';
   if (window.PROFASE_VISTA) return;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  var MAX_VISTA = 15 * 1024 * 1024, MAX_FILAS = 1000, MAX_COLS = 60, MAX_TEXTO = 3 * 1024 * 1024;
+  var MAX_VISTA = 15 * 1024 * 1024, MAX_OFI = 30 * 1024 * 1024, MAX_FILAS = 1000, MAX_COLS = 60, MAX_TEXTO = 3 * 1024 * 1024;
+  function tope(q) { return q === 'word' || q === 'ppt' ? MAX_OFI : MAX_VISTA; }
   var XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
   // lo que tiene su propia vista (las mismas reglas del chat): el PDF (js/visor.js), la foto, el video y el audio
   function esPdf(a) { return /pdf/i.test(a.tipo || '') || /\.pdf$/i.test(a.nombre || ''); }
@@ -42,6 +60,10 @@
     a = a || {};
     var e = ext(a), t = String(a.tipo || '').toLowerCase();
     if (esPdf(a) || esImagen(a) || esVideo(a) || esAudio(a)) return '';
+    // los de Office nuevos (son un ZIP por dentro); los viejos (.doc, .ppt) no se pueden dibujar aquí
+    if (/^(docx|docm|dotx|dotm)$/.test(e) || (!e && /wordprocessingml/.test(t))) return 'word';
+    if (/^(pptx|pptm|ppsx|ppsm|potx|potm)$/.test(e) || (!e && /presentationml/.test(t))) return 'ppt';
+    if (/^(doc|dot|ppt|pps|pot|rtf|odt|odp)$/.test(e)) return '';
     if (/^(xlsx|xlsm|xls|ods|csv)$/.test(e) || /spreadsheet|ms-excel|text\/csv/.test(t)) return 'hojas';
     if (e === 'xml' || /[\/+]xml$/.test(t)) return 'xml';
     if (/^(txt|log|json|md)$/.test(e) || t === 'text/plain' || t === 'application/json') return 'texto';
@@ -51,6 +73,8 @@
   function insignia(a) {
     var e = ext(a), t = String(a.tipo || '').toLowerCase();
     if (/^(xls|xlsx|xlsm|ods)$/.test(e) || /spreadsheet|excel/.test(t)) return ['xls', e.toUpperCase() || 'XLS'];
+    if (/^(docx|docm|dotx|dotm)$/.test(e) || /wordprocessingml/.test(t)) return ['doc', e.toUpperCase() || 'DOCX'];
+    if (/^(pptx|pptm|ppsx|ppsm|potx|potm)$/.test(e) || /presentationml/.test(t)) return ['ppt', e.toUpperCase() || 'PPTX'];
     if (e === 'xml' || /xml/.test(t)) return ['xml', 'XML'];
     return ['', (e || 'ARCH').toUpperCase().slice(0, 4)];
   }
@@ -463,6 +487,30 @@
     + '#pf-vx .vx-cab b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14.5px}'
     + '#pf-vx .vx-cab .tipo{flex:none;width:34px;height:34px;border-radius:8px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;background:#5A6577}'
     + '#pf-vx .vx-cab .tipo.xls{background:#1D6F42}#pf-vx .vx-cab .tipo.xml{background:#7A4CC2}'
+    + '#pf-vx .vx-cab .tipo.doc{background:#2B5797}#pf-vx .vx-cab .tipo.ppt{background:#C43E1C}'
+    // «Con marca PROFASE» / «Original (sin marca)» (24-nov-2026): en su propio renglón, abajo del nombre (en el celular,
+    // a todo lo ancho); así los botones de arriba nunca se enciman
+    + '#pf-vx .vx-modos{flex:none;display:flex;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--surface)}'
+    + '#pf-vx .vx-modo{flex:none;display:inline-flex;border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;background:var(--surface-2)}'
+    + '#pf-vx .vx-modo button{border:0;background:none;color:var(--muted);height:36px;padding:0 12px;font-weight:600;font-size:13px;white-space:nowrap}'
+    + '#pf-vx .vx-modo button+button{border-left:1px solid var(--line-strong)}'
+    + '#pf-vx .vx-modo button[aria-pressed="true"]{background:var(--navy);color:var(--navy-ink,#fff);box-shadow:inset 0 -3px 0 var(--accent,#F07A1E)}'
+    + '#pf-vx .vx-area{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}'
+    + '#pf-vx .vx-area>.vx-cu{flex:1;min-height:0}'
+    // la marca sobre el Excel (lo que se ve), como la de los PDF: marca de agua al centro y el pie abajo a la izquierda
+    + '#pf-vx .vx-sello{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden;display:none}'
+    + '#pf-vx.vx-conmarca .vx-sello{display:block}'
+    + '#pf-vx .vx-sello .vx-agua{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(60%,400px);height:auto;max-height:60%;object-fit:contain;opacity:.55}'
+    + '#pf-vx .vx-sello .vx-pie{position:absolute;left:16px;bottom:8px;display:flex;align-items:center;gap:4px;font:9px/1 Helvetica,Arial,sans-serif;white-space:nowrap;background:rgba(255,255,255,.82);padding:2px 6px 2px 4px;border-radius:4px}'
+    + '#pf-vx .vx-sello .vx-pie img{width:11px;height:12px;display:block}'
+    + '#pf-vx .vx-sello .vx-pie b{color:#1F3864;font-size:8.7px}#pf-vx .vx-sello .vx-pie i{color:#5A6577;font-size:8px;margin-left:6px}'
+    // Word y PowerPoint: el marco aislado ocupa todo; mientras se dibuja, «Abriendo…»
+    + '#pf-vx .vx-cu.vx-cu-ofi{position:relative;overflow:hidden;background:var(--surface-2)}'
+    + '#pf-vx .vx-ofi{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;visibility:hidden;background:var(--surface-2)}'
+    + '#pf-vx .vx-ofi.listo{visibility:visible}'
+    + '#pf-vx .vx-carga{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:var(--muted);font-size:14px;padding:24px;text-align:center}'
+    + '#pf-vx .vx-gira{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent,#F07A1E);animation:pf-vx-g .8s linear infinite}'
+    + '@keyframes pf-vx-g{to{transform:rotate(360deg)}}'
     + '#pf-vx .vx-baja{flex:none;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:10px;height:38px;padding:0 14px;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;white-space:nowrap}'
     + '#pf-vx .vx-baja:hover{border-color:var(--navy)}'
     + '#pf-vx .vx-baja[disabled]{opacity:.55;cursor:default}'
@@ -491,10 +539,12 @@
     + '#pf-vx .vx-vacio,#pf-vx .vx-nota{color:var(--muted);font-size:12.5px;margin:10px 14px}'
     // en el celular, de orilla a orilla (con lugar para la hora y la rayita del iPhone)
     + '@media (max-width:759px){#pf-vx{padding:0}#pf-vx .vx-p{width:100%;height:100%;border-radius:0}'
+    + '#pf-vx .vx-modos{padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px))}'
+    + '#pf-vx .vx-modo{flex:1 1 100%}#pf-vx .vx-modo button{flex:1 1 50%;padding:0 6px}'
     + '#pf-vx .vx-cab{padding-top:max(10px,env(safe-area-inset-top,0px));padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px))}'
     + '#pf-vx .vx-cu{margin-bottom:env(safe-area-inset-bottom,0px)}'
     + '#pf-vx .vx-t th,#pf-vx .vx-t td{max-width:240px}}'
-    + '@media (prefers-reduced-motion: reduce){#pf-vx{animation:none}}'
+    + '@media (prefers-reduced-motion: reduce){#pf-vx{animation:none}#pf-vx .vx-gira{animation-duration:2.4s}}'
     + '@media print{#pf-vx{display:none!important}}';
   var X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   // los colores de la página que la pidió (claro u oscuro), para que en la página de arriba se vea igual
@@ -522,8 +572,31 @@
   function abierta() { return !!(VX && VX.isConnected); }
   function cierra() { if (VX && VX.__cierra) VX.__cierra(true); }
   addEventListener('pagehide', cierra);
-  function abre(op, cuerpo, hojas) {
+  // la marca PROFASE de los PDF sellados (js/marca.js: la marca de agua, el signo y el subtítulo); sin ella, sin selector
+  function marcaLista() {
+    var M = window.PROFASE_MARCA;
+    return M && /^data:image\/png;base64,/.test(M.logo || '') && /^data:image\/png;base64,/.test(M.marcaAgua || '') ? M : null;
+  }
+  var MODO = '<div class="vx-modo" role="group" aria-label="Cómo verlo"><button type="button" data-modo="1" aria-pressed="true">Con marca PROFASE</button>'
+    + '<button type="button" data-modo="0" aria-pressed="false">Original (sin marca)</button></div>';
+  // la marca sobre lo que se ve del Excel (las imágenes se ponen por DOM: son las de js/marca.js, las mismas de los PDF)
+  function ponSello(v) {
+    var M = marcaLista(), area = v.querySelector('.vx-area');
+    if (!M || !area) return;
+    var D = v.ownerDocument, s = D.createElement('div'), a = D.createElement('img'), pie = D.createElement('div'), l = D.createElement('img');
+    s.className = 'vx-sello'; s.setAttribute('aria-hidden', 'true');
+    a.className = 'vx-agua'; a.alt = ''; a.src = M.marcaAgua;
+    pie.className = 'vx-pie'; l.alt = ''; l.src = M.logo;
+    var b = D.createElement('b'), i = D.createElement('i');
+    b.textContent = 'PROFASE'; i.textContent = M.subtitulo || 'Asesoría Contable, Legal y Fiscal';
+    pie.appendChild(l); pie.appendChild(b); pie.appendChild(i);
+    s.appendChild(a); s.appendChild(pie); area.appendChild(s);
+  }
+  // ext: {marca: con el selector «Con marca PROFASE» / «Original (sin marca)», sello: la marca la pone esta página
+  // (el Excel; en Word y PowerPoint la pone el marco aislado), ofi: Word o PowerPoint}
+  function abre(op, cuerpo, hojas, ext) {
     cierra();
+    ext = ext || {};
     // el foco regresa al «Ver» que la abrió (mientras se abría estaba deshabilitado y el foco se salió de él)
     var t = insignia(op), antes = op.boton || document.activeElement, ligas = [];
     var D = capaDe(op), W = D.defaultView || window;
@@ -534,16 +607,26 @@
     var v = D.createElement('div'); v.className = 'vx'; v.id = 'pf-vx';
     v.setAttribute('role', 'dialog'); v.setAttribute('aria-modal', 'true'); v.setAttribute('aria-label', op.nombre || ''); v.setAttribute('data-sin-jalar', '');
     try { (op.copiaVars || copiaVars)(v); } catch (e) { /* con los colores de esa página */ }
+    var conModo = !!ext.marca && !!marcaLista();
     v.innerHTML = '<div class="vx-p"><div class="vx-cab"><span class="tipo ' + t[0] + '">' + esc(t[1]) + '</span><b title="' + esc(op.nombre) + '">' + esc(op.nombre) + '</b>'
       + (typeof op.alBajar === 'function' ? '<button type="button" class="vx-baja" data-vx-baja>Bajar</button>' : '')
       + '<button type="button" class="vx-x" data-cierra aria-label="Cerrar (Esc)" title="Cerrar (Esc)">' + X + '</button></div>'
+      + (conModo ? '<div class="vx-modos">' + MODO + '</div>' : '')
       + (hojas && hojas.length > 1 ? '<div class="vx-tabs" role="tablist">' + hojas.map(function (h, i) { return '<button type="button" role="tab" data-hoja="' + i + '" aria-selected="' + (i === 0 ? 'true' : 'false') + '">' + esc(h.n) + '</button>'; }).join('') + '</div>' : '')
-      + '<div class="vx-cu" tabindex="0">' + cuerpo + '</div></div>';
+      + '<div class="vx-area"><div class="vx-cu' + (ext.ofi ? ' vx-cu-ofi' : '') + '" tabindex="0">' + cuerpo + '</div></div></div>';
+    // con la marca al abrir (como los PDF); «Original (sin marca)» la quita solo de la vista
+    v.__marca = conModo;
+    v.__alModo = null;
+    v.__limpia = [];
+    if (conModo) v.classList.add('vx-conmarca');
+    if (conModo && ext.sello) ponSello(v);
     D.body.appendChild(v);
     VX = v;
     if (hojas && hojas[0]) ponImagenes(v.querySelector('.vx-cu'), hojas[0], ligas);
     function cierraEsta(sinFoco) {
       if (VX === v) VX = null;
+      (v.__limpia || []).forEach(function (f) { try { f(); } catch (e) { /* sigue */ } });
+      v.__limpia = [];
       v.remove(); D.removeEventListener('keydown', tecla, true);
       if (D !== document) document.removeEventListener('keydown', tecla, true);
       ligas.forEach(function (u) { URL.revokeObjectURL(u); });
@@ -574,6 +657,15 @@
       if (ev.target === v || (b && b.hasAttribute('data-cierra'))) { cierraEsta(); return; }
       if (!b) return;
       if (b.hasAttribute('data-vx-baja')) { op.alBajar(b); return; }
+      if (b.hasAttribute('data-modo')) {
+        var si = b.getAttribute('data-modo') === '1';
+        if (si === v.__marca) return;
+        v.__marca = si;
+        v.querySelectorAll('[data-modo]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        v.classList.toggle('vx-conmarca', si);
+        if (typeof v.__alModo === 'function') { try { v.__alModo(si); } catch (e) { /* el marco ya no está */ } }
+        return;
+      }
       if (b.hasAttribute('data-copia')) {
         // el portapapeles de la página donde está la vista previa (la que tiene el foco)
         try { (W.navigator.clipboard || navigator.clipboard).writeText(b.getAttribute('data-copia')); b.textContent = 'Copiado'; setTimeout(function () { b.textContent = 'Copiar'; }, 1400); } catch (e) { /* sin portapapeles */ }
@@ -594,12 +686,170 @@
     try { v.querySelector('[data-cierra]').focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
     return v;
   }
+  /* ---------- Word y PowerPoint, en un marco aislado (24-nov-2026) ----------
+     El archivo lo mandó alguien más: se dibuja dentro de un iframe con sandbox="allow-scripts" y sin «allow-same-origin»
+     (un origen aparte, sin la sesión del portal, sin la base y sin poder tocar esta página), con una CSP que solo deja
+     correr su código de arranque (con su nonce) y las librerías del portal (js/lib), y solo imágenes y letras de
+     adentro (data: y blob:): nada de la red. Esta página le manda los bytes por mensaje y solo le hace caso a los
+     mensajes que vienen de ese marco (ev.source); él solo contesta listo, hecho, falla o esc. */
+  var LIB = (function () {
+    try { var s = document.currentScript && document.currentScript.src; return s ? new URL('lib/', s).href : new URL('js/lib/', location.href).href; } catch (e) { return ''; }
+  })();
+  var OFI_LIBS = { word: ['jszip.min.js', 'docx-preview.min.js'], ppt: ['pptx-preview.min.js'] };
+  var OFI_TIEMPO = 45000;
+  var OFI_CSS = 'html{-webkit-text-size-adjust:100%}html,body{margin:0;padding:0}'
+    + 'body{background:#EEF2F7;color:#000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;overscroll-behavior:contain}'
+    + '.docx-wrapper{background:transparent!important;padding:16px 8px 4px!important}'
+    + '.docx-wrapper>section.docx{box-shadow:0 2px 10px rgba(0,0,0,.22)!important;margin-bottom:16px!important}'
+    + '.pptx-preview-wrapper{height:auto!important;overflow:visible!important;background:transparent!important;padding:12px 0 2px}'
+    + '.pptx-preview-slide-wrapper{box-shadow:0 2px 10px rgba(0,0,0,.22)}'
+    // la marca de cada hoja o lámina: la de los PDF sellados (js/marca.js, sellaPDF)
+    + '.pf-sello{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;z-index:2147483000;overflow:hidden}'
+    + '.pf-agua{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(60%,400px);height:auto;max-height:60%;object-fit:contain;opacity:.55}'
+    + '.pf-pie{position:absolute;left:16px;bottom:6px;display:flex;align-items:center;gap:4px;font:9px/1 Helvetica,Arial,sans-serif;white-space:nowrap}'
+    + '.pf-pie img{width:11px;height:12px;display:block}.pf-pie b{color:#1F3864;font-weight:700;font-size:8.7px}.pf-pie i{color:#878787;font-size:8px;margin-left:6px}'
+    + 'body.sin-marca .pf-sello{display:none}';
+  // lo que corre DENTRO del marco aislado (se manda como texto; no ve nada de esta página)
+  function dentro() {
+    var raiz = document.getElementById('pf-doc'), E = { logo: '', agua: '', sub: '', tipo: '' }, caja = null, natural = 0;
+    function avisa(m) { try { parent.postMessage(m, '*'); } catch (e) { /* sin página */ } }
+    addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); avisa({ pf: 'esc' }); } });
+    // la marca de una hoja o lámina: marca de agua al centro y, abajo a la izquierda, el signo, «PROFASE» y el subtítulo
+    function sello(arriba, alto) {
+      var s = document.createElement('div'), a = new Image(), pie = document.createElement('div'), l = new Image();
+      var b = document.createElement('b'), i = document.createElement('i');
+      s.className = 'pf-sello'; s.setAttribute('aria-hidden', 'true');
+      if (arriba != null) { s.style.top = arriba + 'px'; s.style.height = alto + 'px'; s.style.bottom = 'auto'; }
+      a.className = 'pf-agua'; a.alt = ''; a.src = E.agua;
+      pie.className = 'pf-pie'; l.alt = ''; l.src = E.logo;
+      b.textContent = 'PROFASE'; i.textContent = E.sub;
+      pie.appendChild(l); pie.appendChild(b); pie.appendChild(i); s.appendChild(a); s.appendChild(pie);
+      return s;
+    }
+    // las ligas del documento no llevan a ningún lado (solo las de adentro del mismo documento, «#…»)
+    function sinLigas() {
+      Array.prototype.forEach.call(raiz.querySelectorAll('a[href]'), function (x) {
+        var h = x.getAttribute('href') || '';
+        if (h.charAt(0) === '#') return;
+        x.removeAttribute('href'); if (h) x.title = h;
+      });
+      Array.prototype.forEach.call(raiz.querySelectorAll('[target]'), function (x) { x.removeAttribute('target'); });
+    }
+    // a lo ancho de la pantalla: en el celular la hoja o la lámina se achica completa (nunca se sale a lo ancho)
+    function ajusta() {
+      if (!caja || !natural) return;
+      var z = Math.min(1, Math.max(0.2, (document.documentElement.clientWidth - (E.tipo === 'ppt' ? 24 : 0)) / natural));
+      caja.style.zoom = z === 1 ? '' : String(z);
+    }
+    addEventListener('resize', ajusta);
+    async function abre(m) {
+      E.logo = m.logo || ''; E.agua = m.agua || ''; E.sub = m.sub || ''; E.tipo = m.tipo;
+      document.body.classList.toggle('sin-marca', !m.marca);
+      if (m.fondo) document.body.style.background = m.fondo;
+      var n = 0;
+      if (m.tipo === 'word') {
+        await docx.renderAsync(m.b, raiz, null, { className: 'docx', inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
+          useBase64URL: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, renderEndnotes: true,
+          renderComments: false, renderChanges: false, experimental: false, debug: false });
+        caja = raiz.querySelector('.docx-wrapper') || raiz;
+        var hojas = raiz.querySelectorAll('section.docx');
+        n = hojas.length;
+        Array.prototype.forEach.call(hojas, function (h) {
+          natural = Math.max(natural, h.offsetWidth + 16);
+          if (!E.agua) return;
+          // si una hoja trae varias páginas sin su salto, la marca va en cada página (como en el PDF)
+          var alto = h.offsetHeight, pag = parseFloat(getComputedStyle(h).minHeight) || alto, k = pag > 50 ? Math.max(1, Math.round(alto / pag)) : 1;
+          if (k === 1) { h.appendChild(sello(null)); return; }
+          for (var i = 0; i < k; i++) h.appendChild(sello(i * pag, i === k - 1 ? alto - i * pag : pag));
+        });
+      } else {
+        var ancho = Math.min(1100, Math.max(280, document.documentElement.clientWidth - 24));
+        var p = pptxPreview.init(raiz, { width: ancho, height: Math.max(200, innerHeight), mode: 'list' });
+        await p.preview(m.b);
+        caja = raiz.querySelector('.pptx-preview-wrapper') || raiz;
+        natural = ancho;
+        var lam = raiz.querySelectorAll('.pptx-preview-slide-wrapper');
+        n = lam.length;
+        if (E.agua) Array.prototype.forEach.call(lam, function (x) { x.appendChild(sello(null)); });
+      }
+      sinLigas();
+      ajusta();
+      if (!n) throw new Error('no trae hojas');
+      return n;
+    }
+    addEventListener('message', function (ev) {
+      if (ev.source !== parent) return;   // JSZip y las librerías se mandan mensajes a sí mismas: esos no son de la página
+      var m = ev.data || {};
+      if (m.pf === 'abre') {
+        abre(m).then(function (n) { avisa({ pf: 'hecho', n: n }); }, function (e) { avisa({ pf: 'falla', m: String((e && e.message) || e || '').slice(0, 200) }); });
+      } else if (m.pf === 'marca') document.body.classList.toggle('sin-marca', !m.si);
+    });
+    avisa({ pf: 'listo' });
+  }
+  function azar() {
+    var a = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+  function marcoDe(q) {
+    var N = azar();
+    var csp = "default-src 'none'; script-src 'nonce-" + N + "' " + LIB + "; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; media-src data: blob:; base-uri 'none'; form-action 'none'";
+    return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + esc(csp) + '">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1"><style>' + OFI_CSS + '</style></head><body><div id="pf-doc"></div>'
+      + OFI_LIBS[q].map(function (x) { return '<script src="' + esc(LIB + x) + '"></' + 'script>'; }).join('')
+      + '<script nonce="' + N + '">(' + dentro.toString() + ')();</' + 'script></body></html>';
+  }
+  // ¿es un Word o PowerPoint de los nuevos (un ZIP por dentro)? Los viejos y los que traen contraseña no se ven aquí
+  function revisaOfi(b, q) {
+    var app = q === 'word' ? 'Word' : 'PowerPoint';
+    if (b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0) throw new Error('Este ' + app + ' trae contraseña o viene en el formato viejo de Office; aquí no se puede ver. Qué hacer: bájalo con «Bajar» y ábrelo en ' + app + '.');
+    if (!(b[0] === 0x50 && b[1] === 0x4B)) throw new Error('El archivo no es un ' + app + ' que se pueda ver aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
+  }
+  function oficina(v, b, q, op) {
+    return new Promise(function (ok) {
+      var cu = v.querySelector('.vx-cu'), D = v.ownerDocument, W = D.defaultView || window, M = marcaLista();
+      var fr = D.createElement('iframe'), fin = false, reloj = 0, fondo = '';
+      fr.className = 'vx-ofi';
+      fr.title = (q === 'word' ? 'Documento de Word: ' : 'Presentación de PowerPoint: ') + (op.nombre || '');
+      fr.setAttribute('sandbox', 'allow-scripts');
+      fr.setAttribute('referrerpolicy', 'no-referrer');
+      try { fondo = W.getComputedStyle(cu).backgroundColor || ''; } catch (e) { fondo = ''; }
+      function termina(bien, porque) {
+        if (fin) return;
+        fin = true; clearTimeout(reloj);
+        if (bien) { fr.classList.add('listo'); var c = cu.querySelector('.vx-carga'); if (c) c.remove(); }
+        else if (v.isConnected) {
+          try { if (porque && window.PORTAL && PORTAL.fallaAnota) PORTAL.fallaAnota('vista de archivos: ' + q + ': ' + porque, ''); } catch (e) { /* nada */ }
+          fr.remove();
+          cu.innerHTML = '<div class="vx-carga" role="alert"><div>No se pudo abrir aquí; ya quedó avisado.</div><div>Qué hacer: bájalo con «Bajar» y ábrelo en ' + (q === 'word' ? 'Word' : 'PowerPoint') + '.</div></div>';
+        }
+        ok(bien);
+      }
+      function oye(ev) {
+        if (ev.source !== fr.contentWindow) return;   // solo lo que viene del marco de este documento
+        var m = ev.data || {};
+        if (m.pf === 'listo') {
+          var copia = b.slice().buffer;
+          fr.contentWindow.postMessage({ pf: 'abre', tipo: q, b: copia, marca: v.__marca === true, logo: M ? M.logo : '', agua: M ? M.marcaAgua : '',
+            sub: M ? (M.subtitulo || '') : '', fondo: fondo }, '*', [copia]);
+        } else if (m.pf === 'hecho') termina(true);
+        else if (m.pf === 'falla') termina(false, String(m.m || 'sin detalle'));
+        else if (m.pf === 'esc' && v.__cierra && !D.querySelector('.pba-velo,.pm-menu')) v.__cierra();
+      }
+      W.addEventListener('message', oye);
+      v.__limpia.push(function () { W.removeEventListener('message', oye); if (!fin) { fin = true; clearTimeout(reloj); ok(false); } });
+      v.__alModo = function (si) { try { fr.contentWindow.postMessage({ pf: 'marca', si: !!si }, '*'); } catch (e) { /* ya se cerró */ } };
+      reloj = setTimeout(function () { termina(false, 'tardó más de ' + OFI_TIEMPO / 1000 + ' s'); }, OFI_TIEMPO);
+      fr.srcdoc = marcoDe(q);
+      cu.appendChild(fr);
+    });
+  }
   var ABRIENDO = false;
   async function ver(op) {
     op = op || {};
     var q = tipo(op);
     if (!q || ABRIENDO) return null;
-    if ((op.tam || 0) > MAX_VISTA) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
+    if ((op.tam || 0) > tope(q)) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
     ABRIENDO = true;
     var btn = op.boton, t0 = btn ? btn.textContent : '', v = null, falla = null;
     if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
@@ -608,12 +858,16 @@
       b = await b;
       if (!b) throw new Error('No llegó el archivo');
       if (!(b instanceof Uint8Array)) b = ArrayBuffer.isView(b) ? new Uint8Array(b.buffer, b.byteOffset, b.byteLength) : new Uint8Array(b);
-      if (b.length > MAX_VISTA) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
+      if (b.length > tope(q)) throw new Error('Es muy grande para verlo aquí. Qué hacer: bájalo con «Bajar» y ábrelo en tu equipo.');
       if (q === 'hojas') {
         var csv = /\.csv$/i.test(op.nombre || '') || /text\/csv/i.test(op.tipo || '');
         var r = await leeHojas(b, csv, !csv && (/\.xls[xm]$/i.test(op.nombre || '') || /openxmlformats-officedocument\.spreadsheetml|ms-excel\.sheet\.macroenabled/i.test(op.tipo || '')));
         if (!r.hojas.length) throw new Error('No trae hojas visibles. Qué hacer: bájalo con «Bajar» y ábrelo en Excel.');
-        v = abre(op, tablaHoja(r.hojas[0]) + (r.ocultas ? '<p class="vx-nota">' + r.ocultas + (r.ocultas === 1 ? ' hoja oculta no se enseña' : ' hojas ocultas no se enseñan') + '.</p>' : ''), r.hojas);
+        v = abre(op, tablaHoja(r.hojas[0]) + (r.ocultas ? '<p class="vx-nota">' + r.ocultas + (r.ocultas === 1 ? ' hoja oculta no se enseña' : ' hojas ocultas no se enseñan') + '.</p>' : ''), r.hojas, { marca: true, sello: true });
+      } else if (q === 'word' || q === 'ppt') {
+        revisaOfi(b, q);
+        v = abre(op, '<div class="vx-carga" role="status"><div class="vx-gira" aria-hidden="true"></div><div>Abriendo ' + (q === 'word' ? 'el documento' : 'la presentación') + '…</div></div>', null, { marca: true, ofi: true });
+        await oficina(v, b, q, op);
       } else if (q === 'xml' && window.PROFASE_CFDI) {
         var txt = decodifica(b), doc = new DOMParser().parseFromString(txt, 'application/xml');
         if (doc.getElementsByTagName('parsererror').length) v = abre(op, '<p class="vx-nota">El XML trae un error y no se puede acomodar; así viene:</p><pre class="vx-pre">' + esc(txt.slice(0, MAX_TEXTO)) + '</pre>');
