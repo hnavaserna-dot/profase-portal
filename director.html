@@ -5,7 +5,8 @@
    "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
    diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
    Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
-   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base.
+   Desde el 24-nov-2026 no detiene la pantalla mientras pregunta, salvo si la última vez el CRM estaba cerrado (abajo). */
 (function () {
   'use strict';
   if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
@@ -27,25 +28,50 @@
   // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
   // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
   if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
-  var j = null;
+  // Sin trabar la pantalla (Héctor Daniel Nava, 24-nov-2026, 17:38 a 17:42: el CRM se le quedó en blanco en la app de su
+  // iPhone Duo; «lo cambio para que mientras espera salga el logo» → «Si dale»). Antes esta revisión esperaba la respuesta
+  // de cierre.json con el teléfono detenido (pedido «síncrono»): con el internet lento, nada se pintaba y la pantalla se
+  // quedaba en blanco. Ahora solo espera así si la última vez el CRM estaba cerrado (marca profase-cierre en el
+  // navegador): mientras el CRM está cerrado, nadie alcanza a ver ni mover nada. Si estaba abierto, pregunta sin
+  // detener nada: la entrada y el «Abriendo tu pantalla…» con el signo se pintan en cuanto llegan, y si la respuesta dice
+  // que se cerró, la página se detiene y lleva a cerrado.html igual que antes (y js/portal.js lo sigue revisando cada
+  // minuto en la página abierta).
+  var MARCA = 'profase-cierre';
+  function marca(v) { try { if (v) localStorage.setItem(MARCA, '1'); else localStorage.removeItem(MARCA); } catch (e) { /* sin almacenamiento */ } }
+  function cerrado(j) {
+    if (!j || j.cerrado !== true) return false;
+    // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+    if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return false;
+    return true;
+  }
+  function lleva() {
+    var w = window;
+    try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+    try {
+      var r = w.location.pathname + w.location.search + w.location.hash;
+      if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+    } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+    try { window.stop(); } catch (e) { /* navegador viejo */ }
+    try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+  }
+  function lee(x) { try { return x.status === 200 ? JSON.parse(x.responseText) : null; } catch (e) { return null; } }
+  var antes = false;
+  try { antes = localStorage.getItem(MARCA) === '1'; } catch (e) { antes = false; }
+  var x = new XMLHttpRequest();
+  if (antes) {
+    var j = null;
+    try { x.open('GET', '/cierre.json?t=' + Date.now(), false); x.send(null); j = lee(x); } catch (e) { j = null; }
+    if (j) marca(cerrado(j));
+    if (cerrado(j)) lleva();
+    return;
+  }
   try {
-    var x = new XMLHttpRequest();
-    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.open('GET', '/cierre.json?t=' + Date.now(), true);
+    x.timeout = 20000;
+    x.onload = function () { var j = lee(x); if (!j) return; marca(cerrado(j)); if (cerrado(j)) lleva(); };
     x.send(null);
-    if (x.status === 200) j = JSON.parse(x.responseText);
-  } catch (e) { j = null; }
-  if (!j || j.cerrado !== true) return;
-  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
-  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
-  var w = window;
-  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
-  try {
-    var r = w.location.pathname + w.location.search + w.location.hash;
-    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
-  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
-  try { window.stop(); } catch (e) { /* navegador viejo */ }
-  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
-})();</script><meta name="portal-version" content="9cce20425921"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Dirección</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
+  } catch (e) { /* si cierre.json no llega, la página sigue normal */ }
+})();</script><meta name="portal-version" content="acb762f4315e"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Dirección</title><style>.asof.al-instante{display:none!important}:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>
 #refresh,#w-refresh{display:none!important}
 .asof::after{content:' · se actualiza sola';font-weight:400}
 /* ---- Pantallas (regla de Daniel, 29-oct-2026): las tres vistas (dirección, gerentes y contadores) se acomodan a
@@ -2369,7 +2395,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','var');
     const t=document.getElementById('vtitle');if(t)t.textContent='Variaciones / Movimientos';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='var'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','variaciones.html?v=460dd0205a');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','variaciones.html?v=4fe7931d93');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -2598,7 +2624,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','car');
     const t=document.getElementById('vtitle');if(t)t.textContent='Depuración de CxC / CxP';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='car'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=854f2767e7');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=67b99c2c1c');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -2606,7 +2632,7 @@ function pintarSync(){
   // El «Excel de hallazgos» (js/hallazgos.js; 12-nov-2026): al bajarlo desde Variaciones o Activo fijo, las cifras de las
   // aplicaciones las calcula esta pantalla; si todavía no se ha abierto, se carga aquí por detrás (sin cambiar de pantalla) y
   // queda lista para cuando la abran. Regresa el marco; la pieza le pregunta a su window.__carHallApl.
-  window.__carMarco=function(){ if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=854f2767e7'); return fr; };
+  window.__carMarco=function(){ if(!fr.getAttribute('src'))fr.setAttribute('src','cartera.html?v=67b99c2c1c'); return fr; };
   b.onclick=()=>setView('car');
   // Desde un aviso (2-nov-2026, portal/sql/146_cartera_estatus.sql): «car-marca-<id>» (un estatus por aprobar, aprobado o
   // regresado) y lo nuevo («ver:cartera-estatus») abren «Excluidos» en la pantalla, con ese estatus iluminado
@@ -2618,7 +2644,7 @@ function pintarSync(){
     if(!/^(\d{1,12}|ver:[a-z-]{1,40}|seg:[A-Z0-9&Ñ]{9,14}\|[0-9A-Za-z-]{0,40}\|[kp]|emp:[A-Z0-9&Ñ]{9,14}|pila:can)$/i.test(s))return false;
     let w=null;try{w=fr.getAttribute('src')?fr.contentWindow:null}catch(e){}
     if(w&&typeof w.__carAbre==='function'){setView('car');w.__carAbre(s);return true}
-    fr.setAttribute('src','cartera.html?v=854f2767e7&abre='+encodeURIComponent(s));
+    fr.setAttribute('src','cartera.html?v=67b99c2c1c&abre='+encodeURIComponent(s));
     setView('car');
     return true;
   };
@@ -2870,7 +2896,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','caja');
     const t=document.getElementById('vtitle');if(t)t.textContent='Caja chica';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='caja'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cajachica.html?v=2c67c48cbb');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cajachica.html?v=0144999db3');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -2898,7 +2924,7 @@ function pintarSync(){
 (function(){
   const sw=document.querySelector('.vsw');if(!sw||!window.PORTAL)return;
   const P=window.PORTAL;
-  const SUB=[{k:'mem',t:'Clientes Quo',src:'quo-membresias.html?v=4cb17d8942'},{k:'cot',t:'Cotizador QUO',src:'quo-cotizador.html?v=aea1f395c0'}];
+  const SUB=[{k:'mem',t:'Clientes Quo',src:'quo-membresias.html?v=e85a267471'},{k:'cot',t:'Cotizador QUO',src:'quo-cotizador.html?v=93807cf486'}];
   P.listo.then(async function(p){
     if(!p)return;
     let ok=p.rol==='director';
@@ -3027,7 +3053,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','af');
     const t=document.getElementById('vtitle');if(t)t.textContent='Reclasificación de activo fijo';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='af'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','activofijo.html?v=61bb878f13');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','activofijo.html?v=ff13e4be5d');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -3098,7 +3124,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','qcar');
     const t=document.getElementById('vtitle');if(t)t.textContent='Carga de Quo';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='qcar'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','quo-carga.html?v=31fd43d81a');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','quo-carga.html?v=6bf2ecd00e');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -3223,7 +3249,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cot');
     const t=document.getElementById('vtitle');if(t)t.textContent='Cotizador DECOMSA';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cot'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cotizador.html?v=79d1cd03db');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cotizador.html?v=c2b56ac05b');
     alto();
   };
   window.__setView=setView;
@@ -3402,11 +3428,11 @@ function pintarSync(){
   // abajo), sin abrirla: un marco que no está en la página no navega. Así el marco del Calendario navega una sola vez (revisión
   // de la noche del 15-nov-2026: antes se abría «calendario.html» y en seguida otra vez con lo de la liga, y la primera se
   // cortaba: la llamada cortada de Agenda › Eventos que veía «Comprobar real» cada noche desde el 12-nov)
-  function srcCal(){const t=document.createElement('iframe');t.setAttribute('src','calendario.html?v=acda9ce23b');return t.getAttribute('src')}
+  function srcCal(){const t=document.createElement('iframe');t.setAttribute('src','calendario.html?v=b1dde9590b');return t.getAttribute('src')}
   // la misma página del Calendario (con la huella de versión que le pone construir.py) en modo «eventos»
   function abreEventos(fr){
     if(fr.getAttribute('src'))return;
-    fr.setAttribute('src','calendario.html?v=acda9ce23b&vista=eventos');
+    fr.setAttribute('src','calendario.html?v=b1dde9590b&vista=eventos');
   }
   const sv0=setView;
   setView=function(v){
@@ -3429,7 +3455,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cal');
     const t=document.getElementById('vtitle');if(t)t.textContent='Calendario';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cal'?'true':'false'));
-    if(!fr.getAttribute('src')){if(LIGA){const s0=srcCal();fr.setAttribute('src',s0+(s0.indexOf('?')<0?'?':'&')+LIGA);LIGA=''}else fr.setAttribute('src','calendario.html?v=acda9ce23b')}
+    if(!fr.getAttribute('src')){if(LIGA){const s0=srcCal();fr.setAttribute('src',s0+(s0.indexOf('?')<0?'?':'&')+LIGA);LIGA=''}else fr.setAttribute('src','calendario.html?v=b1dde9590b')}
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto(fr);
   };
@@ -4334,7 +4360,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','acc');
     const t=document.getElementById('vtitle');if(t)t.textContent='Accesos al portal';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='acc'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','accesos.html?v=e6e48797f6');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','accesos.html?v=b7d5bc508b');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -4459,7 +4485,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','chg');
     const t=document.getElementById('vtitle');if(t)t.textContent='Cambios al portal';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chg'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cambios.html?v=68fc33da9f');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cambios.html?v=2c367f4a14');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -5653,7 +5679,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','axcli');
     const t=document.getElementById('vtitle');if(t)t.textContent='Claves SAT y renovaciones';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='axcli'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','access-clientes.html?v=f27d58dd32');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','access-clientes.html?v=5a3749a9ce');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -5668,7 +5694,7 @@ function pintarSync(){
     id=t==='qfs'?rfc:(+id||0);
     let hecho=false;
     if(fr.getAttribute('src')){try{const w=fr.contentWindow;if(w&&typeof w.__abreSeccion==='function'){w.__abreSeccion(t,id);hecho=true}}catch(e){}}
-    if(!hecho){window.__axcliTab=t;window.__axcliRen=t==='qfs'?0:id;window.__axcliQfs=rfc;if(!fr.getAttribute('src'))fr.setAttribute('src','access-clientes.html?v=f27d58dd32#'+t)}
+    if(!hecho){window.__axcliTab=t;window.__axcliRen=t==='qfs'?0:id;window.__axcliQfs=rfc;if(!fr.getAttribute('src'))fr.setAttribute('src','access-clientes.html?v=5a3749a9ce#'+t)}
     try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('access-clientes'))return}catch(e){}
     setView('axcli');
   };
@@ -5731,7 +5757,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','axcom');
     const t=document.getElementById('vtitle');if(t)t.textContent='Comisiones';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='axcom'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','access-comisiones.html?v=86f8f10419');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','access-comisiones.html?v=947bbc8a17');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -5747,7 +5773,7 @@ function pintarSync(){
     if(/^\d{1,12}$/.test(v))q='relig='+v;
     else if(/^varias:\d{4}-\d{2}$/.test(v))q='varias='+v.slice(7);   // 405: los trabajos a los que les tocaban varias facturas
     else{const m=/^ver:([a-z0-9-]{1,40})$/.exec(v);if(m)q='ver='+m[1]}
-    if(q)fr.setAttribute('src','access-comisiones.html?v=86f8f10419&'+q+'&n='+Date.now());   // se vuelve a abrir aunque ya estuviera
+    if(q)fr.setAttribute('src','access-comisiones.html?v=947bbc8a17&'+q+'&n='+Date.now());   // se vuelve a abrir aunque ya estuviera
     setView('axcom');
     return true;
   };
@@ -5799,7 +5825,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','wft');
     const t=document.getElementById('vtitle');if(t)t.textContent='Panel de trabajo';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='wft'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -5817,7 +5843,7 @@ function pintarSync(){
     if(ac){
       let listo=false;
       if(fr.getAttribute('src')){try{const w=fr.contentWindow;if(w&&typeof w.__abreAct==='function'){w.__abreAct(+ac[1],ac[2]||'',ac[3]||'');listo=true}}catch(e){}}
-      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3#act-'+ac[1]+(ac[2]?'-'+ac[2]:'')+(ac[3]?'-'+ac[3]:''));
+      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a#act-'+ac[1]+(ac[2]?'-'+ac[2]:'')+(ac[3]?'-'+ac[3]:''));
       try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('workflow-trabajo'))return true}catch(e){}
       setView('wft');
       return true;
@@ -5827,7 +5853,7 @@ function pintarSync(){
     if(dv){
       let listo=false;
       if(fr.getAttribute('src')){try{const w=fr.contentWindow;if(w&&typeof w.__abreDevCaso==='function'){w.__abreDevCaso(+dv[1]);listo=true}}catch(e){}}
-      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3#dev-'+dv[1]);
+      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a#dev-'+dv[1]);
       try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('workflow-trabajo'))return true}catch(e){}
       setView('wft');
       return true;
@@ -5838,7 +5864,7 @@ function pintarSync(){
     if(dn){
       let listo=false;
       if(fr.getAttribute('src')){try{const w=fr.contentWindow;if(w&&typeof w.__abreDevNueva==='function'){w.__abreDevNueva({impuesto:'isr',empresa:+dn[1],ejercicio:+dn[2]});listo=true}}catch(e){}}
-      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3#devisr-'+dn[1]+'-'+dn[2]);
+      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a#devisr-'+dn[1]+'-'+dn[2]);
       try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('workflow-trabajo'))return true}catch(e){}
       setView('wft');
       return true;
@@ -5849,7 +5875,7 @@ function pintarSync(){
     if(py){
       let listo=false;
       if(fr.getAttribute('src')){try{const w=fr.contentWindow;const f=py[1]==='nuevo'?w&&w.__abreProyNuevo:w&&w.__abreProyCaso;if(typeof f==='function'){py[1]==='nuevo'?f():f(+py[1]);listo=true}}catch(e){}}
-      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3#proy-'+py[1]);
+      if(!listo)fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a#proy-'+py[1]);
       try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('workflow-trabajo'))return true}catch(e){}
       setView('wft');
       return true;
@@ -5869,7 +5895,7 @@ function pintarSync(){
     if(!m||(m[1]!=='devolucion-iva'&&m[1]!=='devolucion-facturas'&&m[1]!=='devolucion-isr'&&m[1]!=='proyectos'))return false;
     let hecho=false;
     if(fr.getAttribute('src')){try{const w=fr.contentWindow;if(w&&typeof w.__abreVer==='function'){w.__abreVer(m[1]);hecho=true}}catch(e){}}
-    if(!hecho)fr.setAttribute('src','workflow-trabajo.html?v=fd25a825e3#ver-'+m[1]);
+    if(!hecho)fr.setAttribute('src','workflow-trabajo.html?v=cd70344b0a#ver-'+m[1]);
     try{if(window.PORTAL_MENU&&window.PORTAL_MENU.ir('workflow-trabajo'))return true}catch(e){}
     setView('wft');
     return true;
@@ -5922,7 +5948,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','wfc');
     const t=document.getElementById('vtitle');if(t)t.textContent='Configuración del WorkFlow';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='wfc'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','wf-config.html?v=f979d7e95a');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','wf-config.html?v=95c22d6432');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -5997,7 +6023,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','wfa');
     const t=document.getElementById('vtitle');if(t)t.textContent='Auditoría SAT vs WF';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='wfa'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','wf-auditoria.html?v=075acc836a');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','wf-auditoria.html?v=eeb362cc91');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -6088,7 +6114,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','fac');
     const t=document.getElementById('vtitle');if(t)t.textContent='Facturación';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='fac'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','facturacion.html?v=56a6aac602');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','facturacion.html?v=ca49fef1db');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -6102,7 +6128,7 @@ function pintarSync(){
     if(b.hidden||!/^\d{1,12}$/.test(s))return false;
     let w=null;try{w=fr.getAttribute('src')?fr.contentWindow:null}catch(e){}
     if(w&&typeof w.__facAbre==='function'){setView('fac');w.__facAbre(+s);return true}
-    fr.setAttribute('src','facturacion.html?v=56a6aac602&fac='+s);
+    fr.setAttribute('src','facturacion.html?v=ca49fef1db&fac='+s);
     setView('fac');
     return true;
   };
@@ -6156,7 +6182,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','pag');
     const t=document.getElementById('vtitle');if(t)t.textContent='Pagos';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='pag'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','pagos.html?v=80c5a4ce30');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','pagos.html?v=5c93201219');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -6212,7 +6238,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','bcli');
     const t=document.getElementById('vtitle');if(t)t.textContent='Base de clientes';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='bcli'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','base-clientes.html?v=d13bf0ef51');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','base-clientes.html?v=2e6ea16d86');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -6237,7 +6263,7 @@ function pintarSync(){
     if(!/^\d{1,12}$/.test(s))return false;
     let w=null;try{w=fr.getAttribute('src')?fr.contentWindow:null}catch(e){}
     if(w&&typeof w.__bcliAbre==='function'){setView('bcli');w.__bcliAbre(+s);return true}
-    fr.setAttribute('src','base-clientes.html?v=d13bf0ef51&abre='+encodeURIComponent(s));
+    fr.setAttribute('src','base-clientes.html?v=2e6ea16d86&abre='+encodeURIComponent(s));
     setView('bcli');
     return true;
   };
@@ -6325,7 +6351,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','rec');
     const t=document.getElementById('vtitle');if(t)t.textContent='Recordatorios de pago';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='rec'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','recordatorios.html?v=13ce82579d');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','recordatorios.html?v=35e11c7e85');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -6395,7 +6421,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','sc');
     const t=document.getElementById('vtitle');if(t)t.textContent='Pregúntale a SuperConta';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='sc'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','superconta.html?v=eb0f39ac33');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','superconta.html?v=958d45fef5');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();apartaAviso();
   };
@@ -6539,7 +6565,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','chat');
     const t=document.getElementById('vtitle');if(t)t.textContent='Chat';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='chat'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=55327fef79');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=e311743e18');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
     alto();
     setTimeout(refresca,1500);
@@ -6822,7 +6848,7 @@ function pintarSync(){
     if(!flota&&mv)termina();   // si la ventanita se va a media arrastrada, se suelta (nunca se queda «arrastrando»)
     document.body.classList.toggle('chf-en-ven',m==='ventana');
     document.body.classList.toggle('chf-en-bur',m==='burbuja');
-    if(flota){if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=55327fef79');fr.style.height='';acomoda()}
+    if(flota){if(!fr.getAttribute('src'))fr.setAttribute('src','chat.html?v=e311743e18');fr.style.height='';acomoda()}
     ponBur();
     // si se acaba de poner a la vista en la ventanita, el chat se pone al día y marca leído lo que se ve
     const ahora=enGrande()?'g':m;
@@ -9287,7 +9313,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','ini');
     const t=document.getElementById('vtitle');if(t)t.textContent='Inicio';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='ini'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','inicio.html?v=8b036cdbd4');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','inicio.html?v=421b7013c5');
     else{try{const w=fr.contentWindow;if(w&&w.INICIO)w.INICIO.refresca()}catch(e){}}
     alto();
   };
@@ -10174,7 +10200,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cdir');
     const t=document.getElementById('vtitle');if(t)t.textContent='Comisiones de dirección';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cdir'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -10186,14 +10212,14 @@ function pintarSync(){
   window.PROFASE_ABRE['comisiones-direccion']=x=>{
     if(b.hidden)return false;
     const v=String(x==null?'':x);
-    if(/^com(?:-\d{4}-\d{2})?$/.test(v))fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b&ir='+v+'&n='+Date.now());
+    if(/^com(?:-\d{4}-\d{2})?$/.test(v))fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0&ir='+v+'&n='+Date.now());
     // 269: el aviso de los pagos a SV abre su pestaña (Devoluciones de IVA › Pagos a SV)
-    else if(v==='ver:'+'pagos-sv'||v==='svp')fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b&ir=svp&n='+Date.now());
+    else if(v==='ver:'+'pagos-sv'||v==='svp')fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0&ir=svp&n='+Date.now());
     // 288: la pila «Reembolsos por pagar» del Inicio ('reem') y el aviso de lo nuevo ('ver:reembolsos', con la pestaña iluminada)
-    else if(v==='reem')fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b&ir=reem&n='+Date.now());
+    else if(v==='reem')fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0&ir=reem&n='+Date.now());
     // 360: los avisos de una devolución de IVA (abono parcial, nota de crédito, falta el monto o el %): su lista o lo que se cobra
-    else if(/^dev:(devs|cobra|porfac|isrsv)$/.test(v))fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b&ir=dev-'+v.slice(4)+'&n='+Date.now());
-    else if(v==='ver:'+'reembolsos')fr.setAttribute('src','comisiones-direccion.html?v=a6d4e53f3b&ir=reemv&n='+Date.now());
+    else if(/^dev:(devs|cobra|porfac|isrsv)$/.test(v))fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0&ir=dev-'+v.slice(4)+'&n='+Date.now());
+    else if(v==='ver:'+'reembolsos')fr.setAttribute('src','comisiones-direccion.html?v=dc8bf3c3b0&ir=reemv&n='+Date.now());
     // 5-nov-2026 (Daniel Nava: «mándale campanita con recorrido para que encuentre ese botón y explícale»): el aviso
     // a Eva de dónde capturar anticipos y descuentos de la comisión ('ver:deducciones') abre la sección y su recorrido
     // (cdir_rec_tab.js), que la lleva a la pestaña de la comisión, a «Deducciones» y a «Agregar deducción»
@@ -10549,17 +10575,17 @@ function pintarSync(){
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const VISTAS=[
-    {v:'rhs',t:'Mis solicitudes',src:'rh-solicitudes.html?v=9eb2fad480&s=mis',ve:e=>!!(e.sol&&e.sol.mis)},
-    {v:'rha',t:'Por autorizar',src:'rh-solicitudes.html?v=9eb2fad480&s=aut',ve:e=>!!((e.sol&&e.sol.gerente)||(e.cob&&e.cob.cubro_aut&&e.cob.cubro_aut.length))},
-    {v:'rhb',t:'Solicitudes',src:'rh-solicitudes.html?v=9eb2fad480&s=rh',ve:e=>!!(e.sol&&e.sol.bandeja)},
+    {v:'rhs',t:'Mis solicitudes',src:'rh-solicitudes.html?v=37c907bf87&s=mis',ve:e=>!!(e.sol&&e.sol.mis)},
+    {v:'rha',t:'Por autorizar',src:'rh-solicitudes.html?v=37c907bf87&s=aut',ve:e=>!!((e.sol&&e.sol.gerente)||(e.cob&&e.cob.cubro_aut&&e.cob.cubro_aut.length))},
+    {v:'rhb',t:'Solicitudes',src:'rh-solicitudes.html?v=37c907bf87&s=rh',ve:e=>!!(e.sol&&e.sol.bandeja)},
     // 1-nov-2026 (Parte 165; 117_cobertura_ausencias.sql): el plan de cobertura de las ausencias (gerentes, RH, la dirección
     // y quien se va o cubre); quien cubre las autorizaciones de un gerente que no está también ve «Por autorizar»
-    {v:'rhk',t:'Coberturas',src:'rh-solicitudes.html?v=9eb2fad480&s=cob',ve:e=>!!(e.cob&&e.cob.ve)},
-    {v:'rhv',t:'Vacaciones y permisos',src:'rh.html?v=60c4a4b63a&s=vac',ve:e=>e.ve},
-    {v:'rhp',t:'Préstamos',src:'rh.html?v=60c4a4b63a&s=pre',ve:e=>e.ve},
-    {v:'rhc',t:'Colaboradores',src:'calendario.html?v=acda9ce23b&rh=colab',ve:e=>e.ve||e.colab},
-    {v:'rhm',t:'Altas y bajas',src:'rh.html?v=60c4a4b63a&s=mov',ve:e=>e.ve},
-    {v:'rhx',t:'Expedientes del personal',src:'rh.html?v=60c4a4b63a&s=exp',ve:e=>e.ve}
+    {v:'rhk',t:'Coberturas',src:'rh-solicitudes.html?v=37c907bf87&s=cob',ve:e=>!!(e.cob&&e.cob.ve)},
+    {v:'rhv',t:'Vacaciones y permisos',src:'rh.html?v=b4d973fda9&s=vac',ve:e=>e.ve},
+    {v:'rhp',t:'Préstamos',src:'rh.html?v=b4d973fda9&s=pre',ve:e=>e.ve},
+    {v:'rhc',t:'Colaboradores',src:'calendario.html?v=b1dde9590b&rh=colab',ve:e=>e.ve||e.colab},
+    {v:'rhm',t:'Altas y bajas',src:'rh.html?v=b4d973fda9&s=mov',ve:e=>e.ve},
+    {v:'rhx',t:'Expedientes del personal',src:'rh.html?v=b4d973fda9&s=exp',ve:e=>e.ve}
   ];
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
@@ -11326,10 +11352,10 @@ function pintarSync(){
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const VISTAS=[
-    {v:'tpre',t:'Préstamos por entregar',src:'tesoreria.html?v=a83f63bed3&s=pre',ve:e=>e.prestamos===true},
-    {v:'trep',t:'Reportes de cobranza',src:'tesoreria.html?v=a83f63bed3&s=rep',ve:e=>Array.isArray(e.reportes)&&e.reportes.length>0},
-    {v:'tbc',t:'Estado de cuenta bancario',src:'estado-cuenta.html?v=a459832446',ve:e=>e.tbc===true},
-    {v:'tdc',t:'TDC DECOMSA',src:'tdc.html?v=25318c92fa',ve:e=>e.tdc===true}
+    {v:'tpre',t:'Préstamos por entregar',src:'tesoreria.html?v=739bbf3c7a&s=pre',ve:e=>e.prestamos===true},
+    {v:'trep',t:'Reportes de cobranza',src:'tesoreria.html?v=739bbf3c7a&s=rep',ve:e=>Array.isArray(e.reportes)&&e.reportes.length>0},
+    {v:'tbc',t:'Estado de cuenta bancario',src:'estado-cuenta.html?v=c370b101e3',ve:e=>e.tbc===true},
+    {v:'tdc',t:'TDC DECOMSA',src:'tdc.html?v=dd5d616152',ve:e=>e.tdc===true}
   ];
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
@@ -11395,7 +11421,7 @@ function pintarSync(){
     if(/^\d{1,12}$/.test(s)){
       let w=null;try{w=fr.getAttribute('src')?fr.contentWindow:null}catch(e){}
       if(w&&typeof w.__tesPre==='function')w.__tesPre(+s);
-      else fr.setAttribute('src','tesoreria.html?v=a83f63bed3&s=pre&prestamo='+s);
+      else fr.setAttribute('src','tesoreria.html?v=739bbf3c7a&s=pre&prestamo='+s);
     }
     setView('tpre');return true;
   };
@@ -11699,12 +11725,12 @@ function pintarSync(){
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const VISTAS=[
-    {v:'mulq',t:'Cotizador de Multinacional',src:'multinacional.html?v=8b29edefa5&s=nueva',ve:e=>e.cotiza===true,k:'mul-cotizador'},
-    {v:'mulc',t:'Cotizaciones de Multinacional',src:'multinacional.html?v=8b29edefa5&s=cot',ve:e=>e.ver_cot===true,k:'mul-cotizaciones'},
-    {v:'mulf',t:'Facturas de Multinacional',src:'multinacional.html?v=8b29edefa5',ve:e=>e.facturas===true,k:'mul-facturas'},
-    {v:'mule',t:'Estado de cuenta de Multinacional',src:'multinacional.html?v=8b29edefa5&s=banco',ve:e=>e.banco===true,k:'mul-estado'},
-    {v:'mulk',t:'Comisiones de Multinacional',src:'multinacional.html?v=8b29edefa5&s=com',ve:e=>e.comisiones===true,k:'mul-comisiones'},
-    {v:'mulp',t:'Pagos de Multinacional',src:'multinacional.html?v=8b29edefa5&s=pagos',ve:e=>e.pagos===true,k:'mul-pagos'}
+    {v:'mulq',t:'Cotizador de Multinacional',src:'multinacional.html?v=4caa480a88&s=nueva',ve:e=>e.cotiza===true,k:'mul-cotizador'},
+    {v:'mulc',t:'Cotizaciones de Multinacional',src:'multinacional.html?v=4caa480a88&s=cot',ve:e=>e.ver_cot===true,k:'mul-cotizaciones'},
+    {v:'mulf',t:'Facturas de Multinacional',src:'multinacional.html?v=4caa480a88',ve:e=>e.facturas===true,k:'mul-facturas'},
+    {v:'mule',t:'Estado de cuenta de Multinacional',src:'multinacional.html?v=4caa480a88&s=banco',ve:e=>e.banco===true,k:'mul-estado'},
+    {v:'mulk',t:'Comisiones de Multinacional',src:'multinacional.html?v=4caa480a88&s=com',ve:e=>e.comisiones===true,k:'mul-comisiones'},
+    {v:'mulp',t:'Pagos de Multinacional',src:'multinacional.html?v=4caa480a88&s=pagos',ve:e=>e.pagos===true,k:'mul-pagos'}
   ];
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
@@ -11887,7 +11913,7 @@ function pintarSync(){
      por PROFASE_GUIA.pasos): una sola versión. A Liliana y Frank, también cómo asignan y cargan su Excel. */
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
-  const X={v:'bzt',t:'Buzón tributario',src:'buzon-tributario.html?v=48a84a7894',k:'buzon'};
+  const X={v:'bzt',t:'Buzón tributario',src:'buzon-tributario.html?v=69b520c4da',k:'buzon'};
   const st=document.createElement('style');
   st.textContent='body:not([data-view="bzt"]) #v-bzt{display:none!important}body[data-view="bzt"] .asof{display:none!important}'
     +'#v-bzt{display:block;width:100%}#v-bzt iframe{display:block;width:100%;border:0;background:var(--bg)}'
@@ -12200,32 +12226,32 @@ function pintarSync(){
   const sw=document.querySelector('.vsw');if(!sw)return;
   const VISTAS=[
     // 385 (Daniel Nava, 12-nov-2026: «quiero ver qué ha hecho; qué no ha hecho; cómo vamos avanzando»)
-    {v:'cenq',t:'Cómo vamos',src:'centauro.html?v=1e112ad1ea&s=comovamos',ve:e=>e.boveda===true,k:'centauro-comovamos'},
+    {v:'cenq',t:'Cómo vamos',src:'centauro.html?v=1796a18994&s=comovamos',ve:e=>e.boveda===true,k:'centauro-comovamos'},
     // Hallazgos (430) se mudó a Workflow › Auditoría SAT vs WF el 19-nov-2026 (442; Daniel Nava: «1 si»): wfa_tab.js
-    {v:'cenb',t:'Bóveda XML',src:'centauro.html?v=1e112ad1ea&s=boveda',ve:e=>e.boveda===true,k:'centauro-boveda'},
-    {v:'cenc',t:'Canceladas SAT vs QUO',src:'centauro.html?v=1e112ad1ea&s=canceladas',ve:e=>e.canceladas===true,k:'centauro-canceladas'},
-    {v:'cen9',t:'Lista 69-B',src:'centauro.html?v=1e112ad1ea&s=69b',ve:e=>e.b69===true,k:'centauro-69b'},
-    {v:'cenr',t:'Reportes de Centauro',src:'centauro.html?v=1e112ad1ea&s=reportes',ve:e=>e.reportes===true,k:'centauro-reportes'},
+    {v:'cenb',t:'Bóveda XML',src:'centauro.html?v=1796a18994&s=boveda',ve:e=>e.boveda===true,k:'centauro-boveda'},
+    {v:'cenc',t:'Canceladas SAT vs QUO',src:'centauro.html?v=1796a18994&s=canceladas',ve:e=>e.canceladas===true,k:'centauro-canceladas'},
+    {v:'cen9',t:'Lista 69-B',src:'centauro.html?v=1796a18994&s=69b',ve:e=>e.b69===true,k:'centauro-69b'},
+    {v:'cenr',t:'Reportes de Centauro',src:'centauro.html?v=1796a18994&s=reportes',ve:e=>e.reportes===true,k:'centauro-reportes'},
     // 247 (4-nov-2026, la revisión fiscal de Frank): las declaraciones que el robot baja del portal del SAT; dentro, de cada
     // cliente decide la base (lo de las compañías de la dirección, solo la dirección)
-    {v:'cend',t:'Declaraciones',src:'centauro.html?v=1e112ad1ea&s=declaraciones',ve:e=>e.boveda===true,k:'centauro-declaraciones'},
+    {v:'cend',t:'Declaraciones',src:'centauro.html?v=1796a18994&s=declaraciones',ve:e=>e.boveda===true,k:'centauro-declaraciones'},
     // 317 (6-nov-2026; Daniel: «dale luz verde», «si sale»): cómo van en el SAT los trámites de devolución de cada cliente
     // de la tabla de devoluciones y si cuadran con el WorkFlow; las mismas reglas de Declaraciones (cen_decl_dev)
-    {v:'cenv',t:'Devoluciones',src:'centauro.html?v=1e112ad1ea&s=devoluciones',ve:e=>e.boveda===true,k:'centauro-devoluciones'},
+    {v:'cenv',t:'Devoluciones',src:'centauro.html?v=1796a18994&s=devoluciones',ve:e=>e.boveda===true,k:'centauro-devoluciones'},
     // 280 (5-nov-2026; Daniel: «hay forma de ver todos estos riesgos; algún submenú o algo?»): los hallazgos de la revisión
     // fiscal de todos los clientes en una sola lista; las mismas reglas de Declaraciones (cen_decl_riesgos)
-    {v:'cenf',t:'Riesgos fiscales',src:'centauro.html?v=1e112ad1ea&s=riesgos',ve:e=>e.boveda===true,k:'centauro-riesgos'},
+    {v:'cenf',t:'Riesgos fiscales',src:'centauro.html?v=1796a18994&s=riesgos',ve:e=>e.boveda===true,k:'centauro-riesgos'},
     // 287 (5-nov-2026; Daniel: «la pantalla nueva Centauro › Ficha contra el SAT»): la constancia de situación fiscal de
     // cada cliente contra su ficha, lo que el CRM corrigió solo y lo que queda por revisar (cen_decl_ficha)
-    {v:'cens',t:'Ficha contra el SAT',src:'centauro.html?v=1e112ad1ea&s=ficha',ve:e=>e.boveda===true,k:'centauro-ficha'},
+    {v:'cens',t:'Ficha contra el SAT',src:'centauro.html?v=1796a18994&s=ficha',ve:e=>e.boveda===true,k:'centauro-ficha'},
     // 331 (9-nov-2026; petición de Frank, Daniel: «Sí, así es.»): la e.firma y los sellos de hoy de cada cliente contra el
     // SAT (estatus, vigencia, si coinciden con la ficha y su fecha contra Claves SAT); las mismas reglas de Declaraciones (cen_cert_lista)
-    {v:'cent',t:'Certificados',src:'centauro.html?v=1e112ad1ea&s=certificados',ve:e=>e.boveda===true,k:'centauro-certificados'},
+    {v:'cent',t:'Certificados',src:'centauro.html?v=1796a18994&s=certificados',ve:e=>e.boveda===true,k:'centauro-certificados'},
     // 295 (5-nov-2026; lo que propuso Chuy en su inventario): cada cliente mes por mes, con lo de cada reporte, la lista 69-B, las
     // canceladas activas en QUO y los riesgos altos de la revisión fiscal (cen_decl_semaforo)
     // 299 (5-nov-2026; Daniel: «solo a barbosa el semáforo por el momento»): también a quien solo tiene el Semáforo
     // (Fernando Barbosa, con los clientes de su equipo: cen_sem_quien); la base dice quién (cen_estado().semaforo)
-    {v:'cenx',t:'Semáforo',src:'centauro.html?v=1e112ad1ea&s=semaforo',ve:e=>e.semaforo===true,k:'centauro-semaforo'}
+    {v:'cenx',t:'Semáforo',src:'centauro.html?v=1796a18994&s=semaforo',ve:e=>e.semaforo===true,k:'centauro-semaforo'}
   ];
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
@@ -12644,11 +12670,11 @@ function pintarSync(){
    La base decide (usr_estado(), portal/sql/82_usuarios.sql, 103_usuarios_wf.sql y 298); aquí solo se enseñan los botones. */
 (function(){
   const sw=document.querySelector('.vsw');if(!sw)return;
-  const VISTAS=[{v:'usr',t:'Usuarios del portal',src:'usuarios.html?v=aafd7361ae',ve:e=>!!e.puede||!!e.permisos},
+  const VISTAS=[{v:'usr',t:'Usuarios del portal',src:'usuarios.html?v=ea2c27fed1',ve:e=>!!e.puede||!!e.permisos},
     // Workflow (31-oct-2026; Daniel: «que se llame Workflow y dale acceso a Cadengo, Gabo y a mí»): las personas del
     // WorkFlow (usuarios-wf.html, portal/sql/103_usuarios_wf.sql); la base dice quién la ve (usr_estado().wf)
-    {v:'uwf',t:'Personas del WorkFlow',src:'usuarios-wf.html?v=160e3e08b4',ve:e=>e.wf===true}];
-  if(!sw.querySelector('[data-view="acc"]'))VISTAS.push({v:'acc',t:'Accesos al portal',src:'accesos.html?v=e6e48797f6',ve:e=>e.accesos===true});
+    {v:'uwf',t:'Personas del WorkFlow',src:'usuarios-wf.html?v=e848e2efe1',ve:e=>e.wf===true}];
+  if(!sw.querySelector('[data-view="acc"]'))VISTAS.push({v:'acc',t:'Accesos al portal',src:'accesos.html?v=b7d5bc508b',ve:e=>e.accesos===true});
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
     +VISTAS.map(x=>'#v-'+x.v).join(',')+'{display:block;width:100%}'
@@ -12713,7 +12739,7 @@ function pintarSync(){
     const k=String(x||''),fr=M.usr.firstElementChild,nueva=!fr.getAttribute('src');
     // 360: «u:<usuario>», «mov:<n>» y «colab:<n>» (avisos de RH y de quitar un usuario): la ficha, las bajas o el alta
     const de=k==='ver:permiso-buzon'||/^(?:u:[a-z0-9._-]{1,60}|mov:\d{1,12}|colab:[A-Za-z0-9_]{1,40})$/.test(k);
-    if(de&&nueva)fr.setAttribute('src','usuarios.html?v=aafd7361ae&abre='+encodeURIComponent(k));   // la página lo abre sola al cargar
+    if(de&&nueva)fr.setAttribute('src','usuarios.html?v=ea2c27fed1&abre='+encodeURIComponent(k));   // la página lo abre sola al cargar
     setView('usr');
     if(de&&!nueva){let n=0;const va=()=>{try{if(fr.contentWindow&&fr.contentWindow.__usrAbre){fr.contentWindow.__usrAbre(k);return}}catch(e){return}if(n++<40)setTimeout(va,150)};va()}
     return true;
@@ -12911,7 +12937,7 @@ function pintarSync(){
     document.body.setAttribute('data-view',V);
     const t=document.getElementById('vtitle');if(t)t.textContent=TIT;
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view===V?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','mis-recordatorios.html?v=d8c7ac24c3');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','mis-recordatorios.html?v=7b2570c56a');
     else try{fr.contentWindow.postMessage({tipo:'rcd-recarga'},location.origin)}catch(err){}
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(err){}
     alto();
@@ -12921,7 +12947,7 @@ function pintarSync(){
   // «Nuevo recordatorio» desde fuera (el Inicio o la ventana): abre la pestaña con el formulario
   window.__rcdNuevo=function(){
     if(b.hidden)return;
-    if(!fr.getAttribute('src')){fr.setAttribute('src','mis-recordatorios.html?v=d8c7ac24c3&nuevo=1');setView(V);return}
+    if(!fr.getAttribute('src')){fr.setAttribute('src','mis-recordatorios.html?v=7b2570c56a&nuevo=1');setView(V);return}
     setView(V);try{fr.contentWindow.postMessage({tipo:'rcd-nuevo'},location.origin)}catch(err){}
   };
 
@@ -12933,7 +12959,7 @@ function pintarSync(){
     if(b.hidden)return false;
     const s=String(x==null?'':x);
     if(!/^(?:aviso:)?\d{1,12}$/.test(s)){setView(V);return true}
-    if(!fr.getAttribute('src')){fr.setAttribute('src','mis-recordatorios.html?v=d8c7ac24c3&abre='+encodeURIComponent(s));setView(V);return true}
+    if(!fr.getAttribute('src')){fr.setAttribute('src','mis-recordatorios.html?v=7b2570c56a&abre='+encodeURIComponent(s));setView(V);return true}
     setView(V);
     try{fr.contentWindow.postMessage({tipo:'rcd-abre',x:s},location.origin)}catch(err){}
     return true;
@@ -13552,8 +13578,8 @@ function pintarSync(){
   const dormir=ms=>new Promise(ok=>setTimeout(ok,ms));
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const VISTAS=[
-    {v:'pen',t:'Pendientes',src:'expedientes.html?v=3ee257f700&s=pen',ve:()=>true},
-    {v:'exp',t:'Expedientes',src:'expedientes.html?v=3ee257f700&s=exp',ve:e=>e.ve_expedientes===true}
+    {v:'pen',t:'Pendientes',src:'expedientes.html?v=3485d3edd3&s=pen',ve:()=>true},
+    {v:'exp',t:'Expedientes',src:'expedientes.html?v=3485d3edd3&s=exp',ve:e=>e.ve_expedientes===true}
   ];
   const st=document.createElement('style');
   st.textContent=VISTAS.map(x=>'body:not([data-view="'+x.v+'"]) #v-'+x.v+'{display:none!important}body[data-view="'+x.v+'"] .asof{display:none!important}').join('')
@@ -14046,7 +14072,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cpf');
     const t=document.getElementById('vtitle');if(t)t.textContent='Cotizador PROFASE';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cpf'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','cotizador-profase.html?v=f4854d1796');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','cotizador-profase.html?v=76a48f561c');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -14112,7 +14138,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','fbk');
     const t=document.getElementById('vtitle');if(t)t.textContent='Autorizar publicaciones';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='fbk'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','campanas-facebook.html?v=9ea5dd0de6');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','campanas-facebook.html?v=ea739bff9b');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -14155,7 +14181,7 @@ function pintarSync(){
   const mains=document.querySelectorAll('body > main');
   (mains.length?mains[mains.length-1]:document.querySelector('header')).after(caja);
   const fr=caja.firstElementChild;
-  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','marketing.html?v=b84269aa04'+(b.dataset.sub?'&t='+b.dataset.sub:''))};
+  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','marketing.html?v=dea8074264'+(b.dataset.sub?'&t='+b.dataset.sub:''))};
   (async function(){
     try{
       const P=window.PORTAL;if(!P)return;
@@ -14262,7 +14288,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','imp');
     const t=document.getElementById('vtitle');if(t)t.textContent='IMPI';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='imp'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','impi.html?v=0247d49ddc');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','impi.html?v=f72cf86a8a');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -14330,7 +14356,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','cos');
     const t=document.getElementById('vtitle');if(t)t.textContent='Costos de sistemas';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='cos'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','costos.html?v=ce7ed6e1e6');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','costos.html?v=fee6073944');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -14394,7 +14420,7 @@ function pintarSync(){
   const mains=document.querySelectorAll('body > main');
   (mains.length?mains[mains.length-1]:document.querySelector('header')).after(caja);
   const fr=caja.firstElementChild;
-  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','qchat.html?v=cad3d4ab8a')};
+  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','qchat.html?v=2ff048633e')};
   const listo=(async function(){
     try{
       const P=window.PORTAL;if(!P)return null;
@@ -14580,7 +14606,7 @@ function pintarSync(){
     document.body.setAttribute('data-view','vqf');
     const t=document.getElementById('vtitle');if(t)t.textContent='Vigía fiscal';
     document.querySelectorAll('.vsw button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='vqf'?'true':'false'));
-    if(!fr.getAttribute('src'))fr.setAttribute('src','quo-vigia.html?v=53dfc7f3ce');
+    if(!fr.getAttribute('src'))fr.setAttribute('src','quo-vigia.html?v=c8478a32fa');
     try{b.scrollIntoView({block:'nearest',inline:'nearest'})}catch(e){}
     alto();
   };
@@ -14624,7 +14650,7 @@ function pintarSync(){
   const mains=document.querySelectorAll('body > main');
   (mains.length?mains[mains.length-1]:document.querySelector('header')).after(caja);
   const fr=caja.firstElementChild;
-  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','estrategias.html?v=6dc0c16057')};
+  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','estrategias.html?v=f370726dda')};
   const BASE={marca:1,indemnizacion:1,premio:1};   // las tres que ya trae el menú
   let TIPOS={},LIGAS={};
   // lo que dice la base: quién la ve, sus tipos y cuánto le toca a cada uno
@@ -14752,7 +14778,7 @@ function pintarSync(){
   const mains=document.querySelectorAll('body > main');
   (mains.length?mains[mains.length-1]:document.querySelector('header')).after(caja);
   const fr=caja.firstElementChild;
-  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','biblioteca.html?v=1f6c8ab8e1')};
+  const carga=()=>{if(!fr.getAttribute('src'))fr.setAttribute('src','biblioteca.html?v=26327d5ff2')};
   const listo=(async function(){
     try{
       const P=window.PORTAL;if(!P)return null;

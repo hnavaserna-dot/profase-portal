@@ -5,7 +5,8 @@
    "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
    diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
    Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
-   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base.
+   Desde el 24-nov-2026 no detiene la pantalla mientras pregunta, salvo si la última vez el CRM estaba cerrado (abajo). */
 (function () {
   'use strict';
   if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
@@ -27,24 +28,49 @@
   // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
   // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
   if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
-  var j = null;
+  // Sin trabar la pantalla (Héctor Daniel Nava, 24-nov-2026, 17:38 a 17:42: el CRM se le quedó en blanco en la app de su
+  // iPhone Duo; «lo cambio para que mientras espera salga el logo» → «Si dale»). Antes esta revisión esperaba la respuesta
+  // de cierre.json con el teléfono detenido (pedido «síncrono»): con el internet lento, nada se pintaba y la pantalla se
+  // quedaba en blanco. Ahora solo espera así si la última vez el CRM estaba cerrado (marca profase-cierre en el
+  // navegador): mientras el CRM está cerrado, nadie alcanza a ver ni mover nada. Si estaba abierto, pregunta sin
+  // detener nada: la entrada y el «Abriendo tu pantalla…» con el signo se pintan en cuanto llegan, y si la respuesta dice
+  // que se cerró, la página se detiene y lleva a cerrado.html igual que antes (y js/portal.js lo sigue revisando cada
+  // minuto en la página abierta).
+  var MARCA = 'profase-cierre';
+  function marca(v) { try { if (v) localStorage.setItem(MARCA, '1'); else localStorage.removeItem(MARCA); } catch (e) { /* sin almacenamiento */ } }
+  function cerrado(j) {
+    if (!j || j.cerrado !== true) return false;
+    // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+    if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return false;
+    return true;
+  }
+  function lleva() {
+    var w = window;
+    try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+    try {
+      var r = w.location.pathname + w.location.search + w.location.hash;
+      if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+    } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+    try { window.stop(); } catch (e) { /* navegador viejo */ }
+    try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+  }
+  function lee(x) { try { return x.status === 200 ? JSON.parse(x.responseText) : null; } catch (e) { return null; } }
+  var antes = false;
+  try { antes = localStorage.getItem(MARCA) === '1'; } catch (e) { antes = false; }
+  var x = new XMLHttpRequest();
+  if (antes) {
+    var j = null;
+    try { x.open('GET', '/cierre.json?t=' + Date.now(), false); x.send(null); j = lee(x); } catch (e) { j = null; }
+    if (j) marca(cerrado(j));
+    if (cerrado(j)) lleva();
+    return;
+  }
   try {
-    var x = new XMLHttpRequest();
-    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.open('GET', '/cierre.json?t=' + Date.now(), true);
+    x.timeout = 20000;
+    x.onload = function () { var j = lee(x); if (!j) return; marca(cerrado(j)); if (cerrado(j)) lleva(); };
     x.send(null);
-    if (x.status === 200) j = JSON.parse(x.responseText);
-  } catch (e) { j = null; }
-  if (!j || j.cerrado !== true) return;
-  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
-  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
-  var w = window;
-  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
-  try {
-    var r = w.location.pathname + w.location.search + w.location.hash;
-    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
-  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
-  try { window.stop(); } catch (e) { /* navegador viejo */ }
-  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+  } catch (e) { /* si cierre.json no llega, la página sigue normal */ }
 })();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · IMPI</title>
 <link rel="icon" href="img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
