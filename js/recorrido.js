@@ -24,7 +24,23 @@
    Rivera (bzt_tab.js; Héctor Daniel, 4-nov-2026: «dale un recorrido a lili y a frank obligatorio»), por unaVez(). El del chat ya no es obligatorio (Héctor Daniel, 3-nov-2026,
    15:57: «quita la regla del recorrido obligatorio en chat»): se puede saltar, como los de las demás pantallas.
    Último paso de todos (regla de Daniel, 31-oct-2026, 5:04): dónde está SuperConta (IA) para sus dudas. Lo registra
-   PROFASE_RECORRIDO.alFinal(() => paso) (portal/guia_tab.js) y se agrega solo; sinCierre: true lo apaga (los de SuperConta). */
+   PROFASE_RECORRIDO.alFinal(() => paso) (portal/guia_tab.js) y se agrega solo; sinCierre: true lo apaga (los de SuperConta).
+   De la mano (Héctor Daniel Nava, 24-nov-2026, 10:36, al pedir el recorrido de los complementos de pago de Dora Montalvo:
+   «pero la llevas de la mano (así deben de ser los recorridos); le da clic y así se va»): un paso puede pedirle a la persona
+   que lo haga ella, en la pantalla de verdad:
+     haz: 'clic'   → solo lo iluminado se puede picar (lo demás queda tapado); al picarlo pasa lo de siempre (se abre la
+                     pantalla, el menú o la ventana) y el recorrido sigue solo, sin «Siguiente».
+     haz: 'libre'  → la persona escribe o escoge en la pantalla (nada se tapa) y luego pica «Siguiente».
+     listo: () => true cuando ya lo hizo (por ejemplo, ya palomeó una factura): el recorrido sigue solo.
+     espera: ms    → lo que se abre tarda (una ventana que pide datos a la base): espera hasta ms a que su parte aparezca
+                     (o una función que da los ms: 0 si no hay nada que esperar).
+     siNo: { titulo, texto } → si su parte no está (no hay nada que palomear), sale al centro con ese texto y «Siguiente»
+                     en lugar de brincarse.
+     hazTexto: lo que dice la línea «Te toca» (si no, la de siempre); sinAtras: true, sin «Atrás» (después de cambiar de
+                     pantalla, regresar no tiene a dónde).
+   En un paso «haz», el teclado es de la página (las flechas, Tab y Enter no mueven el recorrido; Esc sigue igual). Si la
+   parte se vuelve a pintar (la pantalla se recarga), se busca otra vez; si ya no está, el globo sale al centro con «Siguiente».
+   Nunca obliga a guardar, mandar ni timbrar nada: el último clic de verdad lo da la persona. */
 (function () {
   'use strict';
   if (window.PROFASE_RECORRIDO) return;
@@ -55,6 +71,11 @@
     + '.rc-pie button{font:inherit;font-size:14px;font-weight:700;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
     + '.rc-pie .rc-sig{background:#F07A1E;border-color:#F07A1E;color:#14233F}'
     + '.rc-pie .rc-salta{border:0;background:none;color:var(--muted,#5A6577);font-weight:600;padding:8px 4px}'
+    // de la mano: lo iluminado se puede usar; con haz: 'clic', unos muros transparentes tapan todo lo demás
+    + '.rc-capa.rc-haz{pointer-events:none}.rc-capa.rc-haz .rc-globo,.rc-capa.rc-haz .rc-muro{pointer-events:auto}'
+    + '.rc-muro{position:fixed;background:transparent}'
+    + '.rc-toca{flex:none;display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(240,122,30,.12);font-size:14px;font-weight:700;line-height:1.35}'
+    + '.rc-toca::before{content:"";flex:none;width:10px;height:10px;margin-top:4px;border-radius:50%;background:#F07A1E;animation:rc-late 1.6s ease-in-out infinite}'
     + '.rc-pie button:focus-visible{outline:2px solid #1F3864;outline-offset:2px}'
     + '.rc-espera{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--surface,#fff);color:var(--ink,#132036);border-radius:999px;padding:10px 18px;font-size:14.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px}'
     + '.rc-espera i{width:16px;height:16px;border-radius:50%;border:2.5px solid #C4CDDA;border-top-color:#F07A1E;animation:rc-gira .8s linear infinite}'
@@ -97,8 +118,22 @@
       // dentro del marco de una pestaña que en el celular es más alto que lo que se ve: también cuenta la pantalla de
       // afuera (si no, una parte de abajo del marco se brincaba; 2-nov-2026, Caja chica en el celular)
       if (!fuera && g && v !== window) fuera = g.y < 0 || g.y + g.h > innerHeight;
+      // o tapada por el recuadro que se desliza donde vive (el cuerpo de una ventana con su pie abajo): se ve en la pantalla,
+      // pero el recuadro la corta (24-nov-2026, los botones de una forma de Quo Facturita quedaban debajo del pie)
+      if (!fuera) fuera = recortada(el, r, v);
       if (fuera) el.scrollIntoView({ block: 'center', inline: 'nearest' });
     } catch (e) { /* se queda donde está */ }
+  }
+  function recortada(el, r, v) {
+    for (var x = el.parentElement; x && x !== el.ownerDocument.body; x = x.parentElement) {
+      var cs = v.getComputedStyle(x), oy = cs.overflowY, ox = cs.overflowX;
+      if ((oy === 'visible' && ox === 'visible') || (x.scrollHeight <= x.clientHeight + 1 && x.scrollWidth <= x.clientWidth + 1)) continue;
+      var c = x.getBoundingClientRect();
+      // solo si cabe en el recuadro (si es más grande, deslizar no la deja ver completa y la pantalla se quedaría brincando)
+      if (r.height <= c.height && (r.top < c.top - 1 || r.bottom > c.bottom + 1)) return true;
+      if (r.width <= c.width && (r.left < c.left - 1 || r.right > c.right + 1)) return true;
+    }
+    return false;
   }
   function clamp(v, a, b) { return Math.max(a, Math.min(v, b)); }
   // ¿se ve de verdad? (no escondida, no transparente, y al menos un pedazo dentro de la pantalla)
@@ -273,8 +308,10 @@
     pasos = partePasos(pasos);
     var visto = -1;   // el último paso que de verdad se enseñó (para que «(2 de 3)» siga en lo mismo sin volver a abrir nada)
     var capa = document.createElement('div'); capa.className = 'rc-capa';
-    capa.innerHTML = '<i class="rc-sa" aria-hidden="true"></i><div class="rc-luz" hidden></div><div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
-      + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p>'
+    capa.innerHTML = '<i class="rc-sa" aria-hidden="true"></i><div class="rc-luz" hidden></div>'
+      + '<i class="rc-muro" hidden></i><i class="rc-muro" hidden></i><i class="rc-muro" hidden></i><i class="rc-muro" hidden></i>'
+      + '<div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
+      + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p><div class="rc-toca" role="status" hidden></div>'
       + '<div class="rc-pie"><button type="button" class="rc-salta">Saltar</button><span class="rc-n" aria-live="polite"></span><button type="button" class="rc-atras">Atrás</button><button type="button" class="rc-sig">Siguiente</button></div></div>';
     document.body.appendChild(capa);
     var luz = capa.querySelector('.rc-luz'), flecha = capa.querySelector('.rc-flecha'), globo = capa.querySelector('.rc-globo');
@@ -291,15 +328,57 @@
     }
     texto.addEventListener('scroll', masTexto, { passive: true });
     var bAtras = capa.querySelector('.rc-atras'), bSig = capa.querySelector('.rc-sig'), bSalta = capa.querySelector('.rc-salta');
+    // de la mano: los cuatro muros que tapan lo que no es la parte (haz: 'clic'), la línea «Te toca» y quién escucha el clic
+    var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false;
     return new Promise(function (listo) {
       function termina(como) {
         if (!activo) return;
         activo = false; clearInterval(tick);
+        escuchaClic(null);
         sueltaMenu();
         removeEventListener('resize', acomoda); removeEventListener('keydown', tecla, true);
         capa.remove();
         try { antesFoco && antesFoco.focus && antesFoco.focus(); } catch (e) { /* sin foco */ }
         listo(como);
+      }
+      // de la mano, haz: 'clic': cuatro muros transparentes alrededor de la parte; solo ella se puede picar
+      function ponMuros(t, vw, vh) {
+        var r = t ? [[0, 0, vw, t.y], [0, t.y + t.h, vw, Math.max(0, vh - t.y - t.h)], [0, t.y, t.x, t.h], [t.x + t.w, t.y, Math.max(0, vw - t.x - t.w), t.h]] : [];
+        for (var k = 0; k < muros.length; k++) {
+          var m = muros[k]; m.hidden = !t;
+          if (t) { m.style.left = r[k][0] + 'px'; m.style.top = r[k][1] + 'px'; m.style.width = Math.max(0, r[k][2]) + 'px'; m.style.height = Math.max(0, r[k][3]) + 'px'; }
+        }
+      }
+      // al picar la parte (haz: 'clic') el recorrido sigue solo; el clic le llega a la pantalla como siempre
+      function alClic(ev) {
+        var p = pasos[i], t = ev.target;
+        if (!activo || yendo || hazAhora !== 'clic' || !el || !p || p.listo || !t || t.nodeType !== 1) return;
+        if (el !== t && !el.contains(t)) return;
+        yendo = true; var n = i;
+        setTimeout(function () { if (activo && i === n) muestra(n + 1, 1); }, 120);
+      }
+      function escuchaClic(d) {
+        if (docClic === d) return;
+        if (docClic) { try { docClic.removeEventListener('click', alClic, true); } catch (e) { /* ya no está */ } }
+        docClic = d;
+        if (d) d.addEventListener('click', alClic, true);
+      }
+      // el modo de la mano según si su parte está: sin parte, sale al centro con «Siguiente», como cualquier paso
+      function modo(p) {
+        var ultimo = i === pasos.length - 1;
+        hazAhora = p && p.haz && el ? p.haz : '';
+        capa.classList.toggle('rc-haz', !!hazAhora);
+        toca.hidden = !hazAhora;
+        if (hazAhora) toca.textContent = p.hazTexto || (hazAhora === 'clic' ? 'Te toca: pícale a lo que está iluminado.' : 'Te toca: hazlo ahí mismo y luego pica «Siguiente».');
+        bSig.hidden = hazAhora === 'clic' && !ultimo;
+        escuchaClic(hazAhora === 'clic' ? el.ownerDocument : null);
+        if (!hazAhora) ponMuros(null);
+      }
+      // la parte de un paso (o null si no está o no se ve)
+      function busca(p) {
+        var e = null;
+        try { e = typeof p.el === 'function' ? p.el() : document.querySelector(p.el); } catch (x) { e = null; }
+        return e && caja(e) ? e : null;
       }
       function acomoda() {
         var p = pasos[i]; if (!p) return;
@@ -311,7 +390,7 @@
         var bw = globo.offsetWidth, bh = globo.offsetHeight;
         masTexto();
         if (!g) {
-          luz.hidden = true; flecha.hidden = true;
+          luz.hidden = true; flecha.hidden = true; ponMuros(null);
           globo.style.left = Math.round((vw - bw) / 2) + 'px'; globo.style.top = Math.round(Math.max(m0, (vh - bh) / 2)) + 'px';
           return;
         }
@@ -321,6 +400,7 @@
         t.w = Math.min(t.w, vw - t.x - 4); t.h = Math.min(t.h, vh - t.y - 4);
         luz.hidden = false;
         luz.style.left = t.x + 'px'; luz.style.top = t.y + 'px'; luz.style.width = t.w + 'px'; luz.style.height = t.h + 'px';
+        ponMuros(hazAhora === 'clic' ? t : null, vw, vh);
         var hueco = 52, cx = t.x + t.w / 2, cy = t.y + t.h / 2, lado, x, y;
         if (t.y + t.h + hueco + bh <= vh - m1) lado = 'abajo';
         else if (t.y - hueco - bh >= m0) lado = 'arriba';
@@ -345,8 +425,9 @@
         dir = d || 1;
         if (n < 0) n = 0;
         if (n >= pasos.length) { termina('fin'); return; }
-        i = n;
+        i = n; yendo = false;
         var p = pasos[i];
+        escuchaClic(null); hazAhora = ''; ponMuros(null);
         // la parte siguiente del mismo paso: se queda con lo que ya está iluminado (sin cerrar ni volver a abrir el menú)
         if (p.__sigue && visto === n - 1 && el && caja(el)) { pinta(p, n); return; }
         globo.style.visibility = 'hidden'; luz.hidden = true; flecha.hidden = true;
@@ -367,10 +448,20 @@
           if (!el && !p.el) { muestra(n + dir, dir); return; }   // ese módulo no está en su menú: se brinca
         }
         if (!el && p.el) {
-          try { el = typeof p.el === 'function' ? p.el() : document.querySelector(p.el); } catch (e) { el = null; }
-          if (!el || !caja(el)) { muestra(n + dir, dir); return; }   // no está a la vista: se brinca
-          dentro(el);
-          if (!aLaVista(el)) { muestra(n + dir, dir); return; }      // fuera de la pantalla o escondida: se brinca
+          el = busca(p);
+          // de la mano: lo que se abre después de un clic (una ventana que pide sus datos) tarda; se espera, con «Un momento…»
+          var ms = 0; try { ms = typeof p.espera === 'function' ? +p.espera() || 0 : +p.espera || 0; } catch (x) { ms = 0; }
+          if (!el && ms > 0 && dir > 0) {
+            capa.classList.add('sin-luz'); espera.hidden = false;
+            for (var h = Date.now() + ms; !el && Date.now() < h;) { await dormir(200); if (!activo || i !== n) return; el = busca(p); }
+            espera.hidden = true;
+          }
+          if (el) { dentro(el); if (!aLaVista(el)) el = null; }
+          if (!el) {
+            // siNo: sale al centro con su texto («Siguiente»); si no, se brinca como siempre
+            if (p.siNo) { pinta(Object.assign({}, p, p.siNo, { haz: '' }), n); return; }
+            muestra(n + dir, dir); return;                           // no está a la vista: se brinca
+          }
         }
         pinta(p, n);
       }
@@ -382,19 +473,22 @@
         capa.querySelector('#rc-t').textContent = p.titulo || '';
         texto.textContent = p.texto || ''; texto.scrollTop = 0;
         capa.querySelector('.rc-n').textContent = (i + 1) + ' de ' + pasos.length;
-        bAtras.hidden = i === 0;
+        bAtras.hidden = i === 0 || !!p.sinAtras;
         var ultimo = i === pasos.length - 1;
         bSig.textContent = ultimo ? (def.fin || 'Terminar') : 'Siguiente';
         bSalta.hidden = ultimo || !!def.obligatorio;
+        modo(p);
         // si estaba escondido (se abrió algo antes), aparece ya en su lugar, sin resbalar desde donde estaba
         var oculto = globo.style.visibility === 'hidden';
         if (oculto) globo.style.transition = 'none';
         acomoda();
         if (oculto) { void globo.offsetHeight; globo.style.transition = ''; }
         globo.style.visibility = '';
-        try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+        // de la mano, el foco se queda en la pantalla (lo que la persona va a usar); si no, en «Siguiente»
+        if (!hazAhora) { try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ } }
       }
       function tecla(ev) {
+        if (hazAhora && ev.key !== 'Escape') return;   // de la mano: el teclado es de la pantalla
         if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); if (!def.obligatorio) termina('saltado'); }
         else if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.stopPropagation(); muestra(i + 1, 1); }
         else if (ev.key === 'ArrowLeft' && i > 0) { ev.preventDefault(); ev.stopPropagation(); muestra(i - 1, -1); }
@@ -409,7 +503,20 @@
       bSalta.onclick = function () { if (!def.obligatorio) termina('saltado'); };
       addEventListener('resize', acomoda);
       addEventListener('keydown', tecla, true);
-      tick = setInterval(function () { if (activo && globo.style.visibility !== 'hidden') acomoda(); }, 500);   // sigue a la parte si algo se mueve
+      tick = setInterval(function () {   // sigue a la parte si algo se mueve
+        if (!activo || globo.style.visibility === 'hidden') return;
+        var p = pasos[i];
+        if (p && p.haz && p.el && visto === i) {
+          // de la mano: la pantalla se volvió a pintar (otro RFC, una búsqueda): se busca otra vez la parte
+          if ((el && !el.isConnected) || !el) {
+            var antes0 = el; el = busca(p);
+            if (el || antes0) pinta(el || !p.siNo ? p : Object.assign({}, p, p.siNo, { haz: '' }), i);
+          }
+          // listo(): ya lo hizo (palomeó una factura, se cerró la ventana): sigue solo
+          if (p.listo && !yendo) { var ok = false; try { ok = !!p.listo(); } catch (e) { ok = false; } if (ok) { yendo = true; muestra(i + 1, 1); return; } }
+        }
+        acomoda();
+      }, 400);
       muestra(0, 1);
     });
   }
