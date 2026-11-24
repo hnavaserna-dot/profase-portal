@@ -163,6 +163,12 @@ button,select,input,textarea{font:inherit;color:inherit}
 .sinp b{font-family:var(--f-display);font-stretch:85%;font-size:16px;color:var(--ink)}
 .sinp span{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;max-width:44ch}
 .sinp svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.8}
+/* 506: el carrusel (se desliza) y el Reel (video vertical) */
+.carr{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:0;background:var(--surface-2);scrollbar-width:thin}
+.carr .foto{flex:0 0 100%;scroll-snap-align:start}
+.carr-n{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 12px 0;font-size:12px;color:var(--muted)}
+.reel{display:block;width:100%;max-height:560px;aspect-ratio:9/16;background:#000;object-fit:contain}
+.anterior{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0;font-size:12.5px;color:var(--muted)}
 .pub .info{padding:10px 12px 0;display:grid;gap:6px}
 .msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere}
 .msg.mal{background:var(--red-soft);color:var(--red)}
@@ -254,7 +260,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     <div style="min-width:0">
       <div class="eti">Administración</div>
       <h1>Campañas Facebook</h1>
-      <p>Cada publicación como saldrá en su página de Facebook (Profase Fiscal o Sistemas Quo). Nada se programa sin tu visto bueno.</p>
+      <p>Cada publicación como saldrá en sus redes (Facebook e Instagram) de Profase Fiscal o Sistemas Quo. Nada sale sin tu visto bueno.</p>
     </div>
   </div>
 </div></div>
@@ -281,6 +287,7 @@ button,select,input,textarea{font:inherit;color:inherit}
       <button type="button" role="tab" data-t="med" aria-selected="false">Cómo les fue</button>
     </div>
     <div class="cias" id="cias" role="group" aria-label="Campaña"></div>
+    <div class="anterior" id="anterior" hidden></div>
     <div id="lista"></div>
     <div id="med" hidden>
       <div class="bar">
@@ -310,7 +317,7 @@ button,select,input,textarea{font:inherit;color:inherit}
         </div>
       </div>
     </div>
-    <p class="pie" id="pie">Lo que autorizas se programa solo en Facebook en cuanto cabe (Meta deja programar hasta 29 días antes). Si pides un cambio a una que ya estaba programada, se quita de Facebook hasta que autorices la versión corregida; la tarea de Facebook de esa página la rehace. Lo que pasa su hora sin tu visto bueno no se publica. Nunca se promociona ni se paga nada.</p>
+    <p class="pie" id="pie">Lo que autorizas se programa solo en Facebook en cuanto cabe (Meta deja programar hasta 29 días antes); en Instagram, que no deja programar, el CRM la publica sola a su hora (si a los 15 minutos no salió, ya no sale). Si pides un cambio a una que ya estaba programada, se quita de Facebook hasta que autorices la versión corregida; la tarea de Facebook de esa página la rehace. Lo que pasa su hora sin tu visto bueno no se publica. Nunca se promociona ni se paga nada.</p>
   </div>
 </div>
 
@@ -321,6 +328,11 @@ button,select,input,textarea{font:inherit;color:inherit}
   'use strict';
   var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
   var EST = null, CONSULTA = false, DATOS = null, TAB = 'aut', CAMP = '', URLS = {}, SEL = '', VIGILA = null;
+  // Lo activo y lo anterior (24-nov-2026: «La vista enseña solo lo activo (por autorizar, autorizado, programado y publicado con su
+  // liga) y un filtro para ver lo anterior»): lo que no se publica o pasó su hora sin salir, solo con «Ver lo anterior»
+  var ANT = false, ANTERIOR = ['no_publicar', 'vencida'];
+  function activa(p) { return ANTERIOR.indexOf(p.estado) < 0; }
+  function seVe(p) { return ANT || activa(p); }
   // La página de Facebook que se ve (500, 23-nov-2026: «así como tenemos profase; ahora quo»): cada campaña es de una
   var PAGINAS = { profase: { nombre: 'Profase Fiscal', img: 'img/logo.png' }, quo: { nombre: 'Sistemas Quo', img: 'https://www.quosistemas.com/img/icono-192.png' } };
   var PAG = /[?&]pagina=quo\b/.test(location.search) ? 'quo' : 'profase';
@@ -337,6 +349,11 @@ button,select,input,textarea{font:inherit;color:inherit}
   // 505 (24-nov-2026: «que cada publicación diga en qué red sale»): la red y el formato de cada publicación
   var REDES = { facebook: 'Facebook', instagram: 'Instagram' }, FORMATOS = { imagen: 'Imagen', carrusel: 'Carrusel', reel: 'Reel' };
   function conPieza(p) { return !p.sin_pieza; }
+  function redes(p) { return p.redes && p.redes.length ? p.redes : ['facebook']; }
+  function vaA(p, r) { return redes(p).indexOf(r) >= 0; }
+  function medios(p) { return (p.medios && p.medios.length) ? p.medios : (p.imagen ? [{ ruta: p.imagen, tipo: /\.mp4$/i.test(p.imagen) ? 'video' : 'imagen' }] : []); }
+  function ligaFb(p) { return p.liga && /^https:\/\/(www\.)?facebook\.com\//.test(p.liga) ? p.liga : ''; }
+  function ligaIg(p) { return p.ig_liga && /^https:\/\/(www\.)?instagram\.com\//.test(p.ig_liga) ? p.ig_liga : ''; }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -382,7 +399,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (ve) $('conexion').textContent = 'La página ' + PAGINAS[PAG].nombre + ' todavía no está conectada' + (cx.motivo ? ': ' + cx.motivo : '') + '. Puedes revisar y autorizar; lo autorizado entra a Facebook en cuanto se conecte. Qué hacer: pídele a Claude los pasos para conectarla (sacas la llave de la página con tu cuenta de Facebook y la pegas tú en GitHub).';
   }
   function pintaCias() {
-    var cs = (DATOS.campanas || []).filter(delPag);
+    var cs = (DATOS.campanas || []).filter(delPag).filter(function (c) { return (c.pubs || []).some(seVe); });
     $('cias').hidden = cs.length < 2;
     $('cias').innerHTML = '<button type="button" data-c="" aria-pressed="' + (!CAMP) + '">Todas las campañas</button>'
       + cs.map(function (c) { return '<button type="button" data-c="' + esc(c.id) + '" aria-pressed="' + (CAMP === c.id) + '">' + esc(c.nombre) + '</button>'; }).join('');
@@ -394,8 +411,15 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (p.estado === 'cambio_pedido') h += '<div class="msg ojo"><b>Pediste:</b> ' + esc(p.cambio) + (p.cambio_en ? ' <span class="mut">(' + esc(fechaHora(p.cambio_en)) + ')</span>' : '') + '<br>La tarea de Facebook la rehace y te la vuelve a enseñar aquí.</div>';
     if (p.estado === 'no_publicar' && p.no_motivo) h += '<div class="msg">No se publica: ' + esc(p.no_motivo) + '</div>';
     if (p.estado === 'autorizada' && p.previa) h += '<div class="msg az">' + esc(p.autorizada_nota || 'Autorizada antes del CRM') + '.</div>';
-    if (p.estado === 'autorizada' && p.entra && !p.error) h += '<div class="msg az">Autorizada. Entra sola a Facebook desde el ' + esc(fecha(p.entra)) + ' (Meta deja programar hasta 29 días antes).</div>';
-    else if (p.estado === 'autorizada' && !p.error) h += '<div class="msg az">Autorizada. Se está programando en Facebook (tarda un par de minutos).</div>';
+    if (p.estado === 'autorizada' && p.entra && !p.error && vaA(p, 'facebook')) h += '<div class="msg az">Autorizada. Entra sola a Facebook desde el ' + esc(fecha(p.entra)) + ' (Meta deja programar hasta 29 días antes).</div>';
+    else if (p.estado === 'autorizada' && !p.error && vaA(p, 'facebook')) h += '<div class="msg az">Autorizada. Se está programando en Facebook (tarda un par de minutos).</div>';
+    // 506: Instagram no deja programar: el CRM la publica a su hora
+    if (vaA(p, 'instagram') && !p.sin_pieza) {
+      if (p.ig_estado === 'publicada') h += '<div class="msg bien">Ya salió en Instagram.</div>';
+      else if (p.ig_estado === 'vencida') h += '<div class="msg mal">No alcanzó a salir en Instagram a su hora: ahí ya no sale.</div>';
+      else if (['autorizada', 'programada', 'publicada'].indexOf(p.estado) >= 0) h += '<div class="msg az">En Instagram sale sola a su hora (' + esc(p.hora) + '): Instagram no deja programar y el CRM la publica en ese momento.</div>';
+      if (p.ig_error && !p.ig_estado && ['autorizada', 'programada', 'publicada'].indexOf(p.estado) >= 0) h += '<div class="msg mal">No se pudo en Instagram: ' + esc(p.ig_error) + '. Se vuelve a intentar sola mientras alcance su hora.</div>';
+    }
     if (p.estado === 'programada') h += '<div class="msg bien">Ya está programada en Facebook para el ' + esc(p.cuando) + '.' + (p.revisar ? ' Revisar: ' + esc(p.revisar) + '.' : '') + '</div>';
     if (p.error && ['autorizada', 'programada', 'por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0) h += '<div class="msg mal">No se pudo en Facebook: ' + esc(p.error) + '. Se vuelve a intentar sola.</div>';
     if (p.en_facebook && ['por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0) h += '<div class="msg ojo">Se está quitando de Facebook (un par de minutos).</div>';
@@ -414,23 +438,45 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="edita">Corregir texto</button>');
     if (['no_publicar', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="regresa">Regresar a por autorizar</button>');
     if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn peligro chico" type="button" data-a="no">No publicar</button>');
-    if (p.estado === 'publicada' && p.liga && /^https:\/\/(www\.)?facebook\.com\//.test(p.liga)) b.push('<a class="btn chico" href="' + esc(p.liga) + '" target="_blank" rel="noopener">Ver en Facebook</a>');
+    if (ligaFb(p) && (p.estado === 'publicada' || p.fb_publicada)) b.push('<a class="btn chico" href="' + esc(ligaFb(p)) + '" target="_blank" rel="noopener">Ver en Facebook</a>');
+    if (ligaIg(p)) b.push('<a class="btn chico" href="' + esc(ligaIg(p)) + '" target="_blank" rel="noopener">Ver en Instagram</a>');
     return b.length ? '<div class="acc">' + b.join('') + '</div>' : '';
   }
+  // 506: la pieza como saldrá: una imagen, el carrusel (se desliza) o el Reel (video)
+  function foto(p, r, i, n) {
+    var u = URLS[r];
+    return '<button class="foto" type="button" data-a="foto" data-r="' + esc(r) + '" aria-label="Ver la imagen ' + (n > 1 ? (i + 1) + ' de ' + n + ' ' : '') + 'en grande">'
+      + (u ? '<img src="' + esc(u) + '" alt="Imagen ' + (n > 1 ? (i + 1) + ' de ' + n + ' ' : '') + 'de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">' : '<span class="sin">Cargando la imagen…</span>') + '</button>';
+  }
+  function video(p, r) {
+    var u = URLS[r];
+    return u ? '<video class="reel" controls playsinline preload="metadata" src="' + esc(u) + '" aria-label="Reel de la publicación ' + esc(p.tema || p.id) + '"></video>'
+      : '<div class="foto" data-v="' + esc(r) + '" style="aspect-ratio:9/16;max-height:560px"><span class="sin">Cargando el video…</span></div>';
+  }
+  function pieza(p) {
+    var ms = medios(p);
+    if (!ms.length) return '';
+    if (p.formato === 'reel' || ms[0].tipo === 'video') return video(p, ms[0].ruta);
+    if (ms.length > 1) return '<div class="carr-n"><span>Carrusel · ' + ms.length + ' piezas</span><span>Desliza →</span></div><div class="carr">'
+      + ms.map(function (m, i) { return m.tipo === 'video' ? video(p, m.ruta) : foto(p, m.ruta, i, ms.length); }).join('') + '</div>';
+    return foto(p, ms[0].ruta, 0, 1);
+  }
   function tarjeta(p) {
-    var e = ESTADOS[p.estado] || [p.estado, ''], u = URLS[p.imagen];
+    var e = ESTADOS[p.estado] || [p.estado, ''];
     var largo = String(p.texto || '').length > 360 || String(p.texto || '').split('\n').length > 7;
     return '<article class="pub' + (SEL === p.id ? ' sel' : '') + '" data-p="' + esc(p.id) + '">'
       + '<div class="top"><span class="cuando">' + esc(p.cuando) + '</span>' + chip(e[0], e[1]) + '</div>'
       + (p.tema ? '<div class="mut" style="padding:0 12px 8px;font-weight:600;color:var(--ink)">' + esc(p.tema) + '</div>' : '')
-      + '<div class="redes"><span>Sale en</span>' + (p.redes || ['facebook']).map(function (r) { return chip(REDES[r] || r, 'az'); }).join('') + chip(FORMATOS[p.formato] || 'Imagen', '') + '</div>'
+      + '<div class="redes"><span>Sale en</span>' + redes(p).map(function (r) {
+          var ya = r === 'facebook' ? (p.fb_publicada || (p.estado === 'publicada' && !!ligaFb(p))) : p.ig_estado === 'publicada';
+          return chip((REDES[r] || r) + (ya ? ' · publicada' : ''), ya ? 'ok' : 'az'); }).join('') + chip(FORMATOS[p.formato] || 'Imagen', '') + '</div>'
       + '<div class="fbcab"><img src="' + esc(PAGINAS[PAG].img) + '" alt=""><div><b>' + esc(PAGINAS[PAG].nombre) + '</b><span>' + esc(p.cuando) + '</span></div></div>'
       + '<div class="txt' + (largo ? ' corto' : '') + '">' + esc(p.texto) + '</div>'
       + (largo ? '<button class="mas" type="button" data-a="mas">Ver todo el texto</button>' : '')
       + (p.sin_pieza
         ? '<div class="sinp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/></svg><b>Sin pieza todavía</b>'
           + (p.pieza ? '<span>' + esc(p.pieza) + '</span>' : '<span>La pieza (' + esc((FORMATOS[p.formato] || 'imagen').toLowerCase()) + ') todavía no llega.</span>') + '</div>'
-        : '<button class="foto" type="button" data-a="foto" aria-label="Ver la imagen en grande">' + (u ? '<img src="' + esc(u) + '" alt="Imagen de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">' : '<span class="sin">Cargando la imagen…</span>') + '</button>')
+        : pieza(p))
       + notas(p)
       + (p.fuentes ? '<details><summary>Lo que cita y sus fuentes</summary><div class="cuerpo">' + esc(p.fuentes) + '</div></details>' : '')
       + ((p.bitacora || []).length ? '<details><summary>Bitácora</summary><ul class="bit">' + p.bitacora.map(function (x) { return '<li><b>' + esc(x.que) + '</b> · ' + esc(x.quien) + ' · ' + esc(fechaHora(x.hora)) + (x.texto ? '<br>' + esc(x.texto) : '') + '</li>'; }).join('') + '</ul></details>' : '')
@@ -446,7 +492,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     (DATOS.campanas || []).forEach(function (c) {
       if (!delPag(c)) return;
       if (CAMP && c.id !== CAMP) return;
-      var ps = (c.pubs || []).filter(function (p) { return !est || est.indexOf(p.estado) >= 0; });
+      var ps = (c.pubs || []).filter(function (p) { return (!est || est.indexOf(p.estado) >= 0) && seVe(p); });
       if (!ps.length) return;
       hay = true;
       var por = (c.pubs || []).filter(function (p) { return p.estado === 'por_autorizar' && !p.paso && conPieza(p); }).length, k = c.cuenta || {};
@@ -454,22 +500,31 @@ button,select,input,textarea{font:inherit;color:inherit}
       html += '<section class="camp" data-camp="' + esc(c.id) + '"><header><div style="min-width:0"><h2>' + esc(c.nombre) + '</h2>'
         + '<div class="mut">' + esc(c.n) + (c.n === 1 ? ' publicación' : ' publicaciones') + (c.desde ? ', del ' + esc(fecha(c.desde)) + ' al ' + esc(fecha(c.hasta)) : '') + (c.documento ? ' · ' + esc(c.documento) : '') + '</div>'
         + (c.resumen ? '<p class="res">' + esc(c.resumen) + '</p>' : '')
-        + '<div class="cuenta">' + Object.keys(ESTADOS).filter(function (s) { return k[s]; }).map(function (s) { return chip(ESTADOS[s][0] + ': ' + k[s], ESTADOS[s][1]); }).join('') + (esperan ? chip('Esperan su pieza: ' + esperan, 'ojo') : '') + '</div></div>'
+        + '<div class="cuenta">' + Object.keys(ESTADOS).filter(function (s) { return k[s] && (ANT || ANTERIOR.indexOf(s) < 0); }).map(function (s) { return chip(ESTADOS[s][0] + ': ' + k[s], ESTADOS[s][1]); }).join('') + (esperan ? chip('Esperan su pieza: ' + esperan, 'ojo') : '') + '</div></div>'
         + (por && !CONSULTA ? '<div class="acciones"><button class="btn acento" type="button" data-todo="' + esc(c.id) + '">Autorizar ' + (por === 1 ? 'la que falta' : 'las ' + por + ' que faltan') + '</button></div>' : '')
         + '</header><div class="pubs">' + ps.map(tarjeta).join('') + '</div></section>';
     });
+    var nAnt = pubs().filter(function (p) { return !activa(p) && (!CAMP || p.campana === CAMP); }).length;
+    $('anterior').hidden = !nAnt && !ANT;
+    $('anterior').innerHTML = ANT ? '<span>Estás viendo también lo anterior (lo que no se publica o pasó su hora sin salir).</span><button class="btn chico" type="button" id="ant-b">Ver solo lo activo</button>'
+      : '<span>Solo lo activo: por autorizar, autorizado, programado y publicado.</span><button class="btn chico" type="button" id="ant-b">Ver lo anterior (' + nAnt + ')</button>';
+    if ($('ant-b')) $('ant-b').onclick = function () { ANT = !ANT; if (!ANT && CAMP && !pubs().some(function (p) { return p.campana === CAMP && activa(p); })) CAMP = ''; pinta(); };
     $('lista').innerHTML = hay ? html : '<div class="nota">' + ({ aut: 'No tienes nada por autorizar.', cam: 'No hay cambios pedidos.', pro: 'No hay publicaciones autorizadas ni programadas.', pub: 'Todavía no se publica nada.', tod: 'No hay publicaciones.' }[TAB]) + '</div>';
     $('lista').querySelectorAll('[data-todo]').forEach(function (b) { b.onclick = function () { autorizaTodo(b.getAttribute('data-todo')); }; });
     $('lista').querySelectorAll('.pub').forEach(function (el) {
       var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0];
       el.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { accion(b.getAttribute('data-a'), p, el, b); }; });
     });
-    var faltan = []; $('lista').querySelectorAll('.pub').forEach(function (el) { var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0]; if (p && p.imagen && !URLS[p.imagen]) faltan.push(p.imagen); });
+    var faltan = []; $('lista').querySelectorAll('.pub').forEach(function (el) { var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0]; if (p) medios(p).forEach(function (m) { if (m.ruta && !URLS[m.ruta]) faltan.push(m.ruta); }); });
     if (faltan.length) urls(faltan).then(function () {
-      $('lista').querySelectorAll('.pub').forEach(function (el) {
-        var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0], f = el.querySelector('.foto');
-        if (p && f && URLS[p.imagen] && !f.querySelector('img')) f.innerHTML = '<img src="' + esc(URLS[p.imagen]) + '" alt="Imagen de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">';
-        else if (p && f && !URLS[p.imagen] && !f.querySelector('img')) f.innerHTML = '<span class="sin">No se pudo cargar la imagen</span>';
+      $('lista').querySelectorAll('.foto[data-r]').forEach(function (f) {
+        var r = f.getAttribute('data-r');
+        if (f.querySelector('img')) return;
+        f.innerHTML = URLS[r] ? '<img src="' + esc(URLS[r]) + '" alt="' + esc(f.getAttribute('aria-label').replace(/^Ver la /, '').replace(/ en grande$/, '')) + '" loading="lazy">' : '<span class="sin">No se pudo cargar la imagen</span>';
+      });
+      $('lista').querySelectorAll('[data-v]').forEach(function (f) {
+        var r = f.getAttribute('data-v');
+        f.outerHTML = URLS[r] ? '<video class="reel" controls playsinline preload="metadata" src="' + esc(URLS[r]) + '" aria-label="Reel de la publicación"></video>' : '<div class="foto" style="aspect-ratio:9/16;max-height:560px"><span class="sin">No se pudo cargar el video</span></div>';
       });
     });
     vigila();
@@ -755,7 +810,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (!p) return;
     if (a === 'medir') { var mm = MEDPUB[p.id]; if (mm) abreMedicion(mm.post); return; }
     if (a === 'mas') { var t = el.querySelector('.txt'); var corto = t.classList.toggle('corto'); b.textContent = corto ? 'Ver todo el texto' : 'Ver menos'; return; }
-    if (a === 'foto') { if (!URLS[p.imagen]) return; $('visor-img').src = URLS[p.imagen]; $('visor-img').alt = 'Imagen de la publicación ' + (p.tema || p.id); $('visor').hidden = false; try { $('visor-cierra').focus(); } catch (e) {} return; }
+    if (a === 'foto') { var r0 = (b && b.getAttribute('data-r')) || p.imagen; if (!URLS[r0]) return; $('visor-img').src = URLS[r0]; $('visor-img').alt = 'Imagen de la publicación ' + (p.tema || p.id); $('visor').hidden = false; try { $('visor-cierra').focus(); } catch (e) {} return; }
     if (a === 'autoriza') {
       b.disabled = true;
       try { await rpc('fb_autoriza', { p_campana: p.campana, p_pubs: [p.id] }); await hecho('Autorizada la del ' + p.cuando + '. ' + (p.entra ? 'Entra sola a Facebook cuando quepa.' : 'En un par de minutos queda programada en Facebook.')); }
@@ -790,7 +845,7 @@ button,select,input,textarea{font:inherit;color:inherit}
   // mientras algo autorizado entra a Facebook (o se quita), se vuelve a preguntar cada 30 s, hasta 6 minutos y solo si se ve
   function vigila() {
     var pendiente = pubsTodas().some(function (p) {
-      return (p.estado === 'autorizada' && !p.entra && !p.error && !p.paso) || (p.en_facebook && ['por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0);
+      return (p.estado === 'autorizada' && vaA(p, 'facebook') && !p.entra && !p.error && !p.paso) || (p.en_facebook && ['por_autorizar', 'cambio_pedido', 'no_publicar'].indexOf(p.estado) >= 0);
     });
     if (!pendiente) { clearInterval(VIGILA); VIGILA = null; return; }
     if (VIGILA) return;
