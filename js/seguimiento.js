@@ -37,6 +37,9 @@
    A»; con ideas de la propuesta #19 de Gabriel Cavazos), todo opcional y sin cambiar lo de arriba:
      ancho: true,                    // dos columnas en computadora y iPad acostado (a la izquierda qué es y cómo va; a la
                                      // derecha lo que se trabaja); en pantallas más chicas, una sola columna
+                                     // ancho: 'uno' (24-nov-2026, Multinacional › Cotizaciones): la misma ventana ancha con
+                                     // una sola columna, la de «derecha» (sin pestañas ni plática): para una forma con una
+                                     // tabla ancha, que con dos columnas dejaba la izquierda vacía
      pestanas: [{id, t, html o nodo, nid}],   // pestañas a la derecha; «Comentarios» (la plática) va primero solo; nid: el id
                                      // del número de la pestaña, para que la página lo ponga al día
      pestana: 'id',                  // la que se ve al abrir (si no, Comentarios)
@@ -332,6 +335,8 @@
     + '.segv .sg-der .sg-tabs{padding:4px 22px 0}'
     + '.segv .sg-der .sg-pans{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 18px}'
     + '.segv .sg-der .sg-pans.sg-sola{padding-top:18px}}'
+    + '.segv .sg-uno .sg-body>.sg-col:first-child{display:none}.segv .sg-uno .sg-col.sg-der{border-left:0;margin-top:0}'
+    + '@media (min-width:900px){.sg-modal.sg-ancho.sg-uno .sg-body{grid-template-columns:minmax(0,1fr)}}'
     + '@media (max-width:899px){.segv .sg-col.sg-der{margin-top:18px}.segv .sg-der .sg-tabs{position:sticky;top:-20px;z-index:1;background:var(--sg-sf)}}'
     // los pasos en una línea y «Qué falta» (11-nov-2026: eran del Panel de trabajo; una sola versión para todas las fichas)
     + '.segv .sg-pasos{margin:16px 0 0}'
@@ -521,7 +526,7 @@
       : TODAS ? '<div class="sg-body">' + izqHTML + '<div class="sg-der">' + derHTML + '</div>' + (o.detalles || '') + '</div>'
       : sinPl ? '<div class="sg-body">' + izqHTML + '<div data-derecha>' + DER + '</div>' + (o.detalles || '') + '</div>' : null;
     var html = '<div class="segv" role="dialog" aria-modal="true" aria-label="' + esc(o.titulo || 'Seguimiento') + '">'
-      + '<div class="sg-modal' + (ancho ? ' sg-ancho' : '') + (TODAS ? ' sg-fijo' : '') + '">'
+      + '<div class="sg-modal' + (ancho ? ' sg-ancho' : '') + (o.ancho === 'uno' && !TODAS ? ' sg-uno' : '') + (TODAS ? ' sg-fijo' : '') + '">'
       + '<div class="sg-head"><div><p class="kick">' + esc((o.kick || '') + nCuantos) + '</p><h2>' + esc(o.titulo || 'Seguimiento de revisión') + '</h2></div>'
       + '<div class="sg-nav">'
       + (hayNav ? '<button type="button" class="sg-x seg-fl" data-nav="-1" title="Anterior" aria-label="Anterior"' + (nav.ant ? '' : ' disabled') + '>‹</button>'
