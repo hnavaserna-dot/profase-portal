@@ -40,7 +40,18 @@
                      pantalla, regresar no tiene a dónde).
    En un paso «haz», el teclado es de la página (las flechas, Tab y Enter no mueven el recorrido; Esc sigue igual). Si la
    parte se vuelve a pintar (la pantalla se recarga), se busca otra vez; si ya no está, el globo sale al centro con «Siguiente».
-   Nunca obliga a guardar, mandar ni timbrar nada: el último clic de verdad lo da la persona. */
+   Nunca obliga a guardar, mandar ni timbrar nada: el último clic de verdad lo da la persona.
+   «Ver después» (Héctor Daniel Nava, 24-nov-2026, 12:03 y 12:08: «pongas algo como ver después o algo para que si están en
+   medio de algo no los saques de lo que están haciendo»; «así es»): un recorrido que sale solo (no lo pidió la persona en el
+   «?») empieza con un globo chico al centro, «¿Lo vemos ahora?», que no mueve nada de la pantalla: «Empezar» (el mismo botón
+   de «Siguiente», .rc-sig), «Ver después» y, si no es obligatorio, «Saltar». «Ver después» también va en cada paso. Con
+   «Ver después» el recorrido se quita, la persona sigue donde estaba y no cuenta como visto: vuelve a salir en una hora o la
+   próxima vez que entre, lo que pase primero (lo que falta se guarda en sessionStorage, «profase-rc-despues»; la entrada lo
+   borra). Los obligatorios también lo traen y salen hasta que se terminan. La promesa da 'despues'; quien lo lanza no lo
+   marca como visto. Opciones: solo (true: salió solo; si no se dice, salió solo salvo que la persona lo haya pedido en los
+   últimos segundos con PROFASE_RECORRIDO.pedido(), que llama el «?»), pedido (true: lo pidió la persona: sin globo de
+   inicio ni «Ver después»), id (para acordarse de «Ver después»; si no, sale del primer paso) y otraVez (la función que lo
+   vuelve a lanzar cuando se cumple la hora, en cuanto la pantalla está libre). */
 (function () {
   'use strict';
   if (window.PROFASE_RECORRIDO) return;
@@ -70,7 +81,13 @@
     + '.rc-n{flex:1;font-size:12.5px;color:var(--muted,#5A6577)}'
     + '.rc-pie button{font:inherit;font-size:14px;font-weight:700;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit}'
     + '.rc-pie .rc-sig{background:#F07A1E;border-color:#F07A1E;color:#14233F}'
-    + '.rc-pie .rc-salta{border:0;background:none;color:var(--muted,#5A6577);font-weight:600;padding:8px 4px}'
+    + '.rc-pie .rc-salta,.rc-pie .rc-despues{border:0;background:none;color:var(--muted,#5A6577);font-weight:600;padding:8px 4px}'
+    + '.rc-pie .rc-despues{color:var(--navy,#1F3864);text-decoration:underline;text-underline-offset:3px}'
+    + ':root[data-theme="dark"] .rc-pie .rc-despues{color:#9DB8E8}'
+    // con «Ver después» el pie va en dos renglones: arriba «Ver después», «Saltar» y el número; abajo Atrás y Siguiente
+    + '.rc-brk{display:none}.rc-pie.con-despues{flex-wrap:wrap;row-gap:6px}.rc-pie.con-despues .rc-brk{display:block;flex-basis:100%;height:0}'
+    + '.rc-pie.con-despues .rc-n{text-align:right}.rc-pie.con-despues .rc-atras{margin-left:auto}'
+    + '.rc-pie.con-despues .rc-atras[hidden]+.rc-sig{margin-left:auto}'
     // de la mano: lo iluminado se puede usar; con haz: 'clic', unos muros transparentes tapan todo lo demás
     + '.rc-capa.rc-haz{pointer-events:none}.rc-capa.rc-haz .rc-globo,.rc-capa.rc-haz .rc-muro{pointer-events:auto}'
     + '.rc-muro{position:fixed;background:transparent}'
@@ -195,6 +212,46 @@
   }
 
   var activo = false, cierre = null;
+
+  /* «Ver después» (24-nov-2026): lo que falta para que vuelva a salir cada recorrido, en esta sesión del navegador (al abrir
+     otra vez el portal, sessionStorage empieza vacío: sale otra vez) */
+  var DESPUES_MS = 60 * 60 * 1000, DESPUES_K = 'profase-rc-despues', timers = {}, pedidoHasta = 0;
+  function despuesLee() { try { return JSON.parse(sessionStorage.getItem(DESPUES_K) || '{}') || {}; } catch (e) { return {}; } }
+  function despuesGuarda(o) { try { sessionStorage.setItem(DESPUES_K, JSON.stringify(o)); } catch (e) { /* sin almacenamiento */ } }
+  function despuesFalta(k) { var h = +despuesLee()[k] || 0, f = h - Date.now(); return f > 0 ? f : 0; }
+  function despuesPon(k) { var o = despuesLee(); o[k] = Date.now() + DESPUES_MS; despuesGuarda(o); }
+  function despuesQuita(k) {
+    var o = despuesLee(); if (o[k]) { delete o[k]; despuesGuarda(o); }
+    if (timers[k]) { clearTimeout(timers[k]); delete timers[k]; }
+  }
+  function clave(def) {
+    if (def.id) return String(def.id);
+    var p = def.pasos && def.pasos[0];
+    return 'p:' + String((p && p.titulo) || '').slice(0, 80) + '|' + def.pasos.length;
+  }
+  // una ventana que pide respuesta (fuera de un recorrido) a la vista
+  function hayVentanaG() {
+    return Array.prototype.some.call(document.querySelectorAll('[aria-modal="true"]'), function (d) {
+      if (d.closest('.rc-capa') || !d.getClientRects().length) return false;
+      var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
+    });
+  }
+  // libre para volver a enseñar un recorrido: sin otro recorrido, ventana, llamada, «No molestar» ni alguien escribiendo
+  function libre() {
+    if (activo || document.hidden || hayVentanaG()) return false;
+    try { var P = window.PORTAL; if (P && P.ocupado && P.ocupado()) return false; } catch (e) { /* sigue */ }
+    return !document.documentElement.classList.contains('pm-cargando');
+  }
+  function cuandoLibre(fn) {
+    var vuelta = function () { if (libre()) { try { fn(); } catch (e) { /* un recorrido nunca rompe la página */ } } else setTimeout(vuelta, 3000); };
+    vuelta();
+  }
+  // cuando se cumple la hora, quien lo lanzó lo vuelve a lanzar (otraVez), en cuanto la pantalla esté libre
+  function programa(k, otraVez) {
+    if (typeof otraVez !== 'function' || timers[k]) return;
+    timers[k] = setTimeout(function () { delete timers[k]; cuandoLibre(otraVez); }, Math.max(1000, despuesFalta(k) + 500));
+  }
+  function pedidoVigente() { return Date.now() < pedidoHasta; }
   /* «Primero» (Héctor Daniel, 1-nov-2026: «el primer pop que vean… sea el de deja de usar el Access… y luego ya empiezas
      el tour»): el aviso «¡Adiós Access, hola CRM!» (adios_access_tab.js) y el recorrido general (bienvenida_tab.js) se
      anotan aquí con primero(fn); mientras alguno le falte a la persona (fn() verdadero), activo() dice que sí y ningún otro
@@ -296,6 +353,12 @@
   }
   function corre(def) {
     if (activo || !def || !def.pasos || !def.pasos.length) return Promise.resolve('ocupado');
+    // ¿salió solo o lo pidió la persona (el «?», en los últimos segundos)? Solo el que sale solo trae «Ver después»
+    var pidio = def.pedido === true || (def.solo == null && pedidoVigente());
+    if (pidio) pedidoHasta = 0;
+    var solo = !pidio && def.solo !== false, k = clave(def);
+    // le dio «Ver después» hace menos de una hora: todavía no; quien lo lanzó lo vuelve a lanzar al cumplirse
+    if (solo && despuesFalta(k) > 0) { programa(k, def.otraVez); return Promise.resolve('despues'); }
     activo = true;
     if (!document.getElementById('rc-css')) { var st = document.createElement('style'); st.id = 'rc-css'; st.textContent = CSS; document.head.appendChild(st); }
     var pasos = def.pasos.slice(), i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
@@ -312,7 +375,8 @@
       + '<i class="rc-muro" hidden></i><i class="rc-muro" hidden></i><i class="rc-muro" hidden></i><i class="rc-muro" hidden></i>'
       + '<div class="rc-flecha" hidden>' + FLECHA + '</div><div class="rc-espera" role="status" hidden><i></i>Un momento…</div>'
       + '<div class="rc-globo" role="dialog" aria-modal="true" aria-labelledby="rc-t" aria-describedby="rc-p"><div class="rc-cab"></div><h3 id="rc-t"></h3><p id="rc-p"></p><div class="rc-toca" role="status" hidden></div>'
-      + '<div class="rc-pie"><button type="button" class="rc-salta">Saltar</button><span class="rc-n" aria-live="polite"></span><button type="button" class="rc-atras">Atrás</button><button type="button" class="rc-sig">Siguiente</button></div></div>';
+      + '<div class="rc-pie"><button type="button" class="rc-salta">Saltar</button><button type="button" class="rc-despues" hidden>Ver después</button>'
+      + '<span class="rc-n" aria-live="polite"></span><i class="rc-brk" aria-hidden="true"></i><button type="button" class="rc-atras">Atrás</button><button type="button" class="rc-sig">Siguiente</button></div></div>';
     document.body.appendChild(capa);
     var luz = capa.querySelector('.rc-luz'), flecha = capa.querySelector('.rc-flecha'), globo = capa.querySelector('.rc-globo');
     var espera = capa.querySelector('.rc-espera'), texto = capa.querySelector('#rc-p'), sa = capa.querySelector('.rc-sa');
@@ -328,6 +392,11 @@
     }
     texto.addEventListener('scroll', masTexto, { passive: true });
     var bAtras = capa.querySelector('.rc-atras'), bSig = capa.querySelector('.rc-sig'), bSalta = capa.querySelector('.rc-salta');
+    // un aviso de un solo paso que no abre ni mueve nada (ni menú, ni «antes», ni «de la mano») no lleva el globo de inicio:
+    // ese paso ya es el globo, con su «Ver después» (24-nov-2026)
+    var unAviso = pasos.length === 1 && !pasos[0].antes && !pasos[0].menu && !pasos[0].haz;
+    var bDespues = capa.querySelector('.rc-despues'), enInicio = solo && !unAviso;
+    capa.querySelector('.rc-pie').classList.toggle('con-despues', solo);
     // de la mano: los cuatro muros que tapan lo que no es la parte (haz: 'clic'), la línea «Te toca» y quién escucha el clic
     var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false;
     return new Promise(function (listo) {
@@ -339,6 +408,9 @@
         removeEventListener('resize', acomoda); removeEventListener('keydown', tecla, true);
         capa.remove();
         try { antesFoco && antesFoco.focus && antesFoco.focus(); } catch (e) { /* sin foco */ }
+        // «Ver después»: en una hora (o la próxima vez que entre) vuelve a salir; terminado o saltado, ya no
+        if (como === 'despues') { despuesPon(k); programa(k, def.otraVez); }
+        else if (como === 'fin' || como === 'saltado') despuesQuita(k);
         listo(como);
       }
       // de la mano, haz: 'clic': cuatro muros transparentes alrededor de la parte; solo ella se puede picar
@@ -477,6 +549,7 @@
         var ultimo = i === pasos.length - 1;
         bSig.textContent = ultimo ? (def.fin || 'Terminar') : 'Siguiente';
         bSalta.hidden = ultimo || !!def.obligatorio;
+        bDespues.hidden = !solo;
         modo(p);
         // si estaba escondido (se abrió algo antes), aparece ya en su lugar, sin resbalar desde donde estaba
         var oculto = globo.style.visibility === 'hidden';
@@ -487,20 +560,43 @@
         // de la mano, el foco se queda en la pantalla (lo que la persona va a usar); si no, en «Siguiente»
         if (!hazAhora) { try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ } }
       }
+      // el globo de inicio del que sale solo: al centro, sin abrir ni mover nada de la pantalla
+      function pintaInicio() {
+        visto = -1; i = 0; el = null;
+        escuchaClic(null); hazAhora = ''; capa.classList.remove('rc-haz'); toca.hidden = true; ponMuros(null);
+        var p0 = def.pasos[0] || {}, n = pasos.length, mano = pasos.some(function (x) { return x && x.haz; });
+        var nom = String(def.nombre || p0.titulo || '').replace(/\s*\(\d+ de \d+\)$/, '') || 'Un recorrido para ti';
+        capa.querySelector('.rc-cab').innerHTML = (p0.icono && ICONOS[p0.icono] ? '<span class="rc-ic">' + ICONOS[p0.icono] + '</span>' : '')
+          + '<span class="rc-et">' + esc(p0.etiqueta || 'Recorrido') + '</span>';
+        capa.querySelector('.rc-cab').hidden = false;
+        capa.querySelector('#rc-t').textContent = nom;
+        texto.textContent = 'Te lo enseño paso a paso' + (mano ? ': tú vas picando en la pantalla y el recorrido sigue solo' : '')
+          + ' (' + n + (n === 1 ? ' paso' : ' pasos') + '). ¿Lo vemos ahora? Si estás en medio de algo, pica «Ver después»: te quedas'
+          + ' donde estás y te lo vuelvo a enseñar en un rato.' + (def.obligatorio ? ' Es importante: te lo seguiré enseñando hasta que lo termines.' : '');
+        texto.scrollTop = 0;
+        capa.querySelector('.rc-n').textContent = '';
+        bAtras.hidden = true; bSig.hidden = false; bSig.textContent = 'Empezar';
+        bSalta.hidden = !!def.obligatorio; bDespues.hidden = false;
+        globo.style.transition = 'none'; acomoda(); void globo.offsetHeight; globo.style.transition = '';
+        globo.style.visibility = '';
+        try { bSig.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+      }
+      function empieza() { enInicio = false; muestra(0, 1); }
       function tecla(ev) {
         if (hazAhora && ev.key !== 'Escape') return;   // de la mano: el teclado es de la pantalla
         if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); if (!def.obligatorio) termina('saltado'); }
-        else if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.stopPropagation(); muestra(i + 1, 1); }
-        else if (ev.key === 'ArrowLeft' && i > 0) { ev.preventDefault(); ev.stopPropagation(); muestra(i - 1, -1); }
+        else if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.stopPropagation(); if (enInicio) empieza(); else muestra(i + 1, 1); }
+        else if (ev.key === 'ArrowLeft' && i > 0 && !enInicio) { ev.preventDefault(); ev.stopPropagation(); muestra(i - 1, -1); }
         else if (ev.key === 'Tab') {
           var bs = Array.prototype.filter.call(globo.querySelectorAll('button'), function (b) { return !b.hidden; });
           var k = bs.indexOf(document.activeElement);
           ev.preventDefault(); (bs[(k + (ev.shiftKey ? -1 : 1) + bs.length) % bs.length] || bSig).focus();
         }
       }
-      bSig.onclick = function () { muestra(i + 1, 1); };
+      bSig.onclick = function () { if (enInicio) empieza(); else muestra(i + 1, 1); };
       bAtras.onclick = function () { muestra(i - 1, -1); };
       bSalta.onclick = function () { if (!def.obligatorio) termina('saltado'); };
+      bDespues.onclick = function () { termina('despues'); };
       addEventListener('resize', acomoda);
       addEventListener('keydown', tecla, true);
       tick = setInterval(function () {   // sigue a la parte si algo se mueve
@@ -517,7 +613,7 @@
         }
         acomoda();
       }, 400);
-      muestra(0, 1);
+      if (enInicio) { globo.style.visibility = 'hidden'; pintaInicio(); } else muestra(0, 1);
     });
   }
   // Un recorrido de lo nuevo, una sola vez por persona (31-oct-2026): el flujo de siempre de los recorridos de lo nuevo
@@ -558,6 +654,8 @@
         // preguntaba laVe() de cada recorrido en cada entrada aunque ya lo hubiera visto. Sale el mismo recorrido.
         var v = await vistos(); if (!v || v.indexOf(o.id) >= 0 || vistoLocal()) return;
         if (!(await o.laVe(P, p))) return;
+        // le dio «Ver después» hace menos de una hora: vuelve a salir al cumplirse (o la próxima vez que entre)
+        if (despuesFalta(o.id) > 0) { programa(o.id, function () { quiza(true); }); return; }
         if (!desdeAviso) await dormir(6000);   // al entrar: primero sale la ventana de «Nuevos cambios», si la hay
         // espera a que no haya ventanas ni otro recorrido; un respiro (distinto para cada uno, para no encimarse) y otra vez
         for (var n = 0; n < 6; n++) {
@@ -568,7 +666,8 @@
         if (ocupado()) return;
         var pasos = typeof o.pasos === 'function' ? await o.pasos() : o.pasos;
         if (!pasos || !pasos.length) return;
-        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio, sinCierre: !!o.sinCierre });
+        var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio, sinCierre: !!o.sinCierre,
+                                 solo: true, id: o.id, otraVez: function () { quiza(true); } });
         if (como === 'fin' || (como === 'saltado' && !o.obligatorio)) marcaVisto();
       } catch (e) { /* un recorrido nunca rompe la página */ } finally { esperando = false; }
     }
@@ -581,5 +680,9 @@
   window.PROFASE_RECORRIDO = { corre: corre, activo: function (real) { return activo || (!real && primeroFalta()); },
                                 primero: function (fn) { if (typeof fn === 'function') primeros.push(fn); }, primeroFalta: primeroFalta,
                                 aLaVista: aLaVista, sePuede: sePuede, unaVez: unaVez, partes: partePasos,
-                                alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; } };
+                                alFinal: function (fn) { cierre = typeof fn === 'function' ? fn : null; },
+                                // el «?» (y cualquier botón que lo enseñe a petición) lo llama antes de lanzar uno: sin «Ver después»
+                                pedido: function () { pedidoHasta = Date.now() + 15000; },
+                                // cuánto falta (ms) para que vuelva a salir uno al que le dieron «Ver después» (0: ya puede)
+                                despues: function (id) { return despuesFalta(String(id)); } };
 })();

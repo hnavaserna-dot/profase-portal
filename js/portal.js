@@ -246,7 +246,13 @@
     menuAMarcos('afuera');
     menuAFuera();
   };
-  document.addEventListener('pointerdown', function () { menuAMarcos('afuera'); menuAFuera(); }, true);
+  // picar el globo de un recorrido no cierra lo que el recorrido está enseñando (FILTROS o «Más ▾» abiertos en una pantalla;
+  // de la mano, 24-nov-2026): lo cierra el recorrido mismo al seguir o al terminar
+  document.addEventListener('pointerdown', function (ev) {
+    var t = ev && ev.target;
+    if (t && t.closest && t.closest('.rc-globo')) return;
+    menuAMarcos('afuera'); menuAFuera();
+  }, true);
 
   /* ---- Con el dedo, se desliza el recuadro que flota, nunca la pantalla de abajo (Héctor Daniel, 4-nov-2026, 6:49, con
      una captura de su iPhone con la campanita abierta: «al querer subir y bajar … en el centro de notificaciones, se
@@ -3528,9 +3534,12 @@
       if (!falta()) return;
       // primero lo demás (Nuevos cambios, recorridos, cumpleaños…): espera a que no haya nada encima, un respiro y otra vez
       await dormir(window.__PRUEBA_FOTO ? 300 : 12000);
-      for (var n = 0; n < 3; n++) {
+      // (tres respiros seguidos sin nada encima: los recorridos de lo nuevo salen uno tras otro y, con su globo de inicio
+      // y «Ver después» (24-nov-2026), el siguiente puede salir justo en un respiro; antes, entonces, ya no salía la foto)
+      for (var n = 0, quieto = 0; n < 240 && quieto < 3; n++) {
         for (var j = 0; j < 21600 && ocupado(); j++) await dormir(500);
         await dormir(window.__PRUEBA_FOTO ? 200 : 2500);
+        quieto = ocupado() ? 0 : quieto + 1;
       }
       if (ocupado() || !falta()) return;
     }
