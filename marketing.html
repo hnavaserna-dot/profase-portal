@@ -1,0 +1,1244 @@
+<!doctype html><html lang="es" data-rol="todos" data-incrustada="1"><head><meta charset="utf-8"><script>/* Cierre temporal del portal (30-oct-2026, pedido de Daniel cuando la base se trabó: «cierra temporalmente crm»;
+   «Saca a todos del CRM con ese aviso y cuando quede ya les avisamos»).
+   construir.py lo pone escrito al principio del <head> de cada página que arma (y va a mano en index.html), antes de
+   cualquier otro script. Lee cierre.json, que vive en la raíz de profase-portal (no pasa por la base), y si dice
+   "cerrado": true detiene la página y lleva a cerrado.html, que avisa y regresa sola al portal en cuanto cierre.json
+   diga false. Si la página va en un marco, se lleva a la de arriba. Guarda a dónde iba cada quien para regresarlo ahí.
+   Solo en crmprofase.com.mx: en las pruebas locales no hace nada (salvo con window.__PRUEBA_CIERRE).
+   Si cierre.json no llega, la página sigue normal. No lee ni escribe nada de la base. */
+(function () {
+  'use strict';
+  if (!/(^|\.)crmprofase\.com\.mx$/.test(location.hostname) && !window.__PRUEBA_CIERRE) return;
+  // Nadie de fuera mete el CRM dentro de su página (auditoría externa del 11-nov-2026, H-04; Héctor Daniel Nava: «3 A»).
+  // GitHub Pages no deja poner la protección del navegador (X-Frame-Options / frame-ancestors), así que se hace aquí,
+  // antes que todo: si la página va en un marco de otro sitio, no se enseña ni se carga nada más. Los marcos del mismo
+  // portal (las pantallas dentro de su vista) sí. Única excepción: la llamada del soporte de Quo (sala.html?marca=quo),
+  // que va dentro de la burbuja de los sistemas Quo.
+  if (window.top !== window.self && !(/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search))) {
+    var mismo = false;
+    try { mismo = window.top.location.host === location.host; } catch (e) { mismo = false; }
+    if (!mismo) {
+      try { var st = document.createElement('style'); st.textContent = 'html{display:none!important}'; (document.head || document.documentElement).appendChild(st); } catch (e) { /* nada */ }
+      try { window.stop(); } catch (e) { /* navegador viejo */ }
+      return;
+    }
+  }
+  if (/\/cerrado\.html$/.test(location.pathname)) return;
+  // la llamada del soporte de Quo (sala.html?marca=quo, Q Chat): nunca lleva a la pantalla de cierre de PROFASE (PROFASE no
+  // sale en los sistemas Quo); si la base no contesta, la misma sala lo dice con la marca de Quo
+  if (/\/sala\.html$/.test(location.pathname) && /[?&]marca=quo(?:&|$)/.test(location.search)) return;
+  var j = null;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/cierre.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) j = JSON.parse(x.responseText);
+  } catch (e) { j = null; }
+  if (!j || j.cerrado !== true) return;
+  // «hasta» (2-nov-2026, Daniel: «no dejes ingresar al sistema hasta las nueve A.M.»): a esa hora abre solo
+  if (j.hasta && !isNaN(Date.parse(j.hasta)) && Date.now() >= Date.parse(j.hasta)) return;
+  var w = window;
+  try { if (window.top && window.top.location.host === location.host) w = window.top; } catch (e) { w = window; }
+  try {
+    var r = w.location.pathname + w.location.search + w.location.hash;
+    if (!/cerrado\.html/.test(r)) sessionStorage.setItem('profase-regreso', r);
+  } catch (e) { /* sin almacenamiento: regresa a la entrada */ }
+  try { window.stop(); } catch (e) { /* navegador viejo */ }
+  try { w.location.replace('/cerrado.html'); } catch (e) { location.replace('/cerrado.html'); }
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Marketing</title>
+<link rel="icon" href="img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=fd260d43f1"></script><script src="js/tabla-pegada.js?v=f23f929b64"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=76669bb79d"></script><script src="js/paginas.js?v=6ea322887b"></script><script src="js/filtros.js?v=0836a918f4"></script><script src="js/pilas.js?v=23bd345575"></script>
+<style>
+/* Portal PROFASE · Marketing (Héctor Daniel Nava, 24-nov-2026, 12:28: «quiero que hagas un nuevo menú solo para mí… que se
+   llame Marketing… un nuevo panel para lo de metricool y google ads y demás; y ahí mismo o en otro donde se diga mensajes
+   recibidos; compras y demás»; «1 sub menú para autorizar cosas; 2 compras (leads, usuarios y demás) conseguidos desde estas
+   campañas (medir qué tanto nos ha servido) vs métricas de metricool etc; 3 mensajes y todo interacciones»;
+   portal/sql/507_marketing.sql). Una pantalla con tres opciones del menú (Autorizar publicaciones es Campañas Facebook):
+     · Métricas de redes y anuncios: lo de Metricool (Facebook, Instagram, la página www.quosistemas.com y, cuando se
+       conecten, Google Ads y Meta Ads), con mkt_metricas_lee().
+     · Resultados: los registros, las cuentas, las suscripciones y los pagos en línea de los sistemas Quo (la función
+       quo-clientes, «lista», en vivo; el CRM no los guarda) contra lo medido. Los cobros de Stripe en modo de prueba van aparte.
+     · Mensajes e interacciones: los mensajes y comentarios de las redes (mkt_inter_lista()); él marca cada uno.
+   Solo Héctor Daniel Nava (mkt_estado(), la regla de Campañas Facebook). Solo lee y marca: nunca contesta, publica ni paga
+   nada. UX PROFASE: la barra (periodo, FILTROS, Excel con su PDF y «Más ▾»), las pilas, la lista por páginas y la ficha. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --surface-2:#EEF2F7; --ink:#132036; --muted:#5A6577; --line:#DCE2EB; --line-strong:#C4CDDA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --navy-soft:#E6ECF6; --band-dim:#B9C7DE;
+  --accent:#F07A1E; --accent-soft:#FDEBDC; --accent-ink:#A64B0A;
+  --red:#B42318; --red-soft:#FDECEA; --ok:#1D7A4F; --ok-soft:#E2F1E8; --amber:#8A5A00; --amber-soft:#FFF4D6;
+  --s-fb:#2F5DA8; --s-ig:#D9690F;   /* las dos series (validadas para daltonismo, claro y oscuro) */
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F;
+  --s-fb:#5B8BE0; --s-ig:#D06A1E; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1320; --surface:#141C2B; --surface-2:#1A2436; --ink:#E5EAF2; --muted:#98A3B5; --line:#243049; --line-strong:#33415E;
+  --navy:#16284A; --navy-ink:#E5EAF2; --navy-soft:#1C2A44; --band-dim:#8FA3C4;
+  --accent:#FF8F3F; --accent-soft:#3A2516; --accent-ink:#FFB27A;
+  --red:#F2867B; --red-soft:#3A1C1A; --ok:#4CAF7D; --ok-soft:#173022; --amber:#F2C462; --amber-soft:#33280F;
+  --s-fb:#5B8BE0; --s-ig:#D06A1E; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;margin:0;line-height:1.15}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{margin:0 auto;padding:0 16px}
+[hidden]{display:none!important}
+.band{background:var(--navy);color:var(--navy-ink);border-bottom:4px solid var(--accent)}
+.band .wrap{padding-top:16px;padding-bottom:16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between}
+.band .eti{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--band-dim)}
+.band h1{font-size:26px;font-weight:750;overflow-wrap:anywhere}
+.band p{margin:4px 0 0;color:var(--band-dim);font-size:13px;max-width:640px}
+.band .logo{width:40px;height:auto;display:block}
+.btn{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--navy)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn.acento{background:var(--accent);border-color:var(--accent);color:#14233F}
+.btn.bien{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.chico{padding:4px 9px;font-size:12px}
+.btn[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tabs button:focus-visible,.tabla tr.fila:focus-visible,.chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;overflow-wrap:anywhere}
+.nota.bien{background:var(--ok-soft)}
+.nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.info{background:var(--navy-soft)}
+.nota ul{margin:6px 0 0;padding-left:20px}
+.cargando{padding:40px 16px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted);margin:1px 2px 1px 0}
+.chip.ojo{background:var(--amber-soft);color:var(--amber)}
+.chip.az{background:var(--navy-soft);color:var(--ink)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.mal{background:var(--red-soft);color:var(--red)}
+.chip.na{background:var(--accent-soft);color:var(--accent-ink)}
+.tabs{display:flex;gap:4px;margin:16px 0 4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.tabs .cta{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--accent);color:#14233F;font-size:11.5px;line-height:18px;text-align:center}
+.tabs .cta:empty{display:none}
+.bar{margin:14px 0 12px}
+.caja{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0;margin:0 0 16px}
+.caja>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--navy-soft)}
+.caja h2{font-size:18px;font-weight:750;overflow-wrap:anywhere}
+.caja .cuerpo{padding:12px 16px}
+.dosc{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:0 16px}
+.desliza{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse;font-size:13.5px}
+.tabla th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tabla th.der,.tabla td.der{text-align:right}
+.tabla td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tabla tr.fila{cursor:pointer}
+.tabla tr.fila:hover td{background:var(--surface-2)}
+.tabla tr.sel td{background:var(--accent-soft)}
+.tabla .num{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.tabla .quien{font-weight:700}
+.tabla .txt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vacio{padding:18px 16px;color:var(--muted)}
+.sinr{display:grid;gap:4px;padding:14px 16px}
+/* el embudo */
+.embudo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;padding:12px 16px}
+.paso{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;position:relative}
+.paso span{display:block;font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;overflow-wrap:anywhere}
+.paso b{display:block;font-family:var(--f-display);font-stretch:85%;font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums}
+.paso i{display:block;font-style:normal;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.paso.prin{border-color:var(--navy);background:var(--navy-soft)}
+.paso.sin b{color:var(--muted)}
+/* la gráfica */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--muted)}
+.chips button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--navy-ink)}
+.graf{position:relative}
+.graf{min-height:200px}
+.graf svg{display:block;width:100%;height:auto;overflow:visible}
+.graf .eje{stroke:var(--line);stroke-width:1}
+.graf .et{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.graf .s-fb{stroke:var(--s-fb)}.graf .s-ig{stroke:var(--s-ig)}.graf .s-web{stroke:var(--s-fb)}
+.graf .l{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.graf .pt{stroke:var(--surface);stroke-width:2}
+.graf .pt.s-fb,.graf .pt.s-web{fill:var(--s-fb)}.graf .pt.s-ig{fill:var(--s-ig)}
+.graf .cruz{stroke:var(--line-strong);stroke-width:1;stroke-dasharray:3 3}
+.ley{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin:4px 0 0}
+.ley i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:5px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 9px;font-size:12px;box-shadow:0 6px 18px rgba(10,18,32,.18);white-space:nowrap;z-index:3}
+/* las mejores horas (una sola tinta, de claro a oscuro) */
+.horas{display:grid;grid-template-columns:34px repeat(24,minmax(9px,1fr));gap:2px;font-size:10.5px;color:var(--muted);min-width:420px}
+.horas div{height:16px;border-radius:3px;display:flex;align-items:center}
+.horas .c{background:color-mix(in srgb, var(--s-fb) calc(var(--v) * 1%), var(--surface-2))}
+.horas .h{justify-content:center}
+/* las ventanas */
+.pregunta{position:fixed;inset:0;background:rgba(10,18,32,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.pregunta>div{background:var(--surface);border-radius:12px;padding:18px;max-width:640px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pregunta h3{font-size:19px;margin:0 0 8px;overflow-wrap:anywhere}
+.pregunta p{margin:0 0 10px;overflow-wrap:anywhere}
+.acciones{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pregunta .acciones{justify-content:flex-end;margin-top:12px}
+.pregunta>div>.acciones:last-child{position:sticky;bottom:-18px;z-index:2;background:var(--surface);margin:16px -18px -18px;padding:12px 18px 18px;border-top:1px solid var(--line)}
+.campo{display:grid;gap:4px;margin:0 0 10px;min-width:0}
+.campo label{font-size:12.5px;font-weight:600;color:var(--muted)}
+.campo input:not([type=checkbox]):not([type=radio]),.campo select{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 10px;min-width:0;width:100%;max-width:100%}
+.campo input[type=checkbox]{width:18px;height:18px;margin:0;flex:none}
+.campo textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0;width:100%;min-height:70px;resize:vertical;line-height:1.45}
+.cita{background:var(--bg);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 12px;margin:0 0 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.dl{display:grid;grid-template-columns:minmax(110px,max-content) 1fr;gap:6px 14px;margin:0 0 12px}
+.dl dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere;margin:0 0 10px}
+.msg.mal{background:var(--red-soft);color:var(--red)}
+.pie{color:var(--muted);font-size:12.5px;margin:4px 0 24px;max-width:90ch}
+@media (max-width:760px){
+  .tabla.apila thead{display:none}
+  .tabla.apila,.tabla.apila tbody,.tabla.apila tr,.tabla.apila td{display:block;width:100%}
+  .tabla.apila tr.fila,.tabla.apila tr{border-bottom:1px solid var(--line);padding:10px 14px}
+  .tabla.apila td{border:0;padding:2px 0}
+  .tabla.apila td.der{text-align:left}
+  .tabla.apila td[data-e]::before{content:attr(data-e) " · ";color:var(--muted);font-size:12px;font-weight:600}
+}
+@media (max-width:700px){
+  input,select,textarea,.campo textarea{font-size:16px}
+  .band h1{font-size:22px}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .caja .cuerpo,.embudo{padding:10px 12px}
+}
+</style></head><body>
+<div class="band"><div class="wrap">
+  <div style="display:flex;gap:12px;align-items:center;min-width:0">
+    <img class="logo" id="logo" src="img/logo.png" alt="PROFASE" hidden>
+    <div style="min-width:0">
+      <div class="eti">Marketing</div>
+      <h1 id="titulo">Métricas de redes y anuncios</h1>
+      <p id="expl"></p>
+    </div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="nota mal" id="error" hidden role="alert"></div>
+  <div class="nota bien" id="aviso" hidden role="status"></div>
+  <div class="cargando" id="cargando">Cargando…</div>
+
+  <div id="todo" hidden>
+    <div class="tabs" role="tablist" aria-label="Qué ver">
+      <button type="button" role="tab" data-t="met" aria-selected="true">Métricas de redes y anuncios</button>
+      <button type="button" role="tab" data-t="res" aria-selected="false">Resultados</button>
+      <button type="button" role="tab" data-t="msj" aria-selected="false">Mensajes e interacciones <span class="cta" id="n-msj"></span></button>
+      <button type="button" role="tab" data-t="cos" aria-selected="false">Costos vs compras</button>
+    </div>
+
+    <!-- ===================== Métricas de redes y anuncios ===================== -->
+    <section id="t-met" hidden>
+      <div class="bar" id="m-bar" hidden>
+        <select id="m-per" aria-label="Periodo"><option value="7">Últimos 7 días</option><option value="28" selected>Últimos 28 días</option><option value="90">Últimos 90 días</option><option value="180">Últimos 180 días</option></select>
+        <button class="btn" type="button" data-excel id="m-x">Excel</button>
+        <button class="btn" type="button" id="m-trae">Traer ahora</button>
+        <button class="btn" type="button" id="m-como">Cómo se lee</button>
+      </div>
+      <div hidden><select id="m-red" aria-label="Red"><option value="">Todas las redes</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="web">Página www.quosistemas.com</option><option value="google_ads">Google Ads</option><option value="meta_ads">Meta Ads</option></select></div>
+      <div class="nota info" id="m-estado" hidden></div>
+      <section id="m-pilas" aria-label="Cada red"></section>
+      <section id="m-pilas2" aria-label="En el periodo"></section>
+      <section class="caja" id="m-graf-caja">
+        <header><h2 id="m-graf-t">Día por día</h2><span class="mut" id="m-graf-n"></span></header>
+        <div class="cuerpo">
+          <div class="chips" role="group" aria-label="Qué número" id="m-chips"></div>
+          <div class="graf" id="m-graf"></div>
+          <div class="ley" id="m-ley"></div>
+        </div>
+      </section>
+      <div class="dosc">
+        <section class="caja" id="m-horas-caja">
+          <header><h2>Mejores horas para publicar</h2><span class="mut">Lo calcula Metricool con tus seguidores</span></header>
+          <div class="cuerpo" id="m-horas"></div>
+        </section>
+        <section class="caja" id="m-ads-caja">
+          <header><h2>Anuncios</h2><span class="mut">Google Ads y Meta Ads</span></header>
+          <div class="cuerpo" id="m-ads"></div>
+        </section>
+      </div>
+      <div class="dosc">
+        <section class="caja"><header><h2>De dónde llegan a la página</h2><span class="mut">www.quosistemas.com</span></header><div id="m-fuentes"></div></section>
+        <section class="caja"><header><h2>Lo más visto de la página</h2><span class="mut">www.quosistemas.com</span></header><div id="m-paginas"></div></section>
+      </div>
+      <section class="caja" id="m-tabla-caja">
+        <header><h2>La tabla día por día</h2><span class="mut" id="m-tabla-n"></span></header>
+        <div class="desliza"><table class="tabla" id="m-tabla"><thead id="m-thead"></thead><tbody id="m-tbody"></tbody></table></div>
+        <nav class="pgn" id="m-pag" aria-label="Páginas"></nav>
+      </section>
+    </section>
+
+    <!-- ===================== Resultados ===================== -->
+    <section id="t-res" hidden>
+      <div class="bar" id="r-bar" hidden>
+        <input type="search" id="r-q" placeholder="Busca una cuenta, un correo o un sistema" aria-label="Buscar">
+        <select id="r-per" aria-label="Periodo"><option value="7">Últimos 7 días</option><option value="28" selected>Últimos 28 días</option><option value="90">Últimos 90 días</option><option value="365">Últimos 12 meses</option></select>
+        <button class="btn" type="button" data-excel id="r-x">Excel</button>
+        <button class="btn" type="button" id="r-como">Cómo se lee</button>
+      </div>
+      <div hidden><select id="r-sis" aria-label="Sistema"><option value="">Todos los sistemas</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option></select>
+        <select id="r-canal" aria-label="De dónde llegó"><option value="">De todas partes</option></select></div>
+      <div class="nota mal" id="r-err" hidden></div>
+      <section class="caja">
+        <header><h2 id="r-emb-t">De la red a la venta</h2><span class="mut" id="r-emb-n"></span></header>
+        <div class="embudo" id="r-embudo"></div>
+        <div class="cuerpo mut" id="r-lectura" style="padding-top:0"></div>
+      </section>
+      <section id="r-pilas" aria-label="Las cuentas"></section>
+      <section class="caja" id="r-lista-caja">
+        <header><h2 id="r-lista-t">Cada registro</h2><span class="mut" id="r-lista-n"></span></header>
+        <div class="desliza"><table class="tabla apila">
+          <thead><tr><th>Se registró</th><th>Cuenta</th><th>Sistemas</th><th>Cómo va</th><th>De dónde llegó</th><th class="der">Pagado</th></tr></thead>
+          <tbody id="r-lista"></tbody></table></div>
+        <div class="vacio" id="r-vacio" hidden></div>
+        <nav class="pgn" id="r-pag" aria-label="Páginas"></nav>
+      </section>
+      <section class="caja" id="r-canales-caja">
+        <header><h2>Por canal</h2><span class="mut">De dónde llegó cada registro</span></header>
+        <div id="r-canales"></div>
+      </section>
+    </section>
+
+    <!-- ===================== Mensajes e interacciones ===================== -->
+    <section id="t-msj" hidden>
+      <div class="bar" id="i-bar" hidden>
+        <input type="search" id="i-q" placeholder="Busca a una persona o lo que escribió" aria-label="Buscar">
+        <select id="i-per" aria-label="Periodo"><option value="7">Últimos 7 días</option><option value="30" selected>Últimos 30 días</option><option value="60">Últimos 60 días</option><option value="120">Últimos 120 días</option></select>
+        <button class="btn" type="button" data-excel id="i-x">Excel</button>
+        <button class="btn acento" type="button" id="i-trae">Traer ahora</button>
+        <button class="btn" type="button" id="i-como">Cómo se lee</button>
+      </div>
+      <div hidden>
+        <select id="i-pag" aria-label="Página"><option value="">Las dos páginas</option><option value="quo">Sistemas Quo</option><option value="profase">Profase Fiscal</option></select>
+        <select id="i-red" aria-label="Red"><option value="">Facebook e Instagram</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select>
+        <select id="i-tipo" aria-label="Qué es"><option value="">Mensajes y comentarios</option><option value="mensaje">Mensajes</option><option value="comentario">Comentarios</option></select>
+      </div>
+      <div class="nota info" id="i-estado" hidden></div>
+      <section id="i-pilas" aria-label="Tu trabajo"></section>
+      <section class="caja" id="i-lista-caja">
+        <header><h2 id="i-lista-t">Mensajes y comentarios</h2><span class="mut" id="i-lista-n"></span></header>
+        <div class="desliza"><table class="tabla apila">
+          <thead><tr><th>Cuándo</th><th>Quién</th><th>Dónde</th><th>Qué escribió</th><th>Cómo va</th></tr></thead>
+          <tbody id="i-lista"></tbody></table></div>
+        <div class="vacio" id="i-vacio" hidden></div>
+        <nav class="pgn" id="i-pagn" aria-label="Páginas"></nav>
+      </section>
+    </section>
+    <!-- ===================== Costos vs compras ===================== -->
+    <section id="t-cos" hidden>
+      <div class="bar" id="k-bar" hidden>
+        <select id="k-per" aria-label="Periodo"><option value="3">Últimos 3 meses</option><option value="6" selected>Últimos 6 meses</option><option value="12">Últimos 12 meses</option></select>
+        <button class="btn" type="button" data-excel id="k-x">Excel</button>
+        <button class="btn acento" type="button" id="k-nuevo">+ Agregar gasto</button>
+        <button class="btn" type="button" id="k-como">Cómo se lee</button>
+      </div>
+      <div hidden><select id="k-sis" aria-label="Sistema"><option value="">Los tres sistemas Quo</option><option value="contabilita">Quo Contabilita</option><option value="facturita">Quo Facturita</option><option value="nominita">Quo Nominita</option></select></div>
+      <div class="nota mal" id="k-err" hidden></div>
+      <div class="nota info" id="k-estado" hidden></div>
+      <section id="k-pilas" aria-label="Lo invertido contra lo conseguido"></section>
+      <section class="caja" id="k-mes-caja">
+        <header><h2>Mes por mes</h2><span class="mut" id="k-mes-n"></span></header>
+        <div class="desliza"><table class="tabla apila" id="k-mes-t">
+          <thead><tr><th>Mes</th><th class="der">Anuncios</th><th class="der">Otros gastos</th><th class="der">Invertido</th><th class="der">Registros</th><th class="der">Ya pagan</th><th class="der">Cobrado en línea</th><th class="der">Costo por registro</th><th class="der">Regresó por cada $1</th></tr></thead>
+          <tbody id="k-mes"></tbody></table></div>
+      </section>
+      <section class="caja" id="k-lista-caja">
+        <header><h2>Lo que capturaste</h2><span class="mut" id="k-lista-n"></span></header>
+        <div class="desliza"><table class="tabla apila">
+          <thead><tr><th>Se pagó</th><th>Qué fue</th><th>Qué es</th><th>Para qué sistema</th><th class="der">Monto</th><th class="der">En pesos</th></tr></thead>
+          <tbody id="k-lista"></tbody></table></div>
+        <div class="vacio" id="k-vacio" hidden></div>
+      </section>
+      <p class="pie">Todo lo invertido se refleja solo en Administración › Costos de sistemas, mes por mes: «Anuncios de Sistemas Quo» (en partes iguales entre los tres sistemas) y «Otros gastos de publicidad de Sistemas Quo» (por los sistemas de cada gasto). No hay que capturarlo dos veces.</p>
+    </section>
+
+    <p class="pie" id="pie">Nada de esto sale de esta pantalla: no va en avisos a otros, SuperConta ni resúmenes. Solo lee y marca; contestar se hace en Facebook o Instagram.</p>
+  </div>
+</div>
+
+<div class="pregunta" id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div id="dlg-c"></div></div>
+<script>
+(function () {
+  'use strict';
+  var P = window.PORTAL, $ = function (id) { return document.getElementById(id); };
+  var EST = null, TAB = 'met', MET = null, INTER = null, QUO = null, QUO_ERR = '', QUO_HORA = 0;
+  var MPER = 28, MRED = '', MCHIP = 'vistas', RPER = 28, RQ = '', RSIS = '', RCANAL = '', RPILA = '', IPER = 30, IQ = '', IPAG = '', IRED = '', ITIPO = '', IPILA = 'pend';
+  var BARS = {}, PAGS = {}, ILISTA = [], COLA = [], ABIERTO = null, RLISTA = [];
+  var COS = null, CPER = 6, CSIS = '', CPILA = '', CMESES = [];
+  var QUE = { anuncios: 'Anuncios que Metricool no ve', herramienta: 'Herramienta', contenido: 'Contenido (video, diseño, fotos)', otro: 'Otro' };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  var REDES = { facebook: 'Facebook', instagram: 'Instagram', web: 'Página web', google_ads: 'Google Ads', meta_ads: 'Meta Ads' };
+  var PAGINAS = { quo: 'Sistemas Quo', profase: 'Profase Fiscal' };
+  var SIS = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita' };
+  var TITULOS = { met: 'Métricas de redes y anuncios', res: 'Resultados', msj: 'Mensajes e interacciones', cos: 'Costos vs compras' };
+  var EXPL = {
+    met: 'Lo que mide Metricool de Sistemas Quo: seguidores, alcance, vistas e interacciones de Facebook e Instagram, las visitas a www.quosistemas.com y, cuando se conecten, Google Ads y Meta Ads. Se pone al día solo cada mañana.',
+    res: 'Lo que se consiguió con las campañas: registros a la prueba gratis, cuentas que ya entraron, quién ya paga y lo cobrado en línea, contra lo que midieron las redes en el mismo periodo.',
+    msj: 'Los mensajes y comentarios de Facebook e Instagram de Sistemas Quo y Profase Fiscal: lo que espera respuesta, lo delicado y lo ya atendido. Se trae solo cada 2 horas; contestar se hace en Facebook o Instagram.',
+    cos: 'Lo que se invierte en publicidad de los sistemas Quo (los anuncios que trae Metricool y lo que capturas aquí) contra lo que de verdad se consiguió: registros, cuentas que ya pagan y lo cobrado en línea, mes por mes. Se refleja solo en Costos de sistemas.'
+  };
+  // Cada número que se puede ver en la gráfica: de qué redes sale y si se suma o se toma el último
+  var CHIPS = [
+    { k: 'vistas', t: 'Vistas', redes: ['facebook', 'instagram'], suma: true },
+    { k: 'alcance', t: 'Alcance', redes: ['facebook', 'instagram'], suma: true },
+    { k: 'interacciones', t: 'Interacciones', redes: ['facebook', 'instagram'], suma: true },
+    { k: 'seguidores', t: 'Seguidores', redes: ['facebook', 'instagram'], suma: false },
+    { k: 'visitas', t: 'Visitas a la página', redes: ['web'], suma: true }
+  ];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function falla(e, que) { return window.PORTAL && PORTAL.falla ? PORTAL.falla(e, que) : (String((e && (e.message || e.error_description || e.msg)) || '').replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
+  async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  function avisa(t) { $('aviso').textContent = t; $('aviso').hidden = false; clearTimeout(avisa.t); avisa.t = setTimeout(function () { $('aviso').hidden = true; }, 9000); }
+  function error(t) { t = window.PORTAL && PORTAL.conQueHacer ? PORTAL.conQueHacer(t) : t; $('error').textContent = t; $('error').hidden = !t; if (t) { clearTimeout(error.t); error.t = setTimeout(function () { $('error').hidden = true; }, /Qué hacer/.test(t) ? 30000 : 12000); } }
+  function chip(t, c) { return '<span class="chip ' + (c || '') + '">' + esc(t) + '</span>'; }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var F0 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }), F1 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 });
+  var F2 = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function n0(v) { return v == null || isNaN(v) ? '—' : F0.format(v); }
+  function dinero(v) { if (v == null || isNaN(v)) return '—'; v = Number(v); return (v < 0 ? '−$' : '$') + F2.format(Math.abs(v)); }
+  function pct(a, b) { return b > 0 ? F1.format(a / b * 100) + ' %' : '—'; }
+  function hoy() { return window.PROFASE_HORA ? PROFASE_HORA.dia(new Date()) : new Date().toISOString().slice(0, 10); }
+  function masDias(d, n) { var x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+  function fechaC(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return (+p[2]) + ' ' + MESES[+p[1] - 1] + ' ' + p[0]; }
+  function fechaHora(s) { if (!s) return '—'; try { return window.PROFASE_HORA ? PROFASE_HORA.fechaHora(s) : String(s); } catch (e) { return String(s); } }
+  function diaDe(s) { try { return window.PROFASE_HORA ? PROFASE_HORA.dia(s) : String(s).slice(0, 10); } catch (e) { return String(s).slice(0, 10); } }
+
+  /* ---------- las pestañas (cada una es una opción del menú Marketing) ---------- */
+  (function () {   // la franja dice de una vez la pestaña que se pidió, antes de que lleguen los datos: así no cambia de alto al cargar
+    var t = /[?&]t=(met|res|msj|cos)/.exec(location.search);
+    TAB = t ? t[1] : TAB; $('titulo').textContent = TITULOS[TAB]; $('expl').textContent = EXPL[TAB];
+  })();
+  function abreTab(t, desdeMenu) {
+    if (!TITULOS[t]) t = 'met';
+    TAB = t;
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-t') === t ? 'true' : 'false'); });
+    ['met', 'res', 'msj', 'cos'].forEach(function (k) { $('t-' + k).hidden = k !== t; });
+    $('titulo').textContent = TITULOS[t]; $('expl').textContent = EXPL[t];
+    if (!desdeMenu) { try { if (window.parent !== window && window.parent.__mktSub) window.parent.__mktSub(t); } catch (e) { /* abierta sola */ } }
+    try { if (P && P.franjaAlDia) P.franjaAlDia(); } catch (e) { /* sin franja */ }
+    if (t === 'met') pintaMet();
+    if (t === 'res') { pintaRes(); if (!QUO || Date.now() - QUO_HORA > 5 * 60000) cargaQuo(); }
+    if (t === 'msj') pintaMsj();
+    if (t === 'cos') { pintaCos(); if (!COS) cargaCos().then(pintaCos).catch(function (e) { error(falla(e)); }); if (!QUO || Date.now() - QUO_HORA > 5 * 60000) cargaQuo(); }
+  }
+  document.querySelector('.tabs').addEventListener('click', function (e) { var b = e.target.closest('button[data-t]'); if (b) abreTab(b.getAttribute('data-t')); });
+  // el menú de afuera (mkt_tab.js) pide la pestaña; «ver:<id>» abre ese mensaje
+  window.__mktAbre = function (que) {
+    if (!EST) return false;
+    var s = String(que || '');
+    if (/^(met|res|msj|cos)$/.test(s)) { abreTab(s, true); return true; }
+    var m = /^ver:((?:fbm|igm|fbc|igc):.+)$/.exec(s);
+    if (m) { abreTab('msj', true); var x = (INTER && INTER.items || []).filter(function (i) { return i.id === m[1]; })[0]; if (x) ficha(x.id); return true; }
+    if (s === 'ver:pendientes') { IPILA = 'pend'; abreTab('msj', true); return true; }
+    return false;
+  };
+
+  /* ---------- las barras (UX PROFASE) ---------- */
+  function barras() {
+    if (BARS.met || !window.PROFASE_PILAS) return;
+    var d = window.PROFASE_FILTROS && window.PROFASE_FILTROS.deSelect;
+    BARS.met = PROFASE_PILAS.barra($('m-bar'), { caja: true, periodo: [$('m-per')],
+      filtros: d ? { grupos: [{ t: 'MÉTRICAS', campos: [d($('m-red'), { t: 'RED' })] }],
+        limpiar: function () { if ($('m-red').value) { $('m-red').value = ''; $('m-red').dispatchEvent(new Event('change', { bubbles: true })); } },
+        resultados: function () { return 'Ver'; } } : null,
+      botones: [$('m-x')], mas: [[$('m-trae')], [$('m-como')]] });
+    BARS.res = PROFASE_PILAS.barra($('r-bar'), { caja: true, buscar: $('r-q'), periodo: [$('r-per')],
+      filtros: d ? { grupos: [{ t: 'RESULTADOS', campos: [d($('r-sis'), { t: 'SISTEMA' }), d($('r-canal'), { t: 'DE DÓNDE LLEGÓ' })] }],
+        limpiar: function () { ['r-sis', 'r-canal'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + RLISTA.length + (RLISTA.length === 1 ? ' registro' : ' registros'); } } : null,
+      botones: [$('r-x')], mas: [[$('r-como')]] });
+    BARS.msj = PROFASE_PILAS.barra($('i-bar'), { caja: true, buscar: $('i-q'), periodo: [$('i-per')],
+      filtros: d ? { grupos: [{ t: 'MENSAJES', campos: [d($('i-pag'), { t: 'PÁGINA' }), d($('i-red'), { t: 'RED' }), d($('i-tipo'), { t: 'QUÉ ES' })] }],
+        limpiar: function () { ['i-pag', 'i-red', 'i-tipo'].forEach(function (i) { var x = $(i); if (x.value) { x.value = ''; x.dispatchEvent(new Event('change', { bubbles: true })); } }); },
+        resultados: function () { return 'Ver ' + ILISTA.length; } } : null,
+      botones: [$('i-x'), $('i-trae')], mas: [[$('i-como')]] });
+    BARS.cos = PROFASE_PILAS.barra($('k-bar'), { caja: true, periodo: [$('k-per')],
+      filtros: d ? { grupos: [{ t: 'COSTOS', campos: [d($('k-sis'), { t: 'SISTEMA' })] }],
+        limpiar: function () { if ($('k-sis').value) { $('k-sis').value = ''; $('k-sis').dispatchEvent(new Event('change', { bubbles: true })); } },
+        resultados: function () { return 'Ver'; } } : null,
+      botones: [$('k-x'), $('k-nuevo')], mas: [[$('k-como')]] });
+  }
+
+  /* =============================== Métricas =============================== */
+  function serie(red, metrica, desde, hasta) {   // {fecha: valor}
+    var o = {};
+    ((MET && MET.dias) || []).forEach(function (x) { if (x.r === red && x.m === metrica && x.f >= desde && x.f <= hasta) o[x.f] = Number(x.v); });
+    return o;
+  }
+  function suma(o) { var t = 0, n = 0; Object.keys(o).forEach(function (k) { if (!isNaN(o[k])) { t += o[k]; n++; } }); return n ? t : null; }
+  function ultimo(o) { var ks = Object.keys(o).sort(); for (var i = ks.length - 1; i >= 0; i--) if (o[ks[i]] != null && !isNaN(o[ks[i]])) return o[ks[i]]; return null; }
+  function primero(o) { var ks = Object.keys(o).sort(); for (var i = 0; i < ks.length; i++) if (o[ks[i]] != null && !isNaN(o[ks[i]])) return o[ks[i]]; return null; }
+  function rango(dias) { var h = hoy(); return { desde: masDias(h, -(dias - 1)), hasta: h, antD: masDias(h, -(2 * dias - 1)), antH: masDias(h, -dias) }; }
+  function conectada(red) { var c = MET && MET.metricool && MET.metricool.conexiones; return !!(c && c[red]); }
+  function hayMetricool() { return !!(MET && MET.metricool && MET.metricool.hora); }
+  function cambio(act, ant) {
+    if (act == null || ant == null || ant === 0) return '';
+    var d = (act - ant) / ant * 100;
+    return (d >= 0 ? '▲ ' : '▼ ') + F1.format(Math.abs(d)) + ' % contra los ' + MPER + ' días de antes';
+  }
+  async function cargaMet() {   // lo de las dos pestañas que lo usan (Métricas y Resultados), con los días de antes para comparar
+    var r = rango(Math.max(MPER, RPER));
+    MET = await rpc('mkt_metricas_lee', { p_desde: r.antD, p_hasta: r.hasta });
+  }
+  function pintaMet() {
+    if (!MET) return;
+    var r = rango(MPER), mc = MET.metricool || {};
+    var est = '';
+    if (!hayMetricool()) est = 'Todavía no llega lo de Metricool. Lo trae Claude cada mañana con su conector y se carga solo; la primera vez sale aquí en cuanto se cargue.';
+    else {
+      est = 'Metricool al ' + fechaHora(mc.hora) + ' (del ' + fechaC(mc.desde) + ' al ' + fechaC(mc.hasta) + ').';
+      var sin = ['web', 'google_ads', 'meta_ads'].filter(function (k) { return !conectada(k); }).map(function (k) { return REDES[k]; });
+      if (sin.length) est += ' Sin datos todavía: ' + sin.join(', ') + '.';
+    }
+    $('m-estado').textContent = est; $('m-estado').hidden = false;
+    // las pilas de cada red
+    var pilas = [];
+    ['facebook', 'instagram'].forEach(function (red) {
+      if (MRED && MRED !== red) return;
+      var seg = serie(red, 'seguidores', r.antD, r.hasta), act = serie(red, 'seguidores', r.desde, r.hasta);
+      var u = ultimo(act), ini = primero(act);
+      var gan = suma(serie(red, 'seguidores_ganados', r.desde, r.hasta)), per = suma(serie(red, 'seguidores_perdidos', r.desde, r.hasta));
+      pilas.push({ k: red, t: REDES[red] + ' · seguidores', n: u || 0, txt: u == null ? '—' : n0(u),
+        d: u == null ? 'Sin datos' : (gan != null || per != null ? '+' + n0(gan || 0) + ' ganados · −' + n0(per || 0) + ' perdidos' : (ini != null ? (u - ini >= 0 ? '+' : '−') + n0(Math.abs(u - ini)) + ' en el periodo' : '')),
+        tono: red === 'facebook' ? 'azul' : 'naranja', on: MRED === red });
+    });
+    if (!MRED || MRED === 'web') {
+      var vw = suma(serie('web', 'visitas', r.desde, r.hasta));
+      pilas.push({ k: 'web', t: 'Visitas a la página', n: vw || 0, txt: vw == null ? '—' : n0(vw), d: conectada('web') ? cambio(vw, suma(serie('web', 'visitas', r.antD, r.antH))) || 'www.quosistemas.com' : 'Metricool todavía no ve la página (falta «Verificar»)', tono: 'verde', on: MRED === 'web' });
+    }
+    ['google_ads', 'meta_ads'].forEach(function (red) {
+      if (MRED && MRED !== red) return;
+      var g = suma(serie(red, 'gasto', r.desde, r.hasta));
+      pilas.push({ k: red, t: REDES[red] + ' · gastado', n: g || 0, txt: conectada(red) ? dinero(g || 0) : 'Sin conectar', d: conectada(red) ? n0(suma(serie(red, 'clics', r.desde, r.hasta))) + ' clics' : 'No se gasta nada sin tu sí', tono: 'gris', on: MRED === red });
+    });
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('m-pilas'), { titulo: 'Cada red · Sistemas Quo', meta: 'Últimos ' + MPER + ' días', pilas: pilas,
+      alPicar: function (k) { MRED = MRED === k ? '' : k; $('m-red').value = MRED; pintaMet(); } });
+    // lo que se movió en el periodo (Facebook + Instagram, o la red escogida)
+    var rs = MRED && MRED !== 'web' ? [MRED] : ['facebook', 'instagram'];
+    function total(m, d1, d2) { var t = null; rs.forEach(function (red) { var s = suma(serie(red, m, d1, d2)); if (s != null) t = (t || 0) + s; }); return t; }
+    var p2 = [['alcance', 'Personas alcanzadas', 'azul'], ['vistas', 'Vistas', 'violeta'], ['interacciones', 'Interacciones', 'naranja'], ['publicaciones', 'Publicaciones', 'gris']].map(function (x) {
+      var a = total(x[0], r.desde, r.hasta), b = total(x[0], r.antD, r.antH);
+      return { k: x[0], t: x[1], n: a || 0, txt: a == null ? '—' : n0(a), d: cambio(a, b) || (a == null ? 'Sin datos' : 'En el periodo'), tono: x[2], on: MCHIP === x[0] };
+    });
+    if (window.PROFASE_PILAS && (!MRED || MRED === 'facebook' || MRED === 'instagram')) {
+      $('m-pilas2').hidden = false;
+      PROFASE_PILAS.pinta($('m-pilas2'), { titulo: 'En el periodo · ' + (MRED ? REDES[MRED] : 'Facebook e Instagram'), pilas: p2,
+        alPicar: function (k) { if (k !== 'publicaciones') { MCHIP = k; pintaMet(); } } });
+    } else $('m-pilas2').hidden = true;
+    pintaChips(); pintaGraf(); pintaHoras(); pintaAds(); pintaListas(); pintaTabla();
+  }
+  function chipsVisibles() { return CHIPS.filter(function (c) { return !MRED || c.redes.indexOf(MRED) >= 0; }); }
+  function pintaChips() {
+    var cs = chipsVisibles();
+    if (!cs.some(function (c) { return c.k === MCHIP; })) MCHIP = cs.length ? cs[0].k : 'vistas';
+    $('m-chips').innerHTML = cs.map(function (c) { return '<button type="button" data-c="' + c.k + '" aria-pressed="' + (c.k === MCHIP) + '">' + esc(c.t) + '</button>'; }).join('');
+  }
+  var anchoGraf = 0;
+  addEventListener('resize', function () { var w = $('m-graf').clientWidth; if (TAB === 'met' && w && Math.abs(w - anchoGraf) > 8) { anchoGraf = w; pintaGraf(); } });
+  $('m-chips').addEventListener('click', function (e) { var b = e.target.closest('button[data-c]'); if (!b) return; MCHIP = b.getAttribute('data-c'); pintaChips(); pintaGraf(); pintaTabla(); });
+  function diasDe(desde, hasta) { var l = [], d = desde; while (d <= hasta && l.length < 400) { l.push(d); d = masDias(d, 1); } return l; }
+  function seriesGraf() {
+    var c = CHIPS.filter(function (x) { return x.k === MCHIP; })[0] || CHIPS[0], r = rango(MPER);
+    var redes = c.redes.filter(function (red) { return !MRED || MRED === red; });
+    var met = c.k === 'visitas' ? 'visitas' : c.k;
+    return { c: c, dias: diasDe(r.desde, r.hasta), series: redes.map(function (red) { return { red: red, v: serie(red, met, r.desde, r.hasta) }; }) };
+  }
+  function pintaGraf() {
+    var g = seriesGraf(), W = Math.max(300, Math.round(($('m-graf').clientWidth || 760))), H = W < 560 ? 200 : 240, L = 46, R = 12, T = 12, B = 26;
+    $('m-graf-t').textContent = g.c.t + ' · día por día';
+    var vals = []; g.series.forEach(function (s) { g.dias.forEach(function (d) { if (s.v[d] != null) vals.push(s.v[d]); }); });
+    $('m-graf-n').textContent = 'Últimos ' + MPER + ' días';
+    if (!vals.length) { $('m-graf').innerHTML = '<div class="vacio">Todavía no hay números de ' + esc(g.c.t.toLowerCase()) + ' en este periodo.</div>'; $('m-ley').innerHTML = ''; return; }
+    var max = Math.max.apply(null, vals), min = g.c.suma ? 0 : Math.min.apply(null, vals);
+    if (max === min) { max = max + 1; min = Math.max(0, min - 1); }
+    var n = g.dias.length, x = function (i) { return L + (n < 2 ? 0 : i * (W - L - R) / (n - 1)); }, y = function (v) { return T + (H - T - B) * (1 - (v - min) / (max - min)); };
+    var h = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(g.c.t) + ' día por día">';
+    [0, 0.5, 1].forEach(function (f) { var v = min + (max - min) * f, yy = y(v); h += '<line class="eje" x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '"/><text class="et" x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + esc(n0(v)) + '</text>'; });
+    var cada = Math.max(1, Math.ceil(n / 7));
+    g.dias.forEach(function (d, i) { if (i % cada === 0 || i === n - 1) h += '<text class="et" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(fechaC(d).replace(/ \d{4}$/, '')) + '</text>'; });
+    g.series.forEach(function (s) {
+      var cl = 's-' + (s.red === 'web' ? 'web' : s.red === 'instagram' ? 'ig' : 'fb'), pts = [];
+      g.dias.forEach(function (d, i) { if (s.v[d] != null) pts.push([x(i), y(s.v[d])]); });
+      if (pts.length > 1) h += '<polyline class="l ' + cl + '" points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+      if (pts.length) { var u = pts[pts.length - 1]; h += '<circle class="pt ' + cl + '" cx="' + u[0].toFixed(1) + '" cy="' + u[1].toFixed(1) + '" r="4.5"/>'; }
+    });
+    h += '<line class="cruz" id="m-cruz" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '" visibility="hidden"/><rect x="' + L + '" y="0" width="' + (W - L - R) + '" height="' + H + '" fill="transparent" id="m-hit"/></svg><div class="tip" id="m-tip" hidden></div>';
+    $('m-graf').innerHTML = h;
+    $('m-ley').innerHTML = g.series.length > 1 ? g.series.map(function (s) { return '<span><i style="background:var(--s-' + (s.red === 'instagram' ? 'ig' : 'fb') + ')"></i>' + esc(REDES[s.red]) + '</span>'; }).join('') : '';
+    var svg = $('m-graf').querySelector('svg'), hit = $('m-hit'), tip = $('m-tip'), cruz = $('m-cruz');
+    function mueve(ev) {
+      var bx = svg.getBoundingClientRect(), px = (ev.clientX - bx.left) * W / bx.width, i = Math.round((px - L) / ((W - L - R) / Math.max(1, n - 1)));
+      i = Math.max(0, Math.min(n - 1, i));
+      var d = g.dias[i];
+      cruz.setAttribute('x1', x(i)); cruz.setAttribute('x2', x(i)); cruz.setAttribute('visibility', 'visible');
+      tip.innerHTML = '<b>' + esc(fechaC(d)) + '</b>' + g.series.map(function (s) { return '<br>' + esc(REDES[s.red]) + ': ' + esc(n0(s.v[d])); }).join('');
+      tip.hidden = false;
+      var lx = x(i) * bx.width / W; tip.style.left = Math.min(bx.width - tip.offsetWidth - 4, Math.max(0, lx + 10)) + 'px'; tip.style.top = '8px';
+    }
+    hit.addEventListener('pointermove', mueve); hit.addEventListener('pointerdown', mueve);
+    hit.addEventListener('pointerleave', function () { tip.hidden = true; cruz.setAttribute('visibility', 'hidden'); });
+  }
+  function pintaHoras() {
+    var hs = ((MET.listas || {}).mejores_horas || {}).datos || {};
+    var redes = ['facebook', 'instagram'].filter(function (red) { return hs[red] && hs[red].rejilla && (!MRED || MRED === red); });
+    if (!redes.length) { $('m-horas').innerHTML = '<div class="mut">Todavía no llegan de Metricool. Salen en cuanto se cargue lo de esta mañana.</div>'; return; }
+    $('m-horas').innerHTML = redes.map(function (red) {
+      var x = hs[red], mej = (x.mejores || []).slice(0, 3).map(function (m) { return DIAS[m.dia - 1] + ' ' + (m.hora < 10 ? '0' : '') + m.hora + ':00'; });
+      var g = '<div class="horas" aria-hidden="true"><div></div>' + Array.apply(null, Array(24)).map(function (_, h) { return '<div class="h">' + (h % 3 === 0 ? h : '') + '</div>'; }).join('');
+      x.rejilla.forEach(function (fila, d) { g += '<div>' + DIAS[d] + '</div>' + fila.map(function (v, h) { return '<div class="c" style="--v:' + Math.max(4, Math.min(100, v)) + '" title="' + DIAS[d] + ' ' + (h < 10 ? '0' : '') + h + ':00 · ' + v + ' de 100"></div>'; }).join(''); });
+      return '<div style="margin:0 0 12px"><b>' + esc(REDES[red]) + '</b><div class="mut" style="margin:0 0 6px">Las mejores: ' + esc(mej.join(', ')) + '. Más oscuro, mejor.</div><div class="desliza">' + g + '</div></div>';
+    }).join('');
+  }
+  function pintaAds() {
+    var r = rango(MPER), h = '';
+    ['google_ads', 'meta_ads'].forEach(function (red) {
+      if (MRED && MRED !== red && MRED) return;
+      if (!conectada(red)) {
+        h += '<div style="margin:0 0 12px"><b>' + REDES[red] + '</b> ' + chip('Sin conectar', 'ojo') + '<div class="mut">'
+          + (red === 'google_ads' ? 'Se arranca a mitad de diciembre de 2026, ya con la medición puesta. Al conectarla a Metricool, aquí sale lo gastado, los clics, las conversiones y cuánto cuesta cada registro.'
+            : 'La cuenta publicitaria «Sistemas Quo» del portafolio Familia Quo. Al conectarla a Metricool, aquí sale lo gastado, el alcance y los clics.')
+          + ' Nunca se gasta nada sin tu sí.</div></div>';
+        return;
+      }
+      var g = suma(serie(red, 'gasto', r.desde, r.hasta)) || 0, cl = suma(serie(red, 'clics', r.desde, r.hasta)) || 0, im = suma(serie(red, 'impresiones', r.desde, r.hasta)) || 0, cv = suma(serie(red, 'conversiones', r.desde, r.hasta));
+      h += '<div style="margin:0 0 12px"><b>' + REDES[red] + '</b> ' + chip('Conectada', 'ok') + '<dl class="dl" style="margin-top:6px"><dt>Gastado</dt><dd>' + dinero(g) + '</dd><dt>Impresiones</dt><dd>' + n0(im) + '</dd><dt>Clics</dt><dd>' + n0(cl) + (cl ? ' · ' + dinero(g / cl) + ' por clic' : '') + '</dd>'
+        + (cv != null ? '<dt>Conversiones</dt><dd>' + n0(cv) + (cv ? ' · ' + dinero(g / cv) + ' cada una' : '') + '</dd>' : '') + '</dl></div>';
+    });
+    var camp = ((MET.listas || {}).google_ads_campanas || {}).datos || [];
+    if (camp.length && (!MRED || MRED === 'google_ads')) h += '<div class="mut">Campañas de Google Ads: ' + camp.map(function (c) { return esc(c.nombre) + (c.estado ? ' (' + esc(c.estado) + ')' : ''); }).join(', ') + '</div>';
+    $('m-ads').innerHTML = h || '<div class="mut">Escoge otra red en FILTROS para ver los anuncios.</div>';
+  }
+  function listaSimple(datos, col1, col2, t1, t2) {
+    if (!datos || !datos.length) return '<div class="vacio">Todavía no hay datos: Metricool empieza a contar en cuanto ve la página («Verificar» en sus conexiones).</div>';
+    return '<div class="desliza"><table class="tabla"><thead><tr><th>' + t1 + '</th><th class="der">' + t2 + '</th></tr></thead><tbody>' + datos.slice(0, 12).map(function (x) {
+      return '<tr><td>' + esc(x[col1] || '(sin nombre)') + '</td><td class="der num">' + n0(x[col2]) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function pintaListas() {
+    var l = MET.listas || {};
+    $('m-fuentes').innerHTML = listaSimple((l.web_fuentes || {}).datos, 'fuente', 'sesiones', 'De dónde', 'Visitas');
+    $('m-paginas').innerHTML = listaSimple((l.web_paginas || {}).datos, 'pagina', 'vistas', 'Página', 'Vistas');
+  }
+  function filasTabla() {
+    var r = rango(MPER), dias = diasDe(r.desde, r.hasta).reverse();
+    var cols = [];
+    ['facebook', 'instagram', 'web', 'google_ads', 'meta_ads'].forEach(function (red) {
+      if (MRED && MRED !== red) return;
+      var ms = red === 'web' ? [['visitas', 'Visitas'], ['visitantes', 'Visitantes'], ['paginas_vistas', 'Páginas vistas']]
+        : red === 'google_ads' || red === 'meta_ads' ? [['gasto', 'Gastado'], ['clics', 'Clics']]
+        : [['seguidores', 'Seguidores'], ['alcance', 'Alcance'], ['vistas', 'Vistas'], ['interacciones', 'Interacciones']];
+      if ((red === 'google_ads' || red === 'meta_ads') && !conectada(red)) return;
+      ms.forEach(function (m) { cols.push({ red: red, m: m[0], t: REDES[red] + ' · ' + m[1], v: serie(red, m[0], r.desde, r.hasta) }); });
+    });
+    return { dias: dias, cols: cols };
+  }
+  function pintaTabla() {
+    var t = filasTabla();
+    $('m-thead').innerHTML = '<tr><th>Día</th>' + t.cols.map(function (c) { return '<th class="der">' + esc(c.t) + '</th>'; }).join('') + '</tr>';
+    var pag = PAGS.met ? PAGS.met.corta(t.dias) : t.dias;
+    $('m-tbody').innerHTML = pag.map(function (d) { return '<tr><td data-orden="' + d + '">' + esc(fechaC(d)) + '</td>' + t.cols.map(function (c) { return '<td class="der num">' + n0(c.v[d]) + '</td>'; }).join('') + '</tr>'; }).join('');
+    $('m-tabla-n').textContent = t.dias.length + ' días';
+  }
+  $('m-per').onchange = async function () { MPER = +this.value || 28; if (PAGS.met) PAGS.met.inicio(); try { await cargaMet(); pintaMet(); if (TAB === 'res') pintaRes(); } catch (e) { error(falla(e)); } };
+  $('m-red').onchange = function () { MRED = this.value; pintaMet(); };
+
+  /* =============================== Resultados =============================== */
+  async function cargaQuo() {
+    QUO_ERR = '';
+    try {
+      var r = await P.sb.functions.invoke('quo-clientes', { body: { accion: 'lista' } });
+      var d = r.data;
+      if (r.error && !d) { try { d = await r.error.context.json(); } catch (e) { d = null; } }
+      if (!d || d.ok !== true) throw new Error((d && d.error) || 'No se pudo traer lo de Quo. Qué hacer: vuelve a intentar en un momento.');
+      QUO = d; QUO_HORA = Date.now();
+    } catch (e) { QUO_ERR = falla(e); }
+    if (TAB === 'res') pintaRes();
+    if (TAB === 'cos') pintaCos();
+  }
+  function susDe(a) { return (a && a.suscripciones) || []; }
+  function deRegistro(a) { return !a.propia && susDe(a).length > 0; }
+  function pruebaStripe(a) { return susDe(a).some(function (s) { return s.modo === 'prueba'; }) || ((a && a.pagos_linea) || []).some(function (p) { return p.prueba; }); }
+  // de dónde llegó: lo que mande Quo (utm de la página; desde el 24-nov-2026 www.quosistemas.com lo guarda con cada registro)
+  function origenDe(a) {
+    var o = null;
+    [a && a.utm, a && a.origen_web, a && typeof a.origen === 'object' ? a.origen : null].concat(susDe(a).map(function (s) { return s.utm || (typeof s.origen === 'object' ? s.origen : null); })).some(function (x) { if (x && typeof x === 'object') { o = x; return true; } return false; });
+    return o;
+  }
+  function canalDe(a) {
+    var o = origenDe(a);
+    if (!o) return '';
+    var s = norm(o.utm_source || o.source || ''), m = norm(o.utm_medium || o.medium || ''), ref = norm(o.referrer || o.document_referrer || '');
+    if (/^(fb|facebook)/.test(s) || /facebook\.com|fb\.com|m\.facebook/.test(ref)) return m === 'cpc' || m === 'paid' ? 'Facebook (anuncio)' : 'Facebook';
+    if (/^(ig|instagram)/.test(s) || /instagram\.com/.test(ref)) return m === 'cpc' || m === 'paid' ? 'Instagram (anuncio)' : 'Instagram';
+    if (/google/.test(s) || /google\./.test(ref)) return m === 'cpc' || m === 'paid' ? 'Google (anuncio)' : 'Google';
+    if (s) return o.utm_source || o.source;
+    if (ref) { try { return new URL(o.referrer || o.document_referrer).hostname.replace(/^www\./, ''); } catch (e) { return 'Otra página'; } }
+    return 'Directo';
+  }
+  function estadoDe(a) {
+    var es = susDe(a).map(function (s) { return s.estado; });
+    if (es.indexOf('activa') >= 0 && !pruebaStripe(a)) return ['paga', 'Ya paga', 'ok'];
+    if (es.indexOf('activa') >= 0) return ['paga_prueba', 'Pagando (cobros de prueba)', 'az'];
+    if (es.indexOf('gracia') >= 0) return ['gracia', 'Su pago no pasó', 'mal'];
+    if (es.indexOf('prueba') >= 0) return ['prueba', 'En prueba gratis', 'az'];
+    if (es.indexOf('prueba_vencida') >= 0) return ['vencida', 'Prueba vencida sin pagar', 'ojo'];
+    if (es.indexOf('suspendida') >= 0 || es.indexOf('terminada') >= 0) return ['termino', 'Se detuvo o terminó', 'ojo'];
+    return ['prueba', 'En prueba gratis', 'az'];
+  }
+  function entro(a) { return ((a && a.usuarios) || []).some(function (u) { return !!u.ultimo; }); }
+  function pagadoDe(a, desde) {
+    var t = 0, tp = 0;
+    ((a && a.pagos_linea) || []).forEach(function (p) {
+      if (p.estado !== 'pagado' || (desde && diaDe(p.fecha) < desde)) return;
+      if (p.prueba) tp += Number(p.total || 0); else t += Number(p.total || 0);
+    });
+    return { real: t, prueba: tp };
+  }
+  function registros() {
+    var r = rango(RPER);
+    return ((QUO && QUO.cuentas) || []).filter(deRegistro).map(function (a) {
+      var f = diaDe(a.creada || (susDe(a)[0] || {}).creada);
+      var sis = Object.keys(SIS).filter(function (k) { return susDe(a).some(function (s) { return s.sistema === k; }) || a[k]; });
+      return { a: a, id: a.id, fecha: f, nombre: a.nombre || '', sis: sis, est: estadoDe(a), canal: canalDe(a), entro: entro(a), pago: pagadoDe(a), pagoPer: pagadoDe(a, r.desde),
+        correo: ((a.usuarios || [])[0] || {}).correo || '' };
+    }).sort(function (x, y) { return String(y.fecha).localeCompare(String(x.fecha)); });
+  }
+  function pintaRes() {
+    var r = rango(RPER);
+    $('r-err').hidden = !QUO_ERR; $('r-err').textContent = QUO_ERR;
+    var todos = QUO ? registros() : [];
+    // los canales que hay (para FILTROS)
+    var canales = {}; todos.forEach(function (x) { canales[x.canal || 'Sin dato'] = 1; });
+    var sel = $('r-canal').value;
+    $('r-canal').innerHTML = '<option value="">De todas partes</option>' + Object.keys(canales).sort().map(function (c) { return '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+    var enPer = todos.filter(function (x) { return x.fecha >= r.desde && x.fecha <= r.hasta; });
+    var base = enPer.filter(function (x) { return (!RSIS || x.sis.indexOf(RSIS) >= 0) && (!RCANAL || (x.canal || 'Sin dato') === RCANAL); });
+    // el embudo: las redes (Metricool) → la página → los registros → entraron → pagan → lo cobrado
+    function tot(red, m) { return suma(serie(red, m, r.desde, r.hasta)); }
+    var alc = (tot('facebook', 'alcance') || 0) + (tot('instagram', 'alcance') || 0), inter = (tot('facebook', 'interacciones') || 0) + (tot('instagram', 'interacciones') || 0);
+    var vis = tot('web', 'visitas'), reg = base.length, ent = base.filter(function (x) { return x.entro; }).length;
+    var pag = base.filter(function (x) { return x.est[0] === 'paga'; }).length, cob = 0, cobP = 0;
+    todos.forEach(function (x) { if (!RSIS || x.sis.indexOf(RSIS) >= 0) { cob += x.pagoPer.real; cobP += x.pagoPer.prueba; } });
+    var gasto = (tot('google_ads', 'gasto') || 0) + (tot('meta_ads', 'gasto') || 0);
+    var sol = ((QUO && QUO.solicitudes) || []).filter(function (s) { var f = diaDe(s.creado || s.fecha || ''); return f >= r.desde && f <= r.hasta; }).length;
+    var pasos = [
+      { t: 'Personas alcanzadas', v: hayMetricool() ? n0(alc) : '—', i: 'Facebook e Instagram', sin: !hayMetricool() },
+      { t: 'Interacciones', v: hayMetricool() ? n0(inter) : '—', i: alc ? pct(inter, alc) + ' de lo alcanzado' : 'Reacciones, comentarios, compartidos y clics', sin: !hayMetricool() },
+      { t: 'Visitas a la página', v: conectada('web') ? n0(vis) : '—', i: conectada('web') ? 'www.quosistemas.com' : 'Falta «Verificar» la página en Metricool', sin: !conectada('web') },
+      { t: 'Registros a la prueba gratis', v: QUO ? n0(reg) : '…', i: conectada('web') && vis ? pct(reg, vis) + ' de las visitas' : 'Cuentas que se registraron solas', prin: true },
+      { t: 'Solicitudes de la página', v: QUO ? n0(sol) : '…', i: 'Demostraciones y preguntas' },
+      { t: 'Ya entraron', v: QUO ? n0(ent) : '…', i: reg ? pct(ent, reg) + ' de los registros' : 'Usaron su cuenta' },
+      { t: 'Ya pagan', v: QUO ? n0(pag) : '…', i: reg ? pct(pag, reg) + ' de los registros' : 'Con cobros de verdad', prin: true },
+      { t: 'Cobrado en línea', v: QUO ? dinero(cob) : '…', i: cobP ? dinero(cobP) + ' más en cobros de prueba (no es dinero de verdad)' : 'Con IVA, de verdad' },
+      { t: 'Invertido en anuncios', v: dinero(gasto), i: gasto ? (reg ? dinero(gasto / reg) + ' por registro' : 'Sin registros todavía') : 'Todo es orgánico: no se ha pagado nada' }
+    ];
+    // «Solicitudes de la página» siempre está (aunque sea 0): así nada se mueve cuando llega lo de Quo
+    $('r-embudo').innerHTML = pasos.map(function (p) { return '<div class="paso' + (p.prin ? ' prin' : '') + (p.sin ? ' sin' : '') + '"><span>' + esc(p.t) + '</span><b>' + esc(p.v) + '</b><i>' + esc(p.i) + '</i></div>'; }).join('');
+    $('r-emb-n').textContent = 'Últimos ' + RPER + ' días' + (RSIS ? ' · ' + SIS[RSIS] : '') + (RCANAL ? ' · ' + RCANAL : '');
+    var lec = [];
+    if (!QUO && !QUO_ERR) lec.push('Trayendo lo de Quo…');
+    if (QUO) {
+      lec.push(reg ? 'En estos ' + RPER + ' días se registraron ' + n0(reg) + (reg === 1 ? ' cuenta' : ' cuentas') + ' a la prueba gratis; ' + n0(ent) + ' ya entraron y ' + n0(pag) + ' ya pagan.'
+        : 'En estos ' + RPER + ' días todavía no hay registros a la prueba gratis.');
+      if (!todos.some(function (x) { return x.canal; })) lec.push('De qué red llegó cada registro: la página ya lo guarda desde el 24 de noviembre, pero Quo todavía no lo manda al CRM; en cuanto lo mande, sale aquí solo.');
+      if (pruebaStripe({ suscripciones: [].concat.apply([], todos.map(function (x) { return susDe(x.a); })) })) lec.push('Los cobros de Stripe en modo de prueba van aparte: todavía no es dinero de verdad.');
+    }
+    $('r-lectura').textContent = lec.join(' ');
+    // las pilas de las cuentas
+    // «Ya pagan» es solo lo cobrado de verdad (igual que «De la red a la venta»); lo pagado con cobros
+    // de prueba de Stripe va en su propia pila (siempre está, para que nada se mueva cuando llega Quo).
+    var PILAS = [['prueba', 'En prueba gratis', 'azul'], ['paga', 'Ya pagan', 'verde'], ['paga_prueba', 'Con cobros de prueba', 'gris'], ['gracia', 'Su pago no pasó', 'rojo'], ['vencida', 'Prueba vencida sin pagar', 'ambar'], ['noentro', 'No han entrado', 'gris']];
+    function enPila(x, k) { return k === 'noentro' ? !x.entro : x.est[0] === k; }
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('r-pilas'), { titulo: 'Las cuentas que llegaron · últimos ' + RPER + ' días', pilas: PILAS.map(function (p) {
+      var n = base.filter(function (x) { return enPila(x, p[0]); }).length;
+      return { k: p[0], t: p[1], n: n, tono: p[2], on: RPILA === p[0], tag: n && (p[0] === 'gracia' || p[0] === 'vencida') ? 'Te toca' : '' }; }),
+      alPicar: function (k) { RPILA = RPILA === k ? '' : k; if (PAGS.res) PAGS.res.inicio(); pintaRes(); } });
+    var q = norm(RQ).split(/\s+/).filter(Boolean);
+    var l = base.filter(function (x) { return (!RPILA || enPila(x, RPILA)) && (!q.length || q.every(function (w) { return norm([x.nombre, x.correo, x.sis.map(function (s) { return SIS[s]; }).join(' '), x.canal, x.est[1]].join(' ')).indexOf(w) >= 0; })); });
+    RLISTA = l;
+    if (BARS.res && BARS.res.f) BARS.res.f.pinta();
+    $('r-lista-n').textContent = l.length + (l.length === 1 ? ' registro' : ' registros');
+    var pg = PAGS.res ? PAGS.res.corta(l) : l;
+    $('r-lista').innerHTML = pg.map(function (x) {
+      return '<tr class="fila" tabindex="0" data-id="' + esc(x.id) + '"><td data-e="Se registró" data-orden="' + esc(x.fecha) + '">' + esc(fechaC(x.fecha)) + '</td>'
+        + '<td data-e="Cuenta"><div class="quien">' + esc(x.nombre || 'Sin nombre') + '</div><div class="mut">' + esc(x.correo) + '</div></td>'
+        + '<td data-e="Sistemas">' + x.sis.map(function (s) { return chip(SIS[s], 'az'); }).join('') + '</td>'
+        + '<td data-e="Cómo va">' + chip(x.est[1], x.est[2]) + (x.entro ? '' : chip('No ha entrado', '')) + '</td>'
+        + '<td data-e="De dónde llegó">' + (x.canal ? esc(x.canal) : '<span class="mut">Sin dato todavía</span>') + '</td>'
+        + '<td data-e="Pagado" class="der num">' + (x.pago.real ? dinero(x.pago.real) : '—') + (x.pago.prueba ? '<div class="mut">' + dinero(x.pago.prueba) + ' de prueba</div>' : '') + '</td></tr>';
+    }).join('');
+    $('r-vacio').hidden = l.length > 0 || !QUO;
+    $('r-vacio').textContent = RQ || RSIS || RCANAL || RPILA ? 'Nada coincide con lo que escogiste.' : 'En este periodo todavía no hay registros a la prueba gratis.';
+    // por canal
+    var porC = {};
+    enPer.forEach(function (x) { var c = x.canal || 'Sin dato todavía'; var o = porC[c] || (porC[c] = { reg: 0, ent: 0, pag: 0, cob: 0 }); o.reg++; if (x.entro) o.ent++; if (x.est[0] === 'paga') o.pag++; o.cob += x.pagoPer.real; });
+    var ks = Object.keys(porC).sort(function (a, b) { return porC[b].reg - porC[a].reg; });
+    $('r-canales').innerHTML = ks.length ? '<div class="desliza"><table class="tabla"><thead><tr><th>Canal</th><th class="der">Registros</th><th class="der">Entraron</th><th class="der">Pagan</th><th class="der">Cobrado</th></tr></thead><tbody>'
+      + ks.map(function (c) { var o = porC[c]; return '<tr><td>' + esc(c) + '</td><td class="der num">' + n0(o.reg) + '</td><td class="der num">' + n0(o.ent) + '</td><td class="der num">' + n0(o.pag) + '</td><td class="der num">' + dinero(o.cob) + '</td></tr>'; }).join('')
+      + '</tbody></table></div>' : '<div class="vacio">' + (QUO ? 'Sin registros en este periodo.' : QUO_ERR ? 'No se pudo traer lo de Quo.' : 'Trayendo lo de Quo…') + '</div>';
+  }
+  function abreCuenta(id) {
+    var x = RLISTA.filter(function (r) { return String(r.id) === String(id); })[0]; if (!x) return;
+    var a = x.a, o = origenDe(a);
+    var h = '<h3 id="dlg-t">' + esc(x.nombre || 'Sin nombre') + '</h3><div style="margin:0 0 10px">' + chip(x.est[1], x.est[2]) + (x.entro ? chip('Ya entró', 'ok') : chip('No ha entrado', '')) + '</div>'
+      + '<dl class="dl"><dt>Se registró</dt><dd>' + esc(fechaC(x.fecha)) + '</dd><dt>Sistemas</dt><dd>' + x.sis.map(function (s) { return esc(SIS[s]); }).join(', ') + '</dd>'
+      + susDe(a).map(function (s) { return '<dt>' + esc(SIS[s.sistema] || s.sistema) + '</dt><dd>' + esc(s.plan_txt || '') + (s.periodo ? ' · ' + esc(s.periodo) : '') + (s.prueba_hasta ? '<div class="mut">Prueba hasta el ' + esc(fechaC(s.prueba_hasta)) + '</div>' : '') + '</dd>'; }).join('')
+      + '<dt>De dónde llegó</dt><dd>' + (o ? esc(x.canal) + '<div class="mut">' + esc(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'].map(function (k) { return o[k] ? k.replace('utm_', '') + ': ' + o[k] : ''; }).filter(Boolean).join(' · ')) + '</div>' : 'Sin dato todavía') + '</dd>'
+      + '<dt>Pagado en línea</dt><dd>' + (x.pago.real ? dinero(x.pago.real) : 'Nada todavía') + (x.pago.prueba ? '<div class="mut">' + dinero(x.pago.prueba) + ' en cobros de prueba (Stripe en modo de prueba)</div>' : '') + '</dd></dl>'
+      + '<div class="acciones"><button class="btn" type="button" id="c-quo">Ver en Clientes Quo</button><button class="btn" type="button" id="c-cierra">Cerrar</button></div>';
+    abre(h, 'c-cierra');
+    $('c-cierra').onclick = cierra;
+    $('c-quo').onclick = function () { cierra(); try { window.parent.PORTAL_MENU.ir('quo-membresias'); } catch (e) { avisa('Ábrelo en QUO › Clientes Quo.'); } };
+  }
+  $('r-lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) abreCuenta(tr.getAttribute('data-id')); });
+  $('r-lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); abreCuenta(tr.getAttribute('data-id')); } });
+  $('r-q').addEventListener('input', function () { RQ = this.value; if (PAGS.res) PAGS.res.inicio(); pintaRes(); });
+  $('r-per').onchange = async function () { RPER = +this.value || 28; if (PAGS.res) PAGS.res.inicio(); try { await cargaMet(); } catch (e) { /* lo de Quo se ve igual */ } pintaRes(); };
+  $('r-sis').onchange = function () { RSIS = this.value; if (PAGS.res) PAGS.res.inicio(); pintaRes(); };
+  $('r-canal').onchange = function () { RCANAL = this.value; if (PAGS.res) PAGS.res.inicio(); pintaRes(); };
+
+  /* =============================== Mensajes e interacciones =============================== */
+  async function cargaInter() { INTER = await rpc('mkt_inter_lista', { p_dias: IPER }); }
+  var IPILAS = [['pend', 'Por contestar', 'rojo'], ['delicado', 'Delicados', 'naranja'], ['mensaje', 'Mensajes', 'azul'], ['comentario', 'Comentarios', 'violeta'], ['atendido', 'Atendidos', 'verde']];
+  function enIPila(x, k) {
+    if (k === 'pend') return x.pendiente && x.estado === 'nuevo';
+    if (k === 'delicado') return x.estado === 'delicado';
+    if (k === 'atendido') return x.estado === 'atendido' || (!x.pendiente && x.estado !== 'delicado');
+    return x.tipo === k;
+  }
+  function baseInter() {
+    var q = norm(IQ).split(/\s+/).filter(Boolean);
+    return ((INTER && INTER.items) || []).filter(function (x) {
+      if (IPAG && x.pagina !== IPAG) return false;
+      if (IRED && x.red !== IRED) return false;
+      if (ITIPO && x.tipo !== ITIPO) return false;
+      return !q.length || q.every(function (w) { return norm([x.de, x.texto, x.publicacion_txt, x.nota].join(' ')).indexOf(w) >= 0; });
+    });
+  }
+  function estadoI(x) {
+    if (x.estado === 'delicado') return chip('Delicado', 'na');
+    if (x.estado === 'atendido') return chip('Atendido', 'ok');
+    if (!x.pendiente) return chip('Ya se le contestó', 'ok');
+    return chip('Por contestar', 'mal');
+  }
+  function pintaMsj() {
+    if (!INTER) return;
+    var m = (INTER.mensajes || {}), ps = m.paginas || {}, notas = [];
+    if (m.hora) notas.push('Se trajo el ' + fechaHora(m.hora) + '.'); else notas.push('Todavía no se trae por primera vez: pica «Traer ahora».');
+    Object.keys(PAGINAS).forEach(function (k) {
+      var p = ps[k]; if (!p) return;
+      if (!p.conectada) { notas.push(PAGINAS[k] + ': no está conectada (' + (p.motivo || 'falta su llave') + ').'); return; }
+      var falta = {}; (p.problemas || []).forEach(function (x) { if (x.falta) falta[x.falta] = 1; });
+      var f = Object.keys(falta);
+      if (f.indexOf('pages_messaging') >= 0) notas.push(PAGINAS[k] + ': para ver sus mensajes de Messenger falta el permiso de Messenger en su llave.');
+      if (p.instagram === false && k === 'quo') notas.push(PAGINAS[k] + ': su Instagram todavía no se ve con la llave (falta sacarla con los permisos de Instagram).');
+      else if (f.indexOf('instagram_manage_messages') >= 0) notas.push(PAGINAS[k] + ': para ver los mensajes de Instagram falta el permiso «instagram_manage_messages» en su llave.');
+      if (f.indexOf('instagram_manage_comments') >= 0) notas.push(PAGINAS[k] + ': para ver los comentarios de Instagram falta el permiso «instagram_manage_comments».');
+    });
+    if (INTER.pedido && (!m.hora || INTER.pedido > m.hora)) notas.push('Se está trayendo (lo pediste el ' + fechaHora(INTER.pedido) + ').');
+    $('i-estado').textContent = notas.join(' '); $('i-estado').hidden = false;
+    var base = baseInter();
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('i-pilas'), { titulo: 'Tu trabajo · redes', meta: 'Últimos ' + IPER + ' días', pilas: IPILAS.map(function (p) {
+      var n = base.filter(function (x) { return enIPila(x, p[0]); }).length;
+      return { k: p[0], t: p[1], n: n, tono: p[2], on: IPILA === p[0], tag: n && p[0] === 'pend' ? 'Te toca' : '' }; }),
+      alPicar: function (k) { IPILA = IPILA === k ? '' : k; if (PAGS.msj) PAGS.msj.inicio(); pintaMsj(); },
+      boton: { t: 'Empezar a revisar', n: listaInter().length, alPicar: function () { var l = listaInter(); if (!l.length) return; COLA = l.map(function (x) { return x.id; }); ficha(COLA[0]); } },
+      nota: 'Abre el primero; en su ficha, «Siguiente ›» pasa al que sigue.' });
+    var l = listaInter(); ILISTA = l;
+    if (BARS.msj && BARS.msj.f) BARS.msj.f.pinta();
+    var pend = ((INTER && INTER.items) || []).filter(function (x) { return enIPila(x, 'pend'); }).length;
+    $('n-msj').textContent = pend ? String(pend) : '';
+    var pl = IPILAS.filter(function (p) { return p[0] === IPILA; })[0];
+    $('i-lista-t').textContent = pl ? pl[1] : 'Mensajes y comentarios';
+    $('i-lista-n').textContent = l.length + (l.length === 1 ? ' renglón' : ' renglones');
+    var pg = PAGS.msj ? PAGS.msj.corta(l) : l;
+    $('i-lista').innerHTML = pg.map(function (x) {
+      return '<tr class="fila' + (ABIERTO === x.id ? ' sel' : '') + '" tabindex="0" data-id="' + esc(x.id) + '"><td data-e="Cuándo" data-orden="' + esc(x.cuando || '') + '">' + esc(fechaHora(x.cuando)) + '</td>'
+        + '<td data-e="Quién"><div class="quien">' + esc(x.de || 'Sin nombre') + '</div></td>'
+        + '<td data-e="Dónde">' + chip(x.red === 'instagram' ? 'Instagram' : 'Facebook', 'az') + chip(x.tipo === 'mensaje' ? 'Mensaje' : 'Comentario', '') + '<div class="mut">' + esc(PAGINAS[x.pagina] || x.pagina) + '</div></td>'
+        + '<td data-e="Qué escribió"><div class="txt">' + esc(x.texto) + '</div>' + (x.publicacion_txt ? '<div class="mut">En: ' + esc(x.publicacion_txt) + '</div>' : '') + '</td>'
+        + '<td data-e="Cómo va">' + estadoI(x) + (x.nota ? '<div class="mut">' + esc(x.nota) + '</div>' : '') + '</td></tr>';
+    }).join('');
+    $('i-vacio').hidden = l.length > 0;
+    $('i-vacio').textContent = IQ || IPAG || IRED || ITIPO || IPILA ? (IPILA === 'pend' && !IQ && !IPAG && !IRED && !ITIPO ? 'Nada por contestar: todo al día.' : 'Nada coincide con lo que escogiste.') : 'Todavía no hay mensajes ni comentarios en este periodo.';
+  }
+  function listaInter() {
+    var b = baseInter();
+    if (IPILA) b = b.filter(function (x) { return enIPila(x, IPILA); });
+    return b.sort(function (a, c) { return String(c.cuando || '').localeCompare(String(a.cuando || '')); });
+  }
+  function ficha(id) {
+    var x = ((INTER && INTER.items) || []).filter(function (i) { return i.id === id; })[0];
+    if (!x) return;
+    ABIERTO = id;
+    var red = x.red === 'instagram' ? 'Instagram' : 'Facebook';
+    var h = '<h3 id="dlg-t">' + esc(x.de || 'Sin nombre') + '</h3><div style="margin:0 0 10px">' + chip(red, 'az') + chip(x.tipo === 'mensaje' ? 'Mensaje' : 'Comentario', '') + chip(PAGINAS[x.pagina] || x.pagina, '') + estadoI(x) + '</div>'
+      + '<div class="cita">' + esc(x.texto) + '</div>'
+      + '<dl class="dl"><dt>Cuándo</dt><dd>' + esc(fechaHora(x.cuando)) + '</dd>'
+      + (x.publicacion_txt ? '<dt>En la publicación</dt><dd>' + esc(x.publicacion_txt) + '</dd>' : '')
+      + '<dt>Respuestas de la página</dt><dd>' + (x.respuestas ? n0(x.respuestas) : 'Ninguna todavía') + '</dd>'
+      + (x.marcado_en ? '<dt>Marcado</dt><dd>' + esc(fechaHora(x.marcado_en)) + '</dd>' : '') + '</dl>'
+      + (x.liga ? '<p><a class="btn acento" href="' + esc(x.liga) + '" target="_blank" rel="noopener noreferrer">Contestar en ' + red + '</a></p>' : '')
+      + '<div class="campo"><label for="f-nota">Nota (opcional)</label><textarea id="f-nota" maxlength="500" placeholder="Por ejemplo: le mandé la liga de la prueba gratis">' + esc(x.nota || '') + '</textarea></div>'
+      + '<div class="msg mal" id="f-e" hidden></div>'
+      + '<div class="acciones">'
+      + (x.estado !== 'nuevo' ? '<button class="btn" type="button" data-m="nuevo">Regresar a «Por contestar»</button>' : '')
+      + (x.estado !== 'delicado' ? '<button class="btn" type="button" data-m="delicado">Delicado</button>' : '')
+      + (x.estado !== 'atendido' ? '<button class="btn bien" type="button" data-m="atendido">Atendido</button>' : '<button class="btn" type="button" data-m="atendido">Guardar nota</button>')
+      + '<button class="btn" type="button" id="f-cierra">Cerrar</button></div>';
+    abre(h, 'f-cierra');
+    if (window.PROFASE_PILAS) PROFASE_PILAS.nav({ ids: COLA, id: id, abre: ficha, antes: $('f-cierra'), clase: 'btn' });
+    $('f-cierra').onclick = function () { cierra(); pintaMsj(); };
+    $('dlg-c').querySelectorAll('button[data-m]').forEach(function (b) {
+      b.onclick = async function () {
+        var est = b.getAttribute('data-m'); b.disabled = true;
+        try {
+          var r = await rpc('mkt_marca', { p_id: x.id, p_estado: est, p_nota: $('f-nota').value });
+          x.estado = r.estado; x.nota = r.nota; x.marcado_en = r.marcado_en;
+          var i = COLA.indexOf(x.id), sig = i >= 0 ? COLA[i + 1] : null;
+          if (sig) ficha(sig); else { cierra(); avisa('Listo.'); }
+          pintaMsj();
+        } catch (e) { $('f-e').textContent = falla(e); $('f-e').hidden = false; b.disabled = false; }
+      };
+    });
+  }
+  $('i-lista').addEventListener('click', function (e) { var tr = e.target.closest('tr.fila'); if (tr) { COLA = ILISTA.map(function (x) { return x.id; }); ficha(tr.getAttribute('data-id')); } });
+  $('i-lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr.fila'); if (tr) { e.preventDefault(); COLA = ILISTA.map(function (x) { return x.id; }); ficha(tr.getAttribute('data-id')); } });
+  $('i-q').addEventListener('input', function () { IQ = this.value; if (PAGS.msj) PAGS.msj.inicio(); pintaMsj(); });
+  $('i-per').onchange = async function () { IPER = +this.value || 30; if (PAGS.msj) PAGS.msj.inicio(); try { await cargaInter(); pintaMsj(); } catch (e) { error(falla(e)); } };
+  $('i-pag').onchange = function () { IPAG = this.value; if (PAGS.msj) PAGS.msj.inicio(); pintaMsj(); };
+  $('i-red').onchange = function () { IRED = this.value; if (PAGS.msj) PAGS.msj.inicio(); pintaMsj(); };
+  $('i-tipo').onchange = function () { ITIPO = this.value; if (PAGS.msj) PAGS.msj.inicio(); pintaMsj(); };
+
+  /* =============================== Costos vs compras =============================== */
+  // lo invertido (los anuncios que trae Metricool o «Promocionar», lo más grande de Meta, + lo capturado aquí, en pesos) contra lo que de verdad se consiguió (Quo),
+  // mes por mes; lo invertido se refleja solo en Administración › Costos de sistemas (509)
+  function mesesAtras(n) {   // los últimos n meses, del más viejo al más nuevo («AAAA-MM»)
+    var h = hoy(), y = +h.slice(0, 4), m = +h.slice(5, 7), o = [];
+    for (var i = n - 1; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } o.push(yy + '-' + (mm < 10 ? '0' : '') + mm); }
+    return o;
+  }
+  function mesTxt(k) { var p = String(k).split('-'); return MESES[+p[1] - 1] + ' ' + p[0]; }
+  async function cargaCos() {
+    var ms = mesesAtras(12);
+    COS = await rpc('mkt_costos_lee', { p_desde: ms[0] + '-01', p_hasta: hoy() });
+  }
+  function parteDe(g) {   // lo de un gasto que le toca al sistema escogido (o todo)
+    var sis = g.sistemas || [];
+    if (!CSIS) return Number(g.mxn || 0);
+    return sis.indexOf(CSIS) >= 0 ? Number(g.mxn || 0) / sis.length : 0;
+  }
+  function cosMeses() {
+    var ks = mesesAtras(CPER), regs = QUO ? registros() : [], an = (COS && COS.anuncios) || {};
+    var porMes = {};
+    ks.forEach(function (k) { var a = an[k] || {}, f = CSIS ? 1 / 3 : 1;
+      porMes[k] = { k: k, google: Number(a.google_ads || 0) * f, meta: Number(a.meta_ads || 0) * f, otros: 0, reg: 0, pagan: 0, cob: 0, cobP: 0 }; });
+    ((COS && COS.gastos) || []).forEach(function (g) { if (g.quitado) return; var o = porMes[String(g.fecha).slice(0, 7)]; if (o) o.otros += parteDe(g); });
+    regs.forEach(function (x) {
+      if (CSIS && x.sis.indexOf(CSIS) < 0) return;
+      var o = porMes[String(x.fecha).slice(0, 7)]; if (o) { o.reg++; if (x.est[0] === 'paga') o.pagan++; }
+      ((x.a && x.a.pagos_linea) || []).forEach(function (pg) {
+        if (pg.estado !== 'pagado') return;
+        if (CSIS && pg.sistema && pg.sistema !== CSIS) return;
+        var q = porMes[diaDe(pg.fecha).slice(0, 7)]; if (!q) return;
+        if (pg.prueba) q.cobP += Number(pg.total || 0); else q.cob += Number(pg.total || 0);
+      });
+    });
+    return ks.map(function (k) { var o = porMes[k]; o.inv = o.google + o.meta + o.otros; return o; });
+  }
+  function pintaCos() {
+    $('k-err').hidden = !QUO_ERR; $('k-err').textContent = QUO_ERR ? 'Lo de Quo no se pudo traer: ' + QUO_ERR : '';
+    var con = (COS && COS.conexiones) || (MET && MET.metricool && MET.metricool.conexiones) || {};
+    var est = [];
+    if (!COS) est.push('Trayendo lo invertido…');
+    else {
+      var sin = ['google_ads', 'meta_ads'].filter(function (r) { return !con[r]; }).map(function (r) { return REDES[r]; });
+      if (sin.length) est.push((sin.length === 2 ? 'Google Ads y Meta Ads todavía no están' : sin[0] + ' todavía no está') + ' conectado a Metricool: lo de esos anuncios sale en $0 hasta que se conecte (lo de «Promocionar» sí cuenta: lo mide el CRM solo; nunca se gasta nada sin tu sí). Lo que pagues aparte, captúralo con «+ Agregar gasto».');
+      if (COS.costos_mandado) est.push('Se reflejó en Costos de sistemas el ' + fechaHora(COS.costos_mandado) + '.');
+      else est.push('Todavía no hay nada que reflejar en Costos de sistemas.');
+    }
+    $('k-estado').textContent = est.join(' '); $('k-estado').hidden = !est.length;
+    var L = cosMeses(); CMESES = L;
+    var T = L.reduce(function (t, o) { ['google', 'meta', 'otros', 'inv', 'reg', 'pagan', 'cob', 'cobP'].forEach(function (k) { t[k] += o[k]; }); return t; }, { google: 0, meta: 0, otros: 0, inv: 0, reg: 0, pagan: 0, cob: 0, cobP: 0 });
+    var per = 'Últimos ' + CPER + ' meses' + (CSIS ? ' · ' + SIS[CSIS] : '');
+    function porC(a, b) { return b > 0 ? dinero(a / b) : '—'; }
+    var pilas = [
+      { k: 'inv', t: 'Invertido', n: Math.round(T.inv), txt: dinero(T.inv), d: dinero(T.google + T.meta) + ' en anuncios · ' + dinero(T.otros) + ' en otros gastos', tono: 'naranja' },
+      { k: 'reg', t: 'Registros a la prueba', n: T.reg, txt: QUO ? n0(T.reg) : '…', d: 'Cuentas que se registraron solas', tono: 'azul' },
+      { k: 'pagan', t: 'Ya pagan', n: T.pagan, txt: QUO ? n0(T.pagan) : '…', d: T.reg ? pct(T.pagan, T.reg) + ' de los registros' : 'Con cobros de verdad', tono: 'verde' },
+      { k: 'cob', t: 'Cobrado en línea', n: Math.round(T.cob), txt: QUO ? dinero(T.cob) : '…', d: T.cobP ? dinero(T.cobP) + ' más en cobros de prueba (no es dinero de verdad)' : 'Con IVA, de verdad', tono: 'verde' },
+      { k: 'creg', t: 'Costo por registro', n: 0, txt: T.inv ? porC(T.inv, T.reg) : '—', d: T.inv ? 'Lo invertido entre los registros' : 'Sin inversión todavía: todo es orgánico', tono: 'gris' },
+      { k: 'cpag', t: 'Costo por cliente que paga', n: 0, txt: T.inv ? porC(T.inv, T.pagan) : '—', d: T.inv ? 'Lo invertido entre los que ya pagan' : 'Sin inversión todavía', tono: 'gris' },
+      { k: 'ret', t: 'Regresó por cada $1', n: 0, txt: T.inv ? (QUO ? dinero(T.cob / T.inv) : '…') : '—', d: T.inv ? 'Lo cobrado entre lo invertido' : 'Se calcula en cuanto haya inversión', tono: T.inv && T.cob >= T.inv ? 'verde' : 'gris' }
+    ];
+    if (window.PROFASE_PILAS) PROFASE_PILAS.pinta($('k-pilas'), { titulo: 'Lo invertido contra lo conseguido', meta: per, pilas: pilas,
+      alPicar: function (k) {   // lo conseguido se ve cuenta por cuenta en Resultados; lo demás, en la tabla de abajo
+        if (k === 'reg' || k === 'pagan' || k === 'cob') { RPILA = k === 'pagan' ? 'paga' : ''; abreTab('res'); return; }
+        try { $(k === 'inv' ? 'k-lista-caja' : 'k-mes-caja').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* sin desplazar */ }
+      } });
+    if (BARS.cos && BARS.cos.f) BARS.cos.f.pinta();
+    $('k-mes-n').textContent = per;
+    $('k-mes').innerHTML = L.slice().reverse().map(function (o) {
+      return '<tr><td data-e="Mes" data-orden="' + o.k + '">' + esc(mesTxt(o.k)) + '</td>'
+        + '<td data-e="Anuncios" class="der num">' + dinero(o.google + o.meta) + (o.google && o.meta ? '<div class="mut">Google ' + dinero(o.google) + ' · Meta ' + dinero(o.meta) + '</div>' : '') + '</td>'
+        + '<td data-e="Otros gastos" class="der num">' + dinero(o.otros) + '</td>'
+        + '<td data-e="Invertido" class="der num">' + dinero(o.inv) + '</td>'
+        + '<td data-e="Registros" class="der num">' + (QUO ? n0(o.reg) : '…') + '</td>'
+        + '<td data-e="Ya pagan" class="der num">' + (QUO ? n0(o.pagan) : '…') + '</td>'
+        + '<td data-e="Cobrado en línea" class="der num">' + (QUO ? dinero(o.cob) : '…') + (o.cobP ? '<div class="mut">' + dinero(o.cobP) + ' de prueba</div>' : '') + '</td>'
+        + '<td data-e="Costo por registro" class="der num">' + (o.inv && o.reg ? dinero(o.inv / o.reg) : '—') + '</td>'
+        + '<td data-e="Regresó por cada $1" class="der num">' + (o.inv && QUO ? dinero(o.cob / o.inv) : '—') + '</td></tr>';
+    }).join('');
+    // lo capturado
+    var G = ((COS && COS.gastos) || []).filter(function (g) { return !CSIS || (g.sistemas || []).indexOf(CSIS) >= 0; });
+    var vivos = G.filter(function (g) { return !g.quitado; }), quit = G.length - vivos.length;
+    $('k-lista-n').textContent = vivos.length + (vivos.length === 1 ? ' gasto' : ' gastos') + (quit ? ' · ' + quit + ' quitado' + (quit === 1 ? '' : 's') : '');
+    $('k-lista').innerHTML = G.map(function (g) {
+      var sis = (g.sistemas || []).map(function (x) { return chip(SIS[x] || x, 'az'); }).join('');
+      return '<tr class="fila" tabindex="0" data-gid="' + esc(g.id) + '"' + (g.quitado ? ' style="opacity:.6"' : '') + '><td data-e="Se pagó" data-orden="' + esc(g.fecha) + '">' + esc(fechaC(g.fecha)) + '</td>'
+        + '<td data-e="Qué fue"><div class="quien">' + esc(g.concepto) + '</div>' + (g.quitado ? chip('Quitado', 'mal') : '') + (g.nota ? '<div class="mut txt">' + esc(g.nota) + '</div>' : '') + '</td>'
+        + '<td data-e="Qué es">' + esc(QUE[g.que] || g.que) + '</td>'
+        + '<td data-e="Para qué sistema">' + sis + '</td>'
+        + '<td data-e="Monto" class="der num">' + (g.moneda === 'USD' ? 'US' + dinero(g.monto) : dinero(g.monto)) + '</td>'
+        + '<td data-e="En pesos" class="der num">' + dinero(g.mxn) + (g.moneda === 'USD' && g.tc ? '<div class="mut">a ' + F2.format(g.tc) + ' por dólar</div>' : '') + '</td></tr>';
+    }).join('');
+    $('k-vacio').hidden = G.length > 0 || !COS;
+    $('k-vacio').textContent = CSIS ? 'Nada capturado para ' + SIS[CSIS] + ' en estos meses.' : 'Todavía no has capturado gastos. Lo de Google Ads y Meta Ads no se captura: lo trae Metricool. Aquí va lo demás que se pague (una herramienta, la voz o las escenas de un video, un anuncio que Metricool no vea).';
+  }
+  function gastoForm(g) {
+    g = g || {};
+    var hayId = !!g.id, sis = g.sistemas || ['contabilita', 'facturita', 'nominita'];
+    abre('<h3 id="dlg-t">' + (hayId ? 'Cambiar el gasto' : 'Agregar un gasto de publicidad') + '</h3>'
+      + '<p class="mut">Lo de Google Ads y Meta Ads no se captura: lo trae Metricool. Aquí va lo demás que se pague para vender los sistemas Quo. Se refleja solo en Costos de sistemas.</p>'
+      + '<div class="msg mal" id="g-msg" hidden role="alert"></div>'
+      + '<div class="campo"><label for="g-fecha">Se pagó el</label><input type="date" id="g-fecha" max="' + hoy() + '" value="' + esc(g.fecha || hoy()) + '" style="border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:var(--surface)"></div>'
+      + '<div class="campo"><label for="g-con">Qué fue</label><input type="text" id="g-con" maxlength="120" placeholder="Por ejemplo: voz para los videos" value="' + esc(g.concepto || '') + '" style="border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:var(--surface)"></div>'
+      + '<div class="campo"><label for="g-que">Qué es</label><select id="g-que">' + Object.keys(QUE).map(function (k) { return '<option value="' + k + '"' + ((g.que || 'herramienta') === k ? ' selected' : '') + '>' + esc(QUE[k]) + '</option>'; }).join('') + '</select></div>'
+      + '<fieldset class="campo" style="border:0;padding:0;margin:0 0 10px"><legend style="font-size:12.5px;font-weight:600;color:var(--muted);padding:0;margin-bottom:4px">Para qué sistema</legend><div class="acciones" style="justify-content:flex-start;margin-top:0">'
+      + Object.keys(SIS).map(function (k) { return '<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="g-sis" value="' + k + '"' + (sis.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(SIS[k]) + '</label>'; }).join('')
+      + '</div><div class="mut">Si es para varios, se reparte en partes iguales entre los que palomees.</div></fieldset>'
+      + '<div class="dosc" style="gap:0 12px"><div class="campo"><label for="g-mon">Moneda</label><select id="g-mon"><option value="MXN"' + (g.moneda !== 'USD' ? ' selected' : '') + '>Pesos</option><option value="USD"' + (g.moneda === 'USD' ? ' selected' : '') + '>Dólares</option></select><div class="mut">Lo de dólares se pasa a pesos con el tipo de cambio de ese día.</div></div>'
+      + '<div class="campo"><label for="g-monto">Monto, con IVA</label><input type="text" inputmode="decimal" id="g-monto" placeholder="0.00" value="' + (g.monto != null ? esc(g.monto) : '') + '" style="border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:var(--surface)"></div></div>'
+      + '<div class="campo"><label for="g-nota">Nota (si quieres)</label><textarea id="g-nota" maxlength="500">' + esc(g.nota || '') + '</textarea></div>'
+      + '<div class="acciones">' + (hayId ? '<button class="btn" type="button" id="g-quita" style="margin-right:auto">Quitar este gasto</button>' : '') + '<button class="btn" type="button" id="g-no">Cancelar</button><button class="btn acento" type="button" id="g-si">Guardar</button></div>', 'g-con');
+    $('g-no').onclick = cierra;
+    if (hayId) $('g-quita').onclick = function () { quitaGasto(g); };
+    $('g-si').onclick = async function () {
+      var b = this, m = $('g-msg'); m.hidden = true;
+      var monto = String($('g-monto').value || '').replace(/[$,\s]/g, '');
+      var sel = [].slice.call(document.querySelectorAll('input[name="g-sis"]:checked')).map(function (x) { return x.value; });
+      b.disabled = true;
+      try {
+        await rpc('mkt_gasto_guarda', { p: { id: g.id || null, fecha: $('g-fecha').value, concepto: $('g-con').value, que: $('g-que').value, sistemas: sel, moneda: $('g-mon').value, monto: monto, nota: $('g-nota').value } });
+        cierra(); await cargaCos(); pintaCos();
+        avisa('Guardado. En unos minutos se refleja en Administración › Costos de sistemas.');
+      } catch (e) { m.textContent = falla(e); m.hidden = false; b.disabled = false; }
+    };
+  }
+  function quitaGasto(g) {
+    abre('<h3 id="dlg-t">Quitar «' + esc(g.concepto) + '»</h3><p>No se borra: queda como quitado, con su motivo, y deja de contar aquí y en Costos de sistemas.</p>'
+      + '<div class="msg mal" id="q-msg" hidden role="alert"></div>'
+      + '<div class="campo"><label for="q-mot">Por qué se quita</label><textarea id="q-mot" maxlength="300" placeholder="Por ejemplo: se capturó dos veces"></textarea></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="q-no">Cancelar</button><button class="btn acento" type="button" id="q-si">Quitar</button></div>', 'q-mot');
+    $('q-no').onclick = cierra;
+    $('q-si').onclick = async function () {
+      var b = this; b.disabled = true; $('q-msg').hidden = true;
+      try { await rpc('mkt_gasto_quita', { p_id: g.id, p_motivo: $('q-mot').value }); cierra(); await cargaCos(); pintaCos(); avisa('Se quitó. En unos minutos se refleja en Costos de sistemas.'); }
+      catch (e) { $('q-msg').textContent = falla(e); $('q-msg').hidden = false; b.disabled = false; }
+    };
+  }
+  function verGasto(id) {
+    var g = ((COS && COS.gastos) || []).filter(function (x) { return String(x.id) === String(id); })[0]; if (!g) return;
+    if (!g.quitado) return gastoForm(g);
+    abre('<h3 id="dlg-t">' + esc(g.concepto) + '</h3><div style="margin:0 0 10px">' + chip('Quitado', 'mal') + '</div><dl class="dl">'
+      + '<dt>Se pagó</dt><dd>' + esc(fechaC(g.fecha)) + '</dd><dt>Monto</dt><dd>' + (g.moneda === 'USD' ? 'US' + dinero(g.monto) + ' (' + dinero(g.mxn) + ')' : dinero(g.monto)) + '</dd>'
+      + '<dt>Se quitó</dt><dd>' + esc(fechaHora(g.quitado)) + '</dd><dt>Por qué</dt><dd>' + esc(g.motivo || '—') + '</dd></dl>'
+      + '<div class="acciones"><button class="btn" type="button" id="v-ok">Cerrar</button></div>', 'v-ok');
+    $('v-ok').onclick = cierra;
+  }
+  $('k-lista').addEventListener('click', function (e) { var tr = e.target.closest('tr[data-gid]'); if (tr) verGasto(tr.getAttribute('data-gid')); });
+  $('k-lista').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var tr = e.target.closest('tr[data-gid]'); if (tr) { e.preventDefault(); verGasto(tr.getAttribute('data-gid')); } });
+  $('k-nuevo').onclick = function () { gastoForm(null); };
+  $('k-per').onchange = function () { CPER = +this.value || 6; pintaCos(); };
+  $('k-sis').onchange = function () { CSIS = this.value; pintaCos(); };
+
+  /* ---------- «Traer ahora» (la acción «Marketing»: los mensajes de Meta y lo de Metricool que haya) ---------- */
+  async function trae(b) {
+    b.disabled = true;
+    var antes = INTER && INTER.mensajes && INTER.mensajes.hora;
+    try {
+      var r = await rpc('mkt_pide');
+      avisa(r && r.ya ? 'Ya se está trayendo: en unos minutos se ve lo nuevo.' : r && r.ok ? 'Listo: en unos minutos se trae lo nuevo de Facebook e Instagram. Esta pantalla se pone al día sola.' : 'No se pudo pedir ahora. Qué hacer: vuelve a intentar en un momento.');
+      var n = 0;
+      (function espera() {
+        if (++n > 24) { b.disabled = false; return; }
+        setTimeout(async function () {
+          try { var d = await rpc('mkt_inter_lista', { p_dias: IPER }); if (d && d.mensajes && d.mensajes.hora && d.mensajes.hora !== antes) { INTER = d; await cargaMet(); pintaMsj(); pintaMet(); avisa('Se puso al día.'); b.disabled = false; return; } } catch (e) { /* sigue esperando */ }
+          espera();
+        }, 20000);
+      })();
+    } catch (e) { error(falla(e)); b.disabled = false; }
+  }
+  $('i-trae').onclick = function () { trae(this); };
+  $('m-trae').onclick = function () { trae(this); };
+
+  /* ---------- «Cómo se lee» ---------- */
+  function como(t) {
+    var txt = {
+      met: '<p><b>De dónde sale:</b> de Metricool (marca «Sistemas Quo», plan gratis). Metricool no tiene una llave para el CRM en ese plan, así que cada mañana Claude lo trae con su conector y lo deja cifrado en el repositorio; la nube lo carga y lo borra. Si Metricool corrige días de atrás, se corrigen aquí también.</p>'
+        + '<p><b>Alcance</b> son las personas distintas que vieron algo de la página; <b>vistas</b>, las veces que se vio; <b>interacciones</b>, reacciones, comentarios, compartidos, guardados y clics. Cada pila compara con los mismos días de antes.</p>'
+        + '<p><b>La página web</b> sale en cuanto Metricool la ve: falta darle «Verificar» en sus conexiones. <b>Google Ads y Meta Ads</b> salen en cuanto se conecten a Metricool; nunca se gasta nada sin tu sí.</p>'
+        + '<p><b>Mejores horas:</b> cuándo están en línea tus seguidores, según Metricool; más oscuro, mejor.</p>',
+      res: '<p><b>De la red a la venta:</b> arriba lo que midieron las redes (Metricool) y abajo lo que se consiguió en los sistemas Quo en el mismo periodo: las cuentas que se registraron solas en www.quosistemas.com (la prueba gratis), las que ya entraron, las que ya pagan y lo cobrado en línea con Stripe. Lo de Quo se trae en vivo; el CRM no lo guarda.</p>'
+        + '<p><b>Cobros de prueba:</b> mientras Stripe esté en modo de prueba, lo «pagado» no es dinero de verdad; va aparte.</p>'
+        + '<p><b>De dónde llegó:</b> desde el 24 de noviembre la página guarda de qué red o campaña llegó cada registro (las etiquetas utm de la liga). Sale aquí en cuanto Quo lo mande al CRM. Para saber qué publicación trajo a cada quien, la liga de cada publicación lleva su etiqueta.</p>'
+        + '<p><b>Invertido en anuncios:</b> lo que diga Google Ads y Meta Ads cuando se conecten; con eso sale cuánto cuesta cada registro.</p>',
+      cos: '<p><b>Invertido:</b> lo de Google Ads y Meta Ads lo trae Metricool cada mañana (en pesos, la moneda de las cuentas de anuncios) y lo de «Promocionar» de Campañas Facebook lo mide el CRM solo; como «Promocionar» usa la misma cuenta de Meta, de Meta cuenta, cada mes, lo más grande de los dos (nunca las dos). Lo demás que se pague para vender los sistemas Quo (una herramienta, la voz o las escenas de un video, un anuncio que Metricool no ve) lo capturas aquí con «+ Agregar gasto». Lo de dólares se pasa a pesos con el tipo de cambio de su día.</p>'
+        + '<p><b>Lo conseguido:</b> las cuentas que se registraron solas en www.quosistemas.com, las que ya pagan y lo cobrado en línea de verdad (con IVA), del mismo mes. Los cobros de Stripe en modo de prueba van aparte: no son dinero de verdad.</p>'
+        + '<p><b>Costo por registro</b> es lo invertido entre los registros; <b>costo por cliente que paga</b>, entre los que ya pagan, y <b>regresó por cada $1</b>, lo cobrado entre lo invertido (más de $1 es que ya regresa más de lo que se mete). Al escoger un sistema, lo de los anuncios se reparte en tercios y cada gasto en partes iguales entre los sistemas que dice.</p>'
+        + '<p><b>En Costos de sistemas:</b> todo lo invertido se refleja solo, mes por mes, en Administración › Costos de sistemas: «Anuncios de Sistemas Quo» y «Otros gastos de publicidad de Sistemas Quo», en la parte de cada sistema Quo. No hay que capturarlo dos veces.</p>',
+      msj: '<p><b>Qué trae:</b> los mensajes de Messenger (y de Instagram cuando la llave traiga ese permiso) y los comentarios de lo publicado en los últimos 30 días, de Sistemas Quo y de Profase Fiscal. Se trae solo cada 2 horas, de 8:17 a 22:17, y al momento con «Traer ahora».</p>'
+        + '<p><b>Por contestar</b> es lo que la página todavía no contesta. Al contestar en Facebook o Instagram se quita solo en la siguiente vuelta; también lo puedes marcar «Atendido». <b>Delicado</b> es para verlo con calma. Si alguien vuelve a escribir después, regresa a «Por contestar».</p>'
+        + '<p><b>Avisos:</b> lo nuevo sin contestar te llega a la campanita como «Responder redes sociales», una vez por vuelta. Nada de esto le llega a nadie más.</p>'
+    }[t] || '';
+    abre('<h3 id="dlg-t">Cómo se lee · ' + esc(TITULOS[t]) + '</h3>' + txt + '<div class="acciones"><button class="btn" type="button" id="c-ok">Cerrar</button></div>', 'c-ok');
+    $('c-ok').onclick = cierra;
+  }
+  $('m-como').onclick = function () { como('met'); };
+  $('r-como').onclick = function () { como('res'); };
+  $('i-como').onclick = function () { como('msj'); };
+  $('k-como').onclick = function () { como('cos'); };
+
+  /* ---------- ventanas ---------- */
+  var antesFoco = null;
+  function abre(html, foco) {
+    antesFoco = document.activeElement;
+    $('dlg-c').innerHTML = html; $('dlg').hidden = false;
+    var tecl = true; try { tecl = P.conTeclado ? !!P.conTeclado() : true; } catch (e) {}
+    try { (foco && tecl ? $(foco) : $('dlg-c').querySelector('button')).focus({ preventScroll: true }); } catch (e) {}
+    try { $('dlg-c').scrollTop = 0; } catch (e) {}
+    try { if (P.escribiendo) P.escribiendo('marketing', true); } catch (e) {}
+  }
+  function cierra() {
+    $('dlg').hidden = true; $('dlg-c').innerHTML = ''; ABIERTO = null;
+    try { if (P.escribiendo) P.escribiendo('marketing', false); } catch (e) {}
+    try { if (antesFoco) antesFoco.focus(); } catch (e) {}
+  }
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) cierra(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) cierra(); });
+
+  /* ---------- Excel con su PDF (con la marca PROFASE) ---------- */
+  async function hoja(nombreArchivo, titulo, lineas, head, filas, anchos, num) {
+    var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31).replace(/[\\/?*[\]:]/g, ' '));
+    ws.columns = anchos.map(function (x) { return { width: x }; });
+    var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas.concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
+    ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+    filas.forEach(function (f, i) { ws.getRow(f0 + 1 + i).values = f; });
+    if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+    (num || []).forEach(function (c) { ws.getColumn(c[0]).numFmt = c[1]; });
+    ws.views = [{ state: 'frozen', ySplit: f0 }];
+    MK.impresion(ws, { repetir: f0 });
+    await MK.guardar(wb, nombreArchivo);
+  }
+  $('m-x').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var t = filasTabla();
+      await hoja('Métricas de redes ' + hoy() + '.xlsx', 'Métricas de redes y anuncios', ['Sistemas Quo · últimos ' + MPER + ' días' + (MRED ? ' · ' + REDES[MRED] : ''), 'De Metricool'],
+        ['Día'].concat(t.cols.map(function (c) { return c.t; })), t.dias.map(function (d) { return [d].concat(t.cols.map(function (c) { return c.v[d] != null ? c.v[d] : ''; })); }),
+        [14].concat(t.cols.map(function () { return 16; })), t.cols.map(function (c, i) { return [i + 2, c.m === 'gasto' ? '#,##0.00' : '#,##0']; }));
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+  $('r-x').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = PROFASE_ORDEN.lista($('r-lista').closest('table'), RLISTA);
+      await hoja('Resultados de marketing ' + hoy() + '.xlsx', 'Resultados de marketing', ['Últimos ' + RPER + ' días' + (RSIS ? ' · ' + SIS[RSIS] : '') + (RCANAL ? ' · ' + RCANAL : ''), L.length + ' registros'],
+        ['Se registró', 'Cuenta', 'Correo', 'Sistemas', 'Cómo va', 'Ya entró', 'De dónde llegó', 'Pagado en línea', 'Cobros de prueba'],
+        L.map(function (x) { return [x.fecha, x.nombre, x.correo, x.sis.map(function (s) { return SIS[s]; }).join(', '), x.est[1], x.entro ? 'Sí' : 'No', x.canal || 'Sin dato', x.pago.real, x.pago.prueba]; }),
+        [13, 34, 30, 34, 26, 9, 22, 15, 15], [[8, '#,##0.00'], [9, '#,##0.00']]);
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+  $('i-x').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var L = PROFASE_ORDEN.lista($('i-lista').closest('table'), ILISTA);
+      await hoja('Mensajes de redes ' + hoy() + '.xlsx', 'Mensajes e interacciones', ['Últimos ' + IPER + ' días', L.length + ' renglones'],
+        ['Cuándo', 'Quién', 'Página', 'Red', 'Qué es', 'Qué escribió', 'En la publicación', 'Cómo va', 'Nota'],
+        L.map(function (x) { return [window.PROFASE_HORA ? PROFASE_HORA.excel(x.cuando) : x.cuando, x.de, PAGINAS[x.pagina] || x.pagina, x.red === 'instagram' ? 'Instagram' : 'Facebook', x.tipo === 'mensaje' ? 'Mensaje' : 'Comentario', x.texto, x.publicacion_txt || '', x.estado === 'delicado' ? 'Delicado' : x.estado === 'atendido' ? 'Atendido' : x.pendiente ? 'Por contestar' : 'Ya se le contestó', x.nota || '']; }),
+        [17, 24, 16, 11, 12, 60, 40, 16, 30], [[1, 'd mmm yyyy hh:mm']]);
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  $('k-x').onclick = async function () {
+    var b = this; b.disabled = true;
+    try {
+      var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, 'Costos vs compras');
+      function una(nom, titulo, lineas, head, filas, anchos, num) {
+        var ws = wb.addWorksheet(nom);
+        ws.columns = anchos.map(function (x) { return { width: x }; });
+        var f0 = MK.encabezado(wb, ws, head.length, { titulo: titulo, lineas: lineas.concat(['Exportado el ' + fechaHora(new Date().toISOString())]) });
+        ws.getRow(f0).values = head; MK.cabecera(ws, f0, 1, head.length);
+        filas.forEach(function (f, i) { ws.getRow(f0 + 1 + i).values = f; });
+        if (filas.length) MK.cuerpo(ws, f0 + 1, f0 + filas.length, 1, head.length);
+        (num || []).forEach(function (c) { ws.getColumn(c[0]).numFmt = c[1]; });
+        ws.views = [{ state: 'frozen', ySplit: f0 }];
+        MK.impresion(ws, { repetir: f0 });
+      }
+      var per = 'Últimos ' + CPER + ' meses' + (CSIS ? ' · ' + SIS[CSIS] : '');
+      una('Mes por mes', 'Costos vs compras', [per, 'Anuncios (Metricool y «Promocionar»), otros gastos capturados y lo conseguido en los sistemas Quo'],
+        ['Mes', 'Google Ads', 'Meta Ads', 'Otros gastos', 'Invertido', 'Registros', 'Ya pagan', 'Cobrado en línea', 'Cobros de prueba', 'Costo por registro', 'Regresó por cada $1'],
+        CMESES.slice().reverse().map(function (o) { return [mesTxt(o.k), o.google, o.meta, o.otros, o.inv, o.reg, o.pagan, o.cob, o.cobP, o.inv && o.reg ? o.inv / o.reg : '', o.inv ? o.cob / o.inv : '']; }),
+        [12, 14, 14, 14, 14, 11, 10, 16, 16, 16, 16], [[2, '#,##0.00'], [3, '#,##0.00'], [4, '#,##0.00'], [5, '#,##0.00'], [8, '#,##0.00'], [9, '#,##0.00'], [10, '#,##0.00'], [11, '#,##0.00']]);
+      var G = ((COS && COS.gastos) || []).filter(function (g) { return !CSIS || (g.sistemas || []).indexOf(CSIS) >= 0; });
+      G = PROFASE_ORDEN.lista($('k-lista').closest('table'), G);
+      una('Gastos capturados', 'Gastos capturados', [per, G.length + ' gastos'],
+        ['Se pagó', 'Qué fue', 'Qué es', 'Para qué sistema', 'Moneda', 'Monto', 'En pesos', 'Nota', 'Quitado', 'Por qué'],
+        G.map(function (g) { return [g.fecha, g.concepto, QUE[g.que] || g.que, (g.sistemas || []).map(function (x) { return SIS[x] || x; }).join(', '), g.moneda === 'USD' ? 'Dólares' : 'Pesos', Number(g.monto), Number(g.mxn), g.nota || '', g.quitado ? fechaHora(g.quitado) : '', g.motivo || '']; }),
+        [13, 34, 22, 34, 10, 14, 14, 30, 18, 30], [[6, '#,##0.00'], [7, '#,##0.00']]);
+      await MK.guardar(wb, 'Costos vs compras ' + hoy() + '.xlsx');
+    } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
+    b.disabled = false;
+  };
+
+  /* ---------- arrancar ---------- */
+  async function cargaTodo() {
+    await Promise.all([cargaMet(), cargaInter()]);
+    if (TAB === 'cos') { try { await cargaCos(); } catch (e) { /* se queda con lo de antes */ } }
+    if (TAB === 'met') pintaMet(); pintaMsj(); if (TAB === 'res') pintaRes(); if (TAB === 'cos') pintaCos();
+  }
+  async function arranca() {
+    try {
+      if (!P) { $('cargando').textContent = 'Sin conexión con la base. Qué hacer: recarga la página.'; return; }
+      var u = await P.listo; if (!u) return;
+      if (window.top === window.self) $('logo').hidden = false;
+      EST = await rpc('mkt_estado');
+      if (!EST || !EST.ve) throw new Error('Esta pantalla no está abierta para tu usuario. Qué hacer: si la necesitas, pídesela a la dirección.');
+      PAGS.met = window.PROFASE_PAGINAS.crea({ donde: $('m-pag'), clave: 'mkt.dias', nombre: 'Días', arriba: $('m-tabla-caja'), cambio: function () { pintaTabla(); } });
+      PAGS.res = window.PROFASE_PAGINAS.crea({ donde: $('r-pag'), clave: 'mkt.registros', nombre: 'Registros', arriba: $('r-lista-caja'), cambio: function () { pintaRes(); } });
+      PAGS.msj = window.PROFASE_PAGINAS.crea({ donde: $('i-pagn'), clave: 'mkt.mensajes', nombre: 'Mensajes', arriba: $('i-lista-caja'), cambio: function () { pintaMsj(); } });
+      var t0 = /[?&]t=(met|res|msj|cos)/.exec(location.search);
+      await Promise.all([cargaMet(), cargaInter(), t0 && t0[1] === 'cos' ? cargaCos().catch(function () {}) : null]);
+      // todo se arma escondido y se enseña de una vez, en el lugar de «Cargando…» (así nada brinca al abrir)
+      barras();
+      abreTab(t0 ? t0[1] : TAB, true);
+      $('cargando').hidden = true; $('todo').hidden = false;
+      pintaGraf();
+    } catch (e) { $('cargando').hidden = true; error(falla(e)); }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) cargaTodo().catch(function () {}); });
+  arranca();
+})();
+</script>
+</body></html>

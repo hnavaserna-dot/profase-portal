@@ -51,6 +51,7 @@
     tes: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5h.01M18 15.5h.01M5 6l2.5-3h9L19 6"/>',
     usr: '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1.5"/>',
     mul: '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',   // Multinacional: una caja (la comercializadora)
+    mkt: '<path d="M3.5 10.5v3a1 1 0 0 0 1 1h2.5l5.5 4.5v-14L7 9.5H4.5a1 1 0 0 0-1 1Z"/><path d="M16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/>',   // Marketing: un megáfono
     est: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.5-6.5M15.5 5.5h3v3"/>',   // Estrategias fiscales: una diana con su flecha
     cen: '<path d="M4 4.5h16v4H4z"/><path d="M5.5 8.5v11h13v-11"/><path d="M10 12.5h4"/><path d="m9 16 2 2 4-4"/>',   // Centauro: la bóveda de XML (una caja de archivo con palomita)
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
@@ -175,9 +176,7 @@
       { k: 'cajachica', v: 'caja', t: 'Caja chica', d: 'Gastos menores y sus comprobantes.' },
       { k: 'cotizador', v: 'cot', t: 'Cotizador DECOMSA', d: 'Cotizaciones de DECOMSA.' },
       { k: 'cotizador-profase', v: 'cpf', t: 'Cotizador PROFASE', d: 'Cotizaciones con la marca PROFASE: e.firma y sellos.' },   // solo la dirección (30-oct-2026; 80_cotizar_renovaciones.sql)
-      // Campañas Facebook (Héctor Daniel, 3-nov-2026: «en administración, campañas facebook… que nadamás me salga a mi»):
-      // autoriza las campañas de la página Profase Fiscal; solo él (fb_estado(), 190_campanas_facebook.sql; bloque fbk_tab.js)
-      { k: 'campanas-facebook', v: 'fbk', t: 'Campañas Facebook', d: 'Las publicaciones de la página de Facebook: autoriza, pide cambios o no las publiques.' },
+      // Campañas Facebook se mudó a Marketing › Autorizar publicaciones el 24-nov-2026 (Héctor Daniel Nava; la misma clave y pantalla)
       // IMPI (Héctor Daniel, 3-nov-2026, 17:15: «podemos subir lo del IMPI a CRM? Administración - IMPI?»; «Solo tú y HNR
       // (lector)»): el control de las notificaciones de su cuenta PASE (impi_estado(), 204_impi.sql; bloque impi_tab.js)
       { k: 'impi', v: 'imp', t: 'IMPI', d: 'Las notificaciones del IMPI: cada oficio, qué pide y su fecha límite para contestar.' },
@@ -211,6 +210,18 @@
       // la tarea del vigía. Lo ven Héctor Daniel Nava, Fernando Cadengo, Francisco Rivera y Héctor Nava Ramos (vq_estado(),
       // portal/sql/483_vigia_quo.sql; bloque vqf_tab.js)
       { k: 'quo-vigia', v: 'vqf', t: 'Vigía fiscal', d: 'Los cambios de ley que piden ajustar los sistemas Quo: qué cambió, si el código ya lo cumple y su fecha límite.' }] },
+    /* Marketing (Héctor Daniel Nava, 24-nov-2026, 12:28: «quiero que hagas un nuevo menú solo para mí; acomodarlo donde creas
+       mejor y que se llame Marketing… 1 sub menú para autorizar cosas; 2 compras (leads, usuarios y demás) conseguidos desde
+       estas campañas… vs métricas de metricool etc; 3 mensajes y todo interacciones»). Va junto a QUO porque casi todo es la
+       venta de los sistemas Quo. Solo Héctor Daniel Nava: Autorizar publicaciones es Campañas Facebook (la misma clave y la
+       misma pantalla; antes en Administración; fb_estado()) y las otras tres son una sola pantalla (marketing.html, vista mkt,
+       con su pestaña en p; mkt_estado(), portal/sql/507_marketing.sql; bloque mkt_tab.js). */
+    { k: 'mkt', t: 'Marketing', d: 'Las redes de Sistemas Quo y Profase Fiscal: lo que se publica, lo que miden, lo que se consigue y lo que escriben.', subs: [
+      { k: 'campanas-facebook', v: 'fbk', t: 'Autorizar publicaciones', d: 'Lo que sale en Facebook e Instagram: autorízalo, pide un cambio o di que no se publique.' },
+      { k: 'mkt-metricas', v: 'mkt', p: 'met', t: 'Métricas de redes y anuncios', d: 'Lo que mide Metricool: seguidores, alcance, interacciones, visitas a la página y los anuncios de Google y Meta.' },
+      { k: 'mkt-resultados', v: 'mkt', p: 'res', t: 'Resultados', d: 'Registros a la prueba gratis, cuentas, quién ya paga y lo cobrado, contra lo medido en las redes.' },
+      { k: 'mkt-mensajes', v: 'mkt', p: 'msj', t: 'Mensajes e interacciones', d: 'Los mensajes y comentarios de Facebook e Instagram: lo que espera respuesta, lo delicado y lo atendido.' },
+      { k: 'mkt-costos', v: 'mkt', p: 'cos', t: 'Costos vs compras', d: 'Lo invertido en publicidad (anuncios y lo que captures) contra los registros, los que pagan y lo cobrado; se refleja en Costos de sistemas.' }] },
     // Multinacional (2-nov-2026, Héctor Daniel, 12:01 a 12:20): la comercializadora de la dirección; no tiene que ver con
     // las compañías que facturan el despacho. Solo la ven Mónica Pedraza (sube las facturas), Eva Rangel (marca las
     // cobradas) y la dirección (mul_estado(), portal/sql/136_multinacional.sql; bloque mul_tab.js)
@@ -243,7 +254,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', est: 'Estrategias', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', est: 'Estrategias', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mkt: 'Marketing', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
