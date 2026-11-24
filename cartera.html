@@ -4226,12 +4226,20 @@ async function aplCalienta(){
   let t=performance.now();
   const respira=async()=>{ if(performance.now()-t>=40){ await cede(); t=performance.now(); } };
   for(const ci of [...aplIdx().keys()]){
-    for(let vuelta=0;vuelta<3&&!APL.cache.has(ci)&&aplIdx().has(ci);vuelta++){
-      const ep=APL_EP, it=aplEmpPasos(ci, true); let s;
-      while(!(s=it.next()).done){ await respira(); if(ep!==APL_EP) break; }
-      if(s.done) break;
-    }
+    await aplEmpEnPartes(ci,respira);
     await respira();
+  }
+}
+/* las relaciones de una empresa por partes, cediendo el paso con respira() (la misma vuelta que hacía aplCalienta). Si
+   mientras tanto alguien la arma de un jalón (aplEmp) o cambia algo (APL_EP), se queda con lo de siempre. 24-nov-2026
+   (revisión nocturna; «Comprobar real»: el Excel general de Depuración se trababa 1.1 a 2.0 s seguidos, y la traza dio que
+   casi todo era aplEmp de las empresas que aplCalienta todavía no armaba, pedidas por el orden de la pantalla de
+   rangosEnPartes): el Excel también la usa. El mismo resultado. */
+async function aplEmpEnPartes(ci,respira){
+  for(let vuelta=0;vuelta<3&&!APL.cache.has(ci)&&aplIdx().has(ci);vuelta++){
+    const ep=APL_EP, it=aplEmpPasos(ci, true); let s;
+    while(!(s=it.next()).done){ await respira(); if(ep!==APL_EP) break; }
+    if(s.done) break;
   }
 }
 function aplIdx(){
@@ -6083,8 +6091,13 @@ function sumaEn(C,r){ let o=C.get(r.cli); if(!o){ const c=D.cli[r.cli]; o=nuevaE
    mismo: por grupo y cliente y, dentro de cada cliente, por fecha y folio de Quo (localeCompare = Intl.Collator() sin
    idioma; el sort es estable, así que ordenar cliente por cliente da lo mismo que ordenar todo de una vez). */
 async function rangosEnPartes(docs){
-  const C=new Map(), cede=window.PROFASE_MARCA.rebanadas(40);
-  for(let i=0;i<docs.length;i++){ sumaEn(C,docs[i]); if((i&255)===255) await cede(); }
+  const C=new Map(), cede=window.PROFASE_MARCA.rebanadas(40), armadas=new Set();
+  for(let i=0;i<docs.length;i++){
+    const r=docs[i];
+    // lo que se puede aplicar de cada empresa (sumaEmp → aplF → aplEmp), armado por partes antes de sumarla (24-nov-2026)
+    if((r.mod===0||r.mod===1)&&!armadas.has(r.cli)){ armadas.add(r.cli); await aplEmpEnPartes(r.cli,cede); }
+    sumaEn(C,r); if((i&255)===255) await cede();
+  }
   return rangosPantalla(docs,C);
 }
 async function ordenaEnPartes(docs,rk){
