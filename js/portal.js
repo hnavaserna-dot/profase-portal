@@ -3011,7 +3011,11 @@
   // La misma regla para los relojes propios de cada pantalla (revisión de la noche del 10-nov-2026: Accesos, Cambios al
   // portal, la Cartera y el Cotizador seguían preguntando con su marco escondido): una sola versión.
   P.aLaVista = aLaVista;
-  function despierta() { if (dormida && aLaVista()) { dormida = false; vuelta(); } }
+  function despierta() {
+    if (dormida && aLaVista()) { dormida = false; vuelta(); }
+    // 24-nov-2026: también avisa a la página, por si vigila algo por su cuenta (Depuración revisa sus marcas al regresar)
+    try { window.dispatchEvent(new Event('profase-despierta')); } catch (e) { /* navegador viejo */ }
+  }
   // la pantalla que se esconde guardando lo acomodado no cambia de tamaño al volver: quien la enseña la despierta (20-nov-2026)
   P.despierta = despierta;
   function arranca() {
