@@ -919,6 +919,21 @@ tr.total-row td{border-top:1px solid var(--line);font-weight:700;color:var(--ink
 .segv .cq-msj{white-space:pre-wrap;line-height:1.6;color:var(--ink)}
 .segv .cq-rs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
 @media (max-width:700px){.segv .cq-liga select{font-size:16px}}
+/* lo que hacía la Consola Quo (23-nov-2026): sus vistas y sus ventanas */
+#cqu-root,#cqs-root{min-width:0}
+#cqu-pilas,#cqu-barra,#cqs-pilas,#cqs-barra{margin-bottom:16px}
+#cqu-tb tr,#cqs-tb tr{cursor:pointer}
+#cqu-tb tr:focus-visible,#cqs-tb tr:focus-visible{outline:2px solid var(--naranja);outline-offset:-2px}
+#cqu-tb td b,#cqs-tb td b{color:var(--ink)}
+.cqa-fila{display:flex;align-items:flex-start;gap:8px;padding:6px 2px;font-size:.68rem;line-height:1.45;color:var(--ink);cursor:pointer}
+.cqa-fila input{margin-top:2px;flex:0 0 auto}
+.cqa-lista{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 10px;margin:0 0 10px;min-width:0}
+.cqa-seg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:4px 0 8px;font-size:.68rem;color:var(--ink)}
+.cqa-seg label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.cqa-sis{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.cqa-det summary{cursor:pointer;font-size:.66rem;font-weight:650;color:var(--ink);margin:6px 0}
+.segv .cqa-txt{font-size:.7rem;line-height:1.55;color:var(--ink);margin:0 0 8px}
+@media (max-width:600px){#cqu-barra .ppl-masw,#cqs-barra .ppl-masw{order:1}#cqu-barra .ppl-bb,#cqs-barra .ppl-bb{order:2;flex:1 1 100%}}
 /* en el celular: FILTROS y «Más ▾» juntos, y abajo Excel, su PDF y «+ Nuevo cliente» en su propio renglón */
 @media (max-width:600px){#cq-barra .ppl-masw{order:1}#cq-barra .ppl-bb{order:2;flex:1 1 100%}#cq-barra .ppl-bb .btn{white-space:nowrap}}
 
@@ -1507,7 +1522,9 @@ const MODULOS=[
   {id:'pagos',    label:'Pagos y vigencia'},
   {id:'ingresos',  label:'Ingresos'},
   {id:'precios',  label:'Precios'},
-  {id:'cotizaciones', label:'Cotizaciones', mas:true}   // las del Cotizador QUO (29-oct-2026, propuesta de Gabriel)
+  {id:'cotizaciones', label:'Cotizaciones', mas:true},   // las del Cotizador QUO (29-oct-2026, propuesta de Gabriel)
+  {id:'cqu',      label:'Usuarios de las cuentas', mas:true},   // lo que hacía la Consola Quo (23-nov-2026)
+  {id:'cqs',      label:'Solicitudes de la página', mas:true}
 ];
 
 function vistaCargando(){
@@ -4610,7 +4627,7 @@ const EYEBROW={};   // el eyebrow es siempre el nombre de la página
    correo de la plataforma. Las secciones de antes siguen todas: Pagos y vigencia, Ingresos y Precios arriba, y Panel,
    Padrón y grupos y Cotizaciones en «Más ▾».
    ========================================================= */
-const CQ={ d:null, err:'', cargando:false, paciencia:false, hora:0, pila:'', q:'', f:{cartera:[], sistema:[], estado:[]}, ui:null, fx:null, pg:null, rev:null };
+const CQ={ d:null, err:'', cargando:false, paciencia:false, hora:0, pila:'', q:'', f:{cartera:[], sistema:[], estado:[], cuenta:[]}, ui:null, fx:null, pg:null, rev:null };
 const CQ_SIS=[['contabilita','Contabilita','C'],['facturita','Facturita','F'],['nominita','Nominita','N']];
 const CQ_PILAS=[
   {k:'vencido',   t:'Vencidos',               d:'La membresía (o lo que tenía en Gold) ya venció: cobrar o darla de baja.', tono:'rojo', toca:true},
@@ -4694,6 +4711,7 @@ async function cqCarga(){
   }
   clearTimeout(t); CQ.cargando=false;
   if(vista==='cq') cqPinta();
+  cqaTrasCarga();
 }
 
 /* La liga de cada membresía con su cuenta de Quo: a mano (cuentaQuo), por RFC o por correo */
@@ -4777,6 +4795,15 @@ function cqTexto(r){
   return cqNorm(t.join(' '));
 }
 function cqSisDe(r){ return r.a ? CQ_SIS.filter(function(s){ return r.a[s[0]]; }).map(function(s){ return s[0]; }) : ['sin']; }
+/** Cómo está su cuenta de Quo y su despacho (lo que filtraba la Consola Quo): suspendida, invitado a DECOMSA, le quitaron el acceso
+    o con acceso. */
+const CQ_CTA=[['activa','CUENTA ACTIVA'],['susp','CUENTA SUSPENDIDA'],['dact','DECOMSA CON ACCESO'],['dinv','INVITADO A DECOMSA'],['dquita','LE QUITARON EL ACCESO A DECOMSA'],['dsin','SIN DESPACHO']];
+function cqCuentaDe(r){
+  const a=r.a; if(!a) return [];
+  const o=[a.activa===false?'susp':'activa'];
+  if(!cqEsCasa(a)){ const e=a.despacho&&a.despacho.estado; o.push(e==='activo'?'dact':e==='invitado'?'dinv':e==='quitado'?'dquita':'dsin'); }
+  return o;
+}
 function cqVisibles(filas){
   const q=cqNorm(CQ.q).split(/\s+/).filter(Boolean), f=CQ.f;
   return filas.filter(function(r){
@@ -4784,6 +4811,7 @@ function cqVisibles(filas){
     if(f.cartera.length && f.cartera.indexOf(r.cartera)<0) return false;
     if(f.estado.length && f.estado.indexOf(r.est)<0) return false;
     if(f.sistema.length && !cqSisDe(r).some(function(s){ return f.sistema.indexOf(s)>=0; })) return false;
+    if(f.cuenta.length && !cqCuentaDe(r).some(function(s){ return f.cuenta.indexOf(s)>=0; })) return false;
     if(q.length){ const t=cqTexto(r); if(!q.every(function(w){ return t.indexOf(w)>=0; })) return false; }
     return true;
   }).sort(function(a, b){
@@ -4824,7 +4852,13 @@ function cqArmaBarra(){
              [ro?null:mk('Registrar un pago suelto', function(){ cerrarOverlay(); modalPago(null, null); }, 'Un depósito que todavía no sabes de quién es'),
               (function(){ const b=mk('Descuentos', function(){ cqDescuentos(); }, 'Los descuentos de la compra en línea: un código como BUENFIN o un precio especial para una cuenta');
                 b.id='cq-mas-desc'; b.hidden=!cqDescPapel(); return b; })(),   // sale cuando la base dice quién los ve (al traer lo de Quo)
-              mk('Volver a traer lo de Quo', function(){ cqCarga(); }, 'Las cuentas, usuarios, lo de Gold y las solicitudes, otra vez de la base de Quo'),
+              (function(){ const b=mk('Agregar cliente en Quo', function(){ cqaCuentaForma(null, null); }, 'Un despacho o empresa que contrata los sistemas Quo, con sus sistemas');
+                b.id='cq-mas-cta'; b.hidden=cqAdmin()!=='hace'; return b; })()],
+             [(function(){ const b=mk('Usuarios de todas las cuentas', ir('cqu'), 'Toda la gente de los sistemas Quo: alta, sus sistemas y su tipo, un código nuevo y la baja');
+                b.id='cq-mas-cqu'; b.hidden=!cqAdmin(); return b; })(),   // salen cuando la base dice quién los ve (al traer lo de Quo)
+              (function(){ const b=mk('Solicitudes de la página', ir('cqs'), 'Lo que la gente deja en «Escríbenos» de www.quosistemas.com, también las de privacidad');
+                b.id='cq-mas-cqs'; b.hidden=!cqAdmin(); return b; })(),
+              mk('Volver a traer lo de Quo', function(){ cqaRecarga(); }, 'Las cuentas, usuarios, lo de Gold y las solicitudes, otra vez de la base de Quo'),
               mk('Cómo se lee esta pantalla', cqComoSeLee)].filter(Boolean)];
   CQ.ui=window.PROFASE_PILAS.barra(document.getElementById('cq-barra'), {
     caja:true,
@@ -4835,7 +4869,9 @@ function cqArmaBarra(){
         { k:'sistema', t:'SISTEMA', tipo:'varios', lista:true, opciones:function(){ return CQ_SIS.map(function(s){ return {v:s[0], t:s[1].toUpperCase()}; }).concat([{v:'sin', t:'SIN CUENTA DE QUO'}]); },
           valor:function(){ return CQ.f.sistema; }, pon:function(v){ CQ.f.sistema=v; } },
         { k:'estado', t:'CÓMO ESTÁ', tipo:'varios', lista:true, opciones:function(){ return Object.keys(CQ_EST).map(function(k){ return {v:k, t:CQ_EST[k].toUpperCase()}; }); },
-          valor:function(){ return CQ.f.estado; }, pon:function(v){ CQ.f.estado=v; } }]}],
+          valor:function(){ return CQ.f.estado; }, pon:function(v){ CQ.f.estado=v; } },
+        { k:'cuenta', t:'SU CUENTA DE QUO Y SU DESPACHO', tipo:'varios', lista:true, opciones:function(){ return CQ_CTA.map(function(x){ return {v:x[0], t:x[1]}; }); },
+          valor:function(){ return CQ.f.cuenta; }, pon:function(v){ CQ.f.cuenta=v; } }]}],
       cambio:function(){ if(CQ.pg) CQ.pg.inicio(); cqPinta(); },
       resultados:function(){ return 'VER '+cqVisibles(cqFilas()).length+' CLIENTES'; } },
     botones:botones, mas:mas });
@@ -4914,7 +4950,7 @@ function cqPintaTabla(){
   const tb=document.getElementById('cq-tb'); if(!tb) return;
   const L=CQ_LISTA, pag=CQ.pg?CQ.pg.corta(L):L;
   document.getElementById('cq-n').textContent=L.length+' de '+cqFilas().length;
-  if(!L.length){ tb.innerHTML='<tr><td colspan="7" class="cq-vacio">'+(CQ.q||CQ.pila||CQ.f.cartera.length||CQ.f.sistema.length||CQ.f.estado.length
+  if(!L.length){ tb.innerHTML='<tr><td colspan="7" class="cq-vacio">'+(CQ.q||CQ.pila||CQ.f.cartera.length||CQ.f.sistema.length||CQ.f.estado.length||CQ.f.cuenta.length
       ?'Nada con lo que buscaste. Qué hacer: quita algún filtro o pica otra vez la pila.':'Todavía no hay clientes.')+'</td></tr>'; return; }
   tb.innerHTML=pag.map(function(r){
     const up=r.ps&&r.ps[0];
@@ -4977,7 +5013,7 @@ function cqFalta(r){
       : ['si', r.ge==='gratis'?'Es la cuenta gratis.':'Lo de Gold sigue vigente.']);
   }
   if(r.ab && r.ab.length) l.push(['va',r.ab.length+' cotización'+(r.ab.length>1?'es':'')+' sin respuesta. Qué hacer: dale seguimiento y cámbiale el estatus en «Cotizaciones».']);
-  if(r.s) l.push(['va','Pidió '+(r.s.asunto==='pregunta'?'información':'una demostración')+'. Qué hacer: contáctalo; mientras se pasa al CRM, se marca como atendida en la Consola Quo.']);
+  if(r.s) l.push(['va','Pidió '+(r.s.asunto==='pregunta'?'información':'una demostración')+'. Qué hacer: contáctalo y márcala atendida'+(cqAdmin()==='hace'?' con «Atender la solicitud» (abajo).':' (lo hace la dirección, en «Más ▾ › Solicitudes de la página»).')]);
   return window.PROFASE_SEG.falta('Qué falta', l);
 }
 function cqResumen(r){
@@ -5014,14 +5050,15 @@ function cqTabUsuarios(r){
   }
   if(!CQ.d) return h+'<p class="cq-mu">'+(CQ.err?esc(CQ.err):'Trayendo lo de Quo…')+'</p>';
   if(!r.a) return h+'<p class="cq-mu">Sin cuenta de Quo ligada: aquí salen sus usuarios de Contabilita, Facturita y Nominita en cuanto se ligue.</p>';
-  const us=r.a.usuarios||[], mv=cqMueve() && !cqEsCasa(r.a);
+  const us=r.a.usuarios||[], mv=cqMueve() && !cqEsCasa(r.a), ad=cqAdmin(), col=mv||!!ad;
   h+='<h4 class="cq-h">Usuarios en los sistemas Quo · '+us.length+'</h4>';
-  h+=us.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Usuario</th>'+CQ_SIS.map(function(s){ return '<th>'+s[1]+'</th>'; }).join('')+'<th>Último acceso</th>'+(mv?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
+  if(ad==='hace' && r.a.activa) h+='<div class="cq-acc" style="margin:0 0 10px"><button type="button" class="btn sm accent" data-cqa="ualta">Agregar usuario a esta cuenta</button><span class="cq-mu">Uno, dos o los tres sistemas de una vez, con su tipo y sus RFC; su código le llega a su correo.</span></div>';
+  h+=us.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Usuario</th>'+CQ_SIS.map(function(s){ return '<th>'+s[1]+'</th>'; }).join('')+'<th>Último acceso</th>'+(col?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
     +us.map(function(u){ return '<tr><td><b>'+esc(u.nombre||u.usuario)+'</b><div class="cq-mu">'+esc(u.usuario)+(u.estado==='invitado'?' · se le dio acceso, todavía no entra':'')+(u.entra_crm?' · entra con el CRM':'')+'</div></td>'
       +CQ_SIS.map(function(s){ return '<td>'+(u[s[0]]?esc(u[s[0]]):'<span class="cq-mu">—</span>')+'</td>'; }).join('')
       +'<td>'+(u.ultimo?esc(cqCuando(u.ultimo)):'<span class="cq-mu">Nunca</span>')+'</td>'
-      +(mv?'<td>'+(u.entra_crm?'<span class="cq-mu">Se le quita a mano</span>'
-          :u.nominita?'<span class="cq-mu">Entra a Nominita: se le quita con tu Claude</span>'
+      +(col?'<td>'+(ad?'<button type="button" class="btn sm" data-cqa-u="'+esc(u.usuario)+'">Abrir</button> ':'')
+          +(!mv?'':u.entra_crm?'<span class="cq-mu">Se le quita a mano</span>'
           :'<button type="button" class="btn sm" data-cq-quita="'+esc(u.usuario)+'">Quitar acceso</button>')+'</td>':'')+'</tr>'; }).join('')+'</tbody></table></div>'
     :'<p class="cq-mu">Todavía no tiene usuarios en los sistemas Quo.</p>';
   h+=cqGoldAcceso(r);
@@ -5036,7 +5073,7 @@ function cqGoldAcceso(r){
   if(!l.length) return '';
   const mv=cqMueve() && !cqEsCasa(r.a);
   const nota=!mv?'':!r.a.activa?'La cuenta está suspendida: reactívala en la pestaña «Cuenta» para darles acceso.'
-    :!r.a.contabilita?'La cuenta no tiene Quo Contabilita: se prende con tu Claude en la Consola Quo antes de darles acceso.':'';
+    :!r.a.contabilita?'La cuenta no tiene Quo Contabilita. Qué hacer: '+(cqAdmin()==='hace'?'préndesela en la pestaña «Cuenta» («Cambiar nombre o sistemas»)':'pídele a la dirección que se la prenda en la pestaña «Cuenta»')+' y luego dales acceso.':'';
   let h='<h4 class="cq-h">Los que tenía en Quo Gold · '+l.length+'</h4>'
     +'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Quién</th><th>Aquí sería</th><th>Cómo está</th>'+(mv?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
     +l.map(function(u){
@@ -5079,12 +5116,16 @@ function cqTabLinea(r){
     +(cqDescPapel()==='crea'?'; para darle un precio especial, «Más ▾ › Descuentos».':'.')+'</p>';
   return h;
 }
+/** «1 empresa» o «3 empresas» (de Quo Nominita solo se ven cuántas, nunca sueldos ni datos de nadie). */
+function cqUno(n,uno,varios){ n=Number(n)||0; return n.toLocaleString('es-MX')+' '+(n===1?uno:varios); }
 function cqTabCuenta(r){
   if(!r.a) return '<p class="cq-mu">'+(CQ.d?'Sin cuenta de Quo ligada.':(CQ.err?esc(CQ.err):'Trayendo lo de Quo…'))+'</p>';
   const a=r.a, t=a.timbres;
   let h='<div class="r2"><span>Sistemas <b>'+cqSistemas(a)+'</b></span><span>Desde <b>'+esc(cqFecha(a.creada))+'</b></span>'
     +(a.area?'<span>Área <b>'+esc(a.area)+'</b></span>':'')
     +(t?'<span>Timbres <b>'+t.disponibles+' disponibles'+(t.por_vencer?' · '+t.por_vencer+' por vencer':'')+'</b></span>':'')
+    +(a.facturita?'<span>RFC en Facturita <b>'+(Number(a.rfc_facturita)||0)+'</b></span>':'')
+    +(a.nominita?'<span>En Nominita <b>'+cqUno(a.empresas_nominita,'empresa','empresas')+' · '+cqUno(a.trabajadores_nominita,'trabajador','trabajadores')+'</b></span>':'')
     +(a.despacho&&a.despacho.estado?'<span>Despacho <b>'+esc(a.despacho.estado==='activo'?'con acceso':a.despacho.estado)+'</b></span>':'')
     +(a.activa?'':'<span>Suspendida <b>'+esc(cqCuando(a.suspendida_en))+'</b></span>')+'</div>';
   const rf=a.rfcs||[];
@@ -5092,13 +5133,15 @@ function cqTabCuenta(r){
   h+=rf.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>RFC</th><th>Razón social</th></tr></thead><tbody>'
     +rf.map(function(x){ return '<tr><td>'+esc(x.rfc)+'</td><td>'+esc(x.nombre||'')+'</td></tr>'; }).join('')+'</tbody></table></div>':'<p class="cq-mu">Sin RFC activos.</p>';
   if(!a.activa && a.motivo) h+='<p class="cq-aviso">Se suspendió por: '+esc(a.motivo)+'</p>';
+  if(cqAdmin()==='hace') h+='<div class="cq-acc"><button type="button" class="btn sm" data-cqa="cuenta">Cambiar nombre o sistemas</button><span class="cq-mu">Prenderle o apagarle Quo Contabilita, Quo Facturita o Quo Nominita; apagar uno pide el motivo.</span></div>';
   if(cqEsCasa(a)) h+='<p class="cq-mu">Es una cuenta de la casa: nunca se suspende y su gente entra con su usuario del CRM.</p>';
   else if(cqMueve()){
-    if(!a.contabilita && !a.facturita) h+='<p class="cq-mu">Solo tiene Quo Nominita: se suspende con tu Claude en la Consola Quo.</p>';
+    if(!a.contabilita && !a.facturita && cqAdmin()!=='hace') h+='<p class="cq-mu">Solo tiene Quo Nominita: su suspensión la hace la dirección.</p>';
     else h+='<div class="cq-acc">'+(a.activa
-      ?'<button type="button" class="btn sm" data-cq-cuenta="suspende">Suspender la cuenta</button><span class="cq-mu">Su gente deja de entrar a Contabilita y Facturita en ese momento; nada se borra.</span>'
+      ?'<button type="button" class="btn sm" data-cq-cuenta="suspende">Suspender la cuenta</button><span class="cq-mu">Su gente deja de entrar a sus sistemas Quo en ese momento; nada se borra.</span>'
       :'<button type="button" class="btn sm" data-cq-cuenta="reactiva">Reactivar la cuenta</button><span class="cq-mu">Su gente vuelve a entrar con sus mismos usuarios.</span>')+'</div>';
   }
+  h+=cqaDespacho(a);
   return h;
 }
 function gqUsuario(u){
@@ -5181,6 +5224,7 @@ function cqFicha(k){
   if(!ro && r.tipo==='cuenta' && !r.linea) acc.push({t:'Dar de alta su membresía', accion:function(){ cierra(); cqAltaDesdeCuenta(r.a); }});
   if(!ro && r.x && estCot(r.x)==='Aprobada' && !r.x.clienteId) acc.push({t:'Dar de alta como cliente', accion:function(){ cierra(); altaDesdeCotizacion(r.x.id); }});
   if(r.linea && cqDescPapel()==='crea') acc.push({t:'Darle un descuento', tipo:'b2', accion:function(){ cierra(); cqDescForma(null, r.a.id, r.k); }});
+  if(r.tipo==='solicitud' && cqAdmin()) acc.push({t:cqAdmin()==='hace'?'Atender la solicitud':'Abrir la solicitud', accion:function(){ cierra(); CQA.sl.rev=false; cqaSFicha(r.s.id); }});
   if(!ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot', cliente:cqParaCotizar(r)}, location.origin); }catch(e){} }});
   const v=CQV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo', titulo:r.nombre||'Sin nombre',
     nav: pos>=0 && lista.length>1 ? { pos:pos+1, total:lista.length, donde:'en tu lista', ant:pos>0, sig:pos<lista.length-1,
@@ -5189,8 +5233,21 @@ function cqFicha(k){
     acciones:acc.length?acc:null, pieTexto:ro?'Solo consulta':'',
     alCerrar:function(){ if(CQV===v) CQV=null; } });
   v.scrim.addEventListener('click', function(ev){
-    const b=ev.target.closest('[data-cq-pago],#cq-ligar,[data-cq-acceso],[data-cq-quita],[data-cq-cuenta]'); if(!b) return;
+    const b=ev.target.closest('[data-cq-pago],#cq-ligar,[data-cq-acceso],[data-cq-quita],[data-cq-cuenta],[data-cqa],[data-cqa-u]'); if(!b) return;
     if(b.id==='cq-ligar'){ cqLigar(r, b); return; }
+    if(b.hasAttribute('data-cqa-u')){ const u=b.getAttribute('data-cqa-u'); cierra(); cqaFicha(u, (r.a.usuarios||[]).map(function(x){ return x.usuario; })); return; }
+    if(b.hasAttribute('data-cqa')){
+      const q=b.getAttribute('data-cqa'), atras=function(){ cqFicha(r.k); };
+      cierra();
+      if(q==='cuenta') cqaCuentaForma(r.a, atras);
+      else if(q==='ualta') cqaAlta(r.a.id, atras);
+      else if(q==='dinvita') cqaDespInvita(r);
+      else if(q==='dquita') cqaDespQuita(r);
+      else if(q==='dpasa') cqaDespPasa(r, 'cliente');
+      else if(q==='dregresa') cqaDespPasa(r, 'casa');
+      else if(q==='dbit') cqaDespBit(r);
+      return;
+    }
     if(b.hasAttribute('data-cq-acceso')){ cierra(); cqAcceso(r, b.getAttribute('data-cq-acceso')); return; }
     if(b.hasAttribute('data-cq-quita')){ cierra(); cqQuita(r, b.getAttribute('data-cq-quita')); return; }
     if(b.hasAttribute('data-cq-cuenta')){ cierra(); cqSuspende(r, b.getAttribute('data-cq-cuenta')==='suspende'); return; }
@@ -5304,7 +5361,7 @@ function cqQuita(r, usuario){
   const u=(r.a.usuarios||[]).find(function(x){ return x.usuario===usuario; });
   if(!u){ avisar('Ese usuario ya no está en su cuenta. Qué hacer: vuelve a cargar Clientes Quo.'); cqFicha(r.k); return; }
   const v=cqMvVentana(r, 'Quitar acceso', esc(u.nombre||u.usuario)+' ('+esc(u.usuario)+') · '+esc(r.a.nombre||''),
-    '<p class="cq-aviso">Deja de entrar a Contabilita y Facturita en ese momento. No se borra nada de lo que hizo.</p>'
+    '<p class="cq-aviso">Deja de entrar a sus sistemas Quo (Contabilita, Facturita y Nominita) en ese momento. No se borra nada de lo que hizo.</p>'
     +campo('Motivo', '<textarea id="cq-mv-m" rows="3" maxlength="300" placeholder="Por qué se le quita (queda en la bitácora de su cuenta)"></textarea>'),
     'Quitar acceso');
   v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
@@ -5320,7 +5377,7 @@ function cqSuspende(r, susp){
   if(!cqMueve()||!r.a) return;
   const a=r.a;
   const v=cqMvVentana(r, susp?'Suspender la cuenta':'Reactivar la cuenta', esc(a.nombre||''),
-    (susp?'<p class="cq-aviso mal">Su gente deja de entrar a Quo Contabilita y Quo Facturita en ese momento. Nada se borra y se puede reactivar cuando quieras.</p>'
+    (susp?'<p class="cq-aviso mal">Su gente deja de entrar a sus sistemas Quo (Contabilita, Facturita y Nominita) en ese momento. Nada se borra y se puede reactivar cuando quieras.</p>'
          :'<p class="cq-aviso">Su gente vuelve a entrar con sus mismos usuarios.</p>')
     +campo('Motivo', '<textarea id="cq-mv-m" rows="3" maxlength="300" placeholder="'+(susp?'Por qué se suspende':'Por qué se reactiva')+' (queda en la bitácora de su cuenta)"></textarea>'),
     susp?'Suspender la cuenta':'Reactivar la cuenta');
@@ -5535,6 +5592,7 @@ function cqComoSeLee(){
     +(cqDescPapel()?'<p><b>Más ▾ › Descuentos</b>: los códigos como BUENFIN y los precios especiales para una cuenta. Los crean Héctor Daniel Nava y Fernando Cadengo, cada uno dice quién lo autorizó y, si a un cobro le tocan dos, cuenta solo el mayor.</p>':'')
     +'<p><b>La ficha</b> trae arriba «Qué falta» y abajo sus pestañas: la membresía y sus pagos, sus usuarios de Contabilita, Facturita y Nominita (y los que tenía en Quo Gold), su cuenta con sus RFC, sus cotizaciones, lo que tenía comprado en Gold y la bitácora de su cuenta.</p>'
     +'<p><b>La membresía se liga con su cuenta de Quo</b> sola, por su RFC o por el correo de la plataforma; si no la encuentra, se escoge a mano en la pestaña «Usuarios».</p>'
+    +(cqAdmin()?'<p><b>Lo que hacía la Consola Quo</b> vive aquí: en «Más ▾», «Usuarios de todas las cuentas», «Solicitudes de la página»'+(cqAdmin()==='hace'?' y «Agregar cliente en Quo»':'')+'; en la ficha, «Cuenta» trae '+(cqAdmin()==='hace'?'«Cambiar nombre o sistemas» y ':'')+'su despacho contable, y «Usuarios», a su gente.'+(cqAdmin()==='hace'?'':' Los cambios los hacen Héctor Daniel Nava y Fernando Cadengo.')+'</p>':'')
     +'<p>Lo de Quo se lee directo de la base de Quo cada vez que abres la pantalla. Nada cobra, avisa ni suspende solo: cada acción la hace una persona.</p>',
     '<button class="btn" data-cerrar>Entendido</button>', 'Ayuda');
 }
@@ -5567,6 +5625,19 @@ async function cqExcel(b){
     L.forEach(function(r){ if(r.a && r.tipo!=='solicitud') (r.a.usuarios||[]).forEach(function(u){
       us.push([r.nombre, u.nombre||'', u.usuario, u.contabilita||'', u.facturita||'', u.nominita||'', u.estado==='invitado'?'Invitado':'Activo', u.ultimo?String(u.ultimo).slice(0,10):'']); }); });
     hoja('Usuarios', ['Cliente','Nombre','Usuario','Contabilita','Facturita','Nominita','Cómo está','Último acceso'], us, [32,26,32,14,14,14,12,14]);
+    // lo que traía el Excel de la Consola Quo: cada cuenta con lo que lleva en cada sistema (de Nominita, solo cuántos)
+    const cu=[], vistas={};
+    L.forEach(function(r){ const a=r.a; if(!a || r.tipo==='solicitud' || vistas[a.id]) return; vistas[a.id]=1;
+      const d=a.despacho||{}, ue=a.usuarios||[];
+      cu.push([a.nombre||r.nombre, a.contabilita?'Sí':'No', a.facturita?'Sí':'No', a.nominita?'Sí':'No',
+        cqEsCasa(a)?'Atiende '+(Number(d.clientes)||0):(CQA_DESP[d.estado]?CQA_DESP[d.estado][0]:'Sin despacho'),
+        ue.length, ue.filter(function(u){ return u.estado==='invitado'; }).length,
+        a.contabilita?(Number(a.rfc_contabilita)||0):'', a.facturita?(Number(a.rfc_facturita)||0):'',
+        a.nominita?(Number(a.empresas_nominita)||0):'', a.nominita?(Number(a.trabajadores_nominita)||0):'',
+        a.timbres?a.timbres.disponibles:'', a.creada?String(a.creada).slice(0,10):'', a.activa?'Activa':'Suspendida']); });
+    if(cu.length) hoja('Cuentas de Quo', ['Cuenta','Quo Contabilita','Quo Facturita','Quo Nominita','Despacho','Usuarios','Por crear su contraseña',
+      'RFC en Contabilita','RFC en Facturita','Empresas en Nominita','Trabajadores en Nominita','Timbres','Desde','Cómo está'], cu,
+      [34,14,14,14,22,10,20,16,16,18,20,12,12,12]);
     const cl=[], pl=[], PEST={pagado:'Pagado', pendiente:'Pendiente', fallido:'No pasó', reembolsado:'Reembolsado'};
     L.forEach(function(r){ if(!r.a || r.tipo==='solicitud') return;
       clSus(r.a).forEach(function(x){ const f=clFecha(x);
@@ -5597,6 +5668,868 @@ async function cqExcel(b){
   b.disabled=false;
 }
 
+/* =========================================================
+   LO QUE HACÍA LA CONSOLA QUO PARA LA DIRECCIÓN (23-nov-2026; Héctor Daniel Nava: «si ya! y que no se pierda lo que hace la
+   consola quo; agregalo al crm en ese sub menú»). La Consola Quo de www.quosistemas.com era la pantalla de la dirección para
+   los clientes de los sistemas Quo; desde hoy todo lo suyo vive aquí, en Clientes Quo (una sola versión), y la Consola se
+   retira para la dirección («Mi cuenta», la de cada cliente, se queda en la casa):
+     · en la ficha de cada cliente, pestaña «Cuenta»: cambiarle el nombre o los sistemas y su despacho contable (invitar a
+       DECOMSA, cancelar la invitación o quitarle el acceso, pasar RFC de la casa a su cuenta, regresarlos y su bitácora);
+       pestaña «Usuarios»: abrir a cada quien y agregar a su gente;
+     · «Más ▾ › Agregar cliente en Quo», «Más ▾ › Usuarios de todas las cuentas» (alta en uno, dos o los tres sistemas de una
+       vez, con su tipo y sus RFC; cambiarlo, darle o quitarle un sistema, un código nuevo y la baja de todo) y «Más ▾ ›
+       Solicitudes de la página» (también las de datos personales, que se contestan en 20 días hábiles).
+   Quién: lo hacen Héctor Daniel Nava y Fernando Cadengo y Héctor Nava Ramos lo ve (quo_clientes_yo().admin; 500). Todo va por
+   la función «quo-clientes» y la base de Quo lo revisa otra vez. El código de acceso nunca pasa por el CRM: el de un usuario
+   nuevo y el código nuevo le llegan a su correo; aquí solo se dice si se mandó.
+   ========================================================= */
+const CQA={ g:null, gErr:'', gProm:null, s:null, sErr:'', sProm:null,
+  u:{q:'', f:{cta:[], sis:[]}, pila:'', fx:null, pg:null, rev:null}, sl:{q:'', f:{asunto:[], sis:[], tipo:[]}, pila:'', fx:null, pg:null, rev:false} };
+const CQA_T={
+  qc:[['admin','Administra su cuenta','Ve todo lo de su cuenta y a sus usuarios'],['contador','Contador','Trabaja los RFC de su cuenta: catálogos, clasificación y pólizas'],
+      ['tesoreria','Tesorería','Bancos, pagos y cobros de los RFC de su cuenta'],['lector','Consulta','Solo ve lo de su cuenta; no cambia nada']],
+  qf:[['admin','Administra su cuenta','Todo lo de su cuenta: sus RFC, sus usuarios, sus certificados y sus timbres'],['supervisor','Supervisor','Factura, cancela y ve todo de sus RFC'],
+      ['factura','Factura','Timbra y envía; no cancela'],['lector','Consulta','Solo ve y descarga; no cambia nada']],
+  qn:[['admin','Administra su cuenta','Todas las empresas de su cuenta, con sueldos; da de alta empresas y gente'],['supervisor','Supervisa la nómina','Calcula, autoriza y timbra las empresas que lleva'],
+      ['nomina','Hace la nómina','Calcula, autoriza y timbra las empresas que lleva'],['lector','Consulta','Solo ve estados y totales; sin sueldos']]};
+const CQA_SIS={qc:'Quo Contabilita', qf:'Quo Facturita', qn:'Quo Nominita'}, CQA_CAMPO={qc:'contabilita', qf:'facturita', qn:'nominita'};
+const CQA_FAB={qc:'contador', qf:'factura', qn:'nomina'};
+const CQA_DIR={director:'Dirección', consulta:'Dirección (solo consulta)'};
+const CQA_UEST={activo:['Activo','ok'], pendiente:['Por crear su contraseña','warn'], baja:['Dado de baja','bad']};
+const CQA_ACC={alta:'Lo dio de alta', agrega:'Le dio el sistema', codigo:'Le dio un código nuevo', cambio:'Lo cambió', baja:'Lo dio de baja',
+  clave:'Le dio un código para cambiar su contraseña', clave_lista:'Cambió su contraseña'};
+const CQA_DESP={activo:['Con acceso','ok'], invitado:['Invitado','warn'], quitado:['Le quitaron el acceso','bad'], rechazado:['No aceptó','neutral']};
+const CQA_DACC={puesto:'Quedó con acceso (ya llevaba la contabilidad)', invita:'Invitación', acepta:'Aceptó la invitación', rechaza:'No aceptó la invitación',
+  quita:'Se quitó el acceso', enterado:'Leyó el aviso', pasa_rfc:'Pasaron RFC a su cuenta', regresa_rfc:'Regresaron RFC a la casa'};
+const CQA_PU=[
+  {k:'pend', t:'Por crear su contraseña', d:'Tienen su código y no lo han usado.', tono:'ambar', toca:true, f:function(p){ return p.estado==='pendiente'; }},
+  {k:'activos', t:'Activos', d:'Ya entran.', tono:'verde', f:function(p){ return p.estado==='activo' && !p.dir; }},
+  {k:'varios', t:'Entran a varios', d:'A más de un sistema, con la misma contraseña.', tono:'azul', f:function(p){ return !p.dir && cqaCuantos(p)>1; }},
+  {k:'qn', t:'Con Quo Nominita', d:'Entran a Quo Nominita.', tono:'violeta', f:function(p){ return !p.dir && p.estado!=='baja' && !!p.qn; }},
+  {k:'dir', t:'La dirección', d:'Entra a todo, de todas las cuentas.', tono:'violeta', f:function(p){ return p.dir; }},
+  {k:'baja', t:'Dados de baja', d:'Ya no entran; nada se borró.', tono:'gris', f:function(p){ return p.estado==='baja'; }}];
+const CQA_ASUNTO={demo:['Demostración','Quiere ver los sistemas y su cotización'], pregunta:['Pregunta','Tiene una duda'],
+  privacidad:['Privacidad (ARCO)','Pide ver, corregir, borrar u oponerse al uso de sus datos: se contesta en 20 días hábiles']};
+const CQA_STIPO={despacho:'Despacho contable', empresa:'Empresa', persona:'Persona'};
+const CQA_SSIS={contabilita:'Quo Contabilita', facturita:'Quo Facturita', nominita:'Quo Nominita'};
+const CQA_SEST={nueva:['Nueva','warn'], atendida:['Atendida','ok'], descartada:['Descartada','neutral']};
+const CQA_PLAZO=20;   // días hábiles para contestar los derechos ARCO (art. 31 de la LFPDPPP)
+const CQA_PS=[
+  {k:'nuevas', t:'Nuevas', d:'Nadie las ha atendido.', tono:'ambar', toca:true, f:function(s){ return s.estado==='nueva'; }},
+  {k:'arco', t:'Privacidad por contestar', d:'Derechos ARCO: se contestan en 20 días hábiles.', tono:'rojo', toca:true, f:function(s){ return s.estado==='nueva' && s.asunto==='privacidad'; }},
+  {k:'atendidas', t:'Atendidas', d:'Ya se les contestó.', tono:'verde', f:function(s){ return s.estado==='atendida'; }},
+  {k:'descartadas', t:'Descartadas', d:'Basura o repetidas; nada se borró.', tono:'gris', f:function(s){ return s.estado==='descartada'; }}];
+
+function cqAdmin(){ const a=CQ.d&&CQ.d.yo&&CQ.d.yo.admin; return a==='hace'&&!soloLectura()?'hace':a?'ve':null; }
+window.__cqAdmin=function(){ return cqAdmin(); };   // para el «?» de la pantalla (guia_tab.js) y su recorrido
+function cqaCuantos(p){ return (p.qc?1:0)+(p.qf?1:0)+(p.qn?1:0); }
+function cqaSisDe(p){ return ['qc','qf','qn'].filter(function(s){ return p[s]; }); }
+function cqaLista(l){ const n=l.map(function(s){ return CQA_SIS[s]; }); return n.length<2?n.join(''):n.slice(0,-1).join(', ')+' y '+n[n.length-1]; }
+function cqaTipo(s, r){ const t=(CQA_T[s]||[]).find(function(x){ return x[0]===r; }); return t?t[1]:CQA_DIR[r]||(r||'—'); }
+function cqaOpc(s, sel){ return CQA_T[s].map(function(t){ return '<option value="'+t[0]+'"'+(t[0]===sel?' selected':'')+'>'+esc(t[1])+'</option>'; }).join(''); }
+function cqaRfcVer(r){ return String(r||'').replace(/-\d+$/, ''); }   // la clave de Quo («RFC-<cuenta>» si se repite) se enseña como su RFC
+function cqaCasa(){ return cqCuentas().find(function(a){ return a.propia; })||null; }
+function cqaEsCasa(id){ const a=cqCuenta(Number(id)); return !!(a && a.propia); }
+function cqaNomCta(id){ const a=cqCuenta(Number(id)); return a?a.nombre:(CQA.g&&CQA.g.cuentas[id])||'—'; }
+
+/* La función «quo-clientes» con una acción de la dirección */
+async function cqaPide(cuerpo){
+  const P=window.PORTAL; if(P&&P.listo) await P.listo;
+  const r=await P.sb.functions.invoke('quo-clientes', { body:cuerpo });
+  let d=r.data;
+  if(r.error && !d){ try{ d=await r.error.context.json(); }catch(e){ d=null; } }
+  if(!d || d.ok!==true) throw new Error((d&&d.error)||'No se pudo. Qué hacer: vuelve a intentar en un momento.');
+  return d;
+}
+function cqaFalla(e, que){ return (window.PORTAL&&PORTAL.falla)?PORTAL.falla(e, que):String((e&&e.message)||e||'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
+
+/* La gente de todas las cuentas: las listas de Usuarios de los tres sistemas, juntas por persona (lo que hacía la Consola) */
+function cqaArma(d){
+  const qc=d.qc||null, qf=d.qf||null, qn=d.qn||null, P={}, orden=[];
+  const una=function(u){ if(!P[u.usuario]){ P[u.usuario]={usuario:u.usuario, nombre:u.nombre, cuenta_id:u.cuenta_id, dir:!!CQA_DIR[u.rol], qc:null, qf:null, qn:null, bit:[]}; orden.push(u.usuario); } return P[u.usuario]; };
+  ((qc&&qc.usuarios)||[]).forEach(function(u){ const p=una(u); p.qcu=u; p.rfcsQc=u.rfcs||[]; p.crm=u.crm||null; if(u.estado!=='baja') p.qc=u.rol; });
+  ((qf&&qf.usuarios)||[]).forEach(function(u){ const p=una(u); p.qfu=u; p.rfcsQf=u.rfcs||[]; if(u.estado!=='baja') p.qf=u.rol; });
+  ((qn&&qn.usuarios)||[]).forEach(function(u){ const p=una(u); p.qnu=u; if(u.estado!=='baja') p.qn=u.rol; });
+  orden.forEach(function(k){
+    const p=P[k], a=p.qcu||{}, b=p.qfu||{}, n=p.qnu||{};
+    p.nombre=a.nombre||b.nombre||n.nombre; p.cuenta=a.cuenta||b.cuenta||n.cuenta;
+    p.cuenta_id=a.cuenta_id!=null?a.cuenta_id:b.cuenta_id!=null?b.cuenta_id:n.cuenta_id;
+    p.alta=a.alta||b.alta||n.alta; p.ultimo=a.ultimo||b.ultimo||n.ultimo; p.entro=a.entro||b.entro||n.entro;
+    p.estado=p.dir?'activo':(!p.qc&&!p.qf&&!p.qn)?'baja':(a.estado==='pendiente'||b.estado==='pendiente'||n.estado==='pendiente')?'pendiente':'activo';
+    p.baja=p.estado==='baja'?(a.baja||b.baja||n.baja):null; p.baja_motivo=p.estado==='baja'?(a.baja_motivo||b.baja_motivo||n.baja_motivo):null;
+    p.puesto=a.puesto||b.puesto||n.puesto; p.telefono=a.telefono||b.telefono||n.telefono; p.correo=a.correo||b.correo||n.correo;
+    p.alta_por=a.alta_por||b.alta_por||n.alta_por;
+    p.busca=cqNorm([p.usuario, p.nombre, p.cuenta||'', cqaNomCta(p.cuenta_id), cqaTipo('qc', p.qc), cqaTipo('qf', p.qf), cqaTipo('qn', p.qn), p.correo||''].join(' '));
+  });
+  const bit=[];
+  ((qc&&qc.bitacora)||[]).forEach(function(x){ bit.push(Object.assign({sis:'qc'}, x)); });
+  ((qf&&qf.bitacora)||[]).forEach(function(x){ bit.push(Object.assign({sis:'qf'}, x)); });
+  ((qn&&qn.bitacora)||[]).forEach(function(x){ bit.push(Object.assign({sis:'qn'}, x)); });
+  bit.sort(function(x, y){ return String(y.cuando).localeCompare(String(x.cuando)); });
+  bit.forEach(function(x){ if(P[x.usuario]) P[x.usuario].bit.push(x); });
+  const ctas={};
+  ((qc&&qc.cuentas)||[]).concat((qf&&qf.cuentas)||[], (qn&&qn.cuentas)||[]).forEach(function(c){ ctas[c.id]=ctas[c.id]||c.nombre; });
+  const nr={qc:{}, qf:{}};
+  ((qc&&qc.rfcs)||[]).forEach(function(x){ nr.qc[x.rfc]=x.nombre||cqaRfcVer(x.rfc); });
+  ((qf&&qf.rfcs)||[]).forEach(function(x){ nr.qf[x.rfc]=x.nombre||cqaRfcVer(x.rfc); });
+  return { personas:orden.map(function(k){ return P[k]; }), qc:!!qc, qf:!!qf, qn:!!qn, cuentas:ctas,
+    rfcs:{qc:(qc&&qc.rfcs)||[], qf:(qf&&qf.rfcs)||[]}, nomRfc:nr, cuentasBit:d.cuentas_bit||[] };
+}
+function cqaGente(forzar){
+  if(CQA.g && !forzar) return Promise.resolve(CQA.g);
+  if(CQA.gProm && !forzar) return CQA.gProm;
+  const pr=CQA.gProm=cqaPide({accion:'gente'}).then(function(d){ CQA.g=cqaArma(d); CQA.gErr=''; return CQA.g; })
+    .catch(function(e){ CQA.gErr=cqaFalla(e, 'traer la gente de las cuentas'); throw e; })
+    .finally(function(){ if(CQA.gProm===pr) CQA.gProm=null; });
+  return pr;
+}
+function cqaSolicitudes(forzar){
+  if(CQA.s && !forzar) return Promise.resolve(CQA.s);
+  if(CQA.sProm && !forzar) return CQA.sProm;
+  const pr=CQA.sProm=cqaPide({accion:'solicitudes'}).then(function(d){
+      const l=d.filas||[];
+      l.forEach(function(s){ s.sistemas=s.sistemas||[]; s.busca=cqNorm([s.nombre, s.correo, s.telefono, s.empresa, s.mensaje, s.nota, (CQA_ASUNTO[s.asunto]||[''])[0], CQA_STIPO[s.tipo]||'', cqaSSis(s)].join(' ')); });
+      CQA.s=l; CQA.sErr=''; return l; })
+    .catch(function(e){ CQA.sErr=cqaFalla(e, 'traer las solicitudes de la página'); throw e; })
+    .finally(function(){ if(CQA.sProm===pr) CQA.sProm=null; });
+  return pr;
+}
+function cqaSSis(s){ return (s.sistemas||[]).map(function(k){ return CQA_SSIS[k]||k; }).join(', '); }
+function cqaHabiles(desde){
+  const d=new Date(desde), hoy=new Date(); let n=0;
+  if(isNaN(d)) return 0;
+  d.setHours(0,0,0,0); hoy.setHours(0,0,0,0);
+  while(d<hoy){ d.setDate(d.getDate()+1); const w=d.getDay(); if(w!==0 && w!==6) n++; }
+  return n;
+}
+// vuelve a traer lo de Quo (la lista y, si ya se tenía, la gente y las solicitudes) y repinta lo que se está viendo
+async function cqaRecarga(){
+  for(let i=0; CQ.cargando && i<60; i++) await new Promise(function(ok){ setTimeout(ok, 250); });
+  const l=[cqCarga()];
+  if(CQA.g || vista==='cqu') l.push(cqaGente(true).catch(function(){}));
+  if(CQA.s || vista==='cqs') l.push(cqaSolicitudes(true).catch(function(){}));
+  await Promise.all(l);
+  if(vista==='cqu') cqaUPinta(); else if(vista==='cqs') cqaSPinta();
+}
+
+/* Las ventanas de lo que se hace: el mismo acomodo de «Darle acceso»; al cerrar regresa a donde estaba (volver) */
+function cqaVentana(titulo, sub, cuerpo, boton, volver){
+  const v=VENT=window.PROFASE_SEG.abre({ sinPlatica:true, kick:'Clientes Quo', titulo:titulo,
+    antes:'<p class="mem-sub">'+sub+'</p>', derecha:'<div class="body"><p class="cq-aviso mal" id="cq-mv-err" role="alert" hidden></p>'+cuerpo+'</div>',
+    alCerrar:function(){ if(VENT===v) VENT=null; setTimeout(function(){ if(!CQV && !CQAV && !CQASV && !VENT && volver) volver(); }, 0); } });
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn" data-cerrar>Cancelar</button>'+(boton?'<button class="btn accent" id="cq-mv-ok">'+esc(boton)+'</button>':'')+'</div>';
+  return v;
+}
+async function cqaManda(v, btn, cuerpo, que, listo){
+  const t0=btn.textContent; btn.disabled=true; btn.textContent='Un momento…';
+  let d=null;
+  try{ d=await cqaPide(cuerpo); }
+  catch(e){ btn.disabled=false; btn.textContent=t0; cqMvError(v, cqaFalla(e, que)); return null; }
+  const body=v.scrim.querySelector('.body'); if(body) body.innerHTML=listo(d);
+  const f=v.scrim.querySelector('.sg-foot');
+  if(f) f.innerHTML='<div class="sg-acts mem-pie"><button class="btn accent" id="cq-mv-listo" disabled>Trayendo lo de Quo…</button></div>';
+  try{ await cqaRecarga(); }catch(e){}
+  const b=v.scrim.querySelector('#cq-mv-listo');
+  if(b){ b.disabled=false; b.textContent='Listo'; b.addEventListener('click', function(){ if(VENT===v) v.cerrar(); }); }
+  return d;
+}
+function cqaVal(v, id){ const x=v.scrim.querySelector('#'+id); return x?String(x.value||'').replace(/\s+/g, ' ').trim():''; }
+function cqaFoco(v, id){ setTimeout(function(){ const i=v.scrim.querySelector('#'+id); if(i) try{ i.focus(); }catch(e){} }, 60); }
+
+/* ---------- el cliente: alta y cambio de nombre o sistemas ---------- */
+function cqaCuentaForma(a, volver){
+  if(cqAdmin()!=='hace') return;
+  const nuevo=!a, dis=a&&a.propia?' disabled':'';
+  const chk=function(id, t, sub, on){ return '<label class="cqa-fila"><input type="checkbox" id="'+id+'"'+(on?' checked':'')+dis+'><span><b>'+t+'</b> <span class="cq-mu">· '+sub+'</span></span></label>'; };
+  const v=cqaVentana(nuevo?'Agregar cliente en Quo':'Cambiar nombre o sistemas', nuevo?'Un despacho o empresa que contrata los sistemas Quo':esc(a.nombre),
+    campo('Nombre del despacho o empresa', '<input type="text" id="cqa-cn" maxlength="120" autocomplete="off" value="'+esc(a?a.nombre:'')+'">')
+    +'<h4 class="cq-h">Qué sistemas tiene</h4>'
+    +chk('cqa-cqc', 'Quo Contabilita', 'la contabilidad de sus RFC', !a||a.contabilita)
+    +chk('cqa-cqf', 'Quo Facturita', 'su facturación electrónica', a&&a.facturita)
+    +chk('cqa-cqn', 'Quo Nominita', 'la nómina de sus empresas', a&&a.nominita)
+    +(a&&a.propia?'<p class="cq-mu">Es la cuenta de la casa: siempre con los tres sistemas.</p>':'')
+    +'<div id="cqa-cmw" hidden>'+campo('Motivo (su gente deja de entrar a ese sistema)', '<textarea id="cqa-cm" rows="2" maxlength="300"></textarea>')+'</div>'
+    +(nuevo?'<p class="cq-mu">Después le das de alta a su gente en «Usuarios» de su ficha (o en «Más ▾ › Usuarios de todas las cuentas») y, si se le cobra, su membresía con «Dar de alta su membresía». Sus RFC los da de alta cada sistema.</p>':''),
+    nuevo?'Dar de alta':'Guardar', volver);
+  const sc=v.scrim, revisa=function(){ const w=sc.querySelector('#cqa-cmw'); if(w) w.hidden=!(a && ((a.contabilita && !sc.querySelector('#cqa-cqc').checked) || (a.facturita && !sc.querySelector('#cqa-cqf').checked) || (a.nominita && !sc.querySelector('#cqa-cqn').checked))); };
+  ['cqa-cqc','cqa-cqf','cqa-cqn'].forEach(function(id){ sc.querySelector('#'+id).addEventListener('change', revisa); });
+  sc.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const n=cqaVal(v, 'cqa-cn'), p={accion:'cuenta_guarda', nombre:n, contabilita:sc.querySelector('#cqa-cqc').checked, facturita:sc.querySelector('#cqa-cqf').checked,
+      nominita:sc.querySelector('#cqa-cqn').checked, motivo:cqaVal(v, 'cqa-cm')};
+    if(a) p.id=a.id;
+    if(n.length<3){ cqMvError(v, 'Escribe el nombre del despacho o empresa. Qué hacer: tres letras o más y vuelve a guardar.'); return; }
+    if(!p.contabilita && !p.facturita && !p.nominita){ cqMvError(v, 'Escoge al menos un sistema. Qué hacer: palomea los sistemas que contrató y vuelve a guardar.'); return; }
+    if(!sc.querySelector('#cqa-cmw').hidden && p.motivo.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué se le apaga ese sistema (cinco letras o más) y vuelve a guardar.'); return; }
+    cqaManda(v, this, p, nuevo?'dar de alta el cliente':'guardar el cliente', function(d){
+      if(nuevo && d.id) volver=function(){ cqFicha('a:'+d.id); };
+      return '<p class="cq-aviso">'+(nuevo?'Listo: <b>'+esc(n)+'</b> quedó dado de alta en los sistemas Quo. Al cerrar se abre su ficha para darle de alta a su gente.'
+        :d.igual?'No había nada que cambiar.':'Listo: quedó guardado. Queda en su bitácora.')+'</p>';
+    });
+  });
+  cqaFoco(v, 'cqa-cn');
+}
+
+/* ---------- el despacho contable de un cliente (19_despacho.sql de Quo) ---------- */
+function cqaDespTxt(x){
+  if(!x) return '';
+  if(x.estado==='activo') return 'DECOMSA tiene acceso'+(x.desde?' desde el '+esc(cqCuando(x.desde)):'');
+  if(x.estado==='invitado') return 'Se le invitó'+(x.creado?' el '+esc(cqCuando(x.creado)):'');
+  if(x.estado==='quitado') return 'Se quitó el acceso el '+esc(cqCuando(x.cerrado))+(x.motivo?': '+esc(x.motivo):'');
+  if(x.estado==='rechazado') return 'No aceptó la invitación ('+esc(cqCuando(x.cerrado))+')'+(x.motivo?': '+esc(x.motivo):'');
+  return '';
+}
+function cqaDespacho(a){
+  const ad=cqAdmin(); if(!ad) return '';
+  if(a.propia){
+    const n=a.despacho||{};
+    return '<h4 class="cq-h">Despacho contable</h4><p class="cqa-txt">Atiende <b>'+(n.clientes||0)+'</b> '+((n.clientes||0)===1?'cliente':'clientes')+' que le dieron acceso'
+      +(n.invitados?' <span class="cq-mu">· '+n.invitados+' por contestar la invitación</span>':'')+'.</p>'
+      +'<p class="cq-mu">Ante sus clientes se ve como DECOMSA. Su gente ve los RFC de la casa y de esos clientes según el WorkFlow del CRM.</p>';
+  }
+  const x=a.despacho, e=x&&CQA_DESP[x.estado], b=[];
+  if(ad==='hace'){
+    if(!x || x.estado==='quitado' || x.estado==='rechazado'){ if(a.activa && a.contabilita) b.push('<button type="button" class="btn sm accent" data-cqa="dinvita">Invitar a DECOMSA</button>'); }
+    else b.push('<button type="button" class="btn sm" data-cqa="dquita">'+(x.estado==='invitado'?'Cancelar la invitación':'Quitar el acceso')+'</button>');
+    if(a.activa && a.contabilita) b.push('<button type="button" class="btn sm" data-cqa="dpasa">Pasar RFC de la casa</button>');
+    if((a.rfc_contabilita||0)>0) b.push('<button type="button" class="btn sm" data-cqa="dregresa">Regresar RFC a la casa</button>');
+  }
+  if(x) b.push('<button type="button" class="btn sm" data-cqa="dbit">Bitácora del despacho</button>');
+  return '<h4 class="cq-h">Despacho contable '+(e?cqChip(e[0], e[1]):'')+'</h4>'
+    +'<p class="cqa-txt">'+(x?cqaDespTxt(x):'<span class="cq-mu">DECOMSA no tiene acceso a su contabilidad.</span>')+'</p>'
+    +(x && x.estado==='activo' && !x.enterado?'<p class="cq-mu">Quien administra su cuenta todavía no lee el aviso.</p>':'')
+    +(b.length?'<div class="cq-acc">'+b.join('')+'</div>':'')
+    +'<p class="cq-mu">Cada cliente es dueño de su cuenta: DECOMSA entra a su contabilidad solo si le da acceso, y él lo quita en «Mi cuenta» cuando quiera. Qué ve cada quien de DECOMSA lo dice el WorkFlow del CRM.</p>';
+}
+function cqaDespInvita(r){
+  const a=r.a, v=cqaVentana('Invitar a DECOMSA', esc(a.nombre),
+    '<p class="cq-aviso">A quien administra su cuenta le sale la invitación en «Mi cuenta». En cuanto la acepte, la gente de DECOMSA ve sus RFC según el WorkFlow del CRM. La puede quitar cuando quiera.</p>',
+    'Invitar', function(){ cqFicha(r.k); });
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    cqaManda(v, this, {accion:'desp_invita', cuenta_id:a.id}, 'invitar a DECOMSA', function(){ return '<p class="cq-aviso">Listo: quedó invitado. Queda en la bitácora del despacho.</p>'; });
+  });
+}
+function cqaDespQuita(r){
+  const a=r.a, x=a.despacho||{}, inv=x.estado==='invitado';
+  const v=cqaVentana(inv?'Cancelar la invitación':'Quitarle el acceso a DECOMSA', esc(a.nombre),
+    '<p class="cq-aviso">'+(inv?'La invitación deja de salirle.':'Al momento la gente de DECOMSA deja de ver sus RFC. Su información se queda en su cuenta.')+'</p>'
+    +campo('Motivo', '<textarea id="cqa-dm" rows="3" maxlength="300" placeholder="Por ejemplo: dejó de ser cliente de DECOMSA"></textarea>'),
+    inv?'Cancelar la invitación':'Quitar el acceso', function(){ cqFicha(r.k); });
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const m=cqaVal(v, 'cqa-dm');
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué (cinco letras o más) y vuelve a picar el botón.'); return; }
+    cqaManda(v, this, {accion:'desp_quita', id:x.id, motivo:m}, inv?'cancelar la invitación':'quitar el acceso', function(){
+      return '<p class="cq-aviso">Listo: '+(inv?'se canceló la invitación':'DECOMSA ya no entra a su contabilidad')+'. Queda en la bitácora del despacho con tu motivo.</p>'; });
+  });
+  cqaFoco(v, 'cqa-dm');
+}
+// hacia: «cliente» (de la casa a su cuenta) o «casa» (regresarlos); la lista: los RFC de Contabilita de la cuenta de origen
+async function cqaDespPasa(r, hacia){
+  const a=r.a, casa=cqaCasa();
+  let g=null; try{ g=await cqaGente(); }catch(e){ g=null; }
+  if(!g || !casa){ avisar('No se pudo leer la lista de RFC. Qué hacer: vuelve a intentar en un momento.'); cqFicha(r.k); return; }
+  const de=String(hacia==='cliente'?casa.id:a.id), l=(g.rfcs.qc||[]).filter(function(x){ return String(x.cuenta_id)===de; });
+  const sel={}; let q='';
+  const v=cqaVentana(hacia==='cliente'?'Pasar RFC de la casa':'Regresar RFC a la casa', hacia==='cliente'?'De la casa a '+esc(a.nombre):'De '+esc(a.nombre)+' a la casa',
+    '<p class="cq-aviso">'+(hacia==='cliente'
+      ?'Los RFC que escojas dejan de ser de la cuenta de la casa y pasan a la de '+esc(a.nombre)+'. Su contabilidad no cambia. Si DECOMSA todavía no tiene acceso, queda puesto (ya los trabaja) y a quien administra su cuenta le sale el aviso la primera vez que entra.'
+      :'Los RFC que escojas regresan a la cuenta de la casa (para corregir). Su contabilidad no cambia.')+'</p>'
+    +(l.length?(l.length>6?campo('Buscar RFC o razón social', '<input type="text" id="cqa-pq" autocomplete="off" spellcheck="false">'):'')
+      +'<p class="cq-mu" id="cqa-pn"></p><div class="cqa-lista" id="cqa-pl"></div>'
+      :'<p class="cq-mu">'+(hacia==='cliente'?'La casa no tiene RFC en Quo Contabilita.':'Esta cuenta no tiene RFC en Quo Contabilita.')+'</p>'),
+    hacia==='cliente'?'Pasar a su cuenta':'Regresar a la casa', function(){ cqFicha(r.k); });
+  const sc=v.scrim, esc_=function(){ return l.filter(function(x){ return sel[x.rfc]; }).map(function(x){ return x.rfc; }); };
+  const cuenta=function(){ const n=sc.querySelector('#cqa-pn'); if(n) n.textContent=esc_().length+' escogidos de '+l.length; };
+  const pinta=function(){
+    const u=sc.querySelector('#cqa-pl'); if(!u) return;
+    const w=cqNorm(q).split(/\s+/).filter(Boolean);
+    const vis=l.filter(function(x){ const t=cqNorm((x.nombre||'')+' '+cqaRfcVer(x.rfc)); return w.every(function(k){ return t.indexOf(k)>=0; }); }).slice(0, 300);
+    u.innerHTML=vis.length?vis.map(function(x){ return '<label class="cqa-fila"><input type="checkbox" data-rfc="'+esc(x.rfc)+'"'+(sel[x.rfc]?' checked':'')+'><span><b>'+esc(x.nombre||cqaRfcVer(x.rfc))+'</b> <span class="cq-mu">'+esc(cqaRfcVer(x.rfc))+'</span></span></label>'; }).join('')
+      :'<p class="cq-mu">Ninguno con esa búsqueda.</p>';
+    u.querySelectorAll('input[data-rfc]').forEach(function(i){ i.addEventListener('change', function(){ sel[i.getAttribute('data-rfc')]=i.checked; cuenta(); }); });
+  };
+  const qi=sc.querySelector('#cqa-pq'); if(qi) qi.addEventListener('input', function(){ q=qi.value; pinta(); });
+  pinta(); cuenta();
+  const ok=sc.querySelector('#cq-mv-ok'); if(!l.length) ok.disabled=true;
+  ok.addEventListener('click', function(){
+    const rf=esc_();
+    if(!rf.length){ cqMvError(v, 'Escoge al menos un RFC. Qué hacer: palomea los RFC y vuelve a picar el botón.'); return; }
+    cqaManda(v, this, {accion:'desp_pasa', cuenta_id:a.id, a:hacia, rfcs:rf}, hacia==='cliente'?'pasar los RFC':'regresar los RFC', function(d){
+      const n=d.pasados||rf.length;
+      return '<p class="cq-aviso">Listo: '+(n===1?'pasó 1 RFC':'pasaron '+n+' RFC')+(hacia==='cliente'?' a su cuenta':' a la casa')+'. Queda en la bitácora del despacho.</p>'; });
+  });
+}
+async function cqaDespBit(r){
+  const a=r.a; let d=null;
+  try{ d=await cqaPide({accion:'desp_bit', cuenta_id:a.id}); }catch(e){ avisar(cqaFalla(e, 'leer la bitácora del despacho')); cqFicha(r.k); return; }
+  const L=d.accesos||[];
+  cqaVentana('Bitácora del despacho', esc(a.nombre), L.length?L.map(function(x){
+    const e=CQA_DESP[x.estado]||[x.estado,'neutral'];
+    return '<h4 class="cq-h">'+esc(x.despacho||'DECOMSA')+' '+cqChip(e[0], e[1])+'</h4><p class="cqa-txt">'+cqaDespTxt(x)+'</p>'
+      +'<p class="cq-mu">'+(x.origen==='ya_trabajamos'?'Ya llevaba su contabilidad: el acceso quedó puesto':'Por invitación')+'</p>'
+      +'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Cuándo</th><th>Qué</th><th>Quién</th></tr></thead><tbody>'
+      +(x.bitacora||[]).map(function(b){ return '<tr><td>'+esc(cqCuando(b.cuando))+'</td><td>'+esc(CQA_DACC[b.accion]||b.accion)+(b.detalle&&b.detalle.rfcs?' · '+b.detalle.rfcs+' RFC':'')+(b.motivo?'<div class="cq-mu">'+esc(b.motivo)+'</div>':'')+'</td><td>'+esc(b.quien||'—')+'</td></tr>'; }).join('')
+      +'</tbody></table></div>'; }).join(''):'<p class="cq-mu">Sin movimientos.</p>', null, function(){ cqFicha(r.k); });
+}
+
+/* ---------- la gente: sus RFC en cada sistema ---------- */
+// Todos los de su cuenta o solo los que escojas; quien administra su cuenta, siempre todos (lo guarda la base de Quo)
+function cqaRfcTxt(p, s){
+  const rol=p[s], l=(s==='qc'?p.rfcsQc:p.rfcsQf)||[], nom=(CQA.g&&CQA.g.nomRfc[s])||{};
+  if(!rol) return '';
+  if(s==='qc' && cqaEsCasa(p.cuenta_id)){
+    if(rol==='admin') return 'Todos los de la casa y de los clientes que le dieron acceso';
+    return 'Los que le da el WorkFlow del CRM'+(l.length?' y '+(l.length===1?(nom[l[0]]||cqaRfcVer(l[0])):l.length+' RFC más'):'');
+  }
+  if(rol==='admin' || !l.length) return 'Todos los de su cuenta';
+  return l.length===1?(nom[l[0]]||cqaRfcVer(l[0])):l.length+' RFC';
+}
+function cqaRfcHtml(pre){
+  return '<div class="cqa-rs" id="'+pre+'-rs"><div class="cqa-seg" role="radiogroup" aria-label="Sus RFC">'
+    +'<label><input type="radio" name="'+pre+'-t" value="1"> <span data-t1>Todos los de su cuenta</span></label>'
+    +'<label><input type="radio" name="'+pre+'-t" value="0"> <span data-t0>Solo los que escoja</span></label></div>'
+    +'<p class="cq-mu" id="'+pre+'-adm" hidden></p><div id="'+pre+'-rl" hidden></div></div>';
+}
+function cqaRfcArma(v, pre, s, cuentaDe, marcados){
+  const sc=v.scrim, box=sc.querySelector('#'+pre+'-rs'), rl=sc.querySelector('#'+pre+'-rl'), sel={}; let q='';
+  (marcados||[]).forEach(function(x){ sel[x]=true; });
+  let todos=!(marcados && marcados.length), adm=false, apagado=false;
+  const casa=function(){ return s==='qc' && cqaEsCasa(cuentaDe()); };
+  const deCuenta=function(){
+    const c=String(cuentaDe()), ok={}; ok[c]=true;
+    if(casa()) cqCuentas().forEach(function(x){ if(x.despacho && x.despacho.estado==='activo') ok[String(x.id)]=true; });
+    return ((CQA.g&&CQA.g.rfcs[s])||[]).filter(function(x){ return ok[String(x.cuenta_id)]; });
+  };
+  const cuantos=function(){ return deCuenta().filter(function(x){ return sel[x.rfc]; }).length; };
+  const lista=function(){
+    const u=rl.querySelector('.cqa-lista'); if(!u) return;
+    const w=cqNorm(q).split(/\s+/).filter(Boolean);
+    const vis=deCuenta().filter(function(x){ const t=cqNorm((x.nombre||'')+' '+cqaRfcVer(x.rfc)); return w.every(function(k){ return t.indexOf(k)>=0; }); }).slice(0, 400);
+    u.innerHTML=vis.length?vis.map(function(x){ return '<label class="cqa-fila"><input type="checkbox" data-rfc="'+esc(x.rfc)+'"'+(sel[x.rfc]?' checked':'')+'><span><b>'+esc(x.nombre||cqaRfcVer(x.rfc))+'</b> <span class="cq-mu">'+esc(cqaRfcVer(x.rfc))+'</span></span></label>'; }).join('')
+      :'<p class="cq-mu">Ninguno con esa búsqueda.</p>';
+    u.querySelectorAll('input[data-rfc]').forEach(function(i){ i.addEventListener('change', function(){ sel[i.getAttribute('data-rfc')]=i.checked; cuenta(); }); });
+  };
+  const cuenta=function(){ const n=rl.querySelector('.cqa-n'); if(n) n.textContent=cuantos()+' escogidos'; };
+  const pinta=function(){
+    const l=deCuenta();
+    if(!l.length){ rl.innerHTML='<p class="cq-mu">Su cuenta todavía no tiene RFC en '+CQA_SIS[s]+'.</p>'; return; }
+    rl.innerHTML=(l.length>6?'<div class="field"><label>Buscar RFC o razón social</label><input type="text" class="cqa-rq" autocomplete="off" spellcheck="false"></div>':'')
+      +'<p class="cq-mu cqa-n"></p><div class="cqa-lista"></div>';
+    const i=rl.querySelector('.cqa-rq'); if(i){ i.value=q; i.addEventListener('input', function(){ q=i.value; lista(); }); }
+    lista(); cuenta();
+  };
+  const vista_=function(){
+    const k=casa();
+    box.querySelector('[data-t1]').textContent=k?'Solo lo del WorkFlow':'Todos los de su cuenta';
+    box.querySelector('[data-t0]').textContent=k?'Además, los que escoja':'Solo los que escoja';
+    const ad=box.querySelector('#'+pre+'-adm');
+    ad.textContent=k?'Quien administra la cuenta de la casa ve todos sus RFC y los de los clientes que le dieron acceso.':'Quien administra su cuenta ve todos sus RFC.';
+    ad.hidden=!adm; box.querySelector('.cqa-seg').hidden=adm; rl.hidden=adm||todos; box.hidden=apagado;
+  };
+  box.querySelectorAll('input[type=radio]').forEach(function(x){
+    x.checked=(x.value==='1')===todos;
+    x.addEventListener('change', function(){ todos=x.value==='1'; vista_(); if(!todos) pinta(); });
+  });
+  if(!todos) pinta();
+  vista_();
+  return {
+    tipo:function(r){ adm=r==='admin'; vista_(); },
+    apaga:function(x){ apagado=!!x; vista_(); },
+    cuentaCambio:function(){ Object.keys(sel).forEach(function(k){ delete sel[k]; }); q=''; vista_(); if(!todos) pinta(); },
+    lista:function(){
+      if(todos || adm) return [];
+      const l=deCuenta().filter(function(x){ return sel[x.rfc]; }).map(function(x){ return x.rfc; });
+      if(!l.length) throw new Error('Escoge al menos un RFC en '+CQA_SIS[s]+', o «'+(casa()?'Solo lo del WorkFlow':'Todos los de su cuenta')+'». Qué hacer: palomea sus RFC y vuelve a guardar.');
+      // los que ya tenía y aquí no salen (un RFC reservado) se le quedan
+      const vis={}; deCuenta().forEach(function(x){ vis[x.rfc]=1; });
+      (marcados||[]).forEach(function(x){ if(!vis[x] && l.indexOf(x)<0) l.push(x); });
+      return l;
+    }
+  };
+}
+function cqaSugiere(nombre){
+  const p=cqNorm(nombre).replace(/[^a-z\s]/g, '').split(/\s+/).filter(Boolean);
+  return p.length>1?p[0]+'.'+p[p.length>2?p.length-2:1]:(p[0]||'');
+}
+
+/* ---------- la gente: alta, cambios, sistemas, código nuevo y baja ---------- */
+async function cqaAlta(cuentaId, volver){
+  if(cqAdmin()!=='hace') return;
+  try{ await cqaGente(); }catch(e){ avisar(CQA.gErr||cqaFalla(e, 'traer la gente de las cuentas')); return; }
+  const ctas=cqCuentas().filter(function(a){ return a.activa; }).slice().sort(function(a, b){ return (b.propia?1:0)-(a.propia?1:0) || cqNorm(a.nombre).localeCompare(cqNorm(b.nombre)); });
+  if(!ctas.length){ avisar('Primero da de alta un cliente. Qué hacer: en «Más ▾ › Agregar cliente en Quo» y luego vuelve a agregar al usuario.'); return; }
+  const ini=cuentaId && ctas.some(function(a){ return a.id===cuentaId; })?cuentaId:ctas[0].id;
+  const bloque=function(s, extra){ return '<div id="cqa-w'+s+'" class="cqa-sis"><label class="cqa-fila"><input type="checkbox" id="cqa-a'+s+'"><span><b>'+CQA_SIS[s]+'</b></span></label>'
+    +campo('Tipo en '+CQA_SIS[s], '<select id="cqa-t'+s+'">'+cqaOpc(s, CQA_FAB[s])+'</select>')+extra+'</div>'; };
+  const v=cqaVentana('Agregar usuario', 'Su usuario y su contraseña son los mismos en todos sus sistemas',
+    campo('Nombre completo', '<input type="text" id="cqa-an" maxlength="120" autocomplete="off">')
+    +campo('Usuario', '<input type="text" id="cqa-au" maxlength="40" autocapitalize="none" spellcheck="false" autocomplete="off" placeholder="nombre.apellido">', 'En minúsculas y sin espacios. Con él entra a www.quosistemas.com.')
+    +campo('Su correo', '<input type="text" inputmode="email" id="cqa-am" maxlength="160" autocapitalize="none" spellcheck="false" autocomplete="off" placeholder="nombre@empresa.com">', '<span id="cqa-amd">Ahí le llega su código desde acceso@quosistemas.com y, si olvida su contraseña, el de cambiarla.</span>')
+    +campo('Cuenta', '<select id="cqa-ac">'+ctas.map(function(a){ return '<option value="'+a.id+'"'+(a.id===ini?' selected':'')+'>'+esc(a.nombre)+(a.propia&&!/la casa/i.test(a.nombre)?' (la casa)':'')+'</option>'; }).join('')+'</select>')
+    +'<p class="cq-mu" id="cqa-acasa" hidden>Es de la casa: dale el mismo usuario que tiene en el CRM (por ejemplo, nombre.apellido). Así entra con su contraseña del CRM y ve sus empresas del WorkFlow sin escogerlas aquí.</p>'
+    +'<h4 class="cq-h">A qué entra</h4>'
+    +bloque('qc', cqaRfcHtml('cqa-rqc'))+bloque('qf', cqaRfcHtml('cqa-rqf'))
+    +bloque('qn', '<p class="cq-mu">Quien hace o supervisa la nómina ve las empresas que lleva: se escoge en la ficha de cada empresa, en Quo Nominita.</p>')
+    +'<p class="cq-mu">Al guardar, su código de un solo uso le llega solo a su correo para que cree su contraseña. El código nunca pasa por el CRM.</p>',
+    'Dar de alta', volver);
+  const sc=v.scrim, ctaSel=sc.querySelector('#cqa-ac'), cta=function(){ return cqCuenta(Number(ctaSel.value))||{}; };
+  const RQC=cqaRfcArma(v, 'cqa-rqc', 'qc', function(){ return ctaSel.value; }, []), RQF=cqaRfcArma(v, 'cqa-rqf', 'qf', function(){ return ctaSel.value; }, []);
+  const $s=function(id){ return sc.querySelector('#'+id); };
+  const revisa=function(){
+    const c=cta();
+    $s('cqa-acasa').hidden=!c.propia;
+    $s('cqa-amd').textContent=c.propia?'Si entra con su usuario del CRM, no hace falta: entra con su contraseña del CRM.':'Ahí le llega su código desde acceso@quosistemas.com y, si olvida su contraseña, el de cambiarla.';
+    $s('cqa-wqc').hidden=!c.contabilita; $s('cqa-wqf').hidden=!c.facturita; $s('cqa-wqn').hidden=!c.nominita;
+    if(!c.contabilita) $s('cqa-aqc').checked=false; if(!c.facturita) $s('cqa-aqf').checked=false; if(!c.nominita) $s('cqa-aqn').checked=false;
+    ['qc','qf','qn'].forEach(function(s){ $s('cqa-t'+s).disabled=!$s('cqa-a'+s).checked; });
+    RQC.apaga(!$s('cqa-aqc').checked); RQF.apaga(!$s('cqa-aqf').checked); RQC.tipo($s('cqa-tqc').value); RQF.tipo($s('cqa-tqf').value);
+  };
+  const fabrica=function(){ const c=cta();
+    $s('cqa-aqc').checked=!!c.contabilita; $s('cqa-aqf').checked=!c.contabilita&&!!c.facturita; $s('cqa-aqn').checked=!c.contabilita&&!c.facturita&&!!c.nominita; };
+  ctaSel.addEventListener('change', function(){ fabrica(); RQC.cuentaCambio(); RQF.cuentaCambio(); revisa(); });
+  ['cqa-aqc','cqa-aqf','cqa-aqn','cqa-tqc','cqa-tqf'].forEach(function(id){ $s(id).addEventListener('change', revisa); });
+  fabrica(); revisa();
+  let tocado=false;
+  $s('cqa-au').addEventListener('input', function(){ tocado=true; });
+  $s('cqa-an').addEventListener('input', function(){ if(!tocado) $s('cqa-au').value=cqaSugiere(this.value); });
+  $s('cq-mv-ok').addEventListener('click', function(){
+    const c=cta(), us=cqaVal(v, 'cqa-au').toLowerCase(), nom=cqaVal(v, 'cqa-an'), co=cqaVal(v, 'cqa-am');
+    const p={accion:'usr_alta', nombre:nom, usuario:us, correo:co, cuenta_id:c.id,
+      contabilita:$s('cqa-aqc').checked?$s('cqa-tqc').value:null, facturita:$s('cqa-aqf').checked?$s('cqa-tqf').value:null, nominita:$s('cqa-aqn').checked?$s('cqa-tqn').value:null};
+    if(nom.length<3){ cqMvError(v, 'Falta su nombre completo. Qué hacer: escríbelo y vuelve a picar «Dar de alta».'); return; }
+    if(!/^[a-z][a-z0-9._-]{1,40}$/.test(us)){ cqMvError(v, 'El usuario va en minúsculas, sin espacios ni acentos y empieza con una letra (por ejemplo, nombre.apellido). Qué hacer: escríbelo así y vuelve a picar «Dar de alta».'); return; }
+    if(!c.propia && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(co)){ cqMvError(v, 'Falta su correo: ahí le llega su código para crear su contraseña. Qué hacer: escríbelo completo (con su @ y su dominio) y vuelve a picar «Dar de alta».'); return; }
+    if(!p.contabilita && !p.facturita && !p.nominita){ cqMvError(v, 'Escoge al menos un sistema. Qué hacer: palomea a qué entra y vuelve a picar «Dar de alta».'); return; }
+    try{ p.rfcs_contabilita=p.contabilita?RQC.lista():[]; p.rfcs_facturita=p.facturita?RQF.lista():[]; }catch(e){ cqMvError(v, String(e.message||e)); return; }
+    cqaManda(v, this, p, 'dar de alta el usuario', function(d){
+      return '<p class="cq-aviso'+(d.enviado||d.crm?'':' mal')+'">Listo: <b>'+esc(nom)+'</b> quedó dado de alta con el usuario <b>'+esc(d.usuario||us)+'</b>. '
+        +(d.crm?'Entra con su usuario y su contraseña del CRM: no necesita código.'
+          :d.enviado?'Su código le llegó a '+esc(d.correo||co)+' desde acceso@quosistemas.com; con él crea su contraseña en www.quosistemas.com.'
+          :'No se le pudo mandar el correo. Qué hacer: dile que en la entrada de www.quosistemas.com pique «¿Primera vez u olvidaste tu contraseña? Usa tu código» y luego «Mándame un código»; le llega a '+esc(d.correo||co)+'.')+'</p>'
+        +'<p class="cq-mu">Queda en su bitácora. El código nunca pasa por el CRM.</p>';
+    });
+  });
+  cqaFoco(v, 'cqa-an');
+}
+function cqaCambia(p, volver){
+  const bloque=function(s){ return '<h4 class="cq-h">'+CQA_SIS[s]+'</h4>'+campo('Tipo', '<select id="cqa-k'+s+'">'+cqaOpc(s, p[s])+'</select>')+(s==='qn'?'':cqaRfcHtml('cqa-kr'+s)); };
+  const v=cqaVentana('Cambiar nombre, tipo o sus RFC', esc(p.usuario),
+    campo('Nombre completo', '<input type="text" id="cqa-kn" maxlength="120" value="'+esc(p.nombre||'')+'">', 'El nombre es el mismo en todos sus sistemas: es la misma persona.')
+    +cqaSisDe(p).map(bloque).join(''), 'Guardar', volver);
+  const sc=v.scrim, R={};
+  ['qc','qf'].forEach(function(s){ if(!p[s]) return;
+    const sel=sc.querySelector('#cqa-k'+s);
+    R[s]=cqaRfcArma(v, 'cqa-kr'+s, s, function(){ return p.cuenta_id; }, p[s]==='admin'?[]:(s==='qc'?p.rfcsQc:p.rfcsQf)||[]);
+    R[s].tipo(p[s]); sel.addEventListener('change', function(){ R[s].tipo(sel.value); }); });
+  sc.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const n=cqaVal(v, 'cqa-kn'), c={accion:'usr_cambia', usuario:p.usuario, nombre:n};
+    if(n.length<3){ cqMvError(v, 'Falta su nombre completo. Qué hacer: escríbelo y vuelve a guardar.'); return; }
+    try{ cqaSisDe(p).forEach(function(s){ const rol=sc.querySelector('#cqa-k'+s).value; c[s]=s==='qn'?{rol:rol}:{rol:rol, rfcs:R[s].lista()}; }); }
+    catch(e){ cqMvError(v, String(e.message||e)); return; }
+    cqaManda(v, this, c, 'guardar el usuario', function(){ return '<p class="cq-aviso">Listo: quedó guardado. Queda en su bitácora.</p>'; });
+  });
+  cqaFoco(v, 'cqa-kn');
+}
+function cqaDa(p, s, volver){
+  const v=cqaVentana('Darle '+CQA_SIS[s], esc(p.nombre),
+    campo('Su tipo en '+CQA_SIS[s], '<select id="cqa-dt">'+cqaOpc(s, CQA_FAB[s])+'</select>')
+    +(s==='qn'?'<p class="cq-mu">Quien hace o supervisa la nómina ve las empresas que lleva: se escoge en la ficha de cada empresa, en Quo Nominita.</p>':cqaRfcHtml('cqa-dr'))
+    +'<p class="cq-mu">Entra a '+CQA_SIS[s]+' con su mismo usuario y su misma contraseña.</p>', 'Darle '+CQA_SIS[s], volver);
+  const sc=v.scrim, sel=sc.querySelector('#cqa-dt'), R=s==='qn'?null:cqaRfcArma(v, 'cqa-dr', s, function(){ return p.cuenta_id; }, []);
+  if(R){ R.tipo(sel.value); sel.addEventListener('change', function(){ R.tipo(sel.value); }); }
+  sc.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    let l=[]; try{ if(R) l=R.lista(); }catch(e){ cqMvError(v, String(e.message||e)); return; }
+    cqaManda(v, this, {accion:'usr_da', usuario:p.usuario, sistema:s, rol:sel.value, rfcs:l}, 'darle '+CQA_SIS[s], function(){
+      return '<p class="cq-aviso">Listo: ya entra a '+CQA_SIS[s]+', con su mismo usuario y su misma contraseña.</p>'; });
+  });
+}
+function cqaQuitaSis(p, s, volver){
+  const otros=cqaLista(cqaSisDe(p).filter(function(k){ return k!==s; }));
+  const v=cqaVentana('Quitarle '+CQA_SIS[s], esc(p.nombre),
+    '<p class="cq-aviso">Deja de entrar a '+CQA_SIS[s]+' al momento. Sigue entrando a '+esc(otros)+' con su misma contraseña. Nada se borra: queda en su bitácora.</p>'
+    +campo('Motivo', '<textarea id="cqa-qm" rows="3" maxlength="300"></textarea>'), 'Quitarle '+CQA_SIS[s], volver);
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const m=cqaVal(v, 'cqa-qm');
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué (cinco letras o más) y vuelve a picar el botón.'); return; }
+    cqaManda(v, this, {accion:'usr_quita_sis', usuario:p.usuario, sistema:s, motivo:m}, 'quitarle '+CQA_SIS[s], function(){
+      return '<p class="cq-aviso">Listo: ya no entra a '+CQA_SIS[s]+'. Sigue entrando a '+esc(otros)+'.</p>'; });
+  });
+  cqaFoco(v, 'cqa-qm');
+}
+function cqaCodigo(p, volver){
+  const v=cqaVentana('Darle un código nuevo', esc(p.nombre)+' ('+esc(p.usuario)+')',
+    '<p class="cq-aviso">Le llega a su correo'+(p.correo?' ('+esc(p.correo)+')':'')+' desde acceso@quosistemas.com un código nuevo de un solo uso para crear su contraseña; el de antes deja de servir. El código nunca pasa por el CRM.</p>',
+    'Mandarle un código nuevo', volver);
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    cqaManda(v, this, {accion:'usr_codigo', usuario:p.usuario}, 'darle un código nuevo', function(d){
+      return d.enviado?'<p class="cq-aviso">Listo: su código nuevo le llegó a '+esc(d.correo||p.correo||'su correo')+'.</p>'
+        :d.correo?'<p class="cq-aviso mal">No se le pudo mandar el correo a '+esc(d.correo)+'. Qué hacer: dile que en la entrada de www.quosistemas.com pique «¿Primera vez u olvidaste tu contraseña? Usa tu código» y luego «Mándame un código».</p>'
+        :'<p class="cq-aviso mal">No tiene correo registrado, así que el código no le puede llegar. Qué hacer: dalo de baja y vuelve a darlo de alta con su correo.</p>'; });
+  });
+}
+function cqaBaja(p, volver){
+  const v=cqaVentana('Dar de baja de todo', esc(p.nombre)+' ('+esc(p.usuario)+')',
+    '<p class="cq-aviso mal">Deja de entrar a '+esc(cqaLista(cqaSisDe(p)))+' al momento (se cierran sus sesiones). Nada se borra: queda en «Dados de baja» y en su bitácora.</p>'
+    +campo('Motivo', '<textarea id="cqa-bm" rows="3" maxlength="300" placeholder="Por ejemplo: ya no trabaja con el cliente"></textarea>'), 'Dar de baja', volver);
+  v.scrim.querySelector('#cq-mv-ok').addEventListener('click', function(){
+    const m=cqaVal(v, 'cqa-bm');
+    if(m.length<5){ cqMvError(v, 'Escribe el motivo. Qué hacer: escribe por qué (cinco letras o más) y vuelve a picar «Dar de baja».'); return; }
+    cqaManda(v, this, {accion:'usr_baja', usuario:p.usuario, motivo:m}, 'dar de baja al usuario', function(){ return '<p class="cq-aviso">Listo: quedó dado de baja. Queda en su bitácora con tu motivo.</p>'; });
+  });
+  cqaFoco(v, 'cqa-bm');
+}
+
+/* ---------- la ficha de una persona ---------- */
+let CQAV=null;
+async function cqaFicha(usuario, lista){
+  let g=null;
+  try{ g=await cqaGente(); }catch(e){ avisar(CQA.gErr||cqaFalla(e, 'traer la gente de las cuentas')); return; }
+  const p=g.personas.find(function(x){ return x.usuario===usuario; }); if(!p) { avisar('Ese usuario ya no está. Qué hacer: vuelve a traer lo de Quo («Más ▾ › Volver a traer lo de Quo»).'); return; }
+  if(CQAV){ const o=CQAV; CQAV=null; try{ o.cerrar(); }catch(e){} }
+  if(CQV){ const o=CQV; CQV=null; try{ o.cerrar(); }catch(e){} }
+  const a=cqCuenta(Number(p.cuenta_id))||{}, e=CQA_UEST[p.estado]||[p.estado,'neutral'], hace=cqAdmin()==='hace';
+  const L=lista||[], pos=L.indexOf(usuario), volver=function(){ cqaFicha(usuario, L); };
+  const s=function(t, x){ return '<span>'+t+' <b>'+x+'</b></span>'; };
+  const resumen='<div class="cq-rs">'+cqChip(e[0], e[1])+' '+cqaSisDe(p).map(function(k){ return '<span class="cq-sis">'+CQA_SIS[k].replace('Quo ', '')+'</span>'; }).join(' ')+'</div>'
+    +'<div class="r2">'+s('Usuario', esc(p.usuario))+s('Cuenta', esc(p.dir?'Todas (la dirección)':cqaNomCta(p.cuenta_id)))+(p.correo?s('Correo', esc(p.correo)):'')+s('Último ingreso', p.ultimo?esc(cqCuando(p.ultimo)):'Nunca')+'</div>';
+  const falta=[];
+  if(p.estado==='pendiente') falta.push(['va','Todavía no crea su contraseña. Qué hacer: si no le llegó su código, '+(hace?'«Darle un código nuevo» (le llega a su correo).':'pídele a la dirección que le dé un código nuevo (le llega a su correo).')]);
+  else if(p.estado==='baja') falta.push(['no','Está dado de baja: ya no entra a nada. Qué hacer: si regresa, '+(hace?'dalo de alta otra vez con «Agregar usuario».':'pídele a la dirección que lo dé de alta otra vez.')]);
+  else falta.push(['si','Entra a '+esc(cqaLista(cqaSisDe(p)))+(cqaCuantos(p)>1?' con la misma contraseña':'')+'.']);
+  if(a.id && a.activa===false) falta.push(['no','Su cuenta está suspendida: no entra hasta que se reactive (pestaña «Cuenta» de su cliente).']);
+  const sist='<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Sistema</th><th>Tipo</th><th>Lo que ve</th></tr></thead><tbody>'
+    +['qc','qf','qn'].map(function(k){
+      const lv=!p[k]?'':p.dir?'Todo, de todas las cuentas':k==='qn'?(p.qn==='admin'?'Todas las empresas de su cuenta':p.qn==='lector'?'Estados y totales de su cuenta, sin sueldos':'Las empresas que lleva (se escoge en la ficha de cada empresa)'):cqaRfcTxt(p, k);
+      return '<tr><td><b>'+CQA_SIS[k]+'</b></td><td>'+(p[k]?esc(cqaTipo(k, p[k])):'<span class="cq-mu">No entra</span>')+'</td><td>'+esc(lv)+'</td></tr>'; }).join('')
+    +'</tbody></table></div>'
+    +(['qc','qf'].map(function(k){ const l=(k==='qc'?p.rfcsQc:p.rfcsQf)||[], nom=g.nomRfc[k]||{};
+        if(!p[k] || p[k]==='admin' || p.dir || l.length<2) return '';
+        return '<details class="cqa-det"><summary>Sus '+l.length+' RFC en '+CQA_SIS[k]+'</summary><div class="cq-tw"><table class="cq-t cq-mini"><tbody>'
+          +l.map(function(x){ return '<tr><td>'+esc(nom[x]||'')+'</td><td>'+esc(cqaRfcVer(x))+'</td></tr>'; }).join('')+'</tbody></table></div></details>'; }).join(''))
+    +(p.qc && !p.dir && p.qc!=='admin' && cqaEsCasa(p.cuenta_id)?'<p class="cq-mu">Es de la casa: además de lo que se le escoja aquí, ve los RFC que le da el WorkFlow del CRM'
+      +(p.crm?(p.crm.en_crm?' (hoy: '+(p.crm.gerente?'es gerente, ve todos; ':'')+(p.crm.resp||0)+' como responsable y '+(p.crm.aut||0)+' como quien autoriza «Cálculo de impuestos»'+(p.crm.cubre?', y '+p.crm.cubre+' que cubre estos días':'')+')'
+        :' (no está en la gente del CRM: no le da ninguno)'):' (responsable o quien autoriza «Cálculo de impuestos», y lo que cubre esos días)')+'.</p>':'');
+  const fechas='<div class="r2">'+s('Alta', (p.alta?esc(cqCuando(p.alta)):'—')+(p.alta_por?' · la dio '+esc(p.alta_por):''))+s('Creó su contraseña', p.entro?esc(cqCuando(p.entro)):'Todavía no')
+    +s('Último ingreso', p.ultimo?esc(cqCuando(p.ultimo)):'Nunca')+(p.puesto?s('Puesto', esc(p.puesto)):'')+(p.telefono?s('Teléfono', esc(p.telefono)):'')
+    +(p.baja?s('Baja', esc(cqCuando(p.baja))+(p.baja_motivo?' · '+esc(p.baja_motivo):'')):'')+'</div>';
+  const bit=p.bit.length?'<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Cuándo</th><th>Qué</th><th>Sistema</th><th>Quién lo hizo</th><th>Motivo</th></tr></thead><tbody>'
+    +p.bit.slice(0, 60).map(function(x){
+      const sigue=x.accion==='baja'&&x.despues&&x.despues.sigue_en?' (sigue en '+String(x.despues.sigue_en).replace(/contabilita/g,'Quo Contabilita').replace(/facturita/g,'Quo Facturita').replace(/nominita/g,'Quo Nominita')+')':'';
+      return '<tr><td>'+esc(cqCuando(x.cuando))+'</td><td>'+esc((CQA_ACC[x.accion]||x.accion)+sigue)+'</td><td>'+esc(CQA_SIS[x.sis]||'')+'</td><td>'+esc(x.por||'—')+'</td><td>'+esc(x.motivo||'')+'</td></tr>'; }).join('')
+    +'</tbody></table></div>':'<p class="cq-mu">Sin movimientos.</p>';
+  const acc=[];
+  if(hace && !p.dir && p.estado!=='baja'){
+    acc.push({t:'Cambiar nombre, tipo o sus RFC', accion:function(){ cierra(); cqaCambia(p, volver); }});
+    ['qc','qf','qn'].forEach(function(k){ if(!p[k] && a[CQA_CAMPO[k]] && a.activa) acc.push({t:'Darle '+CQA_SIS[k], tipo:'b2', accion:function(){ cierra(); cqaDa(p, k, volver); }}); });
+    if(cqaCuantos(p)>1) cqaSisDe(p).forEach(function(k){ acc.push({t:'Quitarle '+CQA_SIS[k], tipo:'b2', accion:function(){ cierra(); cqaQuitaSis(p, k, volver); }}); });
+    if(p.estado==='pendiente') acc.push({t:'Darle un código nuevo', tipo:'b2', accion:function(){ cierra(); cqaCodigo(p, volver); }});
+    acc.push({t:'Dar de baja de todo', tipo:'b2', accion:function(){ cierra(); cqaBaja(p, volver); }});
+  }
+  if(a.id && !a.propia) acc.push({t:'Abrir su cliente', tipo:'b2', accion:function(){ cierra(); vista='cq'; render(); setTimeout(function(){ cqaAbreCuenta(a.id); }, 0); }});
+  const v=CQAV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo · Usuarios', titulo:p.nombre||p.usuario,
+    nav: pos>=0 && L.length>1 ? { pos:pos+1, total:L.length, donde:'en tu lista', ant:pos>0, sig:pos<L.length-1, ir:function(dir){ const n=L[pos+(dir<0?-1:1)]; if(n) cqaFicha(n, L); } } : null,
+    resumen:resumen, bajoResumen:window.PROFASE_SEG.falta('Cómo está', falta),
+    pestanas:[{id:'sis', t:'Sus sistemas', html:sist}, {id:'fechas', t:'Fechas', html:fechas}, {id:'bit', t:'Bitácora', html:bit}], pestana:'sis',
+    acciones:acc.length?acc:null, pieTexto:hace?'':(p.dir?'Los usuarios de la dirección no se cambian desde aquí':'Solo consulta'),
+    alCerrar:function(){ if(CQAV===v) CQAV=null; } });
+  function cierra(){ if(CQAV===v){ CQAV=null; v.cerrar(); } }
+}
+// abre la ficha de la cuenta de Quo (o de la membresía ligada a ella)
+function cqaAbreCuenta(id){
+  const r=cqFilas().find(function(x){ return x.a && x.a.id===id && (x.tipo==='membresia'||x.tipo==='cuenta'); });
+  if(r) cqFicha(r.k); else avisar('No se encontró ese cliente. Qué hacer: vuelve a traer lo de Quo («Más ▾ › Volver a traer lo de Quo»).');
+}
+
+/* ---------- la vista «Usuarios de todas las cuentas» ---------- */
+function cqaUBase(){ const g=CQA.g; if(!g) return []; const q=cqNorm(CQA.u.q).split(/\s+/).filter(Boolean), f=CQA.u.f;
+  return g.personas.filter(function(p){
+    if(q.length && !q.every(function(w){ return p.busca.indexOf(w)>=0; })) return false;
+    if(f.cta.length && f.cta.indexOf(p.dir?'dir':String(p.cuenta_id))<0) return false;
+    if(f.sis.length && !f.sis.some(function(k){ return p[k]; })) return false;
+    return true; }); }
+function cqaUVis(){
+  const b=cqaUBase(), pl=CQA_PU.find(function(z){ return z.k===CQA.u.pila; });
+  const l=pl?b.filter(pl.f):b.filter(function(p){ return p.estado!=='baja' && !p.dir; });
+  return l.sort(function(x, y){ return (x.estado==='pendiente'?0:1)-(y.estado==='pendiente'?0:1) || cqNorm(x.nombre).localeCompare(cqNorm(y.nombre)); });
+}
+let CQA_ULISTA=[];
+function cqaUVista(v){
+  if(!v.querySelector('#cqu-root')){
+    if(CQA.u.fx){ try{ CQA.u.fx.destruye(); }catch(e){} CQA.u.fx=null; }
+    v.innerHTML='<div id="cqu-root"><div id="cqu-barra"></div><div id="cqu-aviso" class="cq-aviso" role="status" hidden></div><div id="cqu-pilas"></div>'
+      +'<section class="card cq-card" id="cqu-card"><div class="card-head"><h2 id="cqu-tit">Usuarios de todas las cuentas</h2><span id="cqu-n" class="hint"></span></div>'
+      +'<div class="tablescroll"><table class="cq-t" id="cqu-t"><thead><tr><th>Persona</th><th>Cuenta</th><th>Quo Contabilita</th><th>Quo Facturita</th><th>Quo Nominita</th><th>Último ingreso</th><th>Cómo está</th></tr></thead>'
+      +'<tbody id="cqu-tb"></tbody></table></div><nav class="pgn" id="cqu-pg"></nav></section></div>';
+    cqaUBarra();
+  }
+  if(!CQ.d && !CQ.cargando) cqCarga();
+  if(!CQA.g && !CQA.gProm && CQ.d && cqAdmin()) cqaGente().then(function(){ if(vista==='cqu') cqaUPinta(); }, function(){ if(vista==='cqu') cqaUPinta(); });
+  cqaUPinta();
+}
+function cqaUBarra(){
+  const ro=cqAdmin()!=='hace';
+  const xl=document.createElement('button'); xl.type='button'; xl.className='btn'; xl.setAttribute('data-excel',''); xl.textContent='Excel';
+  xl.onclick=function(){ cqaUExcel(xl); };
+  const mk=function(t, fn, title){ const b=document.createElement('button'); b.type='button'; b.className='btn'; b.textContent=t; if(title) b.title=title; b.onclick=fn; return b; };
+  const nuevo=mk('+ Agregar usuario', function(){ cqaAlta(null, null); }); nuevo.className='btn accent';
+  const botones=[xl]; if(!ro) botones.push(nuevo);
+  CQA.u.ui=window.PROFASE_PILAS.barra(document.getElementById('cqu-barra'), {
+    caja:true,
+    buscar:{ id:'cqu-q', placeholder:'Nombre, usuario, correo o cuenta', alEscribir:function(q){ CQA.u.q=q; if(CQA.u.pg) CQA.u.pg.inicio(); cqaUPinta(); } },
+    filtros:{ grupos:[{ t:'USUARIOS', campos:[
+        { k:'cta', t:'CUENTA', tipo:'varios', lista:true, opciones:function(){
+            const g=CQA.g; if(!g) return [];
+            return cqCuentas().map(function(a){ return {v:String(a.id), t:String(a.nombre).toUpperCase(), n:g.personas.filter(function(p){ return !p.dir && String(p.cuenta_id)===String(a.id); }).length}; })
+              .concat([{v:'dir', t:'LA DIRECCIÓN', n:g.personas.filter(function(p){ return p.dir; }).length}]).filter(function(x){ return x.n; }); },
+          valor:function(){ return CQA.u.f.cta; }, pon:function(v){ CQA.u.f.cta=v; } },
+        { k:'sis', t:'ENTRA A', tipo:'varios', lista:true, opciones:function(){ return ['qc','qf','qn'].map(function(k){ return {v:k, t:CQA_SIS[k].toUpperCase()}; }); },
+          valor:function(){ return CQA.u.f.sis; }, pon:function(v){ CQA.u.f.sis=v; } }]}],
+      cambio:function(){ if(CQA.u.pg) CQA.u.pg.inicio(); cqaUPinta(); }, limpiar:function(){ CQA.u.f={cta:[], sis:[]}; },
+      resultados:function(){ return 'VER '+cqaUVis().length+' USUARIOS'; } },
+    botones:botones,
+    mas:[[mk('‹ Clientes Quo', function(){ vista='cq'; render(); window.scrollTo(0,0); }), mk('Solicitudes de la página', function(){ vista='cqs'; render(); window.scrollTo(0,0); })],
+         [mk('Volver a traer lo de Quo', function(){ cqaRecarga(); }), mk('Cómo se lee esta pantalla', cqaUComo)]] });
+  CQA.u.fx=CQA.u.ui && CQA.u.ui.f;
+  try{ if(window.PROFASE_MARCA && PROFASE_MARCA.empareja) PROFASE_MARCA.empareja(); }catch(e){}
+  CQA.u.pg=window.PROFASE_PAGINAS.crea({ donde:document.getElementById('cqu-pg'), clave:'clientes-quo-usuarios', nombre:'Usuarios',
+    arriba:document.getElementById('cqu-card'), cambio:cqaUTabla });
+  const tb=document.getElementById('cqu-tb');
+  tb.addEventListener('click', function(ev){ const tr=ev.target.closest('tr[data-u]'); if(tr) cqaFicha(tr.getAttribute('data-u'), CQA_ULISTA.map(function(x){ return x.usuario; })); });
+  tb.addEventListener('keydown', function(ev){ if(ev.key!=='Enter' && ev.key!==' ') return; const tr=ev.target.closest('tr[data-u]'); if(tr){ ev.preventDefault(); cqaFicha(tr.getAttribute('data-u'), CQA_ULISTA.map(function(x){ return x.usuario; })); } });
+}
+function cqaUPinta(){
+  const root=document.getElementById('cqu-root'); if(!root) return;
+  const av=document.getElementById('cqu-aviso');
+  const ad=cqAdmin(), err=CQ.err||CQA.gErr;
+  if(CQ.d && !ad){ av.hidden=false; av.className='cq-aviso mal'; av.textContent='Tu usuario no ve la gente de las cuentas. Qué hacer: pídeselo a la dirección.'; root.querySelector('#cqu-card').hidden=true; return; }
+  if(err && !CQA.g){ av.hidden=false; av.className='cq-aviso mal'; av.innerHTML=esc(err)+' <button type="button" class="btn sm" id="cqu-otra">Volver a intentar</button>';
+    document.getElementById('cqu-otra').onclick=function(){ CQA.gErr=''; cqaRecarga(); }; }
+  else if(!CQA.g){ av.hidden=false; av.className='cq-aviso'; av.textContent='Trayendo la gente de las cuentas de Quo…'; }
+  else av.hidden=true;
+  const g=CQA.g, b=cqaUBase(), hace=ad==='hace';
+  window.PROFASE_PILAS.pinta(document.getElementById('cqu-pilas'), {
+    titulo:'Tu trabajo · usuarios de los sistemas Quo', meta:g?cqCuentas().length+' cuentas · '+g.personas.filter(function(p){ return !p.dir && p.estado!=='baja'; }).length+' usuarios':'',
+    pilas:CQA_PU.map(function(z){ const n=b.filter(z.f).length; return {k:z.k, t:z.t, d:z.d, tono:z.tono, n:n, on:CQA.u.pila===z.k, tag:hace&&z.toca&&n?'Te toca':''}; }),
+    alPicar:function(k){ CQA.u.pila=CQA.u.pila===k?'':k; if(CQA.u.pg) CQA.u.pg.inicio(); cqaUPinta(); },
+    boton:hace?{ t:'Empezar a revisar', n:b.filter(function(p){ return p.estado==='pendiente'; }).length, alPicar:function(){
+      const l=cqaUBase().filter(function(p){ return p.estado==='pendiente'; }).map(function(p){ return p.usuario; }); if(l.length) cqaFicha(l[0], l); } }:null });
+  const pl=CQA_PU.find(function(z){ return z.k===CQA.u.pila; });
+  document.getElementById('cqu-tit').textContent=pl?pl.t:'Usuarios de todas las cuentas';
+  if(g && (!g.qc || !g.qf || !g.qn)){ av.hidden=false; av.className='cq-aviso mal';
+    av.textContent='No se pudo leer la lista de '+cqaLista(['qc','qf','qn'].filter(function(k){ return !g[k]; }))+': falta lo de ese sistema. Qué hacer: vuelve a traer lo de Quo en un momento.'; }
+  CQA_ULISTA=cqaUVis();
+  if(CQA.u.fx){ try{ CQA.u.fx.pinta(); }catch(e){} }
+  cqaUTabla();
+}
+function cqaUTabla(){
+  const tb=document.getElementById('cqu-tb'); if(!tb) return;
+  const L=CQA_ULISTA, pag=CQA.u.pg?CQA.u.pg.corta(L):L, g=CQA.g;
+  document.getElementById('cqu-n').textContent=g?L.length+' de '+g.personas.length:'';
+  if(!g){ tb.innerHTML='<tr><td colspan="7" class="cq-vacio">'+(CQA.gErr?esc(CQA.gErr):'Trayendo la gente…')+'</td></tr>'; return; }
+  if(!L.length){ tb.innerHTML='<tr><td colspan="7" class="cq-vacio">'+(CQA.u.q||CQA.u.pila||CQA.u.f.cta.length||CQA.u.f.sis.length?'Nadie con lo que buscaste. Qué hacer: quita algún filtro o pica otra vez la pila.':'Todavía no hay usuarios.')+'</td></tr>'; return; }
+  tb.innerHTML=pag.map(function(p){
+    const e=CQA_UEST[p.estado]||[p.estado,'neutral'];
+    return '<tr data-u="'+esc(p.usuario)+'" tabindex="0" title="Abrir su ficha"><td><b>'+esc(p.nombre||p.usuario)+'</b><div class="cq-mu">'+esc(p.usuario)+'</div></td>'
+      +'<td>'+esc(p.dir?'Todas (la dirección)':cqaNomCta(p.cuenta_id))+'</td>'
+      +['qc','qf','qn'].map(function(k){ return '<td>'+(p[k]?esc(cqaTipo(k, p[k])):'<span class="cq-mu">—</span>')+'</td>'; }).join('')
+      +'<td>'+(p.ultimo?esc(cqCuando(p.ultimo)):'<span class="cq-mu">Nunca</span>')+'</td><td>'+cqChip(e[0], e[1])+'</td></tr>';
+  }).join('');
+}
+function cqaUComo(){
+  abrirModal('Cómo se lee esta pantalla', 'Toda la gente de todas las cuentas de los sistemas Quo.',
+    '<p><b>Cada renglón</b> es una persona, con a qué sistema entra y su tipo en cada uno. Si entra a varios, es un solo usuario con una sola contraseña.</p>'
+    +'<p><b>Las pilas</b>: los que no han creado su contraseña, los activos, los que entran a varios, los de Quo Nominita, la dirección y los dados de baja. Pica una para ver solo esos.</p>'
+    +['qc','qf','qn'].map(function(k){ return '<p><b>Los tipos en '+CQA_SIS[k]+'</b>: '+CQA_T[k].map(function(t){ return esc(t[1])+' ('+esc(t[2].charAt(0).toLowerCase()+t[2].slice(1))+')'; }).join('; ')+'.</p>'; }).join('')
+    +'<p><b>Su ficha</b>: sus sistemas con su tipo y sus RFC, sus fechas y su bitácora.'+(cqAdmin()==='hace'?' Abajo, cambiarlo, darle o quitarle un sistema, un código nuevo (si no ha creado su contraseña) y la baja de todo, cada uno con su motivo cuando quita algo.':'')+'</p>'
+    +'<p>Es lo mismo que en Usuarios de cada sistema: son las mismas personas. El código de acceso nunca pasa por el CRM: le llega a su correo desde acceso@quosistemas.com.</p>',
+    '<button class="btn" data-cerrar>Entendido</button>', 'Ayuda');
+}
+async function cqaUExcel(b){
+  const L=window.PROFASE_ORDEN&&PROFASE_ORDEN.lista?PROFASE_ORDEN.lista(document.getElementById('cqu-t'), CQA_ULISTA):CQA_ULISTA;
+  b.disabled=true;
+  try{
+    const MK=window.PROFASE_MARCA, EX=await MK.excelJS(), wb=MK.libro(EX, 'Usuarios de los sistemas Quo'), ws=wb.addWorksheet('Usuarios');
+    const head=['Nombre','Usuario','Cuenta','Quo Contabilita','Sus RFC en Contabilita','Quo Facturita','Sus RFC en Facturita','Quo Nominita','Alta','Último ingreso','Cómo está'];
+    ws.columns=[32,24,30,22,30,22,30,22,18,18,22].map(function(w){ return {width:w}; });
+    const f0=MK.encabezado(wb, ws, head.length, { titulo:'Usuarios de los sistemas Quo', lineas:['Exportado el '+window.PROFASE_HORA.fechaHora(new Date()), L.length+' usuarios'] });
+    ws.getRow(f0).values=head; MK.cabecera(ws, f0, 1, head.length);
+    const rx=function(p, s){ const l=(s==='qc'?p.rfcsQc:p.rfcsQf)||[]; return !p[s]||p.dir?'':(p[s]==='admin'||!l.length?'Todos los de su cuenta':l.map(cqaRfcVer).join(', ')); };
+    L.forEach(function(p, i){ ws.getRow(f0+1+i).values=[p.nombre, p.usuario, p.dir?'Todas (la dirección)':cqaNomCta(p.cuenta_id), p.qc?cqaTipo('qc', p.qc):'', rx(p, 'qc'),
+      p.qf?cqaTipo('qf', p.qf):'', rx(p, 'qf'), p.qn?cqaTipo('qn', p.qn):'', p.alta?cqCuando(p.alta):'', p.ultimo?cqCuando(p.ultimo):'Nunca', (CQA_UEST[p.estado]||[p.estado])[0]]; });
+    if(L.length) MK.cuerpo(ws, f0+1, f0+L.length, 1, head.length);
+    ws.views=[{state:'frozen', ySplit:f0}]; MK.impresion(ws, { repetir:f0 });
+    await MK.guardar(wb, 'Usuarios de los sistemas Quo.xlsx');
+  }catch(e){ avisar(cqaFalla(e, 'armar el Excel')); }
+  b.disabled=false;
+}
+
+/* ---------- la vista «Solicitudes de la página» (www.quosistemas.com, «Escríbenos») ---------- */
+function cqaSBase(){ const l=CQA.s||[], q=cqNorm(CQA.sl.q).split(/\s+/).filter(Boolean), f=CQA.sl.f;
+  return l.filter(function(s){
+    if(q.length && !q.every(function(w){ return s.busca.indexOf(w)>=0; })) return false;
+    if(f.asunto.length && f.asunto.indexOf(s.asunto)<0) return false;
+    if(f.sis.length && !f.sis.some(function(k){ return k==='—'?!s.sistemas.length:s.sistemas.indexOf(k)>=0; })) return false;
+    if(f.tipo.length && f.tipo.indexOf(s.tipo||'—')<0) return false;
+    return true; }); }
+function cqaSVis(){ const b=cqaSBase(), pl=CQA_PS.find(function(z){ return z.k===CQA.sl.pila; });
+  return pl?b.filter(pl.f):b.filter(function(s){ return s.estado!=='descartada'; }); }
+let CQA_SLISTA=[];
+function cqaSVista(v){
+  if(!v.querySelector('#cqs-root')){
+    if(CQA.sl.fx){ try{ CQA.sl.fx.destruye(); }catch(e){} CQA.sl.fx=null; }
+    v.innerHTML='<div id="cqs-root"><div id="cqs-barra"></div><div id="cqs-aviso" class="cq-aviso" role="status" hidden></div><div id="cqs-pilas"></div>'
+      +'<section class="card cq-card" id="cqs-card"><div class="card-head"><h2 id="cqs-tit">Solicitudes de la página</h2><span id="cqs-n" class="hint"></span></div>'
+      +'<div class="tablescroll"><table class="cq-t" id="cqs-t"><thead><tr><th>Quién</th><th>Qué pide</th><th>Despacho o empresa</th><th>Le interesa</th><th>Llegó</th><th>Cómo está</th></tr></thead>'
+      +'<tbody id="cqs-tb"></tbody></table></div><nav class="pgn" id="cqs-pg"></nav></section></div>';
+    cqaSBarra();
+  }
+  if(!CQ.d && !CQ.cargando) cqCarga();
+  if(!CQA.s && !CQA.sProm && CQ.d && cqAdmin()) cqaSolicitudes().then(function(){ if(vista==='cqs') cqaSPinta(); }, function(){ if(vista==='cqs') cqaSPinta(); });
+  cqaSPinta();
+}
+function cqaSBarra(){
+  const xl=document.createElement('button'); xl.type='button'; xl.className='btn'; xl.setAttribute('data-excel',''); xl.textContent='Excel';
+  xl.onclick=function(){ cqaSExcel(xl); };
+  const mk=function(t, fn){ const b=document.createElement('button'); b.type='button'; b.className='btn'; b.textContent=t; b.onclick=fn; return b; };
+  const cuenta=function(fn){ return (CQA.s||[]).filter(fn).length; };
+  CQA.sl.ui=window.PROFASE_PILAS.barra(document.getElementById('cqs-barra'), {
+    caja:true,
+    buscar:{ id:'cqs-q', placeholder:'Nombre, correo, empresa o lo que escribió', alEscribir:function(q){ CQA.sl.q=q; if(CQA.sl.pg) CQA.sl.pg.inicio(); cqaSPinta(); } },
+    filtros:{ grupos:[{ t:'SOLICITUDES', campos:[
+        { k:'asunto', t:'QUÉ PIDE', tipo:'varios', lista:true, opciones:function(){ return Object.keys(CQA_ASUNTO).map(function(k){ return {v:k, t:CQA_ASUNTO[k][0].toUpperCase(), n:cuenta(function(s){ return s.asunto===k; })}; }).filter(function(o){ return o.n; }); },
+          valor:function(){ return CQA.sl.f.asunto; }, pon:function(v){ CQA.sl.f.asunto=v; } },
+        { k:'sis', t:'LE INTERESA', tipo:'varios', lista:true, opciones:function(){ return Object.keys(CQA_SSIS).concat(['—']).map(function(k){ return {v:k, t:(k==='—'?'No dijo':CQA_SSIS[k]).toUpperCase(),
+            n:cuenta(function(s){ return k==='—'?!s.sistemas.length:s.sistemas.indexOf(k)>=0; })}; }).filter(function(o){ return o.n; }); },
+          valor:function(){ return CQA.sl.f.sis; }, pon:function(v){ CQA.sl.f.sis=v; } },
+        { k:'tipo', t:'ES', tipo:'varios', lista:true, opciones:function(){ return Object.keys(CQA_STIPO).concat(['—']).map(function(k){ return {v:k, t:(k==='—'?'No dijo':CQA_STIPO[k]).toUpperCase(), n:cuenta(function(s){ return (s.tipo||'—')===k; })}; }).filter(function(o){ return o.n; }); },
+          valor:function(){ return CQA.sl.f.tipo; }, pon:function(v){ CQA.sl.f.tipo=v; } }]}],
+      cambio:function(){ if(CQA.sl.pg) CQA.sl.pg.inicio(); cqaSPinta(); }, limpiar:function(){ CQA.sl.f={asunto:[], sis:[], tipo:[]}; },
+      resultados:function(){ return 'VER '+cqaSVis().length+' SOLICITUDES'; } },
+    botones:[xl],
+    mas:[[mk('‹ Clientes Quo', function(){ vista='cq'; render(); window.scrollTo(0,0); }), mk('Usuarios de todas las cuentas', function(){ vista='cqu'; render(); window.scrollTo(0,0); })],
+         [mk('Volver a traer lo de Quo', function(){ cqaRecarga(); }), mk('Cómo se lee esta pantalla', cqaSComo)]] });
+  CQA.sl.fx=CQA.sl.ui && CQA.sl.ui.f;
+  try{ if(window.PROFASE_MARCA && PROFASE_MARCA.empareja) PROFASE_MARCA.empareja(); }catch(e){}
+  CQA.sl.pg=window.PROFASE_PAGINAS.crea({ donde:document.getElementById('cqs-pg'), clave:'clientes-quo-solicitudes', nombre:'Solicitudes',
+    arriba:document.getElementById('cqs-card'), cambio:cqaSTabla });
+  const tb=document.getElementById('cqs-tb');
+  tb.addEventListener('click', function(ev){ const tr=ev.target.closest('tr[data-s]'); if(tr){ CQA.sl.rev=false; cqaSFicha(Number(tr.getAttribute('data-s'))); } });
+  tb.addEventListener('keydown', function(ev){ if(ev.key!=='Enter' && ev.key!==' ') return; const tr=ev.target.closest('tr[data-s]'); if(tr){ ev.preventDefault(); CQA.sl.rev=false; cqaSFicha(Number(tr.getAttribute('data-s'))); } });
+}
+function cqaSPinta(){
+  const root=document.getElementById('cqs-root'); if(!root) return;
+  const av=document.getElementById('cqs-aviso'), ad=cqAdmin(), err=CQ.err||CQA.sErr;
+  if(CQ.d && !ad){ av.hidden=false; av.className='cq-aviso mal'; av.textContent='Tu usuario no ve las solicitudes de la página. Qué hacer: pídeselo a la dirección.'; root.querySelector('#cqs-card').hidden=true; return; }
+  if(err && !CQA.s){ av.hidden=false; av.className='cq-aviso mal'; av.innerHTML=esc(err)+' <button type="button" class="btn sm" id="cqs-otra">Volver a intentar</button>';
+    document.getElementById('cqs-otra').onclick=function(){ CQA.sErr=''; cqaRecarga(); }; }
+  else if(!CQA.s){ av.hidden=false; av.className='cq-aviso'; av.textContent='Trayendo las solicitudes de la página…'; }
+  else av.hidden=true;
+  const b=cqaSBase(), hace=ad==='hace', pend=cqaSVis().filter(function(s){ return s.estado==='nueva'; });
+  window.PROFASE_PILAS.pinta(document.getElementById('cqs-pilas'), {
+    titulo:'Tu trabajo · solicitudes de la página', meta:CQA.s?CQA.s.length+(CQA.s.length===1?' solicitud':' solicitudes')+' en total':'',
+    pilas:CQA.s && CQA.s.length?CQA_PS.map(function(z){ const n=b.filter(z.f).length; return {k:z.k, t:z.t, d:z.d, tono:z.tono, n:n, on:CQA.sl.pila===z.k, tag:hace&&z.toca&&n?'Te toca':''}; }):[],
+    alPicar:function(k){ CQA.sl.pila=CQA.sl.pila===k?'':k; if(CQA.sl.pg) CQA.sl.pg.inicio(); cqaSPinta(); },
+    boton:hace && pend.length?{ t:'Empezar a revisar', n:pend.length, alPicar:function(){ CQA.sl.rev=true; cqaSFicha(pend[0].id); } }:null });
+  const pl=CQA_PS.find(function(z){ return z.k===CQA.sl.pila; });
+  document.getElementById('cqs-tit').textContent=pl?pl.t:'Solicitudes de la página';
+  CQA_SLISTA=cqaSVis();
+  if(CQA.sl.fx){ try{ CQA.sl.fx.pinta(); }catch(e){} }
+  cqaSTabla();
+}
+function cqaSTabla(){
+  const tb=document.getElementById('cqs-tb'); if(!tb) return;
+  const L=CQA_SLISTA, pag=CQA.sl.pg?CQA.sl.pg.corta(L):L;
+  document.getElementById('cqs-n').textContent=CQA.s?L.length+' de '+CQA.s.length:'';
+  if(!CQA.s){ tb.innerHTML='<tr><td colspan="6" class="cq-vacio">'+(CQA.sErr?esc(CQA.sErr):'Trayendo las solicitudes…')+'</td></tr>'; return; }
+  if(!L.length){ tb.innerHTML='<tr><td colspan="6" class="cq-vacio">'+(CQA.s.length?'Ninguna con lo que buscaste. Qué hacer: quita algún filtro o pica otra vez la pila.':'Todavía no llega ninguna solicitud. Aquí salen las que dejen en el formulario de www.quosistemas.com.')+'</td></tr>'; return; }
+  tb.innerHTML=pag.map(function(s){
+    const e=CQA_SEST[s.estado]||[s.estado,'neutral'], a=CQA_ASUNTO[s.asunto]||[s.asunto,''], arco=s.asunto==='privacidad'&&s.estado==='nueva';
+    return '<tr data-s="'+esc(s.id)+'" tabindex="0" title="Abrir la solicitud"><td><b>'+esc(s.nombre)+'</b><div class="cq-mu">'+esc(s.correo)+'</div></td>'
+      +'<td>'+cqChip(a[0], s.asunto==='privacidad'?'bad':'neutral')+(arco?'<div class="cq-mu">Lleva '+cqaHabiles(s.creado)+' de '+CQA_PLAZO+' días hábiles</div>':'')+'</td>'
+      +'<td>'+(s.empresa?esc(s.empresa):'')+'<div class="cq-mu">'+esc(CQA_STIPO[s.tipo]||(s.empresa?'':'—'))+(s.rfcs?' · '+esc(s.rfcs)+' RFC':'')+'</div></td>'
+      +'<td>'+esc(cqaSSis(s)||'—')+'</td><td>'+esc(cqCuando(s.creado))+'</td><td>'+cqChip(e[0], e[1])+'</td></tr>';
+  }).join('');
+}
+let CQASV=null;
+async function cqaSFicha(id){
+  if(!CQA.s){ try{ await cqaSolicitudes(); }catch(e){ avisar(CQA.sErr||cqaFalla(e, 'traer las solicitudes de la página')); return; } }
+  const s=(CQA.s||[]).find(function(x){ return x.id===id; }); if(!s){ avisar('Esa solicitud ya no está. Qué hacer: vuelve a traer lo de Quo.'); return; }
+  if(CQASV){ const o=CQASV; CQASV=null; try{ o.cerrar(); }catch(e){} }
+  if(CQV){ const o=CQV; CQV=null; try{ o.cerrar(); }catch(e){} }
+  const e=CQA_SEST[s.estado]||[s.estado,'neutral'], a=CQA_ASUNTO[s.asunto]||[s.asunto,''], hace=cqAdmin()==='hace', tel=String(s.telefono||'').replace(/[^\d+]/g, '');
+  const ids=(CQA.sl.rev?CQA_SLISTA.filter(function(x){ return x.estado==='nueva'; }):CQA_SLISTA).map(function(x){ return x.id; }), pos=ids.indexOf(s.id);
+  const x=function(t, v){ return '<span>'+t+' <b>'+v+'</b></span>'; };
+  const resumen='<div class="cq-rs">'+cqChip(e[0], e[1])+' '+cqChip(a[0], s.asunto==='privacidad'?'bad':'neutral')+'</div><div class="r2">'
+    +x('Correo', '<a href="mailto:'+esc(s.correo)+'">'+esc(s.correo)+'</a>')+(s.telefono?x('Teléfono', '<a href="tel:'+esc(tel)+'">'+esc(s.telefono)+'</a>'):'')
+    +(s.empresa?x('Despacho o empresa', esc(s.empresa)):'')+x('Llegó', esc(cqCuando(s.creado)))+'</div>';
+  const falta=[];
+  if(s.asunto==='privacidad'){
+    const n=cqaHabiles(s.creado);
+    falta.push(s.estado==='nueva'?[n>=CQA_PLAZO-5?'no':'va','Lleva '+n+' de '+CQA_PLAZO+' días hábiles (sin descontar días festivos). Qué hacer: contéstale a su correo antes de los 20 días hábiles desde que llegó y, si procede, hazlo efectivo en los 15 siguientes; deja la nota de qué se le contestó y márcala atendida.']
+      :['si','Se le contestó.']);
+  } else falta.push(s.estado==='nueva'?['va','Pidió '+(s.asunto==='pregunta'?'información':'una demostración')+'. Qué hacer: escríbele o llámale, deja la nota de qué se le dijo y márcala atendida.']:['si', s.estado==='atendida'?'Ya se le contestó.':'Se descartó; nada se borró.']);
+  const sol='<div class="r2">'+(s.tipo?x('Es', esc(CQA_STIPO[s.tipo]||s.tipo)):'')+(s.rfcs?x('RFC que lleva', esc(s.rfcs)):'')+(s.sistemas.length?x('Le interesa', esc(cqaSSis(s))):'')+'</div>'
+    +'<p class="cq-mu">'+esc(a[1])+'</p>'+(s.mensaje?'<p class="cq-msj">'+esc(s.mensaje)+'</p>':'<p class="cq-mu">No escribió mensaje.</p>');
+  const va='<div class="r2">'+x('Llegó', esc(cqCuando(s.creado)))+(s.atendio?x(s.estado==='descartada'?'La descartó':'La atendió', esc(s.atendio)+(s.atendido_en?' · '+esc(cqCuando(s.atendido_en)):'')):'')+'</div>'
+    +(hace?campo('Nota (qué se le contestó, cuándo se le llamó…)', '<textarea id="cqa-sn" rows="3" maxlength="1000">'+esc(s.nota||'')+'</textarea>')
+      +'<p class="cq-aviso mal" id="cqa-serr" role="alert" hidden></p><div class="cq-acc"><a class="btn sm" href="mailto:'+esc(s.correo)+'?subject='+encodeURIComponent('Sistemas Quo · '+a[0])+'">Escribirle</a>'
+      +(s.estado==='nueva'?'<button type="button" class="btn sm accent" data-cqa-sm="atendida">Ya la atendí</button><button type="button" class="btn sm" data-cqa-sm="descartada">Descartar</button>'
+        :'<button type="button" class="btn sm accent" data-cqa-sm="'+esc(s.estado)+'">Guardar la nota</button><button type="button" class="btn sm" data-cqa-sm="nueva">Regresar a nueva</button>')+'</div>'
+      :(s.nota?'<p class="cq-msj">'+esc(s.nota)+'</p>':'<p class="cq-mu">Las marcan Héctor Daniel Nava y Fernando Cadengo.</p>'))
+    +'<p class="cq-mu">Son datos personales de quien escribió: los cuida el aviso de privacidad de www.quosistemas.com. Solo los ve la dirección; nunca se copian a otro lado ni se usan para mandar publicidad.</p>';
+  const v=CQASV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo · Solicitudes', titulo:s.nombre||'Sin nombre',
+    nav: pos>=0 && ids.length>1 ? { pos:pos+1, total:ids.length, donde:CQA.sl.rev?'de las nuevas':'en tu lista', ant:pos>0, sig:pos<ids.length-1, ir:function(dir){ const n=ids[pos+(dir<0?-1:1)]; if(n!=null) cqaSFicha(n); } } : null,
+    resumen:resumen, bajoResumen:window.PROFASE_SEG.falta('Qué falta', falta),
+    pestanas:[{id:'cv', t:'Cómo va', html:va}, {id:'sol', t:'Lo que pidió', html:sol}], pestana:'cv',
+    acciones:null, pieTexto:hace?'':'Solo consulta', alCerrar:function(){ if(CQASV===v) CQASV=null; } });
+  v.scrim.addEventListener('click', async function(ev){
+    const b=ev.target.closest('[data-cqa-sm]'); if(!b) return;
+    const est=b.getAttribute('data-cqa-sm'), er=v.scrim.querySelector('#cqa-serr'), nt=v.scrim.querySelector('#cqa-sn');
+    er.hidden=true; b.disabled=true;
+    const sig=CQA.sl.rev && est!=='nueva' && pos>=0 ? ids[pos+1] : null;
+    try{ await cqaPide({accion:'sol_marca', id:s.id, estado:est, nota:nt?nt.value:''}); }
+    catch(e){ b.disabled=false; er.textContent=cqaFalla(e, 'guardar la solicitud'); er.hidden=false; return; }
+    if(CQASV===v){ CQASV=null; v.cerrar(); }
+    avisar(est==='atendida'?'Quedó atendida':est==='descartada'?'Quedó descartada':est==='nueva'?'Regresó a nueva':'Se guardó la nota');
+    await cqaRecarga();
+    if(sig!=null && (CQA.s||[]).some(function(y){ return y.id===sig && y.estado==='nueva'; })) cqaSFicha(sig);
+  });
+}
+function cqaSComo(){
+  abrirModal('Cómo se lee esta pantalla', 'Lo que la gente deja en el formulario «Escríbenos» de www.quosistemas.com.',
+    '<p>Cada una le llega también por correo a la dirección cuando el correo de los sistemas Quo está prendido; si no, se queda aquí igual.</p>'
+    +'<p><b>Qué pide</b>: '+Object.keys(CQA_ASUNTO).map(function(k){ return esc(CQA_ASUNTO[k][0])+' ('+esc(CQA_ASUNTO[k][1].charAt(0).toLowerCase()+CQA_ASUNTO[k][1].slice(1))+')'; }).join('; ')+'.</p>'
+    +'<p><b>Las pilas</b>: las nuevas, las de privacidad por contestar, las atendidas y las descartadas. «Empezar a revisar» abre las nuevas una por una.</p>'
+    +'<p><b>Sus datos</b> son datos personales: los cuida el aviso de privacidad de la página. Solo los ve la dirección; nunca se copian a otro lado ni se usan para mandar publicidad. Las de privacidad (ARCO) se contestan en 20 días hábiles desde que llegan.</p>',
+    '<button class="btn" data-cerrar>Entendido</button>', 'Ayuda');
+}
+async function cqaSExcel(b){
+  const L=window.PROFASE_ORDEN&&PROFASE_ORDEN.lista?PROFASE_ORDEN.lista(document.getElementById('cqs-t'), CQA_SLISTA):CQA_SLISTA;
+  b.disabled=true;
+  try{
+    const MK=window.PROFASE_MARCA, EX=await MK.excelJS(), wb=MK.libro(EX, 'Solicitudes de Sistemas Quo'), ws=wb.addWorksheet('Solicitudes');
+    const head=['Llegó','Qué pide','Nombre','Correo','Teléfono','Despacho o empresa','Es','RFC que lleva','Le interesa','Mensaje','Cómo está','Atendió','Nota'];
+    ws.columns=[18,18,28,30,16,28,18,14,30,50,14,22,40].map(function(w){ return {width:w}; });
+    const f0=MK.encabezado(wb, ws, head.length, { titulo:'Solicitudes de www.quosistemas.com', lineas:['Exportado el '+window.PROFASE_HORA.fechaHora(new Date()), L.length+(L.length===1?' solicitud':' solicitudes')] });
+    ws.getRow(f0).values=head; MK.cabecera(ws, f0, 1, head.length);
+    L.forEach(function(s, i){ ws.getRow(f0+1+i).values=[cqCuando(s.creado), (CQA_ASUNTO[s.asunto]||[s.asunto])[0], s.nombre, s.correo, s.telefono||'', s.empresa||'', CQA_STIPO[s.tipo]||'',
+      s.rfcs||'', cqaSSis(s), s.mensaje||'', (CQA_SEST[s.estado]||[s.estado])[0], s.atendio||'', s.nota||'']; });
+    if(L.length) MK.cuerpo(ws, f0+1, f0+L.length, 1, head.length);
+    ws.views=[{state:'frozen', ySplit:f0}]; MK.impresion(ws, { repetir:f0 });
+    ws.__pdf={ sin:['Teléfono','Es','RFC que lleva','Nota'] };
+    await MK.guardar(wb, 'Solicitudes de Sistemas Quo.xlsx');
+  }catch(e){ avisar(cqaFalla(e, 'armar el Excel')); }
+  b.disabled=false;
+}
+
+// al llegar lo de Quo: los botones de «Más ▾» que dependen de quién eres y, si se está viendo, la gente o las solicitudes
+function cqaTrasCarga(){
+  const ad=cqAdmin();
+  [['cq-mas-cqu', !ad], ['cq-mas-cqs', !ad], ['cq-mas-cta', ad!=='hace']].forEach(function(x){ const b=document.getElementById(x[0]); if(b) b.hidden=x[1]; });
+  if(vista==='cqu'){ if(ad && !CQA.g && !CQA.gProm) cqaGente().then(cqaUPinta, cqaUPinta); cqaUPinta(); }
+  if(vista==='cqs'){ if(ad && !CQA.s && !CQA.sProm) cqaSolicitudes().then(cqaSPinta, cqaSPinta); cqaSPinta(); }
+}
+
 function render(){
   document.documentElement.style.setProperty('--eyebrow', JSON.stringify(EYEBROW[vista]||'Clientes Quo'));
   document.getElementById('nav').innerHTML=MODULOS.filter(m=>!m.mas||vista===m.id).map(m=>
@@ -5607,8 +6540,12 @@ function render(){
   const v=document.getElementById('view');
   if(conexion==='cargando'){ v.innerHTML=vistaCargando(); return; }
   if(conexion==='sin-db'){ v.innerHTML=vistaSinDb(); return; }
+  if(vista!=='cqu' && CQA.u.fx){ try{ CQA.u.fx.destruye(); }catch(e){} CQA.u.fx=null; }
+  if(vista!=='cqs' && CQA.sl.fx){ try{ CQA.sl.fx.destruye(); }catch(e){} CQA.sl.fx=null; }
   if(vista==='cq'){ cqVista(v); return; }
   if(CQ.fx){ try{ CQ.fx.destruye(); }catch(e){} CQ.fx=null; }
+  if(vista==='cqu'){ cqaUVista(v); return; }
+  if(vista==='cqs'){ cqaSVista(v); return; }
   v.innerHTML = vista==='panel'?vistaPanel()
              : vista==='clientes'?vistaClientes()
              : vista==='pagos'?vistaPagos()
