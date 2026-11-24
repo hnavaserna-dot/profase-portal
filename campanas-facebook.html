@@ -106,6 +106,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .nota{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:16px 0;overflow-wrap:anywhere}
 .nota.bien{background:var(--ok-soft)}
 .nota.mal{background:var(--red-soft);color:var(--red)}
+.nota.az{background:var(--navy-soft)}
 .cargando{padding:40px 16px;text-align:center;color:var(--muted)}
 .tabs{display:flex;gap:4px;margin:16px 0 4px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
@@ -278,11 +279,13 @@ button,select,input,textarea{font:inherit;color:inherit}
       <button type="button" data-pg="quo" aria-pressed="false"><img src="https://www.quosistemas.com/img/icono-192.png" alt="">Sistemas Quo<span class="cta" id="np-quo"></span></button>
     </div>
     <div class="nota mal" id="conexion" hidden role="status"></div>
+    <div class="nota az" id="espera" hidden role="status"></div>
     <div class="tabs" role="tablist" aria-label="Qué ver">
       <button type="button" role="tab" data-t="aut" aria-selected="true">Por autorizar <span class="cta" id="n-aut">0</span></button>
       <button type="button" role="tab" data-t="cam" aria-selected="false">Cambios pedidos <span class="cta" id="n-cam">0</span></button>
       <button type="button" role="tab" data-t="pro" aria-selected="false">Autorizadas y programadas <span class="cta" id="n-pro">0</span></button>
       <button type="button" role="tab" data-t="pub" aria-selected="false">Publicadas <span class="cta" id="n-pub">0</span></button>
+      <button type="button" role="tab" data-t="lan" aria-selected="false" hidden>Para el lanzamiento <span class="cta" id="n-lan">0</span></button>
       <button type="button" role="tab" data-t="tod" aria-selected="false">Todas</button>
       <button type="button" role="tab" data-t="med" aria-selected="false">Cómo les fue</button>
     </div>
@@ -341,9 +344,11 @@ button,select,input,textarea{font:inherit;color:inherit}
   var FIL = null, PG = null, MAS = null;
   var ESTADOS = {
     por_autorizar: ['Por autorizar', 'na'], autorizada: ['Autorizada', 'az'], programada: ['Programada en Facebook', 'ok'],
-    publicada: ['Publicada', 'ok'], cambio_pedido: ['Cambio pedido', 'ojo'], no_publicar: ['No se publica', ''], vencida: ['Pasó su hora sin publicarse', 'mal']
+    publicada: ['Publicada', 'ok'], cambio_pedido: ['Cambio pedido', 'ojo'], no_publicar: ['No se publica', ''], vencida: ['Pasó su hora sin publicarse', 'mal'],
+    lanzamiento: ['Para el lanzamiento', 'az']
   };
-  var TABS = { aut: ['por_autorizar'], cam: ['cambio_pedido'], pro: ['autorizada', 'programada'], pub: ['publicada'], tod: null };
+  // 508 (24-nov-2026): «Para el lanzamiento»: Sistemas Quo no publica nada hasta que abra la venta; lo listo se guarda sin fecha
+  var TABS = { aut: ['por_autorizar'], cam: ['cambio_pedido'], pro: ['autorizada', 'programada'], pub: ['publicada'], lan: ['lanzamiento'], tod: null };
   var NF = new Intl.NumberFormat('es-MX'), NF1 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 });
   var TIPOS = { humor: ['Humor', 'na', 'naranja'], estrella: ['Estrella', 'az', 'azul'], tecnica: ['Técnica', '', 'gris'] };
   // 505 (24-nov-2026: «que cada publicación diga en qué red sale»): la red y el formato de cada publicación
@@ -384,6 +389,7 @@ button,select,input,textarea{font:inherit;color:inherit}
   /* ---------- pintar ---------- */
   function pintaTabs() {
     Object.keys(TABS).forEach(function (k) { var n = $('n-' + k); if (n) n.textContent = cuenta(TABS[k]); });
+    var bl = document.querySelector('[data-t="lan"]'); if (bl) bl.hidden = !cuenta(TABS.lan) && TAB !== 'lan';
     document.querySelectorAll('[data-t]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-t') === TAB ? 'true' : 'false'); });
   }
   // el selector de página: cuántas esperan tu visto bueno en cada una y si la página está conectada
@@ -397,6 +403,9 @@ button,select,input,textarea{font:inherit;color:inherit}
     var ve = !!(cx && cx.conectada === false && (PAG === 'quo' || hay));
     $('conexion').hidden = !ve;
     if (ve) $('conexion').textContent = 'La página ' + PAGINAS[PAG].nombre + ' todavía no está conectada' + (cx.motivo ? ': ' + cx.motivo : '') + '. Puedes revisar y autorizar; lo autorizado entra a Facebook en cuanto se conecte. Qué hacer: pídele a Claude los pasos para conectarla (sacas la llave de la página con tu cuenta de Facebook y la pegas tú en GitHub).';
+    var esp = PAG === 'quo' && !!(DATOS && DATOS.quo_espera);
+    $('espera').hidden = !esp;
+    if (esp) $('espera').textContent = 'Sistemas Quo no publica nada, ni en Facebook ni en Instagram, hasta que abra la venta de los sistemas Quo (compra en línea y precios). Lo que está listo se guarda en «Para el lanzamiento», sin fecha: ahí no se puede autorizar ni publicar. Ese día se le ponen sus fechas nuevas y vuelve a «Por autorizar» para tu visto bueno.';
   }
   function pintaCias() {
     var cs = (DATOS.campanas || []).filter(delPag).filter(function (c) { return (c.pubs || []).some(seVe); });
@@ -408,6 +417,7 @@ button,select,input,textarea{font:inherit;color:inherit}
   function notas(p) {
     var h = '';
     if (p.sin_pieza && ['por_autorizar', 'cambio_pedido'].indexOf(p.estado) >= 0 && !p.paso) h += '<div class="msg ojo">Todavía no tiene su pieza: la ves con su texto, pero no se puede autorizar hasta que llegue. En cuanto llegue te aparece aquí con ella y te llega el aviso.</div>';
+    if (p.estado === 'lanzamiento') h += '<div class="msg az">Guardada para el lanzamiento: sin fecha, no se puede autorizar ni publicar hasta que abra la venta de los sistemas Quo. Ese día se le pone su fecha y vuelve a «Por autorizar».</div>';
     if (p.estado === 'cambio_pedido') h += '<div class="msg ojo"><b>Pediste:</b> ' + esc(p.cambio) + (p.cambio_en ? ' <span class="mut">(' + esc(fechaHora(p.cambio_en)) + ')</span>' : '') + '<br>La tarea de Facebook la rehace y te la vuelve a enseñar aquí.</div>';
     if (p.estado === 'no_publicar' && p.no_motivo) h += '<div class="msg">No se publica: ' + esc(p.no_motivo) + '</div>';
     if (p.estado === 'autorizada' && p.previa) h += '<div class="msg az">' + esc(p.autorizada_nota || 'Autorizada antes del CRM') + '.</div>';
@@ -498,7 +508,7 @@ button,select,input,textarea{font:inherit;color:inherit}
       var por = (c.pubs || []).filter(function (p) { return p.estado === 'por_autorizar' && !p.paso && conPieza(p); }).length, k = c.cuenta || {};
       var esperan = (c.pubs || []).filter(function (p) { return p.estado === 'por_autorizar' && !p.paso && !conPieza(p); }).length;
       html += '<section class="camp" data-camp="' + esc(c.id) + '"><header><div style="min-width:0"><h2>' + esc(c.nombre) + '</h2>'
-        + '<div class="mut">' + esc(c.n) + (c.n === 1 ? ' publicación' : ' publicaciones') + (c.desde ? ', del ' + esc(fecha(c.desde)) + ' al ' + esc(fecha(c.hasta)) : '') + (c.documento ? ' · ' + esc(c.documento) : '') + '</div>'
+        + '<div class="mut">' + esc(c.n) + (c.n === 1 ? ' publicación' : ' publicaciones') + (c.desde ? ', del ' + esc(fecha(c.desde)) + ' al ' + esc(fecha(c.hasta)) : (c.lanzamiento ? ', sin fechas: para el lanzamiento' : '')) + (c.documento ? ' · ' + esc(c.documento) : '') + '</div>'
         + (c.resumen ? '<p class="res">' + esc(c.resumen) + '</p>' : '')
         + '<div class="cuenta">' + Object.keys(ESTADOS).filter(function (s) { return k[s] && (ANT || ANTERIOR.indexOf(s) < 0); }).map(function (s) { return chip(ESTADOS[s][0] + ': ' + k[s], ESTADOS[s][1]); }).join('') + (esperan ? chip('Esperan su pieza: ' + esperan, 'ojo') : '') + '</div></div>'
         + (por && !CONSULTA ? '<div class="acciones"><button class="btn acento" type="button" data-todo="' + esc(c.id) + '">Autorizar ' + (por === 1 ? 'la que falta' : 'las ' + por + ' que faltan') + '</button></div>' : '')
@@ -509,7 +519,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     $('anterior').innerHTML = ANT ? '<span>Estás viendo también lo anterior (lo que no se publica o pasó su hora sin salir).</span><button class="btn chico" type="button" id="ant-b">Ver solo lo activo</button>'
       : '<span>Solo lo activo: por autorizar, autorizado, programado y publicado.</span><button class="btn chico" type="button" id="ant-b">Ver lo anterior (' + nAnt + ')</button>';
     if ($('ant-b')) $('ant-b').onclick = function () { ANT = !ANT; if (!ANT && CAMP && !pubs().some(function (p) { return p.campana === CAMP && activa(p); })) CAMP = ''; pinta(); };
-    $('lista').innerHTML = hay ? html : '<div class="nota">' + ({ aut: 'No tienes nada por autorizar.', cam: 'No hay cambios pedidos.', pro: 'No hay publicaciones autorizadas ni programadas.', pub: 'Todavía no se publica nada.', tod: 'No hay publicaciones.' }[TAB]) + '</div>';
+    $('lista').innerHTML = hay ? html : '<div class="nota">' + ({ aut: 'No tienes nada por autorizar.', cam: 'No hay cambios pedidos.', pro: 'No hay publicaciones autorizadas ni programadas.', pub: 'Todavía no se publica nada.', lan: 'No hay nada guardado para el lanzamiento.', tod: 'No hay publicaciones.' }[TAB]) + '</div>';
     $('lista').querySelectorAll('[data-todo]').forEach(function (b) { b.onclick = function () { autorizaTodo(b.getAttribute('data-todo')); }; });
     $('lista').querySelectorAll('.pub').forEach(function (el) {
       var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0];
@@ -863,7 +873,7 @@ button,select,input,textarea{font:inherit;color:inherit}
       var k = b.getAttribute('data-pg'); if (k === PAG) return;
       PAG = k; CAMP = ''; SEL = ''; MSEL = ''; MSOLO = ''; MF = { camp: [], tipo: [], dia: [] }; MFIL = '';
       if (PG) PG.inicio();
-      if (TAB !== 'med') TAB = cuenta(TABS.aut) ? 'aut' : cuenta(TABS.cam) ? 'cam' : cuenta(TABS.pro) ? 'pro' : 'tod';
+      if (TAB !== 'med') TAB = cuenta(TABS.aut) ? 'aut' : cuenta(TABS.cam) ? 'cam' : cuenta(TABS.pro) ? 'pro' : cuenta(TABS.lan) ? 'lan' : 'tod';
       pinta();
     };
   });
@@ -894,7 +904,7 @@ button,select,input,textarea{font:inherit;color:inherit}
         if (pubsDe(function (c) { return pagDe(c) === otra; }).some(function (p) { return p.estado === 'por_autorizar' && !p.paso; })) PAG = otra;
       }
       // primero lo que espera su decisión; si no hay, cómo les fue
-      if (!cuenta(TABS.aut)) TAB = cuenta(TABS.cam) ? 'cam' : (MED && (MED.publicaciones || []).length) ? 'med' : cuenta(TABS.pro) ? 'pro' : 'tod';
+      if (!cuenta(TABS.aut)) TAB = cuenta(TABS.cam) ? 'cam' : (MED && (MED.publicaciones || []).length) ? 'med' : cuenta(TABS.pro) ? 'pro' : cuenta(TABS.lan) ? 'lan' : 'tod';
       if (pubs().length || (MED && (MED.publicaciones || []).length)) pinta();
       $('cargando').hidden = true;
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
