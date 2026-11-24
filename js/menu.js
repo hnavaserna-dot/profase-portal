@@ -53,7 +53,6 @@
     mul: '<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',   // Multinacional: una caja (la comercializadora)
     mkt: '<path d="M3.5 10.5v3a1 1 0 0 0 1 1h2.5l5.5 4.5v-14L7 9.5H4.5a1 1 0 0 0-1 1Z"/><path d="M16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/>',   // Marketing: un megáfono
     est: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6.5-6.5M15.5 5.5h3v3"/>',   // Estrategias fiscales: una diana con su flecha
-    bib: '<path d="M4 4.5h6a2 2 0 0 1 2 2V20a1.5 1.5 0 0 0-1.5-1.5H4z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2V20a1.5 1.5 0 0 1 1.5-1.5H20z"/>',   // Biblioteca legal: un libro abierto
     cen: '<path d="M4 4.5h16v4H4z"/><path d="M5.5 8.5v11h13v-11"/><path d="M10 12.5h4"/><path d="m9 16 2 2 4-4"/>',   // Centauro: la bóveda de XML (una caja de archivo con palomita)
     rh: '<circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4a4.5 4.5 0 0 1 4.5 4.5V20"/><path d="M17 11h5M19.5 8.5v5"/>',
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>'
@@ -157,16 +156,6 @@
       { k: 'est-marcas', v: 'estf', p: 'marca', t: 'Marcas registradas', d: 'Cada marca con su amortización año por año, lo que le queda y cómo cuadra con la anual.' },
       { k: 'est-indemnizaciones', v: 'estf', p: 'indemnizacion', t: 'Indemnizaciones', d: 'Cada indemnización con lo usado cada año y lo que le queda.' },
       { k: 'est-premios', v: 'estf', p: 'premio', t: 'Premios', d: 'Cada premio con lo usado cada año, lo que le queda y su entrega al cliente.' }] },
-    /* Biblioteca legal (Héctor Daniel Nava, 24-nov-2026: «podemos hacer algo parecido nosotros [a Sisthemis]?»; «1- todo el
-       equipo»; «a darle»; 510_biblioteca.sql): las leyes, códigos, reglamentos y la Miscelánea, artículo por artículo, con lo
-       que cita cada uno y quién lo cita, sus versiones, notas y carpetas. Para todo el equipo (bib_estado()). Una sola pantalla
-       (biblioteca.html, vista bib) con cuatro opciones (p; el botón de la vista dice cuál está abierta con data-sub, lo pone
-       bib_tab.js). */
-    { k: 'bib', t: 'Biblioteca legal', d: 'Las leyes, códigos y la Miscelánea vigentes: busca un artículo, léelo y ve con qué se relaciona.', subs: [
-      { k: 'biblioteca', v: 'bib', p: 'buscar', t: 'Buscar', d: 'Escribe «CFF 69-B», una regla de la Miscelánea o palabras, y abre el artículo con sus relacionados.' },
-      { k: 'biblioteca-leyes', v: 'bib', p: 'leyes', t: 'Leyes y códigos', d: 'Todas las leyes por materia, cada una con su índice.' },
-      { k: 'biblioteca-carpetas', v: 'bib', p: 'carpetas', t: 'Mis carpetas', d: 'Lo que guardaste para citar, con «Copiar fundamento».' },
-      { k: 'biblioteca-nuevo', v: 'bib', p: 'nuevo', t: 'Lo nuevo', d: 'Lo que cambió en las leyes y qué cambió, palabra por palabra.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
@@ -265,7 +254,7 @@
   function svg(d, cls) { return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var FLECHA = '<path d="m9 6 6 6-6 6"/>';
 
-  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', est: 'Estrategias', bib: 'Biblioteca', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mkt: 'Marketing', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
+  var CORTO = { wf: 'Workflow', clis: 'Clientes', msj: 'Chat', agd: 'Agenda', rep: 'Reportes', cen: 'Centauro', est: 'Estrategias', adm: 'Admin', usr: 'Usuarios', rh: 'RH', tes: 'Tesorería', quo: 'QUO', mkt: 'Marketing', mul: 'Multi', access: 'Access', ayuda: 'SuperConta (IA)', mas: 'Más' };
   // Una sombrita arriba o abajo cuando quedan opciones por deslizar (se va sola al llegar a la orilla)
   var SOMBRAS = 'background:linear-gradient(var(--surface,#fff) 30%,transparent) top/100% 28px no-repeat local,'
     + 'linear-gradient(transparent,var(--surface,#fff) 70%) bottom/100% 28px no-repeat local,'
