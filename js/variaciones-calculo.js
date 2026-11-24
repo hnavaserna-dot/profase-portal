@@ -103,20 +103,25 @@ function rubroDe(cta){
    no da hallazgos ni se usa para comparar (se compara contra el último mes que sí la trae) y sale en «Balanzas en 0».
    Una sola versión: la usan construir(), «Resueltas» y la lista. */
 function mesesVacios(B){
-  const con = new Set(), primero = new Map(), hasta = new Map();
+  /* Revisión nocturna del 24-nov-2026: los meses con movimiento de cada cliente en un conjunto por cliente (antes, uno solo con
+     «cliente|mes» juntos en un texto por cada renglón de la balanza: cientos de miles de textos nuevos al abrir). Lo mismo. */
+  const con = new Map(), primero = new Map(), hasta = new Map();
+  let ciU, sU;
   for(const [ci,,p] of (B.mov||[])){
-    con.add(ci+"|"+p);
+    if(ci !== ciU){ ciU = ci; sU = con.get(ci); if(!sU){ sU = new Set(); con.set(ci, sU); } }
+    sU.add(p);
     if(!(primero.get(ci) <= p)) primero.set(ci, p);
     if(!(hasta.get(ci) >= p)) hasta.set(ci, p);
   }
-  const es = (ci, p) => { const a = primero.get(ci); return !!a && p>=a && p<=hasta.get(ci) && !con.has(ci+"|"+p); };
+  const tiene = (ci, p) => { const x = con.get(ci); return !!x && x.has(p); };
+  const es = (ci, p) => { const a = primero.get(ci); return !!a && p>=a && p<=hasta.get(ci) && !tiene(ci, p); };
   const desde = B.anios && B.anios.length ? B.anios[0]+"-01" : "";
   const lista = [];
   for(const [ci,a] of primero){
     let [y,m] = a.split("-").map(Number); const z = hasta.get(ci);
     for(let n=0; n<240; n++){
       const p = y+"-"+String(m).padStart(2,"0"); if(p > z) break;
-      if(p >= desde && !con.has(ci+"|"+p)) lista.push([ci, p]);
+      if(p >= desde && !tiene(ci, p)) lista.push([ci, p]);
       if(++m > 12){ m = 1; y++; }
     }
   }
@@ -126,51 +131,69 @@ function construir(B, C){
   if(!B.mov) return B;                       // archivo anterior: ya trae los hallazgos calculados
   const rangos = rangosDe(C.nominaRangos), rangosB = C.bimestral ? rangosDe(C.bimestralRangos) : [];
   const rangosP = C.pagoProv && B.ca ? rangosDe(C.pagoRangos) : [];
-  const ca = new Map(); for(const [ci,ct,p,c,a] of (B.ca||[])) ca.set(ci+"|"+ct+"|"+p, [c,a]);
-  const sal = new Map(); for(const [ci,ct,p,v] of (B.sal||[])) sal.set(ci+"|"+ct+"|"+p, v);
+  /* Revisión nocturna del 24-nov-2026: lo de cada cliente y cuenta se guarda aparte (cliente → cuenta → mes) y en el ciclo de
+     cada cuenta se toma una sola vez; antes cada consulta juntaba «cliente|cuenta|mes» en un texto nuevo (millones al abrir,
+     y casi la mitad de la traba de la pantalla era limpiar esa memoria). Los meses salen de una sola tabla. Mismo resultado. */
+  const VACIO = new Map();
+  const tabla3 = (rows, val) => {
+    const M = new Map(); let ciU, ctU, mC, mP;
+    for(const r of (rows||[])){
+      const ci = r[0], ct = r[1];
+      if(ci !== ciU){ ciU = ci; ctU = undefined; mC = M.get(ci); if(!mC){ mC = new Map(); M.set(ci, mC); } }
+      if(ct !== ctU){ ctU = ct; mP = mC.get(ct); if(!mP){ mP = new Map(); mC.set(ct, mP); } }
+      mP.set(r[2], val(r));
+    }
+    return M;
+  };
+  const de3 = (M, ci, ct) => { const x = M.get(ci); return (x && x.get(ct)) || VACIO; };
+  const ca = tabla3(B.ca, r=>[r[3], r[4]]);
+  const sal = tabla3(B.sal, r=>r[3]);
   const esAcr = acreedoraDe(C, B);
   // el formato de pesos, hecho una sola vez (revisión nocturna del 17-nov-2026: antes se creaba uno nuevo en cada hallazgo, y
   // con los datos de verdad eso solo era ~0.3 s de la traba al abrir Variaciones); mismo texto
   const NF_P = new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0});
   const fmtP = v => NF_P.format(v);
   const esNomina = cta => enRango(rangos, cta);
-  const per = (y,m) => y+"-"+String(m).padStart(2,"0");
+  const PERS = new Map();
+  const per = (y,m) => { const n = y*12+m; let s = PERS.get(n); if(s===undefined){ s = y+"-"+String(m).padStart(2,"0"); PERS.set(n, s); } return s; };
   const atras = (y,m,k) => { m -= k; while(m<1){ m += 12; y--; } return per(y,m); };
   const mesDe = p => MESES_ES[+p.slice(5)-1];
   const mesAnio = p => MESES_ES[+p.slice(5)-1]+" "+p.slice(0,4);
   // último mes con movimiento antes de (y,m), buscando desde «desde» meses atrás y hasta 12 (lo usa la regla bimestral)
-  const ultimoCon = (k, y, m, desde) => {
-    for(let q=desde; q<=12; q++){ const p = atras(y,m,q), v = mov.get(k+p); if(v) return {p, v}; }
+  const ultimoCon = (mP, y, m, desde) => {
+    for(let q=desde; q<=12; q++){ const p = atras(y,m,q), v = mP.get(p); if(v) return {p, v}; }
     return null;
   };
   const VAC = mesesVacios(B);
-  const mov = new Map(), ultimo = new Map(), pares = new Map();
-  for(const [ci,ct,p,v] of B.mov){
-    mov.set(ci+"|"+ct+"|"+p, v);
+  const mov = tabla3(B.mov, r=>r[3]), ultimo = new Map(), pares = [], enPares = new Map();
+  // las parejas cliente-cuenta en el orden en que aparecen (como antes, con «cliente|cuenta» de llave)
+  const par = (ci, ct) => { let x = enPares.get(ci); if(!x){ x = new Set(); enPares.set(ci, x); } if(x.has(ct)) return false; x.add(ct); pares.push([ci,ct]); return true; };
+  for(const [ci,ct,p] of B.mov){
     if(!(ultimo.get(ci) >= p)) ultimo.set(ci, p);
-    pares.set(ci+"|"+ct, [ci,ct]);
+    par(ci, ct);
   }
   // acreedoras: también las que solo traen saldo (un saldo contrario puede no tener movimiento)
-  for(const [ci,ct] of (B.sal||[])){ const k = ci+"|"+ct; if(!pares.has(k) && ultimo.has(ci) && esAcr(B.cuentas[ct][0])) pares.set(k, [ci,ct]); }
+  for(const [ci,ct] of (B.sal||[])){ const x = enPares.get(ci); if(!(x && x.has(ct)) && ultimo.has(ci) && esAcr(B.cuentas[ct][0])) par(ci, ct); }
   const mIni = C.evaluarEnero ? 1 : 2;
   const hall = [];
-  for(const [ci,ct] of pares.values()){
+  for(const [ci,ct] of pares){
     const cta = B.cuentas[ct][0], nom = esNomina(cta), bim = rangosB.length>0 && enRango(rangosB, cta), hasta = ultimo.get(ci);
     const pag = rangosP.length>0 && enRango(rangosP, cta), acr = !pag && esAcr(cta);
+    const mP = de3(mov, ci, ct), cP = de3(ca, ci, ct), sP = de3(sal, ci, ct), de23 = /^[23]/.test(cta);
     for(const y of B.anios){
       for(let m=mIni; m<=12; m++){
         const p = per(y,m); if(p > hasta) break;
         if(VAC.es(ci, p)) continue;          // la balanza de ese mes viene completa en $0: no da hallazgos
         if(pag){
           // provisión por pagar: el abono del mes anterior (provisión) se paga con el cargo de este mes
-          const k = ci+"|"+ct+"|", pAnt = atras(y,m,1);
-          const prov = (ca.get(k+pAnt)||[0,0])[1], pago = (ca.get(k+p)||[0,0])[0];
+          const pAnt = atras(y,m,1);
+          const prov = (cP.get(pAnt)||[0,0])[1], pago = (cP.get(p)||[0,0])[0];
           if(!prov) continue;
           const dif = pago - prov, tol = x => Math.max(C.pagoTolMxn, Math.abs(x)*C.pagoTolPct/100) + 1e-9;
           if(Math.abs(dif) <= tol(prov)) continue;
           if(bim){
             // bimestrales: el pago puede cubrir dos provisiones juntas (las dos del bimestre)
-            const prov2 = (ca.get(k+atras(y,m,2))||[0,0])[1], provM = (ca.get(k+p)||[0,0])[1], pagoSig = (ca.get(k+(m===12 ? per(y+1,1) : per(y,m+1)))||[0,0])[0];
+            const prov2 = (cP.get(atras(y,m,2))||[0,0])[1], provM = (cP.get(p)||[0,0])[1], pagoSig = (cP.get(m===12 ? per(y+1,1) : per(y,m+1))||[0,0])[0];
             if(Math.abs(pago-(prov+prov2)) <= tol(prov+prov2)) continue;
             if(!pago && Math.abs(pagoSig-(prov+provM)) <= tol(prov+provM)) continue;
           }
@@ -183,9 +206,9 @@ function construir(B, C){
           // cuenta acreedora: aumento del mes = abonos − cargos; variación = (saldo final − saldo inicial) ÷ |saldo inicial|,
           // con el saldo acreedor en positivo (la balanza ya los trae así). Saldo inicial en cero: regla de altas.
           // Saldo final en cero: no es hallazgo (lo decidió Daniel el 28-oct).
-          const k = ci+"|"+ct+"|", fin = sal.get(k+p) || 0, mv = mov.get(k+p) || 0, ini = r2(fin - mv);
+          const fin = sP.get(p) || 0, mv = mP.get(p) || 0, ini = r2(fin - mv);
           if(!fin) continue;
-          const cav = ca.get(k+p) || (B.caTodas && /^[23]/.test(cta) ? [0,0] : null), aum = cav ? r2(cav[1] - cav[0]) : r2(mv);
+          const cav = cP.get(p) || (B.caTodas && de23 ? [0,0] : null), aum = cav ? r2(cav[1] - cav[0]) : r2(mv);
           const contra = C.saldoContrario && fin < -0.004;
           let v = null, porVar = false, alta = false;
           if(!ini){ if(!C.excluirAltas){ alta = true; v = fin>0 ? 1 : -1; } }
@@ -202,21 +225,21 @@ function construir(B, C){
         }
         if(bim){
           // cuentas que se mueven cada dos meses: el mes en cero es normal y la base es el mismo mes del bimestre anterior
-          const k = ci+"|"+ct+"|", act = mov.get(k+p) || 0;
-          const a1 = mov.get(k+atras(y,m,1)) || 0, a2 = mov.get(k+atras(y,m,2)) || 0;
+          const act = mP.get(p) || 0;
+          const a1 = mP.get(atras(y,m,1)) || 0, a2 = mP.get(atras(y,m,2)) || 0;
           if(!act){
             if(a1 || !a2) continue;
             if(VAC.es(ci, atras(y,m,1))) continue;   // el mes anterior no trae balanza: no se sabe si faltó
 
             const previos = [];
-            for(let q=1; q<m; q++) if(mov.get(k+per(y,q))) previos.push(MESES_ES[q-1]);
+            for(let q=1; q<m; q++) if(mP.get(per(y,q))) previos.push(MESES_ES[q-1]);
             if(previos.length < C.nominaMeses) continue;
             hall.push({ci, ct, y, m, v:-1, ant:a2, act:0,
               tag:`FALTA BIMESTRE: sin movimiento en ${mesDe(atras(y,m,1))} ni ${MESES_ES[m-1]}; traía en ${previos.join(", ")}`});
             continue;
           }
           let ant = a2 || a1, base = a2 ? atras(y,m,2) : atras(y,m,1), reap = null;
-          if(!ant){ reap = ultimoCon(k, y, m, 3); if(reap){ ant = reap.v; base = reap.p; } }
+          if(!ant){ reap = ultimoCon(mP, y, m, 3); if(reap){ ant = reap.v; base = reap.p; } }
           let v, tag;
           if(!ant){
             if(C.excluirAltas) continue;
@@ -237,8 +260,8 @@ function construir(B, C){
         while(q<12 && VAC.es(ci, bp)){ q++; bp = atras(y,m,q); }
         const pri = VAC.primero.get(ci);
         if(!pri || bp < pri || VAC.es(ci, bp)) continue;
-        let ant = mov.get(ci+"|"+ct+"|"+bp) || 0;
-        const act = mov.get(ci+"|"+ct+"|"+p) || 0;
+        let ant = mP.get(bp) || 0;
+        const act = mP.get(p) || 0;
         if(ant===0 && act===0) continue;
         const salto = q>1 ? (q===2 ? " (el mes de en medio no trae balanza)" : ` (los ${q-1} meses de en medio no traen balanza)`) : "";
         let v, tag = "", cero = false;
@@ -254,7 +277,7 @@ function construir(B, C){
           v = C.baseAbs ? (act-ant)/Math.abs(ant) : act/ant - 1;
           if(act===0){
             const previos = [];
-            for(let k=1; k<m; k++) if(mov.get(ci+"|"+ct+"|"+per(y,k))) previos.push(MESES_ES[k-1]);
+            for(let k=1; k<m; k++) if(mP.get(per(y,k))) previos.push(MESES_ES[k-1]);
             if(C.nomina && nom && previos.length >= C.nominaMeses) tag = "ROMPE PATRÓN NÓMINA: "+previos.join(", ");
             else if(C.excluirBajas || (C.nomina && nom)) continue;
             else tag = `BAJA DE CUENTA: ${mesAnio(bp)} traía ${fmtP(ant)}${salto} y ${MESES_ES[m-1].toLowerCase()} quedó en $0`;
@@ -268,6 +291,10 @@ function construir(B, C){
   const rec = new Map(); hall.forEach(h=>{ const k=h.y+"|"+h.ci+"|"+h.ct; rec.set(k,(rec.get(k)||0)+1); });
   const usadosC = [...new Set(hall.map(h=>h.ci))].sort((a,b)=>a-b);
   const usadosK = [...new Set(hall.map(h=>h.ct))].sort((a,b)=>B.cuentas[a][0].localeCompare(B.cuentas[b][0]));
+  /* el lugar de cada cuenta en ese orden (las que localeCompare da iguales, el mismo lugar): el orden de los hallazgos compara
+     lugares en lugar de volver a comparar los textos en cada paso (revisión nocturna del 24-nov-2026). El mismo orden. */
+  const lugar = new Map();
+  usadosK.forEach((k,i)=>{ lugar.set(k, i>0 && B.cuentas[usadosK[i-1]][0].localeCompare(B.cuentas[k][0])===0 ? lugar.get(usadosK[i-1]) : i); });
   const iC = new Map(usadosC.map((c,i)=>[c,i])), iK = new Map(usadosK.map((c,i)=>[c,i]));
   const rubros = [...new Set(usadosK.map(k=>rubroDe(B.cuentas[k][0])))];
   const mesesPorAnio = {};
@@ -288,8 +315,8 @@ function construir(B, C){
     //  acreedora (sobre saldo), saldo contrario, aumento del mes (abonos − cargos), cargos del mes, abonos del mes,
     //  comparado contra $0]
     // En las acreedoras, «mes anterior» es el saldo inicial y «mes evaluado» el saldo final del mes.
-    filas: hall.sort((a,b)=>a.ci-b.ci || a.y-b.y || a.m-b.m || B.cuentas[a.ct][0].localeCompare(B.cuentas[b.ct][0])).map(h=>{
-      const cav = ca.get(h.ci+"|"+h.ct+"|"+per(h.y,h.m)) || (h.acr && B.caTodas && /^[23]/.test(B.cuentas[h.ct][0]) ? [0,0] : null);
+    filas: hall.sort((a,b)=>a.ci-b.ci || a.y-b.y || a.m-b.m || lugar.get(a.ct)-lugar.get(b.ct)).map(h=>{
+      const cav = de3(ca, h.ci, h.ct).get(per(h.y,h.m)) || (h.acr && B.caTodas && /^[23]/.test(B.cuentas[h.ct][0]) ? [0,0] : null);
       return [B.clientes[h.ci][1]+"_"+h.m+"_"+B.cuentas[h.ct][0]+(h.pago ? "_pago" : "")+(h.y===B.anioBase ? "" : "_"+h.y),
       iC.get(h.ci), h.m, iK.get(h.ct), h.v, h.ant, h.act, rec.get(h.y+"|"+h.ci+"|"+h.ct), 0, h.tag, h.y,
       h.acr ? 1 : 0, h.contra ? 1 : 0, h.acr ? h.aum : null, cav ? cav[0] : null, cav ? cav[1] : null, h.cero ? 1 : 0]; }),
