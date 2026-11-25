@@ -51,7 +51,8 @@
     + '@supports (-moz-appearance:none){.tp-fina{scrollbar-width:thin;scrollbar-color:var(--muted,#5b6577) var(--surface-2,#eef1f6)}}'
     // pegada abajo de lo fijo de arriba, con fondo para que no se vean los renglones por detrás
     + '.tp-barra.tp-pega{position:-webkit-sticky;position:sticky;top:var(--tp-pega,0px);z-index:6;background:var(--tp-fondo,var(--surface,#fff))}'
-    + '.tp-clip.tp-clip{overflow:clip!important}.tp-clip.tp-fr{display:flow-root!important}'
+    // 24-nov-2026: lo escondido se queda escondido (antes el flow-root ganaba y un recuadro con hidden volvía a salir)
+    + '.tp-clip.tp-clip{overflow:clip!important}.tp-clip.tp-fr:not([hidden]):not([style*="display: none"]):not([style*="display:none"]){display:flow-root!important}'
     // los títulos: el renglón de verdad, movido por el deslizar de la página
     + '@supports (animation-timeline:view()){'
     + '.tp-pega-w{view-timeline:--tp-pega block;view-timeline-inset:calc(var(--tp-pega,0px) + var(--tp-b,0px)) 0px}'
