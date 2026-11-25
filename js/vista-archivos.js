@@ -691,7 +691,11 @@
      (un origen aparte, sin la sesión del portal, sin la base y sin poder tocar esta página), con una CSP que solo deja
      correr su código de arranque (con su nonce) y las librerías del portal (js/lib), y solo imágenes y letras de
      adentro (data: y blob:): nada de la red. Esta página le manda los bytes por mensaje y solo le hace caso a los
-     mensajes que vienen de ese marco (ev.source); él solo contesta listo, hecho, falla o esc. */
+     mensajes que vienen de ese marco (ev.source); él solo contesta listo, hecho, falla o esc.
+     El marco solo le hace caso a los mensajes que traen la señal de un solo uso que va en su arranque (T), no a
+     «de dónde vienen»: el chat abre la vista en la página de arriba (op.capa), pero el mensaje lo manda el código del
+     chat, y el navegador dice que viene del chat, no de la página donde está el marco (24-nov-2026: así fallaba la
+     vista de un Word en el chat; «tardó más de 45 s»). */
   var LIB = (function () {
     try { var s = document.currentScript && document.currentScript.src; return s ? new URL('lib/', s).href : new URL('js/lib/', location.href).href; } catch (e) { return ''; }
   })();
@@ -710,7 +714,7 @@
     + '.pf-pie img{width:11px;height:12px;display:block}.pf-pie b{color:#1F3864;font-weight:700;font-size:8.7px}.pf-pie i{color:#878787;font-size:8px;margin-left:6px}'
     + 'body.sin-marca .pf-sello{display:none}';
   // lo que corre DENTRO del marco aislado (se manda como texto; no ve nada de esta página)
-  function dentro() {
+  function dentro(T) {
     var raiz = document.getElementById('pf-doc'), E = { logo: '', agua: '', sub: '', tipo: '' }, caja = null, natural = 0;
     function avisa(m) { try { parent.postMessage(m, '*'); } catch (e) { /* sin página */ } }
     addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); avisa({ pf: 'esc' }); } });
@@ -778,8 +782,11 @@
       return n;
     }
     addEventListener('message', function (ev) {
-      if (ev.source !== parent) return;   // JSZip y las librerías se mandan mensajes a sí mismas: esos no son de la página
+      // JSZip y las librerías se mandan mensajes a sí mismas: esos no son de la página; y de la página, solo lo que trae
+      // la señal de este marco (el que manda puede ser el chat, no la página donde está el marco: ver arriba)
+      if (ev.source === window) return;
       var m = ev.data || {};
+      if (!m || typeof m !== 'object' || m.t !== T) return;
       if (m.pf === 'abre') {
         abre(m).then(function (n) { avisa({ pf: 'hecho', n: n }); }, function (e) { avisa({ pf: 'falla', m: String((e && e.message) || e || '').slice(0, 200) }); });
       } else if (m.pf === 'marca') document.body.classList.toggle('sin-marca', !m.si);
@@ -791,13 +798,13 @@
     (window.crypto || window.msCrypto).getRandomValues(a);
     return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
   }
-  function marcoDe(q) {
+  function marcoDe(q, T) {
     var N = azar();
     var csp = "default-src 'none'; script-src 'nonce-" + N + "' " + LIB + "; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; media-src data: blob:; base-uri 'none'; form-action 'none'";
     return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + esc(csp) + '">'
       + '<meta name="viewport" content="width=device-width,initial-scale=1"><style>' + OFI_CSS + '</style></head><body><div id="pf-doc"></div>'
       + OFI_LIBS[q].map(function (x) { return '<script src="' + esc(LIB + x) + '"></' + 'script>'; }).join('')
-      + '<script nonce="' + N + '">(' + dentro.toString() + ')();</' + 'script></body></html>';
+      + '<script nonce="' + N + '">(' + dentro.toString() + ')(' + JSON.stringify(T) + ');</' + 'script></body></html>';
   }
   // ¿es un Word o PowerPoint de los nuevos (un ZIP por dentro)? Los viejos y los que traen contraseña no se ven aquí
   function revisaOfi(b, q) {
@@ -808,7 +815,7 @@
   function oficina(v, b, q, op) {
     return new Promise(function (ok) {
       var cu = v.querySelector('.vx-cu'), D = v.ownerDocument, W = D.defaultView || window, M = marcaLista();
-      var fr = D.createElement('iframe'), fin = false, reloj = 0, fondo = '';
+      var fr = D.createElement('iframe'), fin = false, reloj = 0, fondo = '', T = azar();
       fr.className = 'vx-ofi';
       fr.title = (q === 'word' ? 'Documento de Word: ' : 'Presentación de PowerPoint: ') + (op.nombre || '');
       fr.setAttribute('sandbox', 'allow-scripts');
@@ -830,7 +837,7 @@
         var m = ev.data || {};
         if (m.pf === 'listo') {
           var copia = b.slice().buffer;
-          fr.contentWindow.postMessage({ pf: 'abre', tipo: q, b: copia, marca: v.__marca === true, logo: M ? M.logo : '', agua: M ? M.marcaAgua : '',
+          fr.contentWindow.postMessage({ pf: 'abre', t: T, tipo: q, b: copia, marca: v.__marca === true, logo: M ? M.logo : '', agua: M ? M.marcaAgua : '',
             sub: M ? (M.subtitulo || '') : '', fondo: fondo }, '*', [copia]);
         } else if (m.pf === 'hecho') termina(true);
         else if (m.pf === 'falla') termina(false, String(m.m || 'sin detalle'));
@@ -838,9 +845,9 @@
       }
       W.addEventListener('message', oye);
       v.__limpia.push(function () { W.removeEventListener('message', oye); if (!fin) { fin = true; clearTimeout(reloj); ok(false); } });
-      v.__alModo = function (si) { try { fr.contentWindow.postMessage({ pf: 'marca', si: !!si }, '*'); } catch (e) { /* ya se cerró */ } };
+      v.__alModo = function (si) { try { fr.contentWindow.postMessage({ pf: 'marca', t: T, si: !!si }, '*'); } catch (e) { /* ya se cerró */ } };
       reloj = setTimeout(function () { termina(false, 'tardó más de ' + OFI_TIEMPO / 1000 + ' s'); }, OFI_TIEMPO);
-      fr.srcdoc = marcoDe(q);
+      fr.srcdoc = marcoDe(q, T);
       cu.appendChild(fr);
     });
   }
