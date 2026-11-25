@@ -719,16 +719,115 @@
     function avisa(m) { try { parent.postMessage(m, '*'); } catch (e) { /* sin página */ } }
     addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); avisa({ pf: 'esc' }); } });
     // la marca de una hoja o lámina: marca de agua al centro y, abajo a la izquierda, el signo, «PROFASE» y el subtítulo
-    function sello(arriba, alto) {
+    // (sinPie: solo la marca de agua; el pie va en el margen de abajo de la hoja, nunca encima del texto)
+    function sello(arriba, alto, sinPie) {
       var s = document.createElement('div'), a = new Image(), pie = document.createElement('div'), l = new Image();
       var b = document.createElement('b'), i = document.createElement('i');
       s.className = 'pf-sello'; s.setAttribute('aria-hidden', 'true');
       if (arriba != null) { s.style.top = arriba + 'px'; s.style.height = alto + 'px'; s.style.bottom = 'auto'; }
       a.className = 'pf-agua'; a.alt = ''; a.src = E.agua;
+      s.appendChild(a);
+      if (sinPie) return s;
       pie.className = 'pf-pie'; l.alt = ''; l.src = E.logo;
       b.textContent = 'PROFASE'; i.textContent = E.sub;
-      pie.appendChild(l); pie.appendChild(b); pie.appendChild(i); s.appendChild(a); s.appendChild(pie);
+      pie.appendChild(l); pie.appendChild(b); pie.appendChild(i); s.appendChild(pie);
       return s;
+    }
+    /* Las hojas del Word, como en Word (Héctor Daniel Nava, 24-nov-2026, 19:39, con la captura de un Word del chat donde
+       el pie de la marca caía encima del texto: «corrígelo»). docx-preview solo parte la hoja donde el documento trae su
+       salto (o donde Word lo dejó guardado al guardar); un Word que no lo trae (hecho en otro programa, o guardado sin
+       eso) sale como una sola hoja muy larga, y la marca se ponía a cada alto de página, a media hoja y encima del texto.
+       Aquí esa hoja larga se reparte en hojas del alto de la página: un párrafo nunca se parte (pasa completo a la
+       siguiente) y una tabla se parte por renglones (como Word); cada hoja lleva su encabezado y su pie del documento,
+       su marca y el pie de la marca en su margen de abajo. Todo se mide antes de mover nada. Lo que no se puede repartir
+       (texto a columnas o una tabla con celdas unidas a lo alto) se queda como venía. Si algo falla, se queda como venía. */
+    function filasDe(t) {
+      var r = [];
+      Array.prototype.forEach.call(t.children, function (x) {
+        if (x.tagName === 'TR') r.push(x);
+        else if (x.tagName === 'TBODY' || x.tagName === 'THEAD' || x.tagName === 'TFOOT') Array.prototype.forEach.call(x.children, function (y) { if (y.tagName === 'TR') r.push(y); });
+      });
+      return r;
+    }
+    function reparte(h) {
+      var pag = parseFloat(getComputedStyle(h).minHeight) || 0;
+      if (pag < 200 || h.offsetHeight <= pag * 1.2) return;
+      var hijos = Array.prototype.slice.call(h.children), arts = hijos.filter(function (x) { return x.tagName === 'ARTICLE'; });
+      if (!arts.length || arts.some(function (x) { var c = parseInt(x.style.columnCount || '1', 10); return c > 1; })) return;
+      var cab = null, pie = null, otros = [];
+      hijos.forEach(function (x) { if (x.tagName === 'HEADER') cab = x; else if (x.tagName === 'FOOTER') pie = x; else if (x.tagName !== 'ARTICLE') otros.push(x); });
+      var R = h.getBoundingClientRect(), padB = parseFloat(getComputedStyle(h).paddingBottom) || 0;
+      function y(el) { return el.getBoundingClientRect().top - R.top; }
+      function fin(el) { return el.getBoundingClientRect().bottom - R.top; }
+      var y0 = y(arts[0]), abajo = pag - padB;
+      // si el pie del documento es más alto que su margen, también le quita lugar al texto
+      if (pie) abajo -= Math.max(0, (R.height - padB) - y(pie));
+      // y un respiro antes del pie del documento (docx-preview lo pone pegado al texto)
+      var cabe = abajo - y0 - (pie && pie.textContent.trim() ? 12 : 0);
+      if (cabe < 150) return;
+      var hojas = [], cur = null;
+      function nueva(top) { cur = { top: top, partes: [] }; hojas.push(cur); }
+      nueva(y0);
+      arts.forEach(function (art) {
+        Array.prototype.forEach.call(art.children, function (b) {
+          if (fin(b) - cur.top <= cabe) { cur.partes.push({ el: b, art: art }); return; }
+          var filas = b.tagName === 'TABLE' ? filasDe(b) : [];
+          var unidas = filas.length && Array.prototype.some.call(b.querySelectorAll('td,th'), function (c) { return c.rowSpan > 1; });
+          if (filas.length > 1 && !unidas) {
+            var desde = 0;
+            for (var j = 0; j < filas.length; j++) {
+              if (fin(filas[j]) - cur.top <= cabe) continue;
+              // no cabe: lo de antes se queda en esta hoja y este renglón empieza la siguiente
+              // (un renglón más alto que la hoja se queda solo en la suya)
+              if (j > desde) cur.partes.push({ el: b, art: art, filas: filas, de: desde, a: j });
+              if (j > desde || cur.partes.length) { desde = j; nueva(y(filas[j])); }
+            }
+            cur.partes.push({ el: b, art: art, filas: filas, de: desde, a: filas.length });
+            return;
+          }
+          // un párrafo (o una imagen) no se parte: pasa completo a la siguiente hoja
+          if (cur.partes.length) nueva(y(b) - (parseFloat(getComputedStyle(b).marginTop) || 0));
+          cur.partes.push({ el: b, art: art });
+        });
+      });
+      if (hojas.length < 2) return;
+      var padre = h.parentNode, tras = h.nextSibling, puesta = [];
+      hojas.forEach(function (hj, k) {
+        var s = h, suyos = [];
+        if (k) {
+          s = h.cloneNode(false);
+          if (cab) s.appendChild(cab.cloneNode(true));
+        }
+        function artDe(art) {
+          for (var i = 0; i < suyos.length; i++) if (suyos[i][0] === art) return suyos[i][1];
+          var n = art.cloneNode(false);
+          s.appendChild(n); suyos.push([art, n]);
+          return n;
+        }
+        hj.partes.forEach(function (p) {
+          if (!p.filas || puesta.indexOf(p.el) < 0) {
+            if (p.filas) puesta.push(p.el);
+            if (k) artDe(p.art).appendChild(p.el);
+            return;
+          }
+          // el resto de una tabla partida: otra tabla igual (sus columnas) con sus renglones
+          var t = p.el.cloneNode(false), cajas = [];
+          Array.prototype.forEach.call(p.el.children, function (x) { if (x.tagName === 'COLGROUP' || x.tagName === 'COL' || x.tagName === 'CAPTION' && false) t.appendChild(x.cloneNode(true)); });
+          for (var i = p.de; i < p.a; i++) {
+            var f = p.filas[i], dad = f.parentNode;
+            if (dad === p.el) { t.appendChild(f); continue; }
+            var c = null;
+            for (var q = 0; q < cajas.length; q++) if (cajas[q][0] === dad) c = cajas[q][1];
+            if (!c) { c = dad.cloneNode(false); t.appendChild(c); cajas.push([dad, c]); }
+            c.appendChild(f);
+          }
+          artDe(p.art).appendChild(t);
+        });
+        if (!k) return;
+        if (k === hojas.length - 1) otros.forEach(function (x) { s.appendChild(x); });
+        if (pie) s.appendChild(pie.cloneNode(true));
+        padre.insertBefore(s, tras);
+      });
     }
     // las ligas del documento no llevan a ningún lado (solo las de adentro del mismo documento, «#…»)
     function sinLigas() {
@@ -756,15 +855,22 @@
           useBase64URL: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, renderEndnotes: true,
           renderComments: false, renderChanges: false, experimental: false, debug: false });
         caja = raiz.querySelector('.docx-wrapper') || raiz;
+        // las letras del documento llegan después de dibujarlo: se espera a que estén (hasta 3 s) antes de medir las hojas
+        void raiz.offsetHeight;
+        try { if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(function (r) { setTimeout(r, 3000); })]); } catch (e) { /* sin letras */ }
+        Array.prototype.forEach.call(raiz.querySelectorAll('section.docx'), function (h) {
+          try { reparte(h); } catch (e) { /* se queda como venía */ }
+        });
         var hojas = raiz.querySelectorAll('section.docx');
         n = hojas.length;
         Array.prototype.forEach.call(hojas, function (h) {
           natural = Math.max(natural, h.offsetWidth + 16);
           if (!E.agua) return;
-          // si una hoja trae varias páginas sin su salto, la marca va en cada página (como en el PDF)
           var alto = h.offsetHeight, pag = parseFloat(getComputedStyle(h).minHeight) || alto, k = pag > 50 ? Math.max(1, Math.round(alto / pag)) : 1;
           if (k === 1) { h.appendChild(sello(null)); return; }
-          for (var i = 0; i < k; i++) h.appendChild(sello(i * pag, i === k - 1 ? alto - i * pag : pag));
+          // una hoja que no se pudo repartir: la marca de agua a cada alto de página y el pie de la marca solo abajo, en
+          // su margen (nunca a media hoja, encima del texto)
+          for (var i = 0; i < k; i++) h.appendChild(sello(i * pag, i === k - 1 ? alto - i * pag : pag, i < k - 1));
         });
       } else {
         var ancho = Math.min(1100, Math.max(280, document.documentElement.clientWidth - 24));
