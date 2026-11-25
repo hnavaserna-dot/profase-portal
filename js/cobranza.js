@@ -36,7 +36,7 @@
   function ni(n) { return Number(n || 0).toLocaleString('es-MX'); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); }
-  function fd(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return +p[2] + '-' + MES[+p[1] - 1] + '-' + p[0].slice(2); }
+  function fd(s) { return s ? window.PROFASE_FECHA.dia(s) : ''; }
   function fdh(s) { return '<span class="cx-nw">' + fd(s) + '</span>'; }   // la fecha nunca se parte en dos renglones
   function ymTxt(ym) { return MES[ym % 100 - 1] + ' ' + String(Math.floor(ym / 100)).slice(2); }
   function edadDe(meses) { return meses <= 1 ? 0 : meses === 2 ? 1 : meses === 3 ? 2 : meses <= 6 ? 3 : meses <= 12 ? 4 : 5; }
@@ -134,7 +134,7 @@
     } catch (e) { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   }
   function fLarga(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length < 3 ? String(s || '') : (+p[2]) + ' de ' + MESL[+p[1] - 1] + ' de ' + p[0]; }
-  function fCorta(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length < 3 ? String(s || '') : (+p[2]) + ' ' + MES[+p[1] - 1] + ' ' + p[0]; }
+  function fCorta(s) { return window.PROFASE_FECHA.dia(s); }
   function diasDe(f, hoy) {
     var a = String(f || '').slice(0, 10).split('-'), b = String(hoy).split('-');
     if (a.length < 3) return 0;
@@ -735,7 +735,7 @@
       var MK = window.PROFASE_MARCA; if (!MK || !P) return;
       btn.disabled = true;
       try {
-        var EX = await MK.excelJS(), C = MK.colores, PESOS = '#,##0.00', FECHA = 'dd-mmm-yyyy';
+        var EX = await MK.excelJS(), C = MK.colores, PESOS = '#,##0.00', FECHA = 'dd/mm/yyyy';
         var hoy = new Date(), cuando = hoy.toLocaleString('es-MX', { timeZone: 'America/Monterrey', dateStyle: 'medium', timeStyle: 'short' });
         var titulo = 'Cobranza' + (S.cia ? ' · ' + S.cia : '');
         var wb = MK.libro(EX, titulo);

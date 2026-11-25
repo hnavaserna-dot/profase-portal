@@ -12,7 +12,16 @@
    reloj de 24 horas (de 00:00 a 23:59, con dos dígitos; nunca «a. m.» ni «p. m.», nunca «24:00») y, si la página no
    dijo la zona, en la de Monterrey, abra quien abra y desde donde sea. Lo que es solo fecha (sin hora) no se toca.
    Para lo nuevo: window.PROFASE_HORA (abajo). construir.py (exige_24h()) cuida que nadie lo quite ni vuelva a las
-   12 horas, y herramientas/pruebas/pantallas/prueba_24h.py lo comprueba en un navegador. ---- */
+   12 horas, y herramientas/pruebas/pantallas/prueba_24h.py lo comprueba en un navegador.
+   ---- Fechas: siempre dd/mm/aaaa (pedido de Fernando Cadengo, 24 y 25-nov-2026: «Hay que revisar el formato de la fecha
+   en todos nuestros sistemas, que sea dd/mm/aaaa»; «1 a, 2 a»; «sí, así es»). Toda fecha de un día sale «24/11/2026»,
+   con hora «24/11/2026 10:15» y sin año «24/11». Se quedan con letra los meses solos («Noviembre 2026»), los encabezados
+   de día con su nombre («martes 24 de noviembre») y los títulos largos por costumbre («al 31 de octubre de 2026»). Aquí
+   mismo, una sola vez: cualquier fecha en español que una página escriba con Intl.DateTimeFormat o toLocale…String con
+   día y mes corto o numérico, o con dateStyle «medium» o «short», sale con números; y para lo
+   nuevo, window.PROFASE_FECHA (abajo). construir.py (exige_fechas_dmy()) no publica una fecha de un día con el mes en
+   letra, herramientas/pruebas/pantallas/prueba_24h.py lo comprueba en un navegador y extra/fechas_dmy.py, en cada
+   pantalla de la revisión. ---- */
 (function horas24() {
   'use strict';
   var ZONA = 'America/Monterrey';
@@ -38,13 +47,42 @@
      pantallas hacían «new Intl.DateTimeFormat(…)» (o NumberFormat) en cada renglón de sus listas (fechas, horas, pesos), y
      armar un formato cuesta mucho más que usarlo; con los datos de verdad, en Variaciones solo eso era ~0.3 s de la traba al
      abrir. Un formato no cambia después de hecho, así que el mismo sirve para todos: el mismo texto, menos trabajo. */
-  function memoIntl(Base, ajustar) {
+  /* La fecha de un día, con números (dd/mm/aaaa): solo en español (o sin idioma, que se escribe en español) y solo lo que
+     es una fecha de un día: día y mes corto o numérico (con o sin el nombre del día: «sáb, 07/11»), o dateStyle «medium»
+     o «short». El mes largo («martes 24 de noviembre», «noviembre de 2026») y lo que no es español (como «en-CA», que
+     arma las llaves AAAA-MM-DD) no se tocan. */
+  function enEspanol(l) { if (l == null) return true; var x = Array.isArray(l) ? l[0] : l; return typeof x === 'string' && /^es(\b|-|_|$)/i.test(x); }
+  var CORTOS = { 'short': 1, narrow: 1, numeric: 1, '2-digit': 1 };
+  function fechaDmy(locales, o, porOmision) {
+    if (!enEspanol(locales)) return o;
+    var x = o == null ? {} : Object(o), n, k;
+    var estilo = x.dateStyle === 'medium' || x.dateStyle === 'short';
+    var deDia = x.day !== undefined && CORTOS[x.month] && !x.dateStyle;
+    var sola = porOmision === 'fecha' && !trae(x, DE_HORA) && !trae(x, DE_FECHA)
+      || porOmision === true && !trae(x, DE_HORA) && !trae(x, DE_FECHA);
+    if (!estilo && !deDia && !sola) return o;
+    n = {};
+    for (k in x) n[k] = x[k];
+    if (estilo) {
+      delete n.dateStyle;
+      if (n.timeStyle) { n.hour = '2-digit'; n.minute = '2-digit'; if (n.timeStyle === 'medium' || n.timeStyle === 'long' || n.timeStyle === 'full') n.second = '2-digit'; delete n.timeStyle; }
+      n.year = 'numeric';
+    }
+    if (sola) { n.year = 'numeric'; if (porOmision === true) { n.hour = '2-digit'; n.minute = '2-digit'; n.second = '2-digit'; } }
+    if (n.year === '2-digit') n.year = 'numeric';
+    n.day = '2-digit'; n.month = '2-digit';
+    return n;
+  }
+  // «24/11/2026, 10:15» → «24/11/2026 10:15»: sin la coma entre la fecha y la hora
+  function sinComa(t) { return typeof t === 'string' ? t.replace(/(\d{2}\/\d{2}(?:\/\d{4})?),\s+(?=\d{2}:)/, '$1 ') : t; }
+  function memoIntl(Base, ajustar, despues) {
     var CACHE = new Map(), MAX = 300;
     function F(locales, o) {
-      var op = ajustar ? ajustar(o) : o, k = null;
+      var op = ajustar ? ajustar(o, locales) : o, k = null;
       try { k = JSON.stringify([locales === undefined ? null : locales, op === undefined ? null : op]); } catch (e) { k = null; }
       if (k !== null) { var c = CACHE.get(k); if (c) return c; }
       var f = new Base(locales, op);
+      if (despues) despues(f, op);
       if (k !== null && CACHE.size < MAX) CACHE.set(k, f);
       return f;
     }
@@ -52,7 +90,12 @@
     F.supportedLocalesOf = Base.supportedLocalesOf;
     return F;
   }
-  var DTF = memoIntl(Orig, function (o) { return ajusta(o, false); });
+  var DTF = memoIntl(Orig, function (o, l) { return ajusta(fechaDmy(l, o, false), false); }, function (f, op) {
+    // con fecha numérica y hora: format() sin la coma de en medio (formatToParts queda tal cual)
+    if (!op || op.month !== '2-digit' || op.day !== '2-digit' || op.hour === undefined) return;
+    var orig = f.format;
+    try { Object.defineProperty(f, 'format', { value: function (d) { return sinComa(orig.call(f, d)); }, configurable: true }); } catch (e) {}
+  });
   try { Object.defineProperty(DTF, '__h24', { value: true }); } catch (e) { DTF.__h24 = true; }
   try { Object.defineProperty(I, 'DateTimeFormat', { value: DTF, writable: true, configurable: true }); } catch (e) { I.DateTimeFormat = DTF; }
   if (I.NumberFormat && !I.NumberFormat.__memo) {
@@ -61,10 +104,14 @@
     try { Object.defineProperty(I, 'NumberFormat', { value: NF, writable: true, configurable: true }); } catch (e) { I.NumberFormat = NF; }
   }
   var D = Date.prototype;
-  [['toLocaleString', true], ['toLocaleTimeString', true], ['toLocaleDateString', false]].forEach(function (m) {
+  [['toLocaleString', true, true], ['toLocaleTimeString', true, false], ['toLocaleDateString', false, 'fecha']].forEach(function (m) {
     var f = D[m[0]];
     if (typeof f !== 'function') return;
-    D[m[0]] = function (locales, o) { return f.call(this, locales, ajusta(o, m[1])); };
+    D[m[0]] = function (locales, o) {
+      var op = m[2] === false ? o : fechaDmy(locales, o, m[2]);
+      if (op !== o && locales == null) locales = 'es-MX';
+      return sinComa(f.call(this, locales, ajusta(op, m[1])));
+    };
   });
 
   function dos(n) { return (n < 10 ? '0' : '') + n; }
@@ -88,13 +135,8 @@
     ZONA: ZONA,
     // «18:40», en hora de Monterrey
     hora: function (d) { d = fecha(d); if (!d) return ''; var p = partes(d); return dos(p.hora) + ':' + dos(p.min); },
-    // «31 oct 2026, 18:40» (sin el año: anio = false)
-    fechaHora: function (d, anio) {
-      d = fecha(d); if (!d) return '';
-      var o = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
-      if (anio !== false) o.year = 'numeric';
-      return new DTF('es-MX', o).format(d).replace(/\./g, '');
-    },
+    // «31/10/2026 18:40» (sin el año: anio = false, «31/10 18:40»): la misma de PROFASE_FECHA.fechaHora
+    fechaHora: function (d, anio) { return window.PROFASE_FECHA.fechaHora(d, anio); },
     // «2026-10-31»: el día en Monterrey
     dia: function (d) { d = fecha(d); if (!d) return ''; var p = partes(d); return p.anio + '-' + dos(p.mes) + '-' + dos(p.dia); },
     // Para una celda de Excel con hora: Excel no sabe de zonas y enseña la hora tal cual viene, así que se le pasa
@@ -122,6 +164,41 @@
       if (!h || !h.value) return '';
       return h.value + ':' + (m && m.value ? m.value : '00');
     }
+  };
+  /* Fechas: siempre dd/mm/aaaa (Fernando Cadengo, 25-nov-2026; arriba). Una sola pieza para todo el portal: ninguna
+     pantalla arma su propia fecha con el mes en letra. Una fecha sin hora («2026-11-24», como la guarda la base) se toma
+     tal cual, sin zonas; una con hora y zona (o un Date) se pasa al día de Monterrey. */
+  var ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?(Z|[+-]\d{2}(?::?\d{2})?)?$/;
+  function trozos(x) {
+    if (x == null || x === '') return null;
+    if (typeof x === 'string') {
+      var s = x.trim(), m = ISO.exec(s);
+      if (m && !m[6]) return { anio: +m[1], mes: +m[2], dia: +m[3], hora: m[4] == null ? null : +m[4], min: m[5] == null ? null : +m[5] };
+      if (!m && !/^\d{4}-\d{2}-\d{2}/.test(s)) return null;
+    }
+    var d = fecha(x); return d ? partes(d) : null;
+  }
+  window.PROFASE_FECHA = {
+    // «24/11/2026» (sin el año: anio = false, «24/11»); lo que no es una fecha se regresa tal cual
+    dia: function (x, anio) {
+      var p = trozos(x); if (!p) return x == null ? '' : String(x);
+      return dos(p.dia) + '/' + dos(p.mes) + (anio === false ? '' : '/' + p.anio);
+    },
+    // «24/11/2026 10:15»; si solo trae el día, solo el día
+    fechaHora: function (x, anio) {
+      var p = trozos(x); if (!p) return x == null ? '' : String(x);
+      var f = dos(p.dia) + '/' + dos(p.mes) + (anio === false ? '' : '/' + p.anio);
+      return p.hora == null ? f : f + ' ' + dos(p.hora) + ':' + dos(p.min);
+    },
+    // «24/11/2026» → «2026-11-24» (también «24-11-2026» y «24/11/26»); lo que no es, ''
+    lee: function (t) {
+      var m = /^\s*(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})\s*$/.exec(String(t == null ? '' : t)); if (!m) return '';
+      var a = +m[3]; if (a < 100) a += 2000;
+      if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31) return '';
+      return a + '-' + dos(+m[2]) + '-' + dos(+m[1]);
+    },
+    // formato de una celda de fecha en Excel (y con hora)
+    XLS: 'dd/mm/yyyy', XLS_HORA: 'dd/mm/yyyy hh:mm'
   };
 })();
 

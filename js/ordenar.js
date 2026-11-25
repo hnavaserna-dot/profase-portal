@@ -84,13 +84,15 @@
     jun: 6, junio: 6, jul: 7, julio: 7, ago: 8, agosto: 8, aug: 8, sep: 9, sept: 9, set: 9, septiembre: 9, setiembre: 9,
     oct: 10, octubre: 10, nov: 11, noviembre: 11, dic: 12, diciembre: 12, dec: 12 };
   function anio2(y) { y = +y; return y < 100 ? 2000 + y : y; }
-  // fechas como las escribe el portal: 2026-11-19, 19/11/2026, 19 nov 2026, 19 de noviembre de 2026, nov 2026, ene-26,
+  // fechas como las escribe el portal: 2026-11-19, 19/11/2026, 19/11, 19 nov 2026, 19 de noviembre de 2026, nov 2026, ene-26,
   // con o sin la hora y el día de la semana; regresa un número que ordena (o null)
   function aFecha(t) {
     var s = sinAcento(t.toLowerCase()).trim().replace(/^(lun|mar|mie|jue|vie|sab|dom)[a-z]*\.?,?\s+(?=\d{1,2}\b)/, '');
     var m, y = 0, mo = 0, d = 1, h = 0, mi = 0;
     if ((m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?(?:[ t](\d{1,2}):(\d{2}))?/.exec(s))) { y = +m[1]; mo = +m[2]; d = +(m[3] || 1); h = +(m[4] || 0); mi = +(m[5] || 0); }
     else if ((m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?!\d)(?:,?\s+(\d{1,2}):(\d{2}))?/.exec(s))) { d = +m[1]; mo = +m[2]; y = anio2(m[3]); h = +(m[4] || 0); mi = +(m[5] || 0); }
+    // «24/11» y «24/11 10:15» (dd/mm sin el año, como las escribe PROFASE_FECHA: siempre con dos cifras; 25-nov-2026)
+    else if ((m = /^(\d{2})\/(\d{2})(?![\d\/])(?:,?\s+(\d{1,2}):(\d{2}))?/.exec(s))) { d = +m[1]; mo = +m[2]; y = ANIO; h = +(m[3] || 0); mi = +(m[4] || 0); }
     else if ((m = /^(\d{1,2})(?:\s+de)?[\s\-\/]+([a-z]{3,10})\.?(?:[\s,\-\/]+(?:de(?:l)?\s+)?(\d{4}|\d{2})(?![\d:]))?(?:,?\s+(?:a las\s+)?(\d{1,2}):(\d{2}))?/.exec(s)) && MES[m[2]]) {
       d = +m[1]; mo = MES[m[2]]; y = m[3] ? anio2(m[3]) : ANIO; h = +(m[4] || 0); mi = +(m[5] || 0);
     }
