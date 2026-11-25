@@ -560,7 +560,7 @@
     return (v < 0 ? '-' : '') + (/\$/.test(fmt) ? '$' : '') + t;
   }
   function fechaTxt(x, fmt) {
-    var t = x.getUTCDate() + ' ' + MESES[x.getUTCMonth()] + ' ' + x.getUTCFullYear();
+    var t = String(x.getUTCDate()).padStart(2, '0') + '/' + String(x.getUTCMonth() + 1).padStart(2, '0') + '/' + x.getUTCFullYear();   // dd/mm/aaaa, como en pantalla
     if (/h/i.test(fmt || '')) t += ' ' + String(x.getUTCHours()).padStart(2, '0') + ':' + String(x.getUTCMinutes()).padStart(2, '0');
     return t;
   }
