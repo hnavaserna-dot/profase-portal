@@ -240,12 +240,12 @@
     // la pantalla (chat.html, verImagen); su «Bajar» baja ahí, para que en la app del iPhone y del iPad la ventanita «Tu
     // archivo está listo» (js/portal.js) salga encima de la foto y no escondida en el marco del chat. Con el botón en la
     // misma página (todo lo demás), igual que siempre.
-    function guardaArchivo(b, d, btn) {
+    function guardaArchivo(b, d, btn, como) {
       var D = document, W = window;
       try { if (btn && btn.ownerDocument && btn.ownerDocument.defaultView && btn.ownerDocument.body) { D = btn.ownerDocument; W = D.defaultView; } } catch (e) { D = document; W = window; }
-      var a = D.createElement('a');
-      a.href = W.URL.createObjectURL(new W.Blob([b], { type: op.esPdf(d) ? 'application/pdf' : 'application/octet-stream' }));
-      a.download = nombre(d); a.rel = 'noopener'; a.style.display = 'none';
+      var a = D.createElement('a'), pdf = como ? como.pdf : op.esPdf(d);
+      a.href = W.URL.createObjectURL(new W.Blob([b], { type: pdf ? 'application/pdf' : 'application/octet-stream' }));
+      a.download = como && como.nombre ? como.nombre : nombre(d); a.rel = 'noopener'; a.style.display = 'none';
       D.body.appendChild(a); a.click();
       setTimeout(function () { W.URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     }
@@ -261,10 +261,48 @@
     }
     // el PDF tal cual se subió, si se escogió «Original» y se pudo sellar (si no se pudo, ya es el original)
     function cual(b, orig) { return orig && b && b.original ? b.original : b; }
+    /* Un Word (.docx, .docm, .dotx): «Bajar» pregunta si como Word (tal cual) o como PDF, con la marca o sin ella, y lo pasa
+       a PDF aquí mismo, en el navegador (js/vista-archivos.js, PROFASE_VISTA.wordPdf; Héctor Daniel Nava, 24-nov-2026,
+       20:06: «puede ser una opción para ver si lo quiero descargar en Word o en PDF y tú lo transformas a PDF según lo haya
+       seleccionado con Branding u original»). Solo en las pantallas que ya enseñan el Word con «Ver» (las que cargan
+       js/vista-archivos.js); con op.wordPdf: false, nunca (lo de Multinacional lleva su propia marca, nunca la de PROFASE). */
+    function esWord(d) {
+      var V = window.PROFASE_VISTA, M = window.PROFASE_MARCA;
+      if (op.wordPdf === false || !V || !V.wordPdf || !V.tipo || !M || !M.eligeWord || op.esPdf(d)) return false;
+      return V.tipo({ nombre: nombre(d), tipo: d.tipo || '' }) === 'word';
+    }
     function baja(d, btn) {
       if (!d) return;
+      if (esWord(d)) {
+        // desde la vista en grande, con lo que ya se escogió arriba («Con marca PROFASE» u «Original»): solo Word o PDF
+        var V = window.PROFASE_VISTA, enVista = V && V.marcaVista ? V.marcaVista(btn) : null;
+        window.PROFASE_MARCA.eligeWord(btn, function (c) { if (c === 'word') bajaComo(d, btn, false); else bajaPdf(d, btn, c === 'pdf-orig'); },
+          enVista === true ? 'marca' : enVista === false ? 'original' : '');
+        return;
+      }
       if (ofrece(d)) { window.PROFASE_MARCA.eligeMarca(btn, function (orig) { bajaComo(d, btn, orig); }, 'el PDF'); return; }
       bajaComo(d, btn, false);
+    }
+    // el Word pasado a PDF: con la marca de siempre (sellaPDF) o, con «original», sin ella; el nombre, el mismo con .pdf
+    function bajaPdf(d, btn, orig) {
+      var t0 = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Pasando a PDF…'; }
+      var nom = nombre(d).replace(/\.(docx|docm|dotx|dotm)$/i, '') + '.pdf';
+      bytes(d).then(function (b) {
+        return window.PROFASE_VISTA.wordPdf({ bytes: b, nombre: nombre(d), marca: !orig, boton: btn });
+      }).then(function (pdf) {
+        guardaArchivo(pdf, d, btn, { nombre: nom, pdf: true });
+        try { if (op.alBajar) op.alBajar(d, orig, 'pdf'); } catch (e) { /* la descarga ya salió */ }
+        if (btn) btn.textContent = 'Listo';
+      }).catch(function (e) {
+        if (e && e.cancelado) { if (btn) btn.textContent = t0; return; }
+        var t = e && e.message && /Qué hacer/.test(e.message) ? e.message
+          : 'No se pudo pasar a PDF. Qué hacer: vuelve a intentar; si sigue, bájalo como Word (Bajar › Word) y conviértelo en tu equipo.';
+        if (btn) { btn.textContent = 'No se pudo'; btn.title = t; }
+        try { if (window.PORTAL && PORTAL.avisoChico) PORTAL.avisoChico({ id: 'word-pdf', texto: t, ms: 15000 }); else if (window.PORTAL && PORTAL.toast) PORTAL.toast(t); } catch (x) { /* el botón ya lo dice */ }
+      }).then(function () {
+        if (btn) setTimeout(function () { btn.textContent = t0; btn.disabled = false; }, 1200);
+      });
     }
     function bajaComo(d, btn, orig) {
       var t0 = btn ? btn.textContent : '';

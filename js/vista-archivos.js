@@ -18,7 +18,7 @@
        marca)»; se abre con la marca. La marca es la misma de los PDF sellados (PROFASE_MARCA.sellaPDF): la marca de agua
        al centro (PROFASE_MARCA.marcaAgua, la misma imagen y la misma opacidad) y abajo a la izquierda el signo, «PROFASE»
        y «Asesoría Contable, Legal y Fiscal», en cada hoja o lámina (en Excel, sobre lo que se ve). Solo cambia cómo se ve:
-       «Bajar» sigue igual (lo hace la página; los Word, Excel y PowerPoint, tal cual se mandaron).
+       «Bajar» lo hace la página (los Excel y PowerPoint, tal cual se mandaron; un Word, como Word o pasado a PDF).
      PROFASE_VISTA.tipo(a)     'hojas' (xlsx, xlsm, xls, ods, csv), 'word', 'ppt', 'xml', 'texto' (txt, log, json, md) o
                                '' si aquí no se ve (los PDF, las fotos, los videos y los audios tienen su propia vista);
                                a = {nombre, tipo}
@@ -36,6 +36,11 @@
        op.alCerrar()           (opcional) avisa que se cerró
      PROFASE_VISTA.abierta()   si hay una abierta de esta página (aquí o en la de arriba)
      PROFASE_VISTA.cierra()    la cierra sin regresar el foco
+     PROFASE_VISTA.marcaVista(btn)  cómo se está viendo, para «Bajar» de esa vista: verdadero con la marca, falso el
+                               original, null si el botón no es de la vista abierta o no trae para escoger (js/visor.js,
+                               al bajar un Word: con lo escogido arriba, solo «PDF» o «Word»)
+     PROFASE_VISTA.wordPdf(op) pasa un Word a PDF (op.bytes, op.nombre, op.marca, op.boton) y regresa sus bytes; la descarga
+                               la hace js/visor.js (ver «Bajar un Word como PDF», abajo)
    Cómo es (lo mismo que tenía el chat): se ve dentro del portal, sin bajar nada. El Excel se lee en un proceso aparte
    (Worker) con SheetJS y ExcelJS de cdnjs (las mismas versiones de siempre), para que un archivo raro no pueda tocar la
    página; el XML se lee con el lector del navegador, sin cargar nada de fuera, y su ficha del CFDI y el XML acomodado
@@ -506,8 +511,9 @@
     + '#pf-vx .vx-sello .vx-pie b{color:#1F3864;font-size:8.7px}#pf-vx .vx-sello .vx-pie i{color:#5A6577;font-size:8px;margin-left:6px}'
     // Word y PowerPoint: el marco aislado ocupa todo; mientras se dibuja, «Abriendo…»
     + '#pf-vx .vx-cu.vx-cu-ofi{position:relative;overflow:hidden;background:var(--surface-2)}'
-    + '#pf-vx .vx-ofi{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;visibility:hidden;background:var(--surface-2)}'
-    + '#pf-vx .vx-ofi.listo{visibility:visible}'
+    // mientras se dibuja, transparente (no «visibility:hidden»: así el iPhone y el iPad ya lo dejan deslizar al enseñarse)
+    + '#pf-vx .vx-ofi{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;opacity:0;pointer-events:none;background:var(--surface-2)}'
+    + '#pf-vx .vx-ofi.listo{opacity:1;pointer-events:auto}'
     + '#pf-vx .vx-carga{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:var(--muted);font-size:14px;padding:24px;text-align:center}'
     + '#pf-vx .vx-gira{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent,#F07A1E);animation:pf-vx-g .8s linear infinite}'
     + '@keyframes pf-vx-g{to{transform:rotate(360deg)}}'
@@ -570,6 +576,13 @@
   }
   var VX = null;   // la vista previa abierta (en esta página o en la de arriba)
   function abierta() { return !!(VX && VX.isConnected); }
+  /* ¿Cómo se está viendo? Para «Bajar» de la vista en grande (Héctor Daniel Nava, 24-nov-2026, 20:35: «ya estoy
+     seleccionando que la quiero con branding entonces que me de bajar Word o bajar PDF»): verdadero con la marca, falso
+     el original, null si el botón no es de esta vista o la vista no trae para escoger. */
+  function marcaVista(btn) {
+    if (!btn || !VX || !VX.isConnected || !VX.contains(btn) || !VX.querySelector('.vx-modo')) return null;
+    return VX.classList.contains('vx-conmarca');
+  }
   function cierra() { if (VX && VX.__cierra) VX.__cierra(true); }
   addEventListener('pagehide', cierra);
   // la marca PROFASE de los PDF sellados (js/marca.js: la marca de agua, el signo y el subtítulo); sin ella, sin selector
@@ -699,7 +712,7 @@
   var LIB = (function () {
     try { var s = document.currentScript && document.currentScript.src; return s ? new URL('lib/', s).href : new URL('js/lib/', location.href).href; } catch (e) { return ''; }
   })();
-  var OFI_LIBS = { word: ['jszip.min.js', 'docx-preview.min.js'], ppt: ['pptx-preview.min.js'] };
+  var OFI_LIBS = { word: ['jszip.min.js', 'docx-preview.min.js'], ppt: ['pptx-preview.min.js'], wordpdf: ['jszip.min.js', 'docx-preview.min.js'] };
   var OFI_TIEMPO = 45000;
   var OFI_CSS = 'html{-webkit-text-size-adjust:100%}html,body{margin:0;padding:0}'
     + 'body{background:#EEF2F7;color:#000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;overscroll-behavior:contain}'
@@ -712,11 +725,14 @@
     + '.pf-agua{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(60%,400px);height:auto;max-height:60%;object-fit:contain;opacity:.55}'
     + '.pf-pie{position:absolute;left:16px;bottom:6px;display:flex;align-items:center;gap:4px;font:9px/1 Helvetica,Arial,sans-serif;white-space:nowrap}'
     + '.pf-pie img{width:11px;height:12px;display:block}.pf-pie b{color:#1F3864;font-weight:700;font-size:8.7px}.pf-pie i{color:#878787;font-size:8px;margin-left:6px}'
-    + 'body.sin-marca .pf-sello{display:none}';
+    + 'body.sin-marca .pf-sello{display:none}'
+    // al pasar a PDF (no se ve: es el marco escondido de la conversión): las hojas a la izquierda, sin sombra ni margen
+    + 'body.pf-pdf{background:#fff}body.pf-pdf .docx-wrapper{align-items:flex-start!important;padding:0!important;background:#fff!important}'
+    + 'body.pf-pdf .docx-wrapper>section.docx{box-shadow:none!important;margin:0 0 24px!important}';
   // lo que corre DENTRO del marco aislado (se manda como texto; no ve nada de esta página)
   function dentro(T) {
     var raiz = document.getElementById('pf-doc'), E = { logo: '', agua: '', sub: '', tipo: '' }, caja = null, natural = 0;
-    function avisa(m) { try { parent.postMessage(m, '*'); } catch (e) { /* sin página */ } }
+    function avisa(m, pasa) { try { parent.postMessage(m, '*', pasa || []); } catch (e) { /* sin página */ } }
     addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); avisa({ pf: 'esc' }); } });
     // la marca de una hoja o lámina: marca de agua al centro y, abajo a la izquierda, el signo, «PROFASE» y el subtítulo
     // (sinPie: solo la marca de agua; el pie va en el margen de abajo de la hoja, nunca encima del texto)
@@ -845,9 +861,136 @@
       caja.style.zoom = z === 1 ? '' : String(z);
     }
     addEventListener('resize', ajusta);
+    /* Bajar un Word como PDF (Héctor Daniel Nava, 24-nov-2026, 20:06: «para los documentos en Word al picarle descargar,
+       puede ser una opción para ver si lo quiero descargar en Word o en PDF y tú lo transformas a PDF según lo haya
+       seleccionado con Branding u original»). Aquí, en un marco aislado igual al de «Ver» (que no se ve): el Word ya
+       dibujado y repartido como en Word se copia completo a una imagen SVG (foreignObject, con sus estilos y sus imágenes
+       de adentro: nada sale a la red ni se baja otra librería) y cada hoja se pinta de esa imagen en un lienzo, al doble
+       de su tamaño, para que se lea bien. Va completo y no hoja por hoja porque los números de las listas siguen de una
+       hoja a la otra. Su texto se mide renglón por renglón (para que el PDF se pueda buscar y copiar). A la página solo le
+       salen las fotos de cada hoja y sus renglones; ella arma el PDF y, si se escogió con la marca, le pone la de siempre
+       (sellaPDF). Una hoja que no se pudo repartir (más alta que la página) se parte en hojas por donde no hay renglón.
+       (html2canvas no sirve aquí: copia la página en otro marco y, sin «allow-same-origin», no la puede leer.) */
+    function textos(h) {
+      var R = h.getBoundingClientRect(), out = [], rg = document.createRange(), cur = null, n;
+      var w = document.createTreeWalker(h, NodeFilter.SHOW_TEXT, null);
+      function suelta() { if (cur) { out.push(cur); cur = null; } }
+      while ((n = w.nextNode())) {
+        var s = n.nodeValue, el = n.parentElement;
+        if (!s || !/\S/.test(s) || !el) continue;
+        var cs = getComputedStyle(el);
+        if (cs.visibility !== 'visible') continue;
+        var fs = parseFloat(cs.fontSize) || 12, re = /\S+/g, m, mismo = false;
+        while ((m = re.exec(s))) {
+          rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+          var rs = rg.getClientRects();
+          if (!rs.length || rs[0].width < 0.3 || rs[0].height < 0.3) continue;
+          var r = rs[0], x = r.left - R.left, y = r.top - R.top, hueco = cur ? x - (cur.x + cur.w) : 0;
+          if (cur && Math.abs(y - cur.y) < Math.max(2, Math.min(r.height, cur.h) * 0.35) && hueco > -1 && hueco < fs * 1.6 && Math.abs(fs - cur.f) < 0.6) {
+            // en el mismo texto, entre palabras va su espacio; entre dos pedazos de texto, solo si hay hueco
+            cur.t += (mismo || hueco > fs * 0.12 ? ' ' : '') + m[0];
+            cur.w = r.right - R.left - cur.x; cur.h = Math.max(cur.h, r.height);
+          } else { suelta(); cur = { t: m[0], x: x, y: y, w: r.width, h: r.height, f: fs }; }
+          mismo = true;
+        }
+      }
+      suelta();
+      return out;
+    }
+    function trozos(alto, pag, frs) {
+      if (!(pag > 50) || alto <= pag * 1.25) return [[0, alto]];   // casi del alto de la página: en una sola, un poco más chica
+      var out = [], a = 0;
+      while (alto - a > pag + 1) {
+        var y = a + pag, lim = a + pag * 0.6, otra = true;
+        // el corte no parte un renglón: sube hasta el primer hueco
+        while (otra && y > lim) {
+          otra = false;
+          for (var i = 0; i < frs.length; i++) { var f = frs[i]; if (f.y < y - 0.5 && f.y + f.h > y + 0.5) { y = f.y - 1; otra = true; } }
+        }
+        if (y <= lim) y = a + pag;
+        out.push([a, y]); a = y;
+      }
+      out.push([a, alto]);
+      return out;
+    }
+    function aJpg(cv) {
+      return new Promise(function (ok, ko) {
+        cv.toBlob(function (b) {
+          if (!b) { ko(new Error('no salió la foto de la hoja')); return; }
+          b.arrayBuffer().then(ok, ko);
+        }, 'image/jpeg', 0.92);
+      });
+    }
+    function espera(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    // todo el Word, como una imagen SVG del mismo ancho que aquí (sus estilos van dentro, en raiz)
+    function imagenDe(caja, W, H) {
+      var c = raiz.cloneNode(true);
+      Array.prototype.forEach.call(c.querySelectorAll('.pf-sello,script'), function (x) { x.remove(); });
+      var css = 'html,body{margin:0;padding:0}.pf-svg{margin:0;padding:0;width:' + W + 'px;background:#fff;color:#000;'
+        + 'font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}'
+        + '.pf-svg .docx-wrapper{align-items:flex-start!important;padding:0!important;margin:0!important;background:#fff!important}'
+        + '.pf-svg .docx-wrapper>section.docx{box-shadow:none!important;margin:0 0 24px!important}';
+      var div = document.createElement('div');
+      div.className = 'pf-svg';
+      div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      var st = document.createElement('style'); st.textContent = css;
+      div.appendChild(st);
+      while (c.firstChild) div.appendChild(c.firstChild);
+      var x = new XMLSerializer().serializeToString(div);
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">'
+        + '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + x + '</foreignObject></svg>';
+      return new Promise(function (ok, ko) {
+        var im = new Image();
+        im.onload = function () {
+          var d = im.decode ? im.decode().catch(function () { /* ya está */ }) : Promise.resolve();
+          d.then(function () { ok(im); });
+        };
+        im.onerror = function () { ko(new Error('no se pudo copiar el documento a imagen')); };
+        im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    }
+    async function aPdf(m) {
+      var caja = raiz.querySelector('.docx-wrapper') || raiz;
+      var hojas = Array.prototype.slice.call(raiz.querySelectorAll('section.docx')), ancho = 0, esc = +m.escala || 2;
+      hojas.forEach(function (h) { ancho = Math.max(ancho, h.offsetWidth); });
+      if (!hojas.length || !ancho) throw new Error('no trae hojas');
+      // del mismo ancho que la imagen: así las hojas quedan en el mismo lugar aquí y allá
+      var W = Math.ceil(ancho);
+      document.body.style.width = W + 'px';
+      void document.body.offsetHeight;
+      var C = caja.getBoundingClientRect(), H = Math.ceil(caja.scrollHeight || C.height) + 2;
+      var im = await imagenDe(caja, W, H);
+      // Safari a veces pinta la primera vez sin las imágenes de adentro: una pasada completa en chiquito que no se usa,
+      // y un respiro antes de pintar las hojas
+      var cv = document.createElement('canvas'), cx = cv.getContext('2d');
+      cv.width = 64; cv.height = Math.max(1, Math.min(4096, Math.round(64 * H / W)));
+      try { cx.drawImage(im, 0, 0, cv.width, cv.height); } catch (e) { /* nada */ }
+      await espera(150);
+      for (var i = 0; i < hojas.length; i++) {
+        var h = hojas[i], R = h.getBoundingClientRect(), sx = R.left - C.left, sy = R.top - C.top;
+        var alto = h.offsetHeight, w = h.offsetWidth, pag = parseFloat(getComputedStyle(h).minHeight) || alto, frs = textos(h);
+        var cortes = trozos(alto, pag, frs);
+        for (var k = 0; k < cortes.length; k++) {
+          var a = cortes[k][0], b = cortes[k][1], hh = Math.max(1, b - a);
+          avisa({ pf: 'avance', i: i + 1, n: hojas.length });
+          cv.width = Math.ceil(w * esc); cv.height = Math.ceil(hh * esc);
+          cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, cv.width, cv.height);
+          cx.drawImage(im, sx, sy + a, w, hh, 0, 0, w * esc, hh * esc);
+          var img = await aJpg(cv);
+          var suyos = frs.filter(function (f) { var c = f.y + f.h / 2; return c >= a && c < b; }).map(function (f) {
+            return { t: f.t, x: f.x, y: f.y - a, w: f.w, h: f.h, f: f.f };
+          });
+          avisa({ pf: 'hoja', w: w, pag: pag, alto: hh, img: img, textos: suyos }, [img]);
+          await espera(0);
+        }
+      }
+      cv.width = 0; cv.height = 0;
+      return hojas.length;
+    }
     async function abre(m) {
-      E.logo = m.logo || ''; E.agua = m.agua || ''; E.sub = m.sub || ''; E.tipo = m.tipo;
+      E.logo = m.logo || ''; E.agua = m.pdf ? '' : (m.agua || ''); E.sub = m.sub || ''; E.tipo = m.tipo;
       document.body.classList.toggle('sin-marca', !m.marca);
+      document.body.classList.toggle('pf-pdf', !!m.pdf);
       if (m.fondo) document.body.style.background = m.fondo;
       var n = 0;
       if (m.tipo === 'word') {
@@ -883,9 +1026,24 @@
         if (E.agua) Array.prototype.forEach.call(lam, function (x) { x.appendChild(sello(null)); });
       }
       sinLigas();
-      ajusta();
+      if (!m.pdf) ajusta();
       if (!n) throw new Error('no trae hojas');
       return n;
+    }
+    /* Ya se ve (24-nov-2026, 20:10, Héctor Daniel Nava: «cuando abro el chat y veo un Word, no hace scroll down. Tengo que
+       irme a original y luego regresar al de branding y luego ya baja»): en el iPhone y el iPad el marco ya estaba
+       dibujado cuando la página lo enseñó, y su deslizar no se ponía al día hasta que algo cambiaba adentro (como «Original»
+       y de regreso). Al enseñarse, aquí se mueve el alto un pixel, dos cuadros seguidos, y se regresa: el mismo cambio
+       que hacía ese ir y venir, sin que se note; y otra vez un momento después, por si el teléfono lo enseñó más tarde. */
+    function alVerse() {
+      var b = document.body, r = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+      function mueve() {
+        r(function () {
+          b.style.paddingBottom = '1px'; void b.offsetHeight;
+          r(function () { b.style.paddingBottom = ''; void b.offsetHeight; });
+        });
+      }
+      mueve(); setTimeout(mueve, 400);
     }
     addEventListener('message', function (ev) {
       // JSZip y las librerías se mandan mensajes a sí mismas: esos no son de la página; y de la página, solo lo que trae
@@ -894,8 +1052,12 @@
       var m = ev.data || {};
       if (!m || typeof m !== 'object' || m.t !== T) return;
       if (m.pf === 'abre') {
-        abre(m).then(function (n) { avisa({ pf: 'hecho', n: n }); }, function (e) { avisa({ pf: 'falla', m: String((e && e.message) || e || '').slice(0, 200) }); });
+        abre(m).then(function (n) {
+          if (!m.pdf) { avisa({ pf: 'hecho', n: n }); return; }
+          return aPdf(m).then(function (k) { avisa({ pf: 'pdf', n: k }); });
+        }).catch(function (e) { avisa({ pf: 'falla', m: String((e && e.message) || e || '').slice(0, 200) }); });
       } else if (m.pf === 'marca') document.body.classList.toggle('sin-marca', !m.si);
+      else if (m.pf === 'visible') alVerse();
     });
     avisa({ pf: 'listo' });
   }
@@ -930,7 +1092,10 @@
       function termina(bien, porque) {
         if (fin) return;
         fin = true; clearTimeout(reloj);
-        if (bien) { fr.classList.add('listo'); var c = cu.querySelector('.vx-carga'); if (c) c.remove(); }
+        if (bien) {
+          fr.classList.add('listo'); var c = cu.querySelector('.vx-carga'); if (c) c.remove();
+          try { fr.contentWindow.postMessage({ pf: 'visible', t: T }, '*'); } catch (e) { /* ya se cerró */ }
+        }
         else if (v.isConnected) {
           try { if (porque && window.PORTAL && PORTAL.fallaAnota) PORTAL.fallaAnota('vista de archivos: ' + q + ': ' + porque, ''); } catch (e) { /* nada */ }
           fr.remove();
@@ -955,6 +1120,139 @@
       reloj = setTimeout(function () { termina(false, 'tardó más de ' + OFI_TIEMPO / 1000 + ' s'); }, OFI_TIEMPO);
       fr.srcdoc = marcoDe(q, T);
       cu.appendChild(fr);
+    });
+  }
+  /* ---------- Un Word, en PDF (Héctor Daniel Nava, 24-nov-2026, 20:06; lo pide js/visor.js al escoger «PDF con marca
+     PROFASE» o «PDF original (sin marca)» en «Bajar»). ----------
+     PROFASE_VISTA.wordPdf({ bytes, nombre, marca, boton }) → promesa con el PDF (Uint8Array). El Word se dibuja en un
+     marco aislado igual al de «Ver» (sin la sesión ni la base, sin red), transparente detrás de una ventanita que dice
+     cómo va («Pasando a PDF… hoja 3 de 12», con «Cancelar»); de cada hoja salen su foto y sus renglones y aquí se arma el
+     PDF con pdf-lib (la misma de js/marca.js): la foto de la hoja del tamaño de la página del Word y, encima, su texto
+     invisible en su lugar, para buscar y copiar. Con marca: la de los PDF sellados (PROFASE_MARCA.sellaPDF). Lo que se
+     baja lo hace js/visor.js; aquí no se baja nada. Si se cancela, la promesa falla con e.cancelado. */
+  var PDF_TIEMPO = 45000, CONVIRTIENDO = false;
+  var WP_CSS = '.pf-wp{position:fixed;inset:0;z-index:9450;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,18,32,.55)}'
+    + '.pf-wp-c{width:min(360px,100%);background:var(--surface,#fff);color:var(--ink,#132036);border-radius:16px;padding:18px 18px 14px;box-shadow:0 18px 48px rgba(10,18,32,.35);font-family:var(--f-body,Arial,sans-serif)}'
+    + '.pf-wp-c b{display:block;font-size:16px}.pf-wp-c .pf-wp-n{display:block;margin-top:2px;font-size:13px;color:var(--muted,#5A6577);overflow-wrap:anywhere}'
+    + '.pf-wp-b{height:8px;border-radius:8px;background:var(--surface-2,#EEF2F7);margin:14px 0 8px;overflow:hidden}.pf-wp-b i{display:block;height:100%;width:4%;background:var(--accent,#F07A1E);border-radius:8px;transition:width .25s}'
+    + '.pf-wp-c p{margin:0 0 12px;font-size:13.5px}.pf-wp-c button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line-strong,#C4CDDA);background:var(--surface,#fff);color:inherit;font:inherit;font-weight:600;cursor:pointer}'
+    + '.pf-wp-f{position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;opacity:0;pointer-events:none;z-index:9440}';
+  function u8(b) { return b instanceof Uint8Array ? b : ArrayBuffer.isView(b) ? new Uint8Array(b.buffer, b.byteOffset, b.byteLength) : new Uint8Array(b); }
+  function qh(t) { return new Error(t); }
+  async function wordPdf(op) {
+    op = op || {};
+    if (CONVIRTIENDO) throw qh('Ya se está pasando otro Word a PDF. Qué hacer: espera a que termine y vuelve a picar «Bajar».');
+    var M = window.PROFASE_MARCA;
+    if (!M || !M.pdfLib) throw qh('No se pudo pasar a PDF aquí. Qué hacer: vuelve a cargar la pantalla; si sigue, bájalo como Word y conviértelo en tu equipo.');
+    CONVIRTIENDO = true;
+    try {
+      var b = typeof op.bytes === 'function' ? op.bytes() : op.bytes;
+      b = await b;
+      if (!b) throw qh('No llegó el archivo. Qué hacer: vuelve a intentar en un momento.');
+      b = u8(b);
+      if (b.length > MAX_OFI) throw qh('Es muy grande para pasarlo a PDF aquí. Qué hacer: bájalo como Word y conviértelo en tu equipo.');
+      revisaOfi(b, 'word');
+      var L = await M.pdfLib();
+      if (!L || !L.PDFDocument) throw qh('No se pudo pasar a PDF aquí. Qué hacer: vuelve a intentar; si sigue, bájalo como Word y conviértelo en tu equipo.');
+      var pdf = await convierte(b, L, op);
+      if (op.marca && M.sellaPDF) pdf = (await M.sellaPDF(pdf, { titulo: titulo(op.nombre) })) || pdf;
+      return pdf;
+    } finally { CONVIRTIENDO = false; }
+  }
+  function titulo(n) { return String(n || 'documento').replace(/\.(docx|docm|dotx|dotm)$/i, ''); }
+  function convierte(b, L, op) {
+    return new Promise(function (ok, ko) {
+      var D = document;
+      try { if (op.boton && op.boton.ownerDocument && op.boton.ownerDocument.body) D = op.boton.ownerDocument; } catch (e) { D = document; }
+      var W = D.defaultView || window, T = azar(), fin = false, reloj = 0, cadena = Promise.resolve(), doc = null, font = null, letras = null;
+      if (!D.getElementById('pf-wp-css')) { var st = D.createElement('style'); st.id = 'pf-wp-css'; st.textContent = WP_CSS; (D.head || D.documentElement).appendChild(st); }
+      var caja = D.createElement('div');
+      caja.className = 'pf-wp'; caja.setAttribute('role', 'dialog'); caja.setAttribute('aria-modal', 'true'); caja.setAttribute('aria-label', 'Pasando a PDF'); caja.setAttribute('data-sin-jalar', '');
+      caja.innerHTML = '<div class="pf-wp-c"><b>Pasando a PDF' + (op.marca ? ' con marca PROFASE' : ' sin marca') + '</b><span class="pf-wp-n">' + esc(op.nombre || '') + '</span>'
+        + '<div class="pf-wp-b" aria-hidden="true"><i></i></div><p aria-live="polite">Preparando el documento…</p><button type="button" data-wp-x>Cancelar</button></div>';
+      var fr = D.createElement('iframe');
+      fr.className = 'pf-wp-f'; fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1; fr.title = 'Word para pasar a PDF';
+      fr.setAttribute('sandbox', 'allow-scripts'); fr.setAttribute('referrerpolicy', 'no-referrer');
+      var barra = caja.querySelector('.pf-wp-b i'), dice = caja.querySelector('p');
+      function cuenta(i, n) {
+        barra.style.width = Math.max(4, Math.min(100, Math.round(100 * i / Math.max(1, n)))) + '%';
+        dice.textContent = 'Hoja ' + i + ' de ' + n + '…';
+      }
+      function espera() { clearTimeout(reloj); reloj = setTimeout(function () { termina(qh('Tardó demasiado en pasarlo a PDF. Qué hacer: vuelve a intentar; si sigue, bájalo como Word y conviértelo en tu equipo.'), 'tardó más de ' + PDF_TIEMPO / 1000 + ' s'); }, PDF_TIEMPO); }
+      function termina(err, porque, res) {
+        if (fin) return;
+        fin = true; clearTimeout(reloj);
+        W.removeEventListener('message', oye); D.removeEventListener('keydown', tecla, true);
+        caja.remove(); fr.remove();
+        try { if (window.PORTAL && PORTAL.escribiendo) PORTAL.escribiendo('word-pdf', false); } catch (e) { /* nada */ }
+        try { if (op.boton && op.boton.focus) op.boton.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+        if (err) {
+          try { if (porque && window.PORTAL && PORTAL.fallaAnota) PORTAL.fallaAnota('Word a PDF: ' + porque, ''); } catch (e) { /* nada */ }
+          ko(err);
+        } else ok(res);
+      }
+      function cancela() { var e = qh('Se canceló'); e.cancelado = true; termina(e); }
+      function tecla(ev) { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cancela(); } }
+      caja.addEventListener('click', function (ev) { if (ev.target.closest('[data-wp-x]')) cancela(); });
+      // una hoja: su foto (del tamaño de la página del Word) y, encima, sus renglones invisibles (para buscar y copiar)
+      function hoja(m) {
+        var w = +m.w, pag = +m.pag, alto = +m.alto;
+        if (!(w > 0 && pag > 0 && alto > 0) || !(m.img instanceof ArrayBuffer)) throw new Error('hoja sin datos');
+        var wp = w * 0.75, pp = pag * 0.75, hp = alto * 0.75, s = hp > pp ? pp / hp : 1, dw = wp * s, dh = hp * s, x0 = (wp - dw) / 2;
+        return doc.embedJpg(new Uint8Array(m.img)).then(function (img) {
+          var pg = doc.addPage([wp, pp]);
+          pg.drawImage(img, { x: x0, y: pp - dh, width: dw, height: dh });
+          var lst = Array.isArray(m.textos) ? m.textos.slice(0, 20000) : [];
+          if (!lst.length) return;
+          var key = pg.node.newFontDictionary(font.name, font.ref), ops = [L.pushGraphicsState(), L.beginText(), L.setTextRenderingMode(L.TextRenderingMode.Invisible)];
+          lst.forEach(function (f) {
+            var t = Array.from(String(f.t || '').slice(0, 2000)).map(function (c) { return letras.has(c.codePointAt(0)) ? c : '?'; }).join('');
+            var tam = (+f.f || 12) * 0.75 * s, ancho = (+f.w || 0) * 0.75 * s, enc = null, tw = 0;
+            if (!t.trim() || !(tam > 0.5)) return;
+            try { enc = font.encodeText(t); tw = font.widthOfTextAtSize(t, tam); } catch (e) { return; }
+            var sq = tw > 0 && ancho > 0 ? Math.max(10, Math.min(1000, 100 * ancho / tw)) : 100;
+            var x = x0 + (+f.x || 0) * 0.75 * s, y = pp - ((+f.y || 0) + (+f.h || 0) * 0.8) * 0.75 * s;
+            ops.push(L.setFontAndSize(key, tam), L.setCharacterSqueeze(sq), L.setTextMatrix(1, 0, 0, 1, x, y), L.showText(enc));
+          });
+          ops.push(L.endText(), L.popGraphicsState());
+          pg.pushOperators.apply(pg, ops);
+        });
+      }
+      function oye(ev) {
+        if (fin || ev.source !== fr.contentWindow) return;   // solo lo que viene de este marco
+        var m = ev.data || {};
+        espera();
+        if (m.pf === 'listo') {
+          var copia = b.slice().buffer;
+          fr.contentWindow.postMessage({ pf: 'abre', t: T, tipo: 'word', b: copia, marca: false, pdf: true, escala: 2, fondo: '#fff' }, '*', [copia]);
+        } else if (m.pf === 'avance') cuenta(+m.i || 0, +m.n || 1);
+        else if (m.pf === 'hoja') cadena = cadena.then(function () { return hoja(m); });
+        else if (m.pf === 'pdf') {
+          dice.textContent = 'Juntando el PDF…';
+          cadena.then(function () {
+            if (!doc.getPageCount()) throw new Error('sin hojas');
+            try { doc.setTitle(titulo(op.nombre), { showInWindowTitleBar: true }); doc.setCreator('PROFASE'); } catch (e) { /* sin título */ }
+            return doc.save({ useObjectStreams: false });
+          }).then(function (r) { termina(null, '', r); }, function (e) {
+            termina(qh('No se pudo pasar a PDF. Qué hacer: vuelve a intentar; si sigue, bájalo como Word y conviértelo en tu equipo.'), String((e && e.message) || e || 'sin detalle'));
+          });
+        } else if (m.pf === 'falla') termina(qh('No se pudo pasar este Word a PDF aquí; ya quedó avisado. Qué hacer: bájalo como Word (Bajar › Word) y conviértelo en tu equipo.'), String(m.m || 'sin detalle'));
+      }
+      L.PDFDocument.create().then(function (d) {
+        doc = d;
+        return doc.embedFont(L.StandardFonts.Helvetica);
+      }).then(function (f) {
+        font = f; letras = new Set(f.getCharacterSet());
+        if (fin) return;
+        W.addEventListener('message', oye);
+        D.addEventListener('keydown', tecla, true);
+        try { if (window.PORTAL && PORTAL.escribiendo) PORTAL.escribiendo('word-pdf', true); } catch (e) { /* nada */ }
+        D.body.appendChild(caja);
+        D.body.appendChild(fr);
+        try { caja.querySelector('button').focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
+        espera();
+        fr.srcdoc = marcoDe('wordpdf', T);
+      }).catch(function (e) { termina(qh('No se pudo pasar a PDF. Qué hacer: vuelve a intentar en un momento.'), String((e && e.message) || e || '')); });
     });
   }
   var ABRIENDO = false;
@@ -1008,5 +1306,5 @@
     if (falla) throw falla;
     return v;
   }
-  window.PROFASE_VISTA = { tipo: tipo, ver: ver, abierta: abierta, cierra: cierra };
+  window.PROFASE_VISTA = { tipo: tipo, ver: ver, abierta: abierta, cierra: cierra, wordPdf: wordPdf, marcaVista: marcaVista };
 })();

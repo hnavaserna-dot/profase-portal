@@ -34,8 +34,10 @@
     m.W.removeEventListener('resize', m.cierra); m.W.removeEventListener('scroll', m.cierra, true);
     try { if (m.btn && m.btn.focus && m.devuelve) m.btn.focus(); } catch (e) { /* sin foco */ }
   }
-  /* El menú junto al botón: cb(true) = original, cb(false) = con marca. Esc o picar fuera lo cierra sin bajar nada. */
-  function eligeMarca(btn, cb, que) {
+  /* El menú junto al botón, con sus opciones (items: [{v, cls, t, s}]): cb(v) con la que se escogió. Esc o picar fuera lo
+     cierra sin bajar nada. Una sola pieza para «Con marca PROFASE» / «Original (sin marca)» (eligeMarca) y para el Word
+     (eligeWord: el Word tal cual, el PDF con marca o el PDF sin marca). */
+  function menuJunto(btn, titulo, items, cb) {
     cierraMenu();
     // el menú sale en la página del botón: si el botón vive en otra (la vista previa del chat va en la página de arriba,
     // encima de toda la pantalla: 6-nov-2026), ahí mismo, junto a él y encima de todo
@@ -52,14 +54,17 @@
         + '.pm-menu button:hover,.pm-menu button:focus-visible{background:var(--surface-2,#EEF2F7);outline:none}'
         + '.pm-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--accent,#F07A1E)}'
         + '.pm-menu .pm-ic{display:inline-block;width:14px;height:16px;margin-right:7px;vertical-align:-3px;object-fit:contain}'
-        + '.pm-menu .pm-ori .pm-ic{width:11px;height:14px;border:1.5px solid currentColor;border-radius:2px;margin-left:1px;margin-right:9px;box-sizing:border-box}';
+        + '.pm-menu .pm-ori .pm-ic{width:11px;height:14px;border:1.5px solid currentColor;border-radius:2px;margin-left:1px;margin-right:9px;box-sizing:border-box}'
+        + '.pm-menu .pm-doc .pm-ic{width:11px;height:14px;border:1.5px solid currentColor;border-radius:2px;margin-left:1px;margin-right:9px;box-sizing:border-box;'
+        + 'background:linear-gradient(currentColor,currentColor) 2px 3px/5px 1.5px no-repeat,linear-gradient(currentColor,currentColor) 2px 6px/5px 1.5px no-repeat,linear-gradient(currentColor,currentColor) 2px 9px/3px 1.5px no-repeat}';
       (D.head || D.documentElement).appendChild(st);
     }
     var el = D.createElement('div');
-    el.className = 'pm-menu'; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', '¿Cómo lo bajo?');
-    el.innerHTML = '<div class="pm-t">' + (que ? 'Bajar ' + que : '¿Cómo lo bajo?') + '</div>'
-      + '<button type="button" role="menuitem" class="pm-con" data-pm="0"><span><img class="pm-ic" src="img/logo.png" alt="">Con marca PROFASE</span><small>Con el signo y la marca, como siempre</small></button>'
-      + '<button type="button" role="menuitem" class="pm-ori" data-pm="1"><span><i class="pm-ic"></i>Original (sin marca)</span><small>Sin la marca PROFASE, para entregar o imprimir</small></button>';
+    el.className = 'pm-menu'; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', titulo);
+    el.innerHTML = '<div class="pm-t">' + titulo + '</div>' + items.map(function (it) {
+      return '<button type="button" role="menuitem" class="' + it.cls + '" data-pm="' + it.v + '"><span>'
+        + (it.cls === 'pm-con' ? '<img class="pm-ic" src="img/logo.png" alt="">' : '<i class="pm-ic"></i>') + it.t + '</span><small>' + it.s + '</small></button>';
+    }).join('');
     D.body.appendChild(el);
     // junto al botón, sin salirse de la pantalla (abajo si cabe; si no, arriba)
     var r = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : { left: 8, right: 8, top: 8, bottom: 8 };
@@ -80,9 +85,9 @@
       var b = ev.target.closest('[data-pm]');
       if (!b) return;
       ev.preventDefault(); ev.stopPropagation();
-      var orig = b.getAttribute('data-pm') === '1';
+      var v = b.getAttribute('data-pm');
       m.devuelve = false; cierraMenu();
-      cb(orig);
+      cb(v);
     });
     D.addEventListener('keydown', m.tecla, true);
     setTimeout(function () { if (MENU === m) D.addEventListener('pointerdown', m.fuera, true); }, 0);
@@ -90,6 +95,35 @@
     MENU = m;
     try { if (window.PORTAL && window.PORTAL.abreMenu) window.PORTAL.abreMenu('marca'); } catch (e) { /* sin aviso */ }
     try { el.querySelector('button').focus(); } catch (e) { /* sin foco */ }
+  }
+  var CON = { v: '0', cls: 'pm-con', t: 'Con marca PROFASE', s: 'Con el signo y la marca, como siempre' };
+  var ORI = { v: '1', cls: 'pm-ori', t: 'Original (sin marca)', s: 'Sin la marca PROFASE, para entregar o imprimir' };
+  /* cb(true) = original, cb(false) = con marca */
+  function eligeMarca(btn, cb, que) {
+    menuJunto(btn, que ? 'Bajar ' + que : '¿Cómo lo bajo?', [CON, ORI], function (v) { cb(v === '1'); });
+  }
+  /* Bajar un Word (Héctor Daniel Nava, 24-nov-2026, 20:06: «para los documentos en Word al picarle descargar, puede ser una
+     opción para ver si lo quiero descargar en Word o en PDF y tú lo transformas a PDF según lo haya seleccionado con
+     Branding u original»): cb('word') = el Word tal cual, cb('pdf') = en PDF con la marca, cb('pdf-orig') = en PDF sin
+     la marca. A todos los que pueden bajar el Word: el Word ya sale tal cual, sin la marca. */
+  /* Bajar un Word: como Word o pasado a PDF (Héctor Daniel Nava, 24-nov-2026, 20:06). Desde la lista, las tres opciones;
+     desde la vista en grande, ya con lo escogido arriba (20:35: «ya estoy seleccionando que la quiero con branding
+     entonces que me de bajar Word o bajar PDF»): como = 'marca' o 'original', y solo Word o el PDF de lo que se ve. */
+  function eligeWord(btn, cb, como) {
+    var W = { v: 'word', cls: 'pm-doc', t: 'Word (tal cual)', s: 'El archivo como se subió, para editarlo' };
+    var PC = { v: 'pdf', cls: 'pm-con', t: 'PDF con marca PROFASE', s: 'Lo paso a PDF con el signo y la marca' };
+    var PO = { v: 'pdf-orig', cls: 'pm-ori', t: 'PDF original (sin marca)', s: 'Lo paso a PDF sin la marca, para entregar o imprimir' };
+    if (como === 'marca') {
+      menuJunto(btn, 'Bajar con marca PROFASE', [{ v: 'pdf', cls: 'pm-con', t: 'PDF', s: 'Lo paso a PDF con el signo y la marca, como lo ves' },
+        { v: 'word', cls: 'pm-doc', t: 'Word', s: 'El archivo como se subió, para editarlo (el Word no lleva la marca)' }], cb);
+      return;
+    }
+    if (como === 'original') {
+      menuJunto(btn, 'Bajar original (sin marca)', [{ v: 'pdf-orig', cls: 'pm-ori', t: 'PDF', s: 'Lo paso a PDF sin la marca, como lo ves' },
+        { v: 'word', cls: 'pm-doc', t: 'Word', s: 'El archivo como se subió, para editarlo' }], cb);
+      return;
+    }
+    menuJunto(btn, 'Bajar el Word', [W, PC, PO], cb);
   }
   // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
   document.addEventListener('profase-menu', function (e) {
@@ -705,5 +739,5 @@
     renglones: renglones, materializa: materializa,
     pdfJS: pdfJS, marcaPDF: marcaPDF, encabezadoPDF: encabezadoPDF, marcaAguaPDF: marcaAguaPDF, sellaPDF: sellaPDF,
     precargaSello: precargaSello, pdfDeLibro: pdfDeLibro, empareja: empareja,
-    sinMarca: sinMarca, ofreceOriginal: ofreceOriginal, eligeMarca: eligeMarca };
+    sinMarca: sinMarca, ofreceOriginal: ofreceOriginal, eligeMarca: eligeMarca, eligeWord: eligeWord, pdfLib: pdfLib };
 })();
