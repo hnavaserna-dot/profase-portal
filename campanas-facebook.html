@@ -460,7 +460,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     $('pie-pago').textContent = PAG === 'quo' ? 'En Sistemas Quo solo se paga lo que tú promocionas con tu clic («Promocionar»), dentro de tu tope del mes.' : 'En Profase Fiscal nunca se promociona ni se paga nada.';
     var esp = PAG === 'quo' && !!(DATOS && DATOS.quo_espera);
     $('espera').hidden = !esp;
-    if (esp) $('espera').textContent = 'Sistemas Quo no publica nada, ni en Facebook ni en Instagram, hasta que abra la venta de los sistemas Quo (compra en línea y precios). Lo que está listo se guarda en «Para el lanzamiento», sin fecha: ahí no se puede autorizar ni publicar. Ese día se le ponen sus fechas nuevas y vuelve a «Por autorizar» para tu visto bueno.';
+    if (esp) $('espera').textContent = 'Sistemas Quo no publica nada, ni en Facebook ni en Instagram, hasta que abra la venta de los sistemas Quo (compra en línea y precios). Lo que está listo se guarda en «Para el lanzamiento», sin fecha: ahí no se puede autorizar ni publicar, pero sí pedir cambios. Ese día se le ponen sus fechas nuevas y vuelve a «Por autorizar» para tu visto bueno.';
   }
   function pintaCias() {
     var cs = (DATOS.campanas || []).filter(delPag).filter(function (c) { return (c.pubs || []).some(seVe); });
@@ -472,7 +472,9 @@ button,select,input,textarea{font:inherit;color:inherit}
   function notas(p) {
     var h = '';
     if (p.sin_pieza && ['por_autorizar', 'cambio_pedido'].indexOf(p.estado) >= 0 && !p.paso) h += '<div class="msg ojo">Todavía no tiene su pieza: la ves con su texto, pero no se puede autorizar hasta que llegue. En cuanto llegue te aparece aquí con ella y te llega el aviso.</div>';
-    if (p.estado === 'lanzamiento') h += '<div class="msg az">Guardada para el lanzamiento: sin fecha, no se puede autorizar ni publicar hasta que abra la venta de los sistemas Quo. Ese día se le pone su fecha y vuelve a «Por autorizar».</div>';
+    if (p.estado === 'lanzamiento') h += '<div class="msg az">Guardada para el lanzamiento: sin fecha, no se puede autorizar ni publicar hasta que abra la venta de los sistemas Quo. Ese día se le pone su fecha y vuelve a «Por autorizar». Si algo no te gusta, «Pedir cambio».</div>';
+    // 525 (25-nov-2026): lo que pidió cambiar de algo guardado para el lanzamiento; Claude lo corrige en la fábrica de videos
+    if (p.estado === 'lanzamiento' && p.cambio) h += '<div class="msg ojo"><b>Pediste:</b> ' + esc(p.cambio) + (p.cambio_en ? ' <span class="mut">(' + esc(fechaHora(p.cambio_en)) + ')</span>' : '') + '<br>Claude la corrige y te la vuelve a enseñar aquí, todavía para el lanzamiento.</div>';
     if (p.estado === 'cambio_pedido') h += '<div class="msg ojo"><b>Pediste:</b> ' + esc(p.cambio) + (p.cambio_en ? ' <span class="mut">(' + esc(fechaHora(p.cambio_en)) + ')</span>' : '') + '<br>La tarea de Facebook la rehace y te la vuelve a enseñar aquí.</div>';
     if (p.estado === 'no_publicar' && p.no_motivo) h += '<div class="msg">No se publica: ' + esc(p.no_motivo) + '</div>';
     if (p.estado === 'autorizada' && p.previa) h += '<div class="msg az">' + esc(p.autorizada_nota || 'Autorizada antes del CRM') + '.</div>';
@@ -501,7 +503,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (CONSULTA) return '';
     var b = [], vivo = !p.paso;
     if (p.estado === 'por_autorizar' && vivo && conPieza(p)) b.push('<button class="btn bien chico" type="button" data-a="autoriza">Autorizar</button>');
-    if (['por_autorizar', 'autorizada', 'programada'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="cambio">Pedir cambio</button>');
+    if (['por_autorizar', 'autorizada', 'programada', 'lanzamiento'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="cambio">' + (p.estado === 'lanzamiento' && p.cambio ? 'Pedir otro cambio' : 'Pedir cambio') + '</button>');
     if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="edita">Corregir texto</button>');
     if (['no_publicar', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn chico" type="button" data-a="regresa">Regresar a por autorizar</button>');
     if (['por_autorizar', 'autorizada', 'programada', 'cambio_pedido'].indexOf(p.estado) >= 0 && vivo) b.push('<button class="btn peligro chico" type="button" data-a="no">No publicar</button>');
@@ -890,8 +892,10 @@ button,select,input,textarea{font:inherit;color:inherit}
       return;
     }
     if (a === 'cambio') return pregunta('Pedir cambio · ' + p.cuando,
-      p.estado === 'programada' ? 'Ya está programada en Facebook: se quita de ahí hasta que autorices la versión corregida.' : 'La tarea de Facebook la rehace a las 11:10 y te la vuelve a enseñar aquí para tu visto bueno.',
-      '¿Qué quieres que cambie?', 'Pedir el cambio', 'acento', async function (v) { await rpc('fb_cambio', { p_pub: p.id, p_texto: v }); await hecho('Pediste el cambio. Te llega la versión nueva para tu visto bueno.'); }, { max: 2000 });
+      p.estado === 'programada' ? 'Ya está programada en Facebook: se quita de ahí hasta que autorices la versión corregida.'
+        : p.estado === 'lanzamiento' ? 'Claude la corrige (el video o la imagen en la fábrica, o el texto) y te la vuelve a enseñar aquí, todavía para el lanzamiento.' + (p.cambio ? ' Lo que pidas ahora reemplaza lo que ya habías pedido.' : '')
+        : 'La tarea de Facebook la rehace a las 11:10 y te la vuelve a enseñar aquí para tu visto bueno.',
+      '¿Qué quieres que cambie?', 'Pedir el cambio', 'acento', async function (v) { await rpc('fb_cambio', { p_pub: p.id, p_texto: v }); await hecho(p.estado === 'lanzamiento' ? 'Pediste el cambio. Claude la corrige y te la vuelve a enseñar aquí.' : 'Pediste el cambio. Te llega la versión nueva para tu visto bueno.'); }, { max: 2000, valor: p.estado === 'lanzamiento' ? (p.cambio || '') : undefined });
     if (a === 'edita') return pregunta('Corregir el texto · ' + p.cuando,
       (p.estado === 'autorizada' || p.estado === 'programada') ? 'Tu corrección cuenta como autorizada' + (p.estado === 'programada' ? ' y se corrige sola en Facebook.' : '.') : 'Después la autorizas como siempre.',
       'Texto de la publicación (tal cual se publica)', 'Guardar el texto', 'acento', async function (v) { var r = await rpc('fb_edita', { p_pub: p.id, p_texto: v }); await hecho(r && r.igual ? 'El texto no cambió.' : 'Guardaste el texto corregido.'); }, { valor: p.texto, largo: true, max: 5000 });
