@@ -386,7 +386,7 @@
     + '.segv .sg-campo input:not([type=checkbox]):not([type=radio]):not([type=file]),.segv .sg-campo select,.segv .sg-campo textarea,.segv .sg-ctl{display:block;box-sizing:border-box;border:1px solid var(--sg-ln2);background:var(--sg-sf);color:var(--sg-ink);border-radius:10px;padding:9px 12px;font:inherit;font-size:13.5px;min-height:40px;width:100%;max-width:100%}'
     + '.segv .sg-campo textarea{min-height:70px;resize:vertical}'
     + '.segv .sg-campo input:focus,.segv .sg-campo select:focus,.segv .sg-campo textarea:focus,.segv .sg-ctl:focus{outline:none;border-color:var(--sg-ac);box-shadow:0 0 0 3px var(--sg-acs)}'
-    + '.segv .sg-campo input[disabled],.segv .sg-campo select[disabled],.segv .sg-campo input[readonly]{background:var(--sg-sf3);color:var(--sg-ink2)}'
+    + '.segv .sg-campo input:not([type=checkbox]):not([type=radio]):not([type=file])[disabled],.segv .sg-campo input:not([type=checkbox]):not([type=radio]):not([type=file])[readonly],.segv .sg-campo select[disabled],.segv .sg-campo textarea[disabled],.segv .sg-campo textarea[readonly]{background:var(--sg-sf3);color:var(--sg-ink2)}'
     + '.segv .sg-campo .n,.segv .sg-nota{font-size:11.5px;color:var(--sg-ink4);line-height:1.4}'
     + '.segv .sg-chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sg-ink);min-height:36px;cursor:pointer}'
     + '.segv .sg-chk input{width:18px;height:18px;accent-color:var(--sg-ac);flex:none;margin:0}'
