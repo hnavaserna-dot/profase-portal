@@ -550,7 +550,9 @@
       rec_estado: 1, sc_yo: 1, chat_yo: 1, chat_sala_puedo: 1, chat_veo_conectados: 1, cdir_estado: 1, ceq_estado: 1, rh_estado: 1,
       cob_estado: 1, tes_estado: 1, tbc_estado: 1, tdc_estado: 1, mul_estado: 1, bzt_estado: 1, cen_estado: 1, usr_estado: 1,
       rcd_estado: 1, exp_estado: 1, cpf_estado: 1, fb_estado: 1, impi_estado: 1, cos_estado: 1, qchat_estado: 1, est_estado: 1,
-      pcad_estado: 1, ev_estado: 1, cumple_aviso: 1, cal_mis_eventos: 1, agenda_cierre_mias: 1 };
+      pcad_estado: 1, ev_estado: 1, cumple_aviso: 1, cal_mis_eventos: 1, agenda_cierre_mias: 1,
+      // revisión nocturna del 25-nov-2026 (portal/sql/523): las de lo nuevo de esos días, que salían sueltas al entrar
+      bib_estado: 1, vq_estado: 1, mul_timbra_yo: 1, cen_hall_veo: 1 };
     var COLA = null, SIN_LOTE = false, TANDA = 22;
     function sola(fn) { return rpcBase(fn); }
     function copiaDe(d) { return d != null && typeof d === 'object' ? JSON.parse(JSON.stringify(d)) : d; }
@@ -1349,7 +1351,9 @@
   (function ventanasEnMarco() {
     var SEL = '[aria-modal="true"],[role="dialog"],[role="alertdialog"],dialog[open]';
     function seVe(d) {
-      if (!d.getClientRects().length) return false;
+      // revisión nocturna 25-nov-2026: checkVisibility() dice si tiene caja sin obligar al navegador a acomodar en ese
+      // momento toda la pantalla (getClientRects sí lo obliga, aunque la ventana esté escondida); la misma respuesta
+      if (typeof d.checkVisibility === 'function' ? !d.checkVisibility() : !d.getClientRects().length) return false;
       var cs = getComputedStyle(d);
       return cs.visibility !== 'hidden' && cs.display !== 'none';
     }
@@ -3517,7 +3521,8 @@
   var dormir = function (ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); };
   function hayVentana() {
     return [].slice.call(document.querySelectorAll('[aria-modal="true"]')).some(function (d) {
-      if ((d.closest && d.closest('.rc-capa')) || !d.getClientRects().length) return false;
+      // checkVisibility: si tiene caja, sin obligar a acomodar la pantalla (revisión nocturna 25-nov-2026; la misma respuesta)
+      if ((d.closest && d.closest('.rc-capa')) || (typeof d.checkVisibility === 'function' ? !d.checkVisibility() : !d.getClientRects().length)) return false;
       var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
     });
   }

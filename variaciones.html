@@ -71,7 +71,7 @@
     x.onload = function () { var j = lee(x); if (!j) return; marca(cerrado(j)); if (cerrado(j)) lleva(); };
     x.send(null);
   } catch (e) { /* si cierre.json no llega, la página sigue normal */ }
-})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=fd260d43f1"></script><script src="js/tabla-pegada.js?v=c8cd10b7c9"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=0dca8f49aa"></script><script src="js/bitacora.js?v=14742df021"></script><script src="js/seguimiento.js?v=545ca778bd"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/ocultos.js?v=c024042044"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=448072076e"></script><script src="js/variaciones-calculo.js?v=806ac8c6a1"></script><script src="js/hallazgos.js?v=aefcba6d63"></script></head><body>
+})();</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>Portal PROFASE · Variaciones / Movimientos</title><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=8ccddeb868"></script><script src="js/tabla-pegada.js?v=c8cd10b7c9"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=0dca8f49aa"></script><script src="js/bitacora.js?v=14742df021"></script><script src="js/seguimiento.js?v=545ca778bd"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/ocultos.js?v=c024042044"></script><script src="js/quo-al-dia.js?v=bc76e2910d"></script><script src="js/pilas.js?v=448072076e"></script><script src="js/variaciones-calculo.js?v=806ac8c6a1"></script><script src="js/hallazgos.js?v=aefcba6d63"></script></head><body>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Tablero de variaciones — paleta y componentes tomados del proyecto de Figma Make. */
@@ -1464,11 +1464,52 @@ function observaMas(){
 }
 let pendiente = 0;
 const pintarLuego = () => { if(pendiente) return; pendiente = requestAnimationFrame(()=>{ pendiente = 0; pintar(); }); };
+/* (25-nov-2026, revisión nocturna; «Comprobar real»: al abrir, la tabla de Movimientos se armaba completa dos veces —la
+   segunda cuando llega lo ya revisado— y el navegador quitaba y volvía a poner los ~4,400 meses de las cuentas: trabada
+   0.6 s en la laptop y 1.4 s en el celular frenado). Pone los renglones de la tabla y, si ya estaban, solo cambia los que
+   cambiaron: un renglón igual no se toca; de una cuenta en la que solo cambió «Por revisar», solo ese número y su color; si
+   cambia más de la mitad o el número de renglones, todo de una vez, como antes. Cada renglón es un texto (o, el de cada
+   cuenta, {h, base, rev}). Lo que queda en la página es exactamente lo mismo que con innerHTML. marcaSel() y marcaCasilla()
+   cambian la tabla a mano: olvidan lo guardado y la siguiente vez se pone todo. */
+function ponFilas(tb, filas){
+  const h = x => typeof x === "string" ? x : x.h;
+  const antes = tb.__filas;
+  if(antes && antes.length === filas.length && tb.rows.length === filas.length){
+    const cambian = [];
+    for(let i = 0; i < filas.length; i++) if(h(filas[i]) !== h(antes[i])) cambian.push(i);
+    if(!cambian.length){ tb.__filas = filas; return; }
+    if(cambian.length <= filas.length/2){
+      const enteros = [];
+      for(const i of cambian){
+        const n = filas[i], a = antes[i];
+        if(typeof n !== "string" && typeof a !== "string" && n.base === a.base){
+          const s = tb.rows[i].querySelector('[data-g="rev"]');
+          if(s){ s.textContent = n.rev.t; if(n.rev.n) s.style.color = "var(--orange-2)"; else s.removeAttribute("style"); continue; }
+        }
+        enteros.push(i);
+      }
+      if(enteros.length){
+        const t = document.createElement("template");
+        t.innerHTML = enteros.map(i=>h(filas[i])).join("");
+        const nuevos = [...t.content.children];
+        if(nuevos.length === enteros.length){
+          const viejos = enteros.map(i=>tb.rows[i]);
+          viejos.forEach((v, j)=>v.replaceWith(nuevos[j]));
+          tb.__filas = filas; return;
+        }
+      } else { tb.__filas = filas; return; }
+    }
+  }
+  tb.innerHTML = filas.map(h).join("");
+  tb.__filas = filas;
+}
 function marcaSel(rid){
+  const tbS = document.getElementById("tb"); if(tbS) tbS.__filas = null;
   document.querySelectorAll("#tb tr.sel").forEach(tr=>tr.classList.remove("sel"));
   if(rid){ const tr = document.querySelector(`#tb tr[data-rid="${CSS.escape(rid)}"]`); if(tr) tr.classList.add("sel"); }
 }
 function marcaCasilla(rid){
+  const tbC = document.getElementById("tb"); if(tbC) tbC.__filas = null;
   S.marcadas.has(rid) ? S.marcadas.delete(rid) : S.marcadas.add(rid);
   const b = document.querySelector(`#tb [data-cb="${CSS.escape(rid)}"]`); if(b) b.classList.toggle("on", S.marcadas.has(rid));
   const vis = window.__vis||[], all = document.getElementById("cball");
@@ -1560,6 +1601,7 @@ function pintar(){
   let nGrupos = 0;
   if(!vis.length){
     NAV = [];
+    tb.__filas = null;
     tb.innerHTML = `<tr><td colspan="${cols.length+2}"><div class="vacio">Ningún hallazgo cumple estos filtros.<br>Baja el porcentaje de referencia o vuelve a incluir cuentas.</div></td></tr>`;
   } else {
     const celda = (f,k,e) => {
@@ -1622,25 +1664,35 @@ function pintar(){
       return {g, pm, emps:emps.size, rev, alza};
     });
     const topeG = Math.max(1, ...resumenes.flatMap(r=>[...r.pm.values()].map(x=>x.u+x.d)));
+    /* (25-nov-2026, revisión nocturna) Cada cuenta es un renglón; lo de «Por revisar» va aparte (`rev`) porque es lo único
+       que cambia cuando llega lo ya revisado (la segunda pintada al abrir): así ponFilas() solo le cambia ese número y su
+       color, y no vuelve a armar los meses de las ~370 cuentas. El mismo renglón, con lo mismo. */
     const cabeza = ({g, pm, emps, rev, alza}) => {
-      const ab = SH.abiertas.has(g.cta);
-      return `<tr class="gcta${ab?" abierta":""}" data-gcta="${esc(g.cta)}"><td colspan="${cols.length+2}"><div class="gc">
+      const ab = SH.abiertas.has(g.cta), nr = g.filas.length-rev;
+      const pre = `<tr class="gcta${ab?" abierta":""}" data-gcta="${esc(g.cta)}"><td colspan="${cols.length+2}"><div class="gc">
         <button class="gtog" aria-expanded="${ab}" title="${ab?"Contraer":"Desplegar"} los hallazgos de esta cuenta">${ab?"⊟":"⊞"}</button>
         <span class="gn"><span class="cta">${esc(g.cta)}</span><br>${esc(g.nombre)}</span>
         <span class="gk" data-g="hall">${fNum.format(g.filas.length)}</span><span class="gk" data-g="emp">${fNum.format(emps)}</span>
-        <span class="gk" data-g="rev"${g.filas.length-rev?' style="color:var(--orange-2)"':""}>${fNum.format(g.filas.length-rev)}</span>
+        `;
+      const post = `
         <span class="gms" data-g="mes" style="grid-template-columns:repeat(${mesesG.length},minmax(0,1fr))">${mesesG.map(m=>{ const x = pm.get(m), n = x.u+x.d;
           return `<span class="gm" title="${esc(MESES.get(m)||"")}: ${n} ${n===1?"hallazgo":"hallazgos"}${n?` (${x.u} suben, ${x.d} bajan)`:""}" style="${n?`background:color-mix(in srgb, var(--accent) ${Math.round(6+n/topeG*34)}%, transparent)`:""}"><i>${esc(mesCorto(m))}</i>${n?(x.u?`<b class="u">↑${x.u}</b>`:"")+(x.d?`<b class="d">↓${x.d}</b>`:""):'<span style="color:var(--ink-4)">·</span>'}</span>`; }).join("")}</span>
         <span class="gx" data-g="alza">${alza?`<span class="pct up">${esc(pctF(alza))}</span><span class="xt">${esc(alza.cliente)} · ${esc(mesCorto(alza.mes))}</span>`:""}</span>
       </div></td></tr>`;
+      const revTxt = fNum.format(nr);
+      return {h: pre + `<span class="gk" data-g="rev"${nr?' style="color:var(--orange-2)"':""}>${revTxt}</span>` + post,
+              base: pre + post, rev: {t: revTxt, n: nr}};
     };
     const cuerpoG = g => {
-      if(!SH.abiertas.has(g.cta)) return "";
+      if(!SH.abiertas.has(g.cta)) return [];
       const lim = Math.max(SH.lim.get(g.cta) || TANDA, S.sel ? g.filas.findIndex(f=>f.rid===S.sel)+1 : 0);
-      return `<tr class="gsub"><th class="cbcell"></th>${thCols}<th></th></tr>` + g.filas.slice(0, lim).map(filaHTML).join("") + (lim < g.filas.length
-        ? `<tr class="mas"><td colspan="${cols.length+2}"><button class="lnk" data-gmas="${esc(g.cta)}">Mostrando ${fNum.format(lim)} de ${fNum.format(g.filas.length)} de esta cuenta · ver más</button></td></tr>` : "");
+      const l = [`<tr class="gsub"><th class="cbcell"></th>${thCols}<th></th></tr>`].concat(g.filas.slice(0, lim).map(filaHTML));
+      if(lim < g.filas.length) l.push(`<tr class="mas"><td colspan="${cols.length+2}"><button class="lnk" data-gmas="${esc(g.cta)}">Mostrando ${fNum.format(lim)} de ${fNum.format(g.filas.length)} de esta cuenta · ver más</button></td></tr>`);
+      return l;
     };
-    tb.innerHTML = resumenes.map(r=>cabeza(r)+cuerpoG(r.g)).join("");
+    const filas = [];
+    for(const r of resumenes){ filas.push(cabeza(r)); for(const x of cuerpoG(r.g)) filas.push(x); }
+    ponFilas(tb, filas);
     TABLA.siguiente = null;
   }
   document.getElementById("gAbrir").textContent = SH.abiertas.size ? "Contraer todo" : "Desplegar todo";
@@ -1976,7 +2028,9 @@ function pintarResueltas(){
      navegador volver a acomodar y pintar toda la tabla debajo de la ficha (maquetar 1.0 s y pintar 2.4 s en 58 veces). Los
      mismos renglones, en el mismo orden: solo cuándo se agregan. También esperan un momento después de picar o escribir (la
      ficha tarda en salir lo que tarda en llegar su plática, y en ese rato seguían entrando pedazos). */
-  const hayVentana = () => [...document.querySelectorAll('[aria-modal="true"]')].some(d=>d.getClientRects().length)
+  // (25-nov-2026, revisión nocturna) checkVisibility: si la ficha tiene caja, sin obligar al navegador a acomodar en ese
+  // momento la tabla a medias entre pedazo y pedazo (getClientRects sí lo obligaba); la misma respuesta
+  const hayVentana = () => [...document.querySelectorAll('[aria-modal="true"]')].some(d=>typeof d.checkVisibility==="function" ? d.checkVisibility() : d.getClientRects().length)
     || performance.now() - (window.__varToque || -1e9) < 1200;
   if(!window.__varToqueOye){ window.__varToqueOye = true;
     ['pointerdown','keydown'].forEach(t=>addEventListener(t, ()=>{ window.__varToque = performance.now(); }, {capture:true, passive:true})); }

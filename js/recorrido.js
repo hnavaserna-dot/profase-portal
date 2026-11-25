@@ -246,7 +246,7 @@
   // una ventana que pide respuesta (fuera de un recorrido) a la vista
   function hayVentanaG() {
     return Array.prototype.some.call(document.querySelectorAll('[aria-modal="true"]'), function (d) {
-      if (d.closest('.rc-capa') || !d.getClientRects().length) return false;
+      if (d.closest('.rc-capa') || (typeof d.checkVisibility === 'function' ? !d.checkVisibility() : !d.getClientRects().length)) return false;   // sin obligar a acomodar (25-nov-2026)
       var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
     });
   }
@@ -700,7 +700,7 @@
     async function vistos() { try { var r = await window.PORTAL.sb.rpc('recorridos_mios'); return r.error || !Array.isArray(r.data) ? null : r.data; } catch (e) { return null; } }
     function hayVentana() {
       return Array.prototype.some.call(document.querySelectorAll('[aria-modal="true"]'), function (d) {
-        if (d.closest('.rc-capa') || !d.getClientRects().length) return false;
+        if (d.closest('.rc-capa') || (typeof d.checkVisibility === 'function' ? !d.checkVisibility() : !d.getClientRects().length)) return false;   // sin obligar a acomodar (25-nov-2026)
         var cs = getComputedStyle(d); return cs.visibility !== 'hidden' && +cs.opacity > 0.05;
       });
     }

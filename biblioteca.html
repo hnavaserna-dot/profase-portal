@@ -76,7 +76,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=fd260d43f1"></script><script src="js/tabla-pegada.js?v=c8cd10b7c9"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=0dca8f49aa"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/pilas.js?v=448072076e"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=8ccddeb868"></script><script src="js/tabla-pegada.js?v=c8cd10b7c9"></script><script src="js/ordenar.js?v=649ed3d746"></script><script src="js/marca.js?v=0dca8f49aa"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/pilas.js?v=448072076e"></script>
 <style>
 /* Portal PROFASE · Biblioteca legal (Héctor Daniel Nava, 24-nov-2026, al revisar Sisthemis: «podemos hacer algo parecido
    nosotros? para accesar desde el CRM y que nos ayudes con las leyes, códigos y demás; relacionadas de artículos»; «1- todo el
@@ -721,8 +721,10 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
     }).join('');
   }
   $('recientes').addEventListener('click', function (e) { var b = e.target.closest('.fila'); if (b) abreArt(b.getAttribute('data-s'), b.getAttribute('data-c')); });
-  async function inicioNuevo() {
-    var n = 0; try { n = (await rpc('bib_estado')).nuevos7 || 0; } catch (e) {}
+  // ya: lo que trajo bib_estado al abrir (revisión nocturna 25-nov-2026: no se vuelve a pedir en ese mismo momento);
+  // al regresar al inicio se pregunta otra vez, como siempre
+  async function inicioNuevo(ya) {
+    var n = 0; if (ya && typeof ya.nuevos7 === 'number') n = ya.nuevos7; else try { n = (await rpc('bib_estado')).nuevos7 || 0; } catch (e) {}
     $('ini-nuevo').innerHTML = n ? '<p style="margin:0">' + n + (n === 1 ? ' artículo cambió' : ' artículos cambiaron') + ' en la última semana en la Cámara de Diputados o en el SAT.</p>'
       : '<p style="margin:0" class="mut">Nada cambió en la última semana. Cada día a las 5:13 se revisa la Cámara de Diputados y el SAT; lo que cambie sale aquí y, si lo tienes en una carpeta o le dejaste una nota, te llega el aviso.</p>';
   }
@@ -1391,12 +1393,16 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
       if (!P) { $('cargando').textContent = 'Sin conexión con la base. Qué hacer: recarga la página.'; return; }
       var u = await P.listo; if (!u) return;
       if (window.top === window.self) $('logo').hidden = false;
+      // (revisión nocturna 25-nov-2026) el catálogo se pide al mismo tiempo que bib_estado, no después: si no la ve, el
+      // catálogo también falla y manda lo de bib_estado, como antes
+      var pCat = rpc('bib_catalogo').then(function (c) { return { c: c }; }, function (e) { return { e: e }; });
       EST = await rpc('bib_estado');
       if (!EST || !EST.ve) throw new Error('La Biblioteca legal es para el equipo de PROFASE. Qué hacer: entra con tu usuario del CRM.');
       CONSULTA = !!P.consulta || !!EST.consulta; ESCRIBE = !!EST.escribe && !CONSULTA;
       $('consulta').hidden = !CONSULTA;
-      CAT = await rpc('bib_catalogo'); CATS = {}; CAT.forEach(function (l) { CATS[l.sig] = l; });
-      filtros(); pintaIniLeyes(); recientes(); inicioNuevo();
+      var rc = await pCat; if (rc.e) throw rc.e;
+      CAT = rc.c; CATS = {}; CAT.forEach(function (l) { CATS[l.sig] = l; });
+      filtros(); pintaIniLeyes(); recientes(); inicioNuevo(EST);
       $('todo').hidden = false; $('cargando').hidden = true;
       if (!CAT.length) { $('b-ini').hidden = true; error('Todavía no hay leyes cargadas. Qué hacer: espera unos minutos; se cargan solas de la Cámara de Diputados y el SAT.'); }
       var h = (location.hash || '').replace(/^#/, ''); if (h) window.__bibAbre(decodeURIComponent(h));
