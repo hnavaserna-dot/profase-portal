@@ -419,7 +419,8 @@
       }
     }
     [raiz, capa].forEach(function (z) { z.addEventListener('click', clic); z.addEventListener('input', escribe); z.addEventListener('keydown', tecla); });
-    function fuera(e) { if (abierto && !raiz.contains(e.target) && !capa.contains(e.target)) abre(false); }
+    // picar el globo de un recorrido no la cierra (de la mano, 24-nov-2026: en los sistemas Quo el globo vive en la misma página)
+    function fuera(e) { if (abierto && !raiz.contains(e.target) && !capa.contains(e.target) && !(e.target && e.target.closest && e.target.closest('.rc-globo'))) abre(false); }
     // un solo menú a la vez (Daniel, 30-oct-2026: «que no se entrelapen»): si se abre otro menú o se toca fuera de esta pestaña, se cierra
     function otro(e) { if (abierto && e.detail !== yo) abre(false); }
     function tam() { if (!abierto) return; if (celular() !== !!capa.parentNode) pinta(); else ajusta(); }

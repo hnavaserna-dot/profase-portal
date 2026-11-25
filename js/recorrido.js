@@ -35,9 +35,15 @@
      espera: ms    → lo que se abre tarda (una ventana que pide datos a la base): espera hasta ms a que su parte aparezca
                      (o una función que da los ms: 0 si no hay nada que esperar).
      siNo: { titulo, texto } → si su parte no está (no hay nada que palomear), sale al centro con ese texto y «Siguiente»
-                     en lugar de brincarse.
+                     en lugar de brincarse (o una función que lo da, o nada para brincarse).
      hazTexto: lo que dice la línea «Te toca» (si no, la de siempre); sinAtras: true, sin «Atrás» (después de cambiar de
                      pantalla, regresar no tiene a dónde).
+   Un paso de menú (menu y sub) que enseña dónde está una opción va de la mano solo (24-nov-2026, «si ya todos de la mano»):
+   la persona pica esa opción en su menú, se abre la pantalla y el recorrido sigue (manoMenu). Solo cuando los pasos que
+   siguen no iluminan nada de otra pantalla (no traen el ni antes: si no, al cambiar de pantalla se perderían) y solo si
+   esa opción está en su menú, y una sola vez por opción. Si la opción es la pantalla del mismo recorrido (su «liga»), va de
+   la mano aunque sigan pasos que iluminan esa pantalla; mano: true lo pide siempre, mano: false (o mano: false en el
+   recorrido) lo deja con «Siguiente».
    En un paso «haz», el teclado es de la página (las flechas, Tab y Enter no mueven el recorrido; Esc sigue igual). Si la
    parte se vuelve a pintar (la pantalla se recarga), se busca otra vez; si ya no está, el globo sale al centro con «Siguiente».
    Nunca obliga a guardar, mandar ni timbrar nada: el último clic de verdad lo da la persona.
@@ -192,6 +198,14 @@
   }
   function dormir(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
   var menuAbierto = false;
+  function cierraLoAbierto() {
+    try {
+      var P = window.PORTAL;
+      if (P && P.abreMenu) P.abreMenu('recorrido');
+      else document.dispatchEvent(new CustomEvent('profase-menu', { detail: 'recorrido' }));   // los sistemas Quo: FILTROS y «Más ▾» lo escuchan
+    } catch (e) { /* sin menús */ }
+    try { var G = window.PROFASE_GUIA; if (G && G.cierraFormas) G.cierraFormas(); } catch (e) { /* y la forma que abrió la persona, sin guardar */ }
+  }
   function sueltaMenu() {
     if (!menuAbierto) return false;
     menuAbierto = false;
@@ -335,6 +349,26 @@
     }
     return ts;
   }
+  // los pasos de menú que enseñan dónde está una opción: la persona la pica (ver arriba, «va de la mano solo»)
+  function manoMenu(lista, todo, liga) {
+    var mods = [], hecho = {};
+    try { mods = (window.PORTAL_MENU && window.PORTAL_MENU.modulos && window.PORTAL_MENU.modulos()) || []; } catch (e) { mods = []; }
+    if (todo === false || !mods.length) return lista;
+    return lista.map(function (p, i) {
+      if (!p || !p.menu || !p.sub || p.haz || p.mano === false) return p;
+      var s = null;
+      mods.forEach(function (m) { if (m.k === p.menu) (m.subs || []).forEach(function (x) { if (x.k === p.sub) s = x; }); });
+      if (!s || hecho[p.sub]) return p;
+      // lo que sigue ilumina algo de otra pantalla: al cambiar de pantalla se perdería (salvo que sea la pantalla del
+      // mismo recorrido, su «liga»: ahí es justo a donde lleva)
+      var luego = lista.slice(i + 1).some(function (q) { return q && !q.menu && (q.el || q.antes); });
+      if (luego && p.mano !== true && p.sub !== liga) return p;
+      hecho[p.sub] = 1;
+      return Object.assign({}, p, { haz: 'clic', hazTexto: p.hazTexto || 'Te toca: pica «' + s.t + '» en el menú.' });
+    });
+  }
+  // siNo también puede ser una función (da el objeto o nada): lo de adentro de una forma que no se abrió no sale al centro
+  function siNoDe(p) { try { return typeof p.siNo === 'function' ? p.siNo() : p.siNo; } catch (x) { return null; } }
   function partePasos(lista) {
     var out = [];
     lista.forEach(function (p) {
@@ -345,7 +379,9 @@
         for (var c in p) if (Object.prototype.hasOwnProperty.call(p, c)) q[c] = p[c];
         q.texto = tx;
         q.titulo = (p.titulo || '') + ' (' + (k + 1) + ' de ' + ps.length + ')';
-        if (k) { delete q.antes; q.__sigue = true; }   // lo que se abre antes, solo en la primera parte
+        if (k) { delete q.antes; delete q.espera; q.__sigue = true; }   // lo que se abre antes, solo en la primera parte
+        // de la mano: lo que la persona hace (picar, escoger) va en la última parte; las de antes se leen con «Siguiente»
+        if (p.haz && k < ps.length - 1) { delete q.haz; delete q.hazTexto; delete q.listo; }
         out.push(q);
       });
     });
@@ -361,12 +397,20 @@
     if (solo && despuesFalta(k) > 0) { programa(k, def.otraVez); return Promise.resolve('despues'); }
     activo = true;
     if (!document.getElementById('rc-css')) { var st = document.createElement('style'); st.id = 'rc-css'; st.textContent = CSS; document.head.appendChild(st); }
-    var pasos = def.pasos.slice(), i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
+    var pasos = manoMenu(def.pasos.slice(), def.mano, def.liga), i = 0, el = null, antesFoco = document.activeElement, tick = 0, dir = 1;
     // Todos los recorridos terminan recordando dónde está SuperConta (IA) (regla de Daniel, 31-oct-2026, 5:04: «acaba todos
     // los recorridos con recordarles dónde está SuperConta»). El paso lo da quien lo registra con alFinal() (guia_tab.js,
     // el botón «?»); un recorrido que ya es de SuperConta lo apaga con sinCierre: true.
+    // un recorrido de la mano pudo dejar abierto «Más ▾» o FILTROS: se cierra antes del paso de SuperConta
+    var huboHaz = pasos.some(function (q) { return q && q.haz; });
     if (!def.sinCierre && typeof cierre === 'function') {
-      try { var ult = cierre(); if (ult && ult.titulo) pasos.push(ult); } catch (e) { /* sin cierre */ }
+      try {
+        var ult = cierre();
+        if (ult && ult.titulo) {
+          if (huboHaz) { var a0 = ult.antes; ult = Object.assign({}, ult, { antes: function () { cierraLoAbierto(); return a0 ? a0() : undefined; } }); }
+          pasos.push(ult);
+        }
+      } catch (e) { /* sin cierre */ }
     }
     pasos = partePasos(pasos);
     var visto = -1;   // el último paso que de verdad se enseñó (para que «(2 de 3)» siga en lo mismo sin volver a abrir nada)
@@ -398,13 +442,15 @@
     var bDespues = capa.querySelector('.rc-despues'), enInicio = solo && !unAviso;
     capa.querySelector('.rc-pie').classList.toggle('con-despues', solo);
     // de la mano: los cuatro muros que tapan lo que no es la parte (haz: 'clic'), la línea «Te toca» y quién escucha el clic
-    var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false;
+    var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false, ultimoClic = 0;
     return new Promise(function (listo) {
       function termina(como) {
         if (!activo) return;
         activo = false; clearInterval(tick);
         escuchaClic(null);
         sueltaMenu();
+        // lo que el recorrido le pidió abrir a la persona («Más ▾», FILTROS) se cierra al terminar
+        if (huboHaz) cierraLoAbierto();
         removeEventListener('resize', acomoda); removeEventListener('keydown', tecla, true);
         capa.remove();
         try { antesFoco && antesFoco.focus && antesFoco.focus(); } catch (e) { /* sin foco */ }
@@ -426,7 +472,7 @@
         var p = pasos[i], t = ev.target;
         if (!activo || yendo || hazAhora !== 'clic' || !el || !p || p.listo || !t || t.nodeType !== 1) return;
         if (el !== t && !el.contains(t)) return;
-        yendo = true; var n = i;
+        yendo = true; var n = i; ultimoClic = Date.now();
         setTimeout(function () { if (activo && i === n) muestra(n + 1, 1); }, 120);
       }
       function escuchaClic(d) {
@@ -479,6 +525,20 @@
         else if (t.x + t.w + hueco + bw <= vw - 8) lado = 'der';
         else if (t.x - hueco - bw >= 8) lado = 'izq';
         else lado = 'encima';
+        // de la mano (24-nov-2026): la persona tiene que ver y picar la parte, así que el globo nunca la tapa; si no cabe
+        // completo arriba ni abajo, se hace más bajo (su texto se desliza por dentro) en el lado con más espacio
+        // (Comisiones de dirección en el iPhone: el globo de «Devoluciones de IVA» tapaba su pestaña y no se podía picar)
+        if (lado === 'encima' && hazAhora) {
+          // lo más bajo que puede quedar sin que se salgan la cabeza, el título, «Te toca» y Atrás/Siguiente: lo fijo más
+          // tres renglones de texto (FILTROS abierto en el iPad: con 180 px, «Siguiente» quedaba abajo de la pantalla)
+          var flechaSi = true, minimo = Math.max(150, bh - texto.clientHeight + 64);
+          for (var hu = 0; hu < 2 && lado === 'encima'; hu++) {
+            var hz = hu ? 14 : hueco, sobre = t.y - hz - m0, bajo = vh - m1 - (t.y + t.h + hz), cabe = Math.max(sobre, bajo);
+            if (cabe < minimo) continue;
+            globo.style.maxHeight = Math.floor(cabe) + 'px'; bh = globo.offsetHeight;
+            lado = bajo >= sobre ? 'abajo' : 'arriba'; hueco = hz; flechaSi = !hu;
+          }
+        }
         if (lado === 'abajo' || lado === 'arriba') {
           x = clamp(cx - bw / 2, 8, vw - bw - 8); y = lado === 'abajo' ? t.y + t.h + hueco : t.y - hueco - bh;
         } else if (lado === 'der' || lado === 'izq') {
@@ -486,7 +546,7 @@
         } else { x = clamp(cx - bw / 2, 8, vw - bw - 8); y = clamp(vh - bh - 8 - m1, m0, vh - bh - m1); }
         globo.style.left = Math.round(x) + 'px'; globo.style.top = Math.round(y) + 'px';
         // la flechita, entre el globo y la parte, apuntándole
-        flecha.hidden = lado === 'encima';
+        flecha.hidden = lado === 'encima' || flechaSi === false;
         flecha.className = 'rc-flecha ' + ({ abajo: 'arriba', arriba: 'abajo', der: 'izq', izq: 'der' }[lado] || '');
         if (lado === 'abajo') { flecha.style.left = Math.round(clamp(cx, x + 22, x + bw - 22) - 21) + 'px'; flecha.style.top = Math.round(t.y + t.h + 4) + 'px'; }
         else if (lado === 'arriba') { flecha.style.left = Math.round(clamp(cx, x + 22, x + bw - 22) - 21) + 'px'; flecha.style.top = Math.round(t.y - 46) + 'px'; }
@@ -523,6 +583,11 @@
           el = busca(p);
           // de la mano: lo que se abre después de un clic (una ventana que pide sus datos) tarda; se espera, con «Un momento…»
           var ms = 0; try { ms = typeof p.espera === 'function' ? +p.espera() || 0 : +p.espera || 0; } catch (x) { ms = 0; }
+          // después de un clic de la persona (una opción del menú, una pestaña) la pantalla tarda en abrir: se espera
+          if (!ms && p.espera == null && dir > 0 && n > 0 && pasos[n - 1] && pasos[n - 1].haz === 'clic') ms = 5000;
+          // y si la pantalla sigue abriendo (un celular lento), los pasos que siguen también esperan hasta 8 s desde el clic,
+          // en lugar de brincarse uno tras otro (24-nov-2026)
+          if (!ms && p.espera == null && dir > 0 && ultimoClic && Date.now() - ultimoClic < 8000) ms = ultimoClic + 8000 - Date.now();
           if (!el && ms > 0 && dir > 0) {
             capa.classList.add('sin-luz'); espera.hidden = false;
             for (var h = Date.now() + ms; !el && Date.now() < h;) { await dormir(200); if (!activo || i !== n) return; el = busca(p); }
@@ -531,7 +596,8 @@
           if (el) { dentro(el); if (!aLaVista(el)) el = null; }
           if (!el) {
             // siNo: sale al centro con su texto («Siguiente»); si no, se brinca como siempre
-            if (p.siNo) { pinta(Object.assign({}, p, p.siNo, { haz: '' }), n); return; }
+            var sn = siNoDe(p);
+            if (sn) { pinta(Object.assign({}, p, sn, { haz: '' }), n); return; }
             muestra(n + dir, dir); return;                           // no está a la vista: se brinca
           }
         }
@@ -606,7 +672,7 @@
           // de la mano: la pantalla se volvió a pintar (otro RFC, una búsqueda): se busca otra vez la parte
           if ((el && !el.isConnected) || !el) {
             var antes0 = el; el = busca(p);
-            if (el || antes0) pinta(el || !p.siNo ? p : Object.assign({}, p, p.siNo, { haz: '' }), i);
+            if (el || antes0) pinta(el || !siNoDe(p) ? p : Object.assign({}, p, siNoDe(p), { haz: '' }), i);
           }
           // listo(): ya lo hizo (palomeó una factura, se cerró la ventana): sigue solo
           if (p.listo && !yendo) { var ok = false; try { ok = !!p.listo(); } catch (e) { ok = false; } if (ok) { yendo = true; muestra(i + 1, 1); return; } }
@@ -667,7 +733,7 @@
         var pasos = typeof o.pasos === 'function' ? await o.pasos() : o.pasos;
         if (!pasos || !pasos.length) return;
         var como = await corre({ pasos: pasos, fin: o.fin || '¡Listo!', obligatorio: !!o.obligatorio, sinCierre: !!o.sinCierre,
-                                 solo: true, id: o.id, otraVez: function () { quiza(true); } });
+                                 solo: true, id: o.id, liga: o.liga, mano: o.mano, otraVez: function () { quiza(true); } });
         if (como === 'fin' || (como === 'saltado' && !o.obligatorio)) marcaVisto();
       } catch (e) { /* un recorrido nunca rompe la página */ } finally { esperando = false; }
     }

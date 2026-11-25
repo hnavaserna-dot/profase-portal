@@ -267,7 +267,8 @@
       var x = ev.target && ev.target.closest && ev.target.closest('button,a');
       if (x && !ev.target.closest('[data-mas-queda]')) setTimeout(function () { abre(false); }, 0);
     });
-    document.addEventListener('mousedown', function (ev) { if (!m.hidden && !w.contains(ev.target)) abre(false); });
+    // picar el globo de un recorrido no lo cierra (de la mano, 24-nov-2026: en los sistemas Quo el globo vive en la misma página)
+    document.addEventListener('mousedown', function (ev) { if (!m.hidden && !w.contains(ev.target) && !(ev.target && ev.target.closest && ev.target.closest('.rc-globo'))) abre(false); });
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !m.hidden) { abre(false); try { b.focus(); } catch (e) { /* nada */ } } });
     document.addEventListener('profase-menu', function (ev) { if (ev.detail !== id && !m.hidden) abre(false); });
     window.addEventListener('resize', function () { if (!m.hidden) coloca(); });
