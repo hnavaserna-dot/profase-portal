@@ -127,8 +127,10 @@
 
   // ---------- la tabla: sus títulos, sus columnas y sus renglones ----------
   function cabeza(t) {
-    var th = t.tHead; if (!th || !th.rows.length) return null;
-    var R = th.rows, grid = [], n = 0, r, i, c, a, b;
+    var th = t.tHead; if (!th) return null;
+    // El renglón de sumas de arriba (tr.sumas, «todo a la mano», 25-nov-2026) no es de títulos: ni se ordena ni cuenta.
+    var R = Array.prototype.filter.call(th.rows, function (x) { return !x.classList.contains('sumas'); }), grid = [], n = 0, r, i, c, a, b;
+    if (!R.length) return null;
     for (r = 0; r < R.length; r++) {
       grid[r] = grid[r] || []; c = 0;
       for (i = 0; i < R[r].cells.length; i++) {

@@ -26,6 +26,12 @@
       recortan igual pero sin volverse un área que se desliza (tp-clip: overflow:clip, con display:flow-root para que lo de
       adentro se siga acomodando igual). Mientras no se baja, todo se ve igual que antes.
    Una tabla o su recuadro con data-sin-pegar se queda como siempre.
+   - Desde el 25-nov-2026 se queda a la vista todo el encabezado de la tabla, no solo el renglón de los títulos: así los
+     totales que van arriba (debajo de los títulos, dentro del encabezado, como los de la tabla común de los sistemas Quo) y
+     los filtros por columna se quedan pegados con ellos al bajar (Héctor Daniel Nava, 25-nov-2026, 06:43: «en las tablas
+     cuando haya totales… es importante que también los pongas arriba porque es una flojera bajar hasta abajo»; la regla 7
+     de «Todo a la mano», en el CRM y en los sistemas Quo). Todos los renglones del encabezado se mueven juntos, con lo que
+     mide el encabezado completo; sus medidas van en el encabezado (thead), no en cada renglón.
 
    Rápido: no revisa cada cambio de la página; despierta solo cuando entra una tabla nueva, cuando una tabla o su recuadro
    cambia de tamaño o cuando cambia el tamaño de la ventana, y mide una vez por cuadro de pantalla (primero lee todo, luego
@@ -56,11 +62,11 @@
     // los títulos: el renglón de verdad, movido por el deslizar de la página
     + '@supports (animation-timeline:view()){'
     + '.tp-pega-w{view-timeline:--tp-pega block;view-timeline-inset:calc(var(--tp-pega,0px) + var(--tp-b,0px)) 0px}'
-    + 'table.tp-pega>thead>tr:first-child{position:relative;z-index:5;animation:tp-pega linear both;animation-timeline:--tp-pega;'
+    + 'table.tp-pega>thead>tr{position:relative;z-index:5;animation:tp-pega linear both;animation-timeline:--tp-pega;'
     + 'animation-range:exit-crossing var(--tp-a,0px) exit-crossing var(--tp-z,0px)}'
-    + 'table.tp-pega.tp-fondo>thead>tr:first-child{background-color:var(--tp-fondo,#fff)}'
+    + 'table.tp-pega.tp-fondo>thead>tr{background-color:var(--tp-fondo,#fff)}'
     + '@keyframes tp-pega{from{transform:translateY(0)}to{transform:translateY(var(--tp-m,0px))}}}'
-    + '@media print{.tp-barra{display:none!important}table.tp-pega>thead>tr:first-child{animation:none!important;transform:none!important}}';
+    + '@media print{.tp-barra{display:none!important}table.tp-pega>thead>tr{animation:none!important;transform:none!important}}';
   function estilos() {
     if (document.getElementById('tp-css')) return;
     var s = document.createElement('style'); s.id = 'tp-css'; s.textContent = ESTILO; (document.head || document.documentElement).appendChild(s);
@@ -190,7 +196,7 @@
       var m = { sobra: sobra, ancho: w.offsetWidth + sw - cw, peg: false };
       if (!tb || !cw) return m;
       if (x.pag === undefined) x.pag = deLaPagina(w);
-      var tr = tb.tHead && tb.tHead.rows[0], th = tr ? tr.offsetHeight : 0;
+      var hd = tb.tHead, th = hd ? hd.offsetHeight : 0;   // todo el encabezado: títulos, filtros y totales (25-nov-2026)
       var rw = w.getBoundingClientRect(), rt = tb.getBoundingClientRect(), alto = rt.height;
       var vertical = w.scrollHeight - w.clientHeight > 1;   // el recuadro se desliza por dentro: no se pega
       m.peg = !!x.pag && !vertical && (sobra || (th > 0 && alto > H - P));
@@ -198,7 +204,7 @@
         if (x.fondo === undefined) {
           // los títulos tapan lo de atrás si su renglón o todas sus celdas tienen fondo que tapa (el de la tabla o el de
           // los títulos no cuenta: queda detrás de los renglones); si no, se les pone el primero que tapa hacia afuera
-          var tapan = !tr || opaco(tr) || Array.prototype.every.call(tr.cells, opaco);
+          var tapan = !hd || Array.prototype.every.call(hd.rows, function (r) { return opaco(r) || Array.prototype.every.call(r.cells, opaco); });
           x.fondo = tapan ? '' : (fondoDe(tb.tHead) || '#fff');
           x.fondoB = x.b ? fondoDe(x.b.parentElement) : '';   // la barra pegada, con el fondo de donde está
         }
@@ -227,7 +233,8 @@
       // la tabla y, cada vez que la tabla crecía (Variaciones › «Resueltas» agrega sus miles de renglones por partes), el
       // navegador volvía a calcular los estilos de toda la tabla (hasta 1.4 s trabado en «Comprobar real»). En el recuadro
       // solo se queda --tp-b (el alto de la barra), que usa su view-timeline-inset, y solo se escribe si cambia.
-      var tr0 = x.tb.tHead && x.tb.tHead.rows[0];
+      // (25-nov-2026) en el encabezado, no en su primer renglón: lo heredan todos sus renglones (títulos, filtros y totales)
+      var tr0 = x.tb.tHead;
       var v = [m.a, m.mx, m.b, x.fondo, !!tr0].join('|');
       if (v !== x.v || (tr0 && x.vr !== tr0)) {
         var s = x.w.style, rs = tr0 ? tr0.style : s;
