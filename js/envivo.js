@@ -175,6 +175,7 @@
       '.b{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:3;display:flex;' +
       'flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:calc(100vw - 16px);padding:6px 8px 6px 12px;border-radius:14px;' +
       'background:' + Q_AZUL + ';color:#fff;box-shadow:0 6px 24px rgba(10,20,40,.35);font-size:14px;line-height:1.25}' +
+      '.b.cima{top:calc(var(--cima,0px) + 6px)}' +     // la página dice dónde acaba su encabezado (la burbuja abierta en el celular)
       '.b.abajo{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 10px)}' +
       '.pt{width:10px;height:10px;border-radius:50%;background:#9aa6b8;flex:0 0 auto}' +
       '.b.vivo .pt{background:#3fd47a;box-shadow:0 0 0 0 rgba(63,212,122,.6);animation:la 1.6s infinite}' +
@@ -572,10 +573,17 @@
         clearInterval(E.tick);
         var c = E.canal; E.canal = null;
         setTimeout(function () { if (c) c.cierra(); }, 300);
-        ui.barra.hidden = true; ui.pu.classList.remove('on'); ui.alClic = null;
+        ui.barra.hidden = true; ui.barra.classList.remove('cima'); ui.pu.classList.remove('on'); ui.alClic = null;
         if (ACT_C === api) ACT_C = null;
       },
-      activa: function () { return E.vivo; }
+      activa: function () { return E.vivo; },
+      // cima(px): la barra se pone debajo de esa altura (lo que tapa la página arriba, como el encabezado de la ayuda abierta
+      // en el celular); 0 la regresa arriba de siempre. «⇅» (abajo) sigue mandando.
+      cima: function (px) {
+        px = Math.max(0, Math.round(Number(px) || 0));
+        ui.barra.classList.toggle('cima', px > 0);
+        if (px > 0) ui.barra.style.setProperty('--cima', px + 'px'); else ui.barra.style.removeProperty('--cima');
+      }
     };
     ACT_C = api;
     pinta();
