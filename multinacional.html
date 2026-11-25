@@ -358,6 +358,7 @@ td.sel input{width:18px;height:18px}
 
   <section id="s-fac" hidden>
     <div class="tabs" role="tablist" aria-label="Facturas">
+      <button type="button" role="tab" data-ft="tim" id="t-tim" aria-selected="false" hidden>Por timbrar <span class="cta" id="n-tim">0</span></button>
       <button type="button" role="tab" data-ft="por" aria-selected="true">Por cobrar <span class="cta" id="n-por">0</span></button>
       <button type="button" role="tab" data-ft="cob" aria-selected="false">Cobradas</button>
       <button type="button" role="tab" data-ft="can" aria-selected="false">Canceladas</button>
@@ -367,7 +368,7 @@ td.sel input{width:18px;height:18px}
     <div id="kpis"></div>
     <div class="card" id="fac-card">
       <header><div><h2 id="h-lista">Por cobrar</h2><div class="sub" id="lista-sub"></div></div></header>
-      <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th class="monto">Total</th><th>Estatus</th><th><span class="sr">Acción</span></th></tr></thead>
+      <div class="tabla"><table class="resp"><thead><tr><th>Fecha</th><th id="th-folio">Folio</th><th>Cliente</th><th class="monto">Total</th><th>Estatus</th><th><span class="sr">Acción</span></th></tr></thead>
         <tbody id="lista"></tbody></table></div>
       <nav class="pgn" id="fac-pag" aria-label="Páginas de facturas"></nav>
     </div>
@@ -583,7 +584,7 @@ td.sel input{width:18px;height:18px}
       var L = NAV, ix = L.indexOf(CUR);
       nav = { pos: ix + 1, total: L.length, donde: 'en la lista', ant: ix > 0, sig: ix < L.length - 1, ir: function (d) {
         var k = L[ix + d]; if (k == null) return;
-        var id = +String(k).slice(1); if (k.charAt(0) === 'f') ficha(id); else if (k.charAt(0) === 'p') fichaPago(id); else fichaCot(id);
+        var id = +String(k).slice(1); if (k.charAt(0) === 'f') ficha(id); else if (k.charAt(0) === 'p') fichaPago(id); else if (k.charAt(0) === 't') abreTimbrar(id); else fichaCot(id);
       } };
     }
     var v = null, h0 = null, tabs = !!(op.pestanas && op.pestanas.length), c = '<div class="vent" id="v-cuerpo">' + cuerpo + '</div>';
@@ -644,8 +645,9 @@ td.sel input{width:18px;height:18px}
         { k: 'por', t: 'Por cobrar', n: r.por_cobrar || 0, d: dinero(r.por_cobrar_total) + (r.por_cobrar_otra ? ' · ' + r.por_cobrar_otra + ' en otra moneda' : ''), tono: 'naranja', on: FT === 'por' && !MAS30, tag: cobra && r.por_cobrar ? 'Te toca' : '' },
         { k: 'mas30', t: 'Más de 30 días', n: r.mas_30 || 0, d: r.mas_30 ? 'por cobrar de hace más de un mes' : 'ninguna atrasada', tono: 'rojo', on: FT === 'por' && MAS30 },
         { k: 'cob', t: 'Cobradas', n: nCob, d: 'con las fechas que escojas', tono: 'verde', on: FT === 'cob' },
-        { k: 'can', t: 'Canceladas', n: nCan, d: 'se quedan marcadas', tono: 'gris', on: FT === 'can' }],
+        { k: 'can', t: 'Canceladas', n: nCan, d: 'se quedan marcadas', tono: 'gris', on: FT === 'can' }].concat(timPila()),
       alPicar: function (k) {
+        if (k === 'tim') { MAS30 = false; ponFT(FT === 'tim' ? 'por' : 'tim'); pintaKpis(); pinta(); return; }
         if (k === 'mas30') { MAS30 = !(FT === 'por' && MAS30); ponFT('por'); }
         else { MAS30 = false; ponFT(FT === k && k !== 'por' ? 'tod' : k); }
         pintaKpis(); pinta();
@@ -656,6 +658,8 @@ td.sel input{width:18px;height:18px}
         if (!L.length) return; NAV = L.map(function (f) { return 'f' + f.id; }); ficha(L[0].id); } } : null
     });
     $('n-por').textContent = String(r.por_cobrar || 0);
+    $('t-tim').hidden = !(TIMY && TIMY.ve);
+    $('n-tim').textContent = String(timPor().length);
   }
   function filtradas() {
     var q = norm($('q').value), d = $('f-desde').value, h = $('f-hasta').value;
@@ -681,6 +685,8 @@ td.sel input{width:18px;height:18px}
     return chip(e[0], e[1]);
   }
   function pinta() {
+    $('th-folio').textContent = FT === 'tim' ? 'Cotización' : 'Folio';
+    if (FT === 'tim') { pintaTim(); return; }
     var L = filtradas(), T = { por: 'Por cobrar', cob: 'Cobradas', can: 'Canceladas', tod: 'Todas' };
     $('h-lista').textContent = T[FT];
     var suma = 0; L.forEach(function (f) { if (f.moneda === 'MXN' && f.estatus !== 'cancelada') suma += f.tipo === 'E' ? -f.total : +f.total; });
@@ -709,8 +715,11 @@ td.sel input{width:18px;height:18px}
     return b ? '<span class="fac-acc">' + b + '</span>' : '';
   }
   async function carga() {
+    var t = cargaTim();
     DATOS = await rpc('mul_facturas_lista', { p: { desde: $('f-desde').value || null, hasta: $('f-hasta').value || null } });
     FAC = (DATOS && DATOS.facturas) || [];
+    await t;
+    if (FT === 'tim' && !(TIMY && TIMY.ve)) ponFT('por');
     pintaKpis(); pinta();
   }
   document.querySelectorAll('[data-ft]').forEach(function (b) {
@@ -726,6 +735,8 @@ td.sel input{width:18px;height:18px}
     if (b) { e.stopPropagation(); cobrada(+b.getAttribute('data-cobrada')); return; }
     var bc = e.target.closest('[data-cancela]');
     if (bc) { e.stopPropagation(); cancela(+bc.getAttribute('data-cancela')); return; }
+    var tt = e.target.closest('[data-tim]');
+    if (tt) { e.stopPropagation(); NAV = (pintaTim.L || []).map(function (x) { return 't' + x.id; }); abreTimbrar(+tt.getAttribute('data-tim')); return; }
     var tr = e.target.closest('tr[data-id]'); if (tr) { NAV = (pinta.L || []).map(function (f) { return 'f' + f.id; }); ficha(+tr.getAttribute('data-id')); }
   });
 
@@ -761,10 +772,218 @@ td.sel input{width:18px;height:18px}
     else if (!$('s-pag').hidden) await cargaPagos();
   }
 
+  /* ============ «Timbrar en Facturita» (517_multinacional_timbrar.sql; petición 20261124-1629 de Fernando Cadengo con la
+     idea de Gabo; Héctor Daniel Nava, 24-nov-2026: «1 si / 2 si y gabo y eva / 3 como dices tu / 4 solo las autorizadas»).
+     Las cotizaciones autorizadas, con su cliente de Quo Facturita y todas sus claves, se timbran desde aquí en Quo Facturita con
+     la cuenta de Multinacional: primero se revisa cómo saldría (lo dice Quo), luego se pica «Timbrar en Facturita» y entra sola
+     a Facturas «Por cobrar» con su XML y su PDF, ligada a su cotización (si Centauro ya la trajo del SAT, se liga esa: nunca
+     dos veces). Lo pican Héctor Daniel Nava, Fernando Cadengo, Mónica Pedraza, Gabriel Cavazos y Eva Rangel (mul_timbra_yo, que
+     decide la base); Héctor Nava Ramos solo ve. Sin costo, sobrecosto ni utilidad: los precios de la cotización. No se le manda
+     correo al cliente; cancelar sigue en Quo Facturita. Lo que pasa después lo trae el reloj de la base y, mientras la ventana
+     espera, la misma función. ============ */
+  var TIM = null, TIMY = null;
+  var TEST = { en_camino: ['Timbrando…', 'ojo'], timbrada: ['Timbrada', 'ok'], pruebas: ['Timbrada en pruebas', 'az'], rechazada: ['No se pudo', 'mal'], revisar: ['Por revisar', 'mal'] };
+  async function cargaTim() {
+    try { TIM = await rpc('mul_timbra_lista'); TIMY = (TIM && TIM.yo) || null; }
+    catch (e) { TIM = null; TIMY = null; }
+    return TIM;
+  }
+  function timDe(id) { return ((TIM && TIM.cotizaciones) || []).filter(function (x) { return x.id === id; })[0] || null; }
+  // las que faltan por timbrar (sin las que ya quedaron y entraron a Facturas)
+  function timPor() { return ((TIM && TIM.cotizaciones) || []).filter(function (x) { return !x.factura && !(x.timbra && x.timbra.estado === 'timbrada'); }); }
+  function timLista(x) { return !x.factura && !(x.falta || []).length && !(x.timbra && (x.timbra.estado === 'en_camino' || x.timbra.estado === 'revisar' || x.timbra.estado === 'timbrada')); }
+  function timPuedo() { return !!(TIMY && TIMY.puede) && !CONSULTA; }
+  function timPila() {
+    if (!(TIMY && TIMY.ve)) return [];
+    var P0 = timPor(), listas = P0.filter(timLista).length, faltan = P0.filter(function (x) { return (x.falta || []).length; }).length;
+    return [{ k: 'tim', t: 'Por timbrar', n: P0.length, tono: 'azul', on: FT === 'tim', tag: timPuedo() && listas ? 'Te toca' : '',
+      d: P0.length ? listas + (listas === 1 ? ' lista' : ' listas') + (faltan ? ' · a ' + faltan + ' les falta algo' : '') : 'ninguna autorizada sin factura' }];
+  }
+  function timChip(x) {
+    var t = x.timbra;
+    if (t && TEST[t.estado]) return chip(TEST[t.estado][0], TEST[t.estado][1])
+      + (t.estado === 'timbrada' && (t.serie || t.folio) ? '<div class="mut">' + esc(((t.serie || '') + ' ' + (t.folio || '')).trim()) + '</div>'
+         : t.error && t.estado !== 'en_camino' ? '<div class="mut">' + esc(String(t.error).split(' Qué hacer')[0].slice(0, 110)) + '</div>' : '');
+    if (x.factura) return chip('Ya tiene su factura', 'ok');
+    if ((x.falta || []).length) return chip('Le falta', 'na') + '<div class="mut">' + esc(x.falta.join(', ')) + '</div>';
+    return chip('Lista para timbrar', 'ojo');
+  }
+  function pintaTim() {
+    var q = norm($('q').value);
+    var L = timPor().concat(((TIM && TIM.cotizaciones) || []).filter(function (x) { return x.timbra && x.timbra.estado === 'timbrada'; }));
+    L = L.filter(function (x) {
+      return !q || norm([x.numero, x.nombre, x.tipo, x.folio_doc, x.cliente && x.cliente.nombre, x.cliente && x.cliente.rfc].join(' ')).indexOf(q) >= 0;
+    });
+    pintaTim.L = L;
+    $('h-lista').textContent = 'Por timbrar';
+    var suma = 0; L.forEach(function (x) { if (!(x.timbra && x.timbra.estado === 'timbrada')) suma += Number(x.total || 0); });
+    $('lista-sub').textContent = L.length + (L.length === 1 ? ' cotización' : ' cotizaciones') + ' · ' + dinero(suma) + ' con IVA por timbrar · las autorizadas, la más vieja arriba';
+    $('rango').hidden = true;
+    var firma = ['tim', $('q').value].join('|'), Vf = pag(PGF, firma, FIRF, L); FIRF = firma;
+    var yo = timPuedo();
+    $('lista').innerHTML = L.length ? Vf.map(function (x) {
+      return '<tr class="click" data-tim="' + x.id + '"><td data-l="Fecha" class="nw">' + esc(fecha(x.fecha)) + '</td>'
+        + '<td data-l="Cotización" class="nw">' + esc(x.numero ? 'Núm. ' + x.numero : 'Sin número') + '</td>'
+        + '<td data-l="Cliente" class="w"><span class="rs">' + (x.cliente ? esc(x.cliente.nombre) : '<span class="falta">Falta el cliente</span>') + '</span>'
+        + '<div class="mut">' + esc(x.nombre) + (x.cliente ? ' · ' + esc(x.cliente.rfc) : '') + '</div></td>'
+        + '<td data-l="Total" class="monto">' + esc(dinero(x.total)) + '</td>'
+        + '<td data-l="Estatus">' + timChip(x) + '</td>'
+        + '<td data-l="">' + (yo && timLista(x) ? '<span class="fac-acc"><button class="btn chico bien" type="button" data-tim="' + x.id + '" title="Revisa cómo saldría y tímbrala en Quo Facturita">Timbrar</button></span>' : '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="vacio">No hay cotizaciones autorizadas por timbrar.</td></tr>';
+  }
+  function timRefresca() {
+    if (!$('s-fac').hidden) return carga();   // carga() también trae lo de «Por timbrar»
+    var t = cargaTim();
+    if (!$('s-cot').hidden) return Promise.all([t, cargaCot()]);
+    return t;
+  }
+  var TMD = null;   // lo que contestó Quo al revisar (para timbrar con lo mismo)
+  async function abreTimbrar(id) {
+    CUR = 't' + id; TMD = null;
+    var c;
+    try { c = await rpc('mul_timbra_ver', { p_cot: id }); } catch (e) { CUR = null; error(falla(e)); return; }
+    if (!c) { CUR = null; error('Esa cotización no está para timbrar. Qué hacer: vuelve a cargar la pantalla; solo se timbran las autorizadas.'); return; }
+    if (c.yo) TIMY = c.yo;
+    var t = c.timbra, puede = timPuedo(), lista = puede && timLista(c);
+    var cl = c.cliente;
+    var dl = [['Cotización', (c.numero ? 'Núm. ' + c.numero + ' · ' : '') + c.nombre], ['Fecha', fecha(c.fecha)], ['Folio del documento', c.folio_doc],
+      ['Cliente', cl ? cl.nombre + ' · ' + cl.rfc : ''], ['Uso del CFDI del cliente', cl && cl.uso], ['Subtotal', dinero(c.subtotal)], ['IVA', dinero(c.iva)], ['Total', dinero(c.total)]];
+    var estH = '';
+    if (t && TEST[t.estado]) {
+      var txt = { en_camino: 'Quo Facturita la está timbrando' + (t.por ? ' (la pidió ' + t.por + ', ' + hora(t.en) + ')' : '') + '. Tarda de unos segundos a un par de minutos; cuando quede, te llega el aviso en la campanita.',
+        timbrada: 'Quedó timbrada' + ((t.serie || t.folio) ? ': ' + ((t.serie || '') + ' ' + (t.folio || '')).trim() : '') + (t.uuid ? ', folio fiscal ' + t.uuid : '') + '. Ya está en Facturas «Por cobrar», ligada a esta cotización.'
+          + (t.pdf === 'espera' ? ' Su PDF llega solo de Quo Facturita en unos minutos.' : t.pdf === 'falla' ? ' ' + (t.pdf_error || 'Su PDF no llegó. Qué hacer: bájalo en Quo Facturita y súbelo con «Subir facturas».') : ''),
+        pruebas: 'Se timbró en el ambiente de pruebas de Timbox: no vale ante el SAT y no entra a Facturas. Cuando Multinacional timbre de verdad, se vuelve a timbrar aquí.',
+        rechazada: t.error || 'No se pudo timbrar. Qué hacer: revisa lo que dice Quo Facturita y vuelve a intentar.',
+        revisar: (t.error || 'No sabemos si Timbox alcanzó a timbrarla.') + (TIMY && TIMY.libera ? '' : ' Qué hacer: la dirección de los sistemas Quo lo revisa en Quo Facturita y en el SAT; no la vuelvas a timbrar por fuera.') }[t.estado];
+      estH = '<div class="msg ' + (t.estado === 'timbrada' ? 'bien' : t.estado === 'en_camino' || t.estado === 'pruebas' ? 'ojo' : 'mal') + '" id="tm-est">' + esc(txt) + '</div>';
+    } else if (c.factura) {
+      estH = '<div class="msg bien" id="tm-est">Esta cotización ya tiene su factura. Qué hacer: no hace falta timbrarla otra vez.</div>';
+    } else if ((c.falta || []).length) {
+      estH = '<div class="msg mal" id="tm-est">Para timbrarla le falta ' + esc(c.falta.join(', ')) + '. Qué hacer: '
+        + (EST && EST.ver_cot && EST.cotiza && !CONSULTA ? 'ábrela en Multinacional › Cotizaciones y pica «Cliente y claves» (si está guardada 🔒, primero «Desbloquear»).' : 'la completa quien captura las cotizaciones, en Multinacional › Cotizaciones.') + '</div>';
+    } else if (!puede) {
+      estH = '<div class="msg" id="tm-est">Aquí solo ves lo que se timbra. Qué hacer: no hace falta hacer nada (la timbran quienes llevan Multinacional).</div>';
+    }
+    var prev = lista ? '<div class="sec" id="tm-prev"><h3>Cómo saldría en Quo Facturita</h3><div class="in"><span class="mut" id="tm-cargando">Revisando con Quo Facturita…</span></div></div>' : '';
+    var ren = (c.renglones || []).map(function (r) {
+      return '<tr><td data-l="#">' + esc(r.orden) + '</td><td data-l="Cantidad" class="monto">' + esc(Number(r.cantidad)) + '</td><td data-l="Unidad">' + esc(r.unidad) + '</td>'
+        + '<td data-l="Producto" class="w"><span class="rs">' + esc(r.producto) + '</span>' + (r.especificacion ? '<div class="mut">' + esc(r.especificacion) + '</div>' : '') + '</td>'
+        + '<td data-l="Precio unitario" class="monto">' + esc(dinero(r.precio_unit)) + '</td><td data-l="Precio total" class="monto">' + esc(dinero(r.precio_total)) + '</td>'
+        + '<td data-l="Clave del SAT" class="nw">' + (r.clave_sat ? esc(r.clave_sat) : '<span class="falta">Falta</span>') + '</td>'
+        + '<td data-l="Unidad del SAT">' + (r.clave_unidad ? esc(r.clave_unidad) : '<span class="falta">Falta</span>') + '</td></tr>';
+    }).join('');
+    var hist = (c.hist || []).slice().reverse().map(function (h) { return '<li>' + esc(h.que || '') + ' · ' + esc(hora(h.en)) + '</li>'; }).join('');
+    var acc = [];
+    if (lista) acc.push({ t: 'Timbrar en Facturita', tipo: 'b1', id: 'tm-si', apagado: true });
+    if (t && t.estado === 'en_camino' && puede) acc.push({ t: 'Ver cómo va', tipo: 'b2', id: 'tm-va' });
+    if (t && t.estado === 'revisar' && TIMY && TIMY.libera && !CONSULTA) acc.push({ t: 'Liberar', tipo: 'b2', id: 'tm-lib' });
+    if (t && t.factura) acc.push({ t: 'Ver la factura', tipo: 'b2', id: 'tm-fac' });
+    abre('Timbrar en Facturita', (c.numero ? 'Núm. ' + c.numero + ' · ' : '') + dinero(c.total) + ' con IVA',
+      (estH ? '<div class="sec"><h3>Cómo va</h3><div class="in">' + estH + '</div></div>' : '') + prev
+      + '<div class="sec"><h3>La cotización</h3><div class="in"><div class="dl">' + dl.filter(function (x) { return x[1]; }).map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>'; }).join('') + '</div>'
+      + '<div class="mut" style="font-size:12.5px;margin-top:6px">Con los precios de la cotización. Al timbrar se guarda 🔒 (si no lo estaba); si Quo Facturita no la timbra, se le quita el 🔒. Al cliente no se le manda correo; cancelarla, en Quo Facturita.</div></div></div>',
+      { ancho: true, acciones: acc, pestanas: [
+        { id: 'ren', t: 'Renglones', n: (c.renglones || []).length, html: '<div class="tabla"><table class="resp"><thead><tr><th>#</th><th class="monto">Cant.</th><th>Unidad</th><th>Producto</th><th class="monto">Precio unitario</th><th class="monto">Precio total</th><th>Clave del SAT</th><th>Unidad del SAT</th></tr></thead><tbody>' + ren + '</tbody></table></div>' },
+        { id: 'his', t: 'Historia', n: (c.hist || []).length, html: '<ul class="bit">' + (hist || '<li class="mut">Todavía no se ha pedido timbrar.</li>') + '</ul>' }] });
+    if ($('tm-fac')) $('tm-fac').onclick = function () { var f = t.factura; cierra(); if (f) ficha(f); };
+    if ($('tm-va')) $('tm-va').onclick = function () { timEspera(c.id, this); };
+    if ($('tm-lib')) $('tm-lib').onclick = function () { timLibera(c); };
+    if (lista) timRevisa(c);
+    else if (t && t.estado === 'en_camino' && puede) timEspera(c.id, null);
+  }
+  // en la ficha de la cotización: cómo va su timbrado y el botón (solo autorizadas, sin factura y a quien la timbra)
+  function timFicha(c) {
+    if (!(TIMY && TIMY.ve) || c.factura || c.estatus !== 'autorizada') return '';
+    var x = timDe(c.id), t = x && x.timbra;
+    var h = '<div class="dl" style="margin-top:8px"><span>Timbrar en Facturita</span><span>' + (x ? timChip(x) : chip('Le falta', 'na')) + '</span></div>';
+    if (timPuedo() && (!t || t.estado !== 'timbrada')) h += '<div class="sg-fila"><button class="sg-b1" type="button" id="k-tim">' + (t && t.estado === 'en_camino' ? 'Ver cómo va' : 'Timbrar en Facturita') + '</button></div>';
+    return h;
+  }
+  function opcion(v, t, sel) { return '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(t) + '</option>'; }
+  async function timRevisa(c) {
+    var box = $('tm-prev'); if (!box) return;
+    var d;
+    try { d = await ft('timbra_revisa', { cot: c.id }); } catch (e) { if (CUR === 't' + c.id && $('tm-prev')) box.querySelector('.in').innerHTML = '<div class="msg mal">' + esc(falla(e)) + '</div>'; return; }
+    if (CUR !== 't' + c.id || !$('tm-prev')) return;
+    TMD = d;
+    var v = d.vista || null, prod = d.ambiente === 'produccion', cl = d.cliente || {};
+    var uso = (c.cliente && c.cliente.uso) || cl.uso_cfdi || 'G03';
+    var h = (prod ? '<div class="msg ojo">Se timbra de verdad ante el SAT, con la cuenta de Multinacional en Quo Facturita' + (d.timbres != null ? ' (le quedan ' + Number(d.timbres) + ' timbres)' : '') + '.</div>'
+                  : '<div class="msg">Multinacional está en el ambiente de pruebas de Timbox: se timbra para probar, no vale ante el SAT y no entra a Facturas.</div>')
+      + '<div class="dl" style="margin-top:10px"><span>La emite</span><span>' + esc((d.emisor && d.emisor.razon_social) || '') + ' · ' + esc((d.emisor && d.emisor.rfc) || '') + '</span>'
+      + '<span>A nombre de</span><span>' + esc(cl.nombre || (c.cliente && c.cliente.nombre) || '') + ' · ' + esc(cl.rfc || (c.cliente && c.cliente.rfc) || '') + '</span>'
+      + (d.yo && d.yo.nombre ? '<span>La timbra en Quo Facturita</span><span>' + esc(d.yo.nombre) + '</span>' : '') + '</div>'
+      + '<div class="campos" style="margin-top:10px">'
+      + '<div class="campo"><label for="tm-serie">Serie</label><select id="tm-serie">' + (d.series || []).map(function (x) { return opcion(x.serie, x.serie + (x.folio ? ' · sigue el ' + x.folio : ''), x.serie === d.serie); }).join('') + '</select></div>'
+      + '<div class="campo"><label for="tm-met">Método de pago</label><select id="tm-met">' + opcion('PPD', METODO.PPD, true) + opcion('PUE', METODO.PUE, false) + '</select></div>'
+      + '<div class="campo" id="tm-forma-c" hidden><label for="tm-forma">Forma de pago</label><select id="tm-forma"><option value="">Escoge cómo se pagó…</option>' + (d.formas || []).map(function (x) { return opcion(x[0], x[0] + ' · ' + x[1], false); }).join('') + '</select></div>'
+      + '<div class="campo"><label for="tm-uso">Uso del CFDI</label><select id="tm-uso">' + (d.usos || []).map(function (x) { return opcion(x[0], x[0] + ' · ' + x[1], x[0] === uso); }).join('') + '</select></div></div>';
+    if (v) {
+      h += '<div class="dl" style="margin-top:10px"><span>Subtotal</span><span>' + esc(dinero(v.subtotal)) + '</span><span>IVA</span><span>' + esc(dinero(v.iva)) + '</span><span>Total</span><span>' + esc(dinero(v.total)) + '</span></div>'
+        + (v.cuadra ? '<div class="msg bien" style="margin-top:8px">Cuadra con la cotización (' + esc(dinero(c.total)) + ').</div>'
+           : '<div class="msg mal" style="margin-top:8px">No cuadra: Quo Facturita da ' + esc(dinero(v.total)) + ' y la cotización ' + esc(dinero(c.total)) + '. Qué hacer: revisa las cantidades y los precios de la cotización.</div>')
+        + ((v.productos_nuevos || []).length ? '<div class="mut" style="font-size:12.5px;margin-top:6px">Se dan de alta en Quo Facturita ' + v.productos_nuevos.length + (v.productos_nuevos.length === 1 ? ' producto nuevo' : ' productos nuevos') + ', con la clave del SAT de la cotización.</div>' : '');
+    }
+    if (d.error) h += '<div class="msg mal" style="margin-top:8px">' + esc(d.error) + '</div>';
+    box.querySelector('.in').innerHTML = h;
+    var met = $('tm-met'), fc = $('tm-forma-c');
+    met.onchange = function () { fc.hidden = met.value !== 'PUE'; };
+    var si = $('tm-si');
+    if (si) {
+      si.disabled = !(v && v.cuadra && !d.error && (!prod || d.timbres == null || Number(d.timbres) > 0));
+      si.onclick = function () { timTimbra(c, si); };
+    }
+  }
+  async function timTimbra(c, b) {
+    if (!TMD) return;
+    var met = $('tm-met').value, forma = met === 'PUE' ? $('tm-forma').value : '', prod = TMD.ambiente === 'produccion';
+    if (met === 'PUE' && !forma) { error('Con PUE (ya se pagó) escoge cómo se pagó. Qué hacer: escoge la forma de pago o cambia el método a PPD.'); return; }
+    var cl = TMD.cliente || {};
+    var r = await pregunta({ texto: (prod ? '¿Timbrar de verdad ante el SAT la factura de ' : '¿Timbrar en pruebas (no vale ante el SAT) la factura de ') + (cl.nombre || 'este cliente') + ' por '
+      + dinero((TMD.vista && TMD.vista.total) || c.total) + '?' + (prod ? ' Ya timbrada, solo se cancela en Quo Facturita.' : ''), si: 'Sí, timbrar' });
+    if (!r) return;
+    b.disabled = true; b.textContent = 'Mandando…'; cierra.ocupado = true;
+    try {
+      await ft('timbra', { cot: c.id, ambiente: TMD.ambiente, serie: $('tm-serie').value, metodo: met, forma: forma, uso: $('tm-uso').value });
+    } catch (e) {
+      cierra.ocupado = false; b.textContent = 'Timbrar en Facturita'; b.disabled = false;
+      var box = $('tm-prev'); if (box) box.querySelector('.in').insertAdjacentHTML('afterbegin', '<div class="msg mal" style="margin-bottom:8px">' + esc(falla(e)) + '</div>');
+      timRefresca().catch(function () {});
+      return;
+    }
+    cierra.ocupado = false;
+    await timRefresca().catch(function () {});
+    abreTimbrar(c.id);
+  }
+  // mientras la ventana espera: trae lo de Quo cada 6 segundos, hasta 3 minutos (después, el reloj de la base y la campanita)
+  async function timEspera(id, b) {
+    if (timEspera.va === id) return; timEspera.va = id;
+    if (b) { b.disabled = true; b.textContent = 'Revisando…'; }
+    try {
+      for (var i = 0; i < 30; i++) {
+        if (CUR !== 't' + id) return;
+        await ft('timbra_recoge', { cots: [id] }).catch(function () { return null; });
+        var c = null; try { c = await rpc('mul_timbra_ver', { p_cot: id }); } catch (e) { c = null; }
+        if (CUR !== 't' + id) return;
+        if (c && !(c.timbra && c.timbra.estado === 'en_camino')) { await timRefresca().catch(function () {}); abreTimbrar(id); return; }
+        await new Promise(function (ok) { setTimeout(ok, 6000); });
+      }
+      var e = $('tm-est'); if (e) e.textContent = 'Sigue en camino. Qué hacer: puedes cerrar esta ventana; cuando quede, te llega el aviso en la campanita y entra sola a Facturas.';
+    } finally { timEspera.va = null; if (b && document.body.contains(b)) { b.disabled = false; b.textContent = 'Ver cómo va'; } }
+  }
+  async function timLibera(c) {
+    var r = await pregunta({ texto: '¿Liberarla? Hazlo solo si ya revisaste en Quo Facturita y en el SAT que no se timbró: después se puede volver a timbrar.', si: 'Sí, liberarla', nota: '¿Qué revisaste?', notaObligada: true });
+    if (!r) return;
+    if (r.nota.length < 10) { error('Escribe qué revisaste (al menos 10 letras). Qué hacer: vuelve a picar «Liberar» y dilo en el motivo.'); return; }
+    try { await ft('timbra_libera', { cot: c.id, motivo: r.nota }); avisa('Listo: quedó liberada.'); await timRefresca(); abreTimbrar(c.id); }
+    catch (e) { error(falla(e)); }
+  }
+
   /* ---------- la ficha de una factura ---------- */
   function hora(t) { try { return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t)); } catch (e) { return String(t || ''); } }
   var QUE = { subida: 'Se subió', cobrada: 'Cobrada', por_cobrar: 'Regresó a «Por cobrar»', cancelada: 'Cancelada',
-              pago: 'Pago', quita: 'Abono quitado', pago_borrado: 'Pago borrado', pdf: 'PDF' };
+              pago: 'Pago', quita: 'Abono quitado', pago_borrado: 'Pago borrado', pdf: 'PDF', timbrada: 'Se timbró en Quo Facturita' };
   async function ficha(id) {
     CUR = 'f' + id;
     var f;
@@ -773,7 +992,7 @@ td.sel input{width:18px;height:18px}
     var dl = [['Folio fiscal', f.uuid], ['Fecha', fecha(f.fecha)], ['Cliente', f.cliente], ['RFC', f.rfc], ['Uso del CFDI', f.uso],
       ['Método de pago', METODO[f.metodo] || f.metodo], ['Forma de pago', f.forma], ['Moneda', f.moneda],
       ['Subtotal', dinero(f.subtotal, f.moneda)], ['Impuestos', dinero(f.impuestos, f.moneda)], ['Total', dinero(f.total, f.moneda)],
-      [f.origen === 'sat' ? 'Llegó' : 'Subió', (f.subida_por || '') + ' · ' + hora(f.subida)]];
+      [f.origen === 'sat' ? 'Llegó' : f.origen === 'crm' ? 'Timbró en Quo Facturita' : 'Subió', (f.subida_por || '') + ' · ' + hora(f.subida)]];
     var vePagos = Array.isArray(f.pagos);   // la base solo los manda a quien ve los pagos (la dirección y Eva)
     if (vePagos && f.tipo === 'I' && f.estatus !== 'cancelada') dl.push(['Abonado', dinero(f.abonado, f.moneda)], ['Saldo', dinero(f.saldo, f.moneda)]);
     if (vePagos && f.tipo === 'E' && f.estatus !== 'cancelada') dl.push(['Por aplicar', dinero(f.disponible, f.moneda)]);
@@ -795,7 +1014,7 @@ td.sel input{width:18px;height:18px}
       '<div class="sec"><h3>Estatus</h3><div class="in">' + estatusDe(f) + (acc ? '<div class="sg-fila">' + acc + '</div>' : '') + '</div></div>'
       + '<div class="sec"><h3>Archivos</h3><div class="in sg-fila" style="margin-top:0">'
       + (f.pdf ? '<button class="sg-b2" type="button" id="f-ver">Ver PDF</button><button class="sg-b2" type="button" id="f-pdf">Bajar PDF</button>'
-         : '<span class="mut">' + (f.origen === 'sat' ? 'Llegó del SAT sin PDF.' + (EST && EST.sube && !CONSULTA ? ' Para agregárselo, súbelo con «Subir facturas» junto con su XML.' : '') : 'Se subió sin PDF.') + '</span>')
+         : '<span class="mut">' + (f.origen === 'sat' ? 'Llegó del SAT sin PDF.' + (EST && EST.sube && !CONSULTA ? ' Para agregárselo, súbelo con «Subir facturas» junto con su XML.' : '') : f.origen === 'crm' ? 'Se timbró desde el CRM: su PDF llega solo de Quo Facturita en unos minutos.' : 'Se subió sin PDF.') + '</span>')
       + '<button class="sg-b2" type="button" id="f-xml">Bajar XML</button></div><div class="in mut" style="padding-top:0">Salen tal cual se subieron.</div></div>',
       { ancho: true, pestanas: [{ id: 'dat', t: 'Datos', html: '<div class="dl">' + dl.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1] || '—') + '</span>'; }).join('') + '</div>' }]
         .concat(vePagos ? [{ id: 'pag', t: f.tipo === 'E' ? 'Dónde se aplicó' : 'Sus pagos', n: f.pagos.length, html: '<ul class="bit">' + (pags || '<li class="mut">' + (f.tipo === 'E' ? 'Todavía no se aplica.' : 'Todavía no tiene pagos.') + '</li>') + '</ul>' }] : [])
@@ -1003,7 +1222,8 @@ td.sel input{width:18px;height:18px}
 
   /* ---------- la ficha de una cotización ---------- */
   var QUEC = { creada: 'Se creó', cambiada: 'Se cambió', estatus: 'Estatus', sobrecosto: 'Sobrecosto', factura: 'Factura', 'del Excel': 'Vino del Excel',
-    subida: 'Se subió', claves: 'Cliente y claves', costos: 'Costos', guardada: 'Guardada 🔒', desbloqueada: 'Desbloqueada' };
+    subida: 'Se subió', claves: 'Cliente y claves', costos: 'Costos', guardada: 'Guardada 🔒', desbloqueada: 'Desbloqueada',
+    timbrar: 'Timbrar en Facturita' };
   async function fichaCot(id) {
     CUR = 'c' + id;
     var c; try { c = await rpc('mul_cot_ver', { p_id: id }); } catch (e) { error(falla(e)); return; }
@@ -1057,7 +1277,7 @@ td.sel input{width:18px;height:18px}
         }).join('') + '</ul>';
     }
     if (!c.factura && cot && c.estatus !== 'no_autorizada' && c.estatus !== 'cancelada') {
-      facH += '<div class="sg-campo" style="margin-top:10px"><label for="k-fac">' + (sg.length ? 'U otra factura' : 'Ligar la factura que la cobra') + '</label><select id="k-fac"><option value="">Cargando…</option></select></div>'
+      facH += '<div class="campo" style="margin-top:10px"><label for="k-fac">' + (sg.length ? 'U otra factura' : 'Ligar la factura que la cobra') + '</label><select id="k-fac"><option value="">Cargando…</option></select></div>'
         + '<div class="acciones" style="margin-top:8px"><button class="btn" type="button" id="k-liga">Ligar</button></div>';
     }
     if (!facH) facH = '<span class="mut">Sin factura.</span>';
@@ -1076,7 +1296,8 @@ td.sel input{width:18px;height:18px}
         + '<button class="sg-b2" type="button" id="k-ftx"' + (lista ? '' : ' disabled') + '>Excel para Facturita</button>'
         + '<button class="sg-b2" type="button" id="k-ftp"' + (lista ? '' : ' disabled') + '>PDF para Facturita</button>'
         + (cot && sub ? '<button class="sg-b2" type="button" id="k-cost">Capturar costos</button>' : '') + '</div>'
-        + '<div class="mut" style="font-size:12.5px;margin-top:6px">' + (lista ? 'El Excel va en Quo Facturita › Facturar › «Facturación masiva»: una factura con estos renglones, que queda como borrador para revisarla y timbrarla allá. El CRM no timbra nada.'
+        + timFicha(c)
+        + '<div class="mut" style="font-size:12.5px;margin-top:6px">' + (lista ? 'Autorizada, se timbra desde aquí con «Timbrar en Facturita» (con la cuenta de Multinacional; entra sola a Facturas «Por cobrar»). El Excel va en Quo Facturita › Facturar › «Facturación masiva», si se prefiere hacerla allá.'
           : 'Para el Excel falta el cliente de Quo Facturita o alguna clave del SAT. Qué hacer: ' + (cot && !fija ? 'pica «' + (sub ? 'Cambiar' : 'Cliente y claves') + '» y complétalo.' : cot ? 'pica «Desbloquear» y complétalo.' : 'lo completa quien captura las cotizaciones.')) + '</div></div></div>';
     }
     var docH = c.doc ? '<div class="sec"><h3>El documento que se subió</h3><div class="in sg-fila" style="margin-top:0">'
@@ -1090,12 +1311,13 @@ td.sel input{width:18px;height:18px}
       + '<div class="in mut" style="padding-top:0">Con la marca de Multinacional y los mismos números de aquí.</div></div>'
       + docH
       + '<div class="sec"><h3>Datos</h3><div class="in"><div class="dl">' + dl.filter(function (x) { return x[1]; }).map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>'; }).join('') + '</div>'
-      + (fac && esp && crm && !fija ? '<div class="sg-campo" style="margin-top:10px"><label for="k-factor">Sobrecosto de esta cotización (solo tú)</label><input type="number" id="k-factor" step="0.01" min="1" max="5" value="' + Number(c.factor) + '" inputmode="decimal"></div>'
+      + (fac && esp && crm && !fija ? '<div class="campo" style="margin-top:10px"><label for="k-factor">Sobrecosto de esta cotización (solo tú)</label><input type="number" id="k-factor" step="0.01" min="1" max="5" value="' + Number(c.factor) + '" inputmode="decimal"></div>'
          + '<div class="sg-fila"><button class="sg-b2" type="button" id="k-factor-b">Cambiar sobrecosto</button></div>' : '') + '</div></div>',
       { ancho: true, pestana: !c.factura && sg.length ? 'fac' : null, pestanas: [{ id: 'ren', t: 'Renglones', n: (c.renglones || []).length, html: '<div class="tabla"><table class="resp"><thead><tr><th>#</th><th>Unidad</th><th class="monto">Cant.</th><th>Producto</th><th class="monto">Costo unitario</th><th class="monto">Costo + envío</th><th class="monto">Precio unitario</th><th class="monto">Precio total</th><th>Clave del SAT</th><th>Unidad del SAT</th></tr></thead><tbody>' + ren + '</tbody></table></div>' },
         { id: 'tot', t: 'Totales', html: '<div class="dl">' + tot.map(function (x) { return '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>'; }).join('') + '</div>' },
         { id: 'fac', t: sg.length ? 'Factura sugerida' : 'Factura', html: facH },
         { id: 'bit', t: 'Bitácora', n: (c.bitacora || []).length, html: '<ul class="bit">' + (bit || '<li class="mut">Sin movimientos.</li>') + '</ul>' }] });
+    if ($('k-tim')) $('k-tim').onclick = function () { cierra(); NAV = null; abreTimbrar(c.id); };
     if ($('k-editar')) $('k-editar').onclick = function () { cierra(); editor(c); };
     if ($('k-cambia')) $('k-cambia').onclick = function () { aRevisar(c, 'edita'); };
     if ($('k-claves')) $('k-claves').onclick = function () { aRevisar(c, 'claves'); };
@@ -2827,10 +3049,10 @@ td.sel input{width:18px;height:18px}
     var formas = Object.keys(FORMAS).filter(function (k) { return nc ? k === 'nota_credito' : k !== 'nota_credito'; });
     abre('Cambiar el pago #' + p.id, p.cliente,
       '<div class="sec"><h3>Lo que cambia</h3><div class="in"><div class="sg-campos">'
-      + '<div class="sg-campo"><label for="cp-f">Fecha</label><input type="date" id="cp-f" value="' + esc(p.fecha) + '" max="' + HOY + '"></div>'
-      + '<div class="sg-campo"><label for="cp-m">Monto</label><input type="number" id="cp-m" step="0.01" min="0.01" inputmode="decimal" value="' + esc(p.monto) + '"></div>'
-      + '<div class="sg-campo"><label for="cp-s">Cómo se pagó</label><select id="cp-s"' + (nc ? ' disabled' : '') + '>' + formas.map(function (k) { return '<option value="' + k + '"' + (k === p.forma ? ' selected' : '') + '>' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
-      + '<div class="sg-campo"><label for="cp-r">Referencia</label><input type="text" id="cp-r" maxlength="300" value="' + esc(p.referencia || '') + '"></div>'
+      + '<div class="campo"><label for="cp-f">Fecha</label><input type="date" id="cp-f" value="' + esc(p.fecha) + '" max="' + HOY + '"></div>'
+      + '<div class="campo"><label for="cp-m">Monto</label><input type="number" id="cp-m" step="0.01" min="0.01" inputmode="decimal" value="' + esc(p.monto) + '"></div>'
+      + '<div class="campo"><label for="cp-s">Cómo se pagó</label><select id="cp-s"' + (nc ? ' disabled' : '') + '>' + formas.map(function (k) { return '<option value="' + k + '"' + (k === p.forma ? ' selected' : '') + '>' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
+      + '<div class="campo"><label for="cp-r">Referencia</label><input type="text" id="cp-r" maxlength="300" value="' + esc(p.referencia || '') + '"></div>'
       + '<div class="sg-campo ancho"><label for="cp-x">¿Por qué se cambia?</label><textarea id="cp-x" maxlength="300"></textarea></div>'
       + '</div><p class="mut" style="margin:10px 0 0">El monto no puede quedar abajo de lo ya aplicado (' + esc(dinero(p.aplicado)) + '): primero quita un abono.</p>'
       + '<div class="msg mal" id="cp-msg" hidden role="alert" style="margin-top:10px"></div></div></div>',
@@ -2859,11 +3081,11 @@ td.sel input{width:18px;height:18px}
     abre(ap ? 'Aplicar el pago #' + ap.id : 'Registrar pago', ap ? ap.cliente + ' · le quedan ' + dinero(ap.por_aplicar) + ' por aplicar' : 'Lo que pagó un cliente y a qué facturas se aplica',
       (ap ? '' : '<div class="sec"><h3>El pago</h3><div class="in"><div class="sg-campos">'
         + '<div class="sg-campo ancho"><label for="rp-cli-in">Cliente</label><div id="rp-cli"></div></div>'
-        + '<div class="sg-campo"><label for="rp-f">¿Qué día entró el dinero?</label><input type="date" id="rp-f" value="' + HOY + '" max="' + HOY + '"></div>'
-        + '<div class="sg-campo"><label for="rp-s">¿Cómo se pagó?</label><select id="rp-s">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '">' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
+        + '<div class="campo"><label for="rp-f">¿Qué día entró el dinero?</label><input type="date" id="rp-f" value="' + HOY + '" max="' + HOY + '"></div>'
+        + '<div class="campo"><label for="rp-s">¿Cómo se pagó?</label><select id="rp-s">' + Object.keys(FORMAS).map(function (k) { return '<option value="' + k + '">' + esc(FORMAS[k]) + '</option>'; }).join('') + '</select></div>'
         + '<div class="sg-campo ancho" id="rp-nc-c" hidden><label for="rp-nc">¿Qué nota de crédito?</label><select id="rp-nc"></select></div>'
-        + '<div class="sg-campo"><label for="rp-m">Monto</label><input type="number" id="rp-m" step="0.01" min="0.01" inputmode="decimal" placeholder="0.00"></div>'
-        + '<div class="sg-campo"><label for="rp-r">Referencia (opcional)</label><input type="text" id="rp-r" maxlength="300" placeholder="Banco, folio del depósito…"></div>'
+        + '<div class="campo"><label for="rp-m">Monto</label><input type="number" id="rp-m" step="0.01" min="0.01" inputmode="decimal" placeholder="0.00"></div>'
+        + '<div class="campo"><label for="rp-r">Referencia (opcional)</label><input type="text" id="rp-r" maxlength="300" placeholder="Banco, folio del depósito…"></div>'
         + '</div></div></div>')
       + '<div class="sec"><h3>A qué facturas se aplica</h3><div class="in" style="padding-bottom:0"><div class="acciones"><button class="btn" type="button" id="rp-rep">Repartir solo (de la más vieja)</button><button class="btn" type="button" id="rp-lim">Limpiar</button></div></div>'
       + '<div id="rp-fac"><div class="in mut">' + (ap ? 'Cargando…' : 'Primero escoge el cliente.') + '</div></div><div class="suma" id="rp-suma"></div></div>'
@@ -3017,6 +3239,8 @@ td.sel input{width:18px;height:18px}
     'cancelar': { el: 'fac-card', si: function () { return !!(EST && EST.cancela) && !CONSULTA; }, nota: 'Nuevo: ya puedes marcar canceladas las facturas de Multinacional que se cancelaron en el SAT. En «Por cobrar» pica «Marcar cancelada» (junto a «Liquidar») o, en la ficha de la factura, el mismo botón; escribe el motivo. Si tiene pagos, primero quítalos en Multinacional › Pagos. Además, el CRM le pregunta al SAT una vez al día y marca solas las que ya se cancelaron.' },
     // Subir cotizaciones (512, 24-nov-2026): a quien cotiza se le ilumina el botón; a quien solo ve, las pilas
     'subir-cot': { el: 'b-subir-cot', alt: 'c-kpis', sec: 's-cot', nota: 'Nuevo: «Subir cotizaciones» sube la que mandó el cliente (foto, PDF o Excel). El CRM la lee, propone la clave del SAT de cada renglón (verde, amarillo o rojo) y, ya revisada, arma el Excel para «Facturación masiva» de Quo Facturita. Nada se guarda sin revisarlo y nada se timbra solo.' },
+    // Timbrar en Facturita (517, 24-nov-2026): a quien timbra se le ilumina la pila «Por timbrar»
+    'timbrar': { el: 't-tim', alt: 'kpis', si: function () { return timPuedo(); }, nota: 'Nuevo: las cotizaciones autorizadas ya se timbran desde aquí. En «Por timbrar» (o en la ficha de la cotización) pica «Timbrar»: el CRM te enseña cómo saldría en Quo Facturita con la cuenta de Multinacional y, al confirmar, la timbra y entra sola a «Por cobrar» con su XML y su PDF, ligada a su cotización. Al cliente no se le manda correo; cancelarla, en Quo Facturita.' },
     'subir': { el: 'b-subir', nota: 'Nuevo: ya puedes subir tú también las facturas de Multinacional. Pica «Subir facturas» y escoge el XML y el PDF de cada una; el CRM lee el folio, el cliente y los montos.' },
     // Pagos (332, 9-nov-2026): a quien registra se le ilumina «Registrar pago»; a quien solo ve, la lista
     'pagos': { el: 'b-pago', alt: 'p-fac', sec: 's-pag', nota: 'Nuevo: los pagos de Multinacional, como en Tesorería › Pagos. Aquí ves lo que tiene saldo y lo abonado; «Liquidar» registra el pago de lo que le queda y «Registrar pago» captura un abono o un pago a varias facturas. Las facturas que emite Multinacional ya llegan solas del SAT desde hoy.' }
@@ -3068,10 +3292,12 @@ td.sel input{width:18px;height:18px}
       }
       if (SEC === 'cot' || SEC === 'nueva') {
         if (!EST.ver_cot) throw new Error('Las cotizaciones de Multinacional no están abiertas para tu usuario.');
-        await cargaCot();
+        await Promise.all([cargaCot(), cargaTim()]);
         $('cargando').hidden = true;
         if (SEC === 'nueva' && EST.cotiza && !CONSULTA) editor(null); else muestra('cot');
-        if (id > 0) fichaCot(id);
+        var tc = +(new URLSearchParams(location.search).get('tim') || 0);
+        if (tc > 0 && TIMY && TIMY.ve) abreTimbrar(tc);
+        else if (id > 0) fichaCot(id);
         else { var vc = new URLSearchParams(location.search).get('ver'); if (vc && NUEVOS[vc] && SEC === 'cot') verNuevo(vc); }
         return;
       }
@@ -3079,8 +3305,11 @@ td.sel input{width:18px;height:18px}
       $('f-desde').value = masDias(HOY.slice(0, 8) + '01', -62).slice(0, 8) + '01'; $('f-hasta').value = HOY;
       await carga();
       muestra('fac'); $('cargando').hidden = true;
-      // desde un aviso de la campanita: abre esa factura (mul_tab.js, PROFASE_ABRE['mul-facturas']) o enseña lo nuevo
-      if (id > 0) ficha(id);
+      // desde un aviso de la campanita: abre esa factura (mul_tab.js, PROFASE_ABRE['mul-facturas']), la cotización por timbrar
+      // («mul-tim|<cot>|…», 517) o enseña lo nuevo
+      var tf = +(new URLSearchParams(location.search).get('tim') || 0);
+      if (tf > 0 && TIMY && TIMY.ve) { ponFT('tim'); pintaKpis(); pinta(); abreTimbrar(tf); }
+      else if (id > 0) ficha(id);
       else { var ver = new URLSearchParams(location.search).get('ver'); if (ver && NUEVOS[ver]) verNuevo(ver); }
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
@@ -3089,7 +3318,7 @@ td.sel input{width:18px;height:18px}
     if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'mul-refresca' || !EST || !EST.ve) return;
     if (VENT || !$('pregunta').hidden) return;   // no le cambia nada a quien está en una ventana
     if (!$('s-fac').hidden) carga().catch(function () {});
-    else if (!$('s-cot').hidden) cargaCot().catch(function () {});   // en el Cotizador no se toca lo que se está capturando
+    else if (!$('s-cot').hidden) { cargaTim().catch(function () {}); cargaCot().catch(function () {}); }   // en el Cotizador no se toca lo que se está capturando
     else if (!$('s-ban').hidden) cargaBanco(BAN && BAN.mes).catch(function () {});
     else if (!$('s-com').hidden) cargaCom(COM && COM.anio).catch(function () {});
     else if (!$('s-pag').hidden) cargaPagos().catch(function () {});
