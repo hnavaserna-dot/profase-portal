@@ -78,7 +78,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Portal PROFASE · Cotizador QUO</title>
 <meta name="robots" content="noindex,nofollow">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=8ccddeb868"></script><script src="js/tabla-pegada.js?v=c8cd10b7c9"></script><script src="js/ordenar.js?v=649ed3d746"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=8ccddeb868"></script><script src="js/tabla-pegada.js?v=5439a66df1"></script><script src="js/ordenar.js?v=b26f7cb3c5"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
@@ -652,6 +652,7 @@ table.reg tr.editando{background:var(--sky-soft)}
             <input type="number" id="fc" step="0.01" min="1" value="1.18">
           </div>
         </div>
+        <p class="nota" id="conta-fijo" hidden></p>
         <p class="nota" id="nomi-aj-tit"><b>Quo Nominita</b>: el precio de cada plan, ya sin factor de aumento (antes del IVA). Lo que cambies aquí solo vale para esta cotización.</p>
         <div class="row2 nomi-aj">
           <div class="field">
@@ -913,6 +914,14 @@ table.reg tr.editando{background:var(--sky-soft)}
      quo_ajustes/cotizador, salen los precios de la tienda (tiendaCatalogo) */
   var FAB = { fm:S.fm, fa:S.fa, fc:S.fc, nomi:JSON.parse(JSON.stringify(NOMI)) };
   var AJ_DOC = null;
+  /* Quo Contabilita con precios fijos y qué líneas se venden (Héctor Daniel Nava, 25-nov-2026, 10:06: la venta abre el 1-dic;
+     «Los precios y planes los decide él el lunes 30-nov… solo se carguen los números en el Cotizador QUO»; «Está pensando vender
+     solo la línea PRO… déjenlo fácil de hacer el lunes»). Si quo_ajustes/cotizador trae «conta», manda eso, igual que «nomi»:
+     { lineas:['PRO'] (las que se venden; sin esto, las dos), PRO:{ mensual:[4], anual:[4] } y LITE igual (cada plan ya final, sin
+     factor, antes del IVA; la línea que no venga sigue con BASE × factor) y usuario (el usuario adicional, ya final) }. Lo pone la
+     base (un archivo de portal/sql/cambios/ con su «sí»); aquí no se captura. La línea que no se vende no se cotiza y, al publicar
+     en la tienda, sale de la venta (activo: false; nada se borra). */
+  var CONTA = null;
   var $ = function(id){ return document.getElementById(id); };
   var mx = new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2});
   var nf = new Intl.NumberFormat('es-MX');
@@ -938,9 +947,33 @@ table.reg tr.editando{background:var(--sky-soft)}
       l.appendChild(i); l.appendChild(s); host.appendChild(l);
     });
   }
+  function contaDe(c){
+    if (!c || typeof c !== 'object') return null;
+    var o = { lineas:['LITE','PRO'] };
+    if (Array.isArray(c.lineas)){
+      var l = ['LITE','PRO'].filter(function(x){ return c.lineas.indexOf(x) >= 0; });
+      if (l.length) o.lineas = l;
+    }
+    ['LITE','PRO'].forEach(function(lin){
+      var x = c[lin]; if (!x || typeof x !== 'object') return;
+      ['mensual','anual'].forEach(function(per){
+        var a = x[per];
+        if (Array.isArray(a) && a.length === 4 && a.every(function(v){ return Number(v) > 0; })){
+          o[lin] = o[lin] || {}; o[lin][per] = a.map(Number);
+        }
+      });
+    });
+    if (Number(c.usuario) > 0) o.usuario = Number(c.usuario);
+    return o;
+  }
+  function lineasVenta(){ return CONTA ? CONTA.lineas : ['LITE','PRO']; }
+  function precioFijo(linea, periodo){ return CONTA && CONTA[linea] && CONTA[linea][periodo] ? CONTA[linea][periodo] : null; }
   function precioLicencia(linea, plan, periodo){
+    var f = precioFijo(linea, periodo);
+    if (f) return f[plan];
     return BASE[linea][periodo][plan] * (periodo === 'mensual' ? S.fm : S.fa);
   }
+  function precioUsuario(fc){ return CONTA && CONTA.usuario ? CONTA.usuario : USUARIO * fc; }
   function precioTimbre(i){ return TIMBRES[i].p * S.fc; }
   function precioNomi(plan, periodo){ return NOMI[periodo][plan]; }
   function precioTrab(periodo){ return periodo === 'mensual' ? NOMI.trabM : NOMI.trabA; }
@@ -980,9 +1013,18 @@ table.reg tr.editando{background:var(--sky-soft)}
     $('blq-periodo').hidden = !conLicencia();
     $('blq-timbres').hidden = !S.sis.fact;
     $('nomi-borrador').hidden = !NOMI.borrador;
+    var cf = $('conta-fijo'), fl = ['LITE','PRO'].filter(function(x){ return precioFijo(x, 'mensual') || precioFijo(x, 'anual'); });
+    cf.hidden = !CONTA;
+    cf.textContent = CONTA ? 'Quo Contabilita: se vende ' + lineasVenta().join(' y ') + (fl.length ? '; ' + fl.join(' y ')
+      + ' con sus precios ya finales (no les aplican los aumentos de arriba)' : '') + '. Lo pone la dirección.' : '';
 
     if (S.sis.conta){
-      radios($('linea'), 'linea', [{v:'LITE', t:'LITE'}, {v:'PRO', t:'PRO'}],
+      /* solo las líneas que se venden (CONTA.lineas, 25-nov-2026); una cotización de antes que se vuelve a abrir con la que ya no
+         se vende la conserva, con su nota, para no cambiarle el precio a nadie */
+      var lv = lineasVenta();
+      if (lv.indexOf(S.linea) < 0 && !S.cargada) S.linea = lv[0];
+      radios($('linea'), 'linea', ['LITE','PRO'].filter(function(x){ return lv.indexOf(x) >= 0 || x === S.linea; })
+        .map(function(x){ return { v:x, t:x, s: lv.indexOf(x) < 0 ? 'Ya no se vende' : '' }; }),
         function(){ return S.linea; }, function(v){ S.linea = v; });
       radios($('plan'), 'plan',
         [0,1,2,3].map(function(i){
@@ -1073,7 +1115,7 @@ table.reg tr.editando{background:var(--sky-soft)}
                  : (S.periodo === 'mensual' ? 'Mensualidad' : 'Anualidad, 360 días de vigencia')),
         q:1, pu:(cort ? 0 : precioLicencia(S.linea, S.plan, S.periodo))
       });
-      if (S.usuarios > 0) l.push({ c:'Usuario adicional', d:'Costo por usuario', q:S.usuarios, pu:USUARIO * S.fc });
+      if (S.usuarios > 0) l.push({ c:'Usuario adicional', d:'Costo por usuario', q:S.usuarios, pu:precioUsuario(S.fc) });
       if (S.almac >= 0) l.push({
         c:'Almacenamiento adicional · Rango ' + (S.almac + 1),
         d:'Incluye ' + nf.format(ALMAC[S.almac].xml) + ' XML', q:1, pu:ALMAC[S.almac].p * S.fc });
@@ -1397,6 +1439,7 @@ table.reg tr.editando{background:var(--sky-soft)}
           if (a[id] !== undefined && !isNaN(v) && (v > 0 || (id === 'iva' && v >= 0))){ S[id] = v; $(id).value = v; }
         });
         tomaNomi(a.nomi);
+        CONTA = contaDe(a.conta);
       }
     }
     ajListo = true;
@@ -1690,6 +1733,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     S.sis = { conta: !!sis.conta, fact: !!sis.fact, nomi: !!sis.nomi };
     if (!sisLista().length) S.sis.conta = true;
     S.linea   = (lin === 'PRO') ? 'PRO' : 'LITE';
+    S.cargada = true;   /* una cotización de antes: conserva su línea aunque ya no se venda */
     S.nplan   = (typeof e.nplan === 'number' && e.nplan >= 0 && e.nplan <= 3) ? e.nplan : 0;
     S.ntrab   = Math.max(0, Math.floor(Number(e.ntrab) || 0));
     $('ntrab').value = S.ntrab;
@@ -1901,6 +1945,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     S.ntrab = 0; $('ntrab').value = 0;
     S.cortesia = 0;
     S.dtipo = 'no'; S.dval = 0; $('desc-val').value = '';
+    S.cargada = false;
     editando = null; marcarEdicion();
     folioFijado = false;
     refrescarFolio();
@@ -2078,15 +2123,19 @@ table.reg tr.editando{background:var(--sky-soft)}
   function tiendaCatalogo(){
     var fm = tiendaFactor('fm'), fa = tiendaFactor('fa'), fc = tiendaFactor('fc');
     var nomi = nomiDe(AJ_DOC && AJ_DOC.nomi, FAB.nomi), l = [];
+    var conta = contaDe(AJ_DOC && AJ_DOC.conta);
     ['LITE','PRO'].forEach(function(lin){
       ['mensual','anual'].forEach(function(per){
+        var fijo = conta && conta[lin] && conta[lin][per];
         BASE[lin][per].forEach(function(p, i){
-          l.push({ sistema:'contabilita', clave:lin.toLowerCase() + '-' + (i + 1), periodo:per,
-                   precio:r2(p * (per === 'mensual' ? fm : fa)), nombre:lin + ' · Plan ' + (i + 1) });
+          var o = { sistema:'contabilita', clave:lin.toLowerCase() + '-' + (i + 1), periodo:per,
+                    precio:r2(fijo ? fijo[i] : p * (per === 'mensual' ? fm : fa)), nombre:lin + ' · Plan ' + (i + 1) };
+          if (conta) o.activo = conta.lineas.indexOf(lin) >= 0;
+          l.push(o);
         });
       });
     });
-    l.push({ sistema:'contabilita', clave:'usuario', periodo:'cada_cobro', precio:r2(USUARIO * fc), nombre:'Usuario adicional' });
+    l.push({ sistema:'contabilita', clave:'usuario', periodo:'cada_cobro', precio:r2(conta && conta.usuario ? conta.usuario : USUARIO * fc), nombre:'Usuario adicional' });
     TIMBRES.forEach(function(t){
       l.push({ sistema:'facturita', clave:'timbres-' + t.n, periodo:'paquete', precio:r2(t.p * fc), nombre:nf.format(t.n) + ' timbres' });
     });
@@ -2106,7 +2155,8 @@ table.reg tr.editando{background:var(--sky-soft)}
       var k = c.sistema + '|' + c.clave + '|' + c.periodo, t = tienda[k];
       if (!t){ falta.push(c); return; }
       vistos[k] = true;
-      if (Number(t.precio) !== c.precio || (c.borrador !== undefined && !!t.borrador !== c.borrador)) cambia.push({ c:c, t:t });
+      if (Number(t.precio) !== c.precio || (c.borrador !== undefined && !!t.borrador !== c.borrador)
+          || (c.activo !== undefined && (t.activo !== false) !== c.activo)) cambia.push({ c:c, t:t });
       else igual++;
     });
     var solo = (TI.tienda || []).filter(function(x){ return !vistos[x.sistema + '|' + x.clave + '|' + x.periodo]; });
@@ -2129,8 +2179,8 @@ table.reg tr.editando{background:var(--sky-soft)}
         var li = document.createElement('li'), q = document.createElement('span'), v = document.createElement('span'), b = document.createElement('b');
         li.className = 'cambia'; q.className = 'q'; v.className = 'v';
         q.textContent = tiendaNombre(x.c);
-        v.textContent = 'Tienda ' + money(x.t.precio) + (x.t.borrador ? ' (borrador)' : '') + ' → ';
-        b.textContent = money(x.c.precio) + (x.c.borrador ? ' (borrador)' : '');
+        v.textContent = 'Tienda ' + money(x.t.precio) + (x.t.borrador ? ' (borrador)' : '') + (x.t.activo === false ? ' (fuera de la venta)' : '') + ' → ';
+        b.textContent = money(x.c.precio) + (x.c.borrador ? ' (borrador)' : '') + (x.c.activo === false ? ' (fuera de la venta)' : '');
         v.appendChild(b); li.appendChild(q); li.appendChild(v); ul.appendChild(li);
       });
       lista.appendChild(ul);
@@ -2179,6 +2229,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     var l = k.cambia.map(function(x){
       var o = { sistema:x.c.sistema, clave:x.c.clave, periodo:x.c.periodo, precio:x.c.precio };
       if (x.c.borrador !== undefined) o.borrador = x.c.borrador;
+      if (x.c.activo !== undefined && (x.t.activo !== false) !== x.c.activo) o.activo = x.c.activo;   /* solo si sale o regresa a la venta */
       return o;
     });
     tiendaPide({ accion:'precios_publica', precios:l }, 'publicar los precios en la tienda').then(function(d){
