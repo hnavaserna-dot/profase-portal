@@ -496,6 +496,8 @@
       function busca(p) {
         var e = null;
         try { e = typeof p.el === 'function' ? p.el() : document.querySelector(p.el); } catch (x) { e = null; }
+        // un campo de fecha: el de siempre va escondido y se ve el dd/mm/aaaa de junto (js/fecha-campo.js); se ilumina ese
+        if (e && e.classList && e.classList.contains('pf-fc-nat') && e.previousElementSibling && e.previousElementSibling.hasAttribute('data-fecha-vista')) e = e.previousElementSibling;
         return e && caja(e) ? e : null;
       }
       function acomoda() {
