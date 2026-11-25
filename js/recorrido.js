@@ -442,7 +442,7 @@
     var bDespues = capa.querySelector('.rc-despues'), enInicio = solo && !unAviso;
     capa.querySelector('.rc-pie').classList.toggle('con-despues', solo);
     // de la mano: los cuatro muros que tapan lo que no es la parte (haz: 'clic'), la línea «Te toca» y quién escucha el clic
-    var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false, ultimoClic = 0;
+    var muros = capa.querySelectorAll('.rc-muro'), toca = capa.querySelector('.rc-toca'), hazAhora = '', docClic = null, yendo = false, ultimoClic = 0, tardo = false;
     return new Promise(function (listo) {
       function termina(como) {
         if (!activo) return;
@@ -472,7 +472,7 @@
         var p = pasos[i], t = ev.target;
         if (!activo || yendo || hazAhora !== 'clic' || !el || !p || p.listo || !t || t.nodeType !== 1) return;
         if (el !== t && !el.contains(t)) return;
-        yendo = true; var n = i; ultimoClic = Date.now();
+        yendo = true; var n = i; ultimoClic = Date.now(); tardo = false;
         setTimeout(function () { if (activo && i === n) muestra(n + 1, 1); }, 120);
       }
       function escuchaClic(d) {
@@ -584,10 +584,11 @@
           // de la mano: lo que se abre después de un clic (una ventana que pide sus datos) tarda; se espera, con «Un momento…»
           var ms = 0; try { ms = typeof p.espera === 'function' ? +p.espera() || 0 : +p.espera || 0; } catch (x) { ms = 0; }
           // después de un clic de la persona (una opción del menú, una pestaña) la pantalla tarda en abrir: se espera
-          if (!ms && p.espera == null && dir > 0 && n > 0 && pasos[n - 1] && pasos[n - 1].haz === 'clic') ms = 5000;
+          if (!ms && p.espera == null && dir > 0 && n > 0 && pasos[n - 1] && pasos[n - 1].haz === 'clic') { ms = 5000; tardo = !el; }
           // y si la pantalla sigue abriendo (un celular lento), los pasos que siguen también esperan hasta 8 s desde el clic,
-          // en lugar de brincarse uno tras otro (24-nov-2026)
-          if (!ms && p.espera == null && dir > 0 && ultimoClic && Date.now() - ultimoClic < 8000) ms = ultimoClic + 8000 - Date.now();
+          // en lugar de brincarse uno tras otro (24-nov-2026); solo si lo que abrió el clic tardó en salir: si el clic abrió
+          // algo que salió al momento (FILTROS o «Más ▾»), lo que no está en esta pantalla se brinca sin «Un momento…»
+          if (!ms && p.espera == null && dir > 0 && ultimoClic && tardo && Date.now() - ultimoClic < 8000) ms = ultimoClic + 8000 - Date.now();
           if (!el && ms > 0 && dir > 0) {
             capa.classList.add('sin-luz'); espera.hidden = false;
             for (var h = Date.now() + ms; !el && Date.now() < h;) { await dormir(200); if (!activo || i !== n) return; el = busca(p); }
