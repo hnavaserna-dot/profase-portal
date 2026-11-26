@@ -14,6 +14,21 @@ if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   echo "::notice::Todavía no está la llave de Cloudflare (CLOUDFLARE_API_TOKEN): no se sube la copia. GitHub Pages sigue igual."
   exit 0
 fi
+# La llave, limpia (26-nov-2026: la primera vez llegó con algo más y Wrangler no la pudo mandar). Si al pegarla se fue con un
+# salto de renglón, espacios o el comando de prueba de Cloudflare («Authorization: Bearer …»), se toma solo la llave. Nunca
+# se imprime: solo cuántas letras y renglones traía.
+LLAVE="$CLOUDFLARE_API_TOKEN"
+RENGLONES=$(printf '%s\n' "$LLAVE" | grep -c .)
+case "$LLAVE" in
+  *"Bearer "*) LLAVE="${LLAVE##*Bearer }"; LLAVE="${LLAVE%%[\"\' ]*}" ;;
+esac
+LLAVE=$(printf '%s' "$LLAVE" | tr -d '[:space:]')
+if ! printf '%s' "$LLAVE" | grep -Eq '^[A-Za-z0-9_-]{30,120}$'; then
+  echo "::error::La llave CLOUDFLARE_API_TOKEN no tiene la forma de una llave de Cloudflare (trae ${#LLAVE} letras en $RENGLONES renglón(es) y una llave es un solo renglón de unas 40 letras y números). Las páginas siguen en GitHub Pages. Qué hacer: en Cloudflare › My Profile › API Tokens, junto a la llave que sacaste para la copia, «Roll» (saca otra y la anterior deja de servir); copia solo la llave, sin «Bearer» ni el comando de prueba, y pégala en Settings › Secrets and variables › Actions › CLOUDFLARE_API_TOKEN de cada repositorio."
+  exit 1
+fi
+[ "$LLAVE" = "$CLOUDFLARE_API_TOKEN" ] || echo "::notice::La llave venía con algo más (${#CLOUDFLARE_API_TOKEN} letras en $RENGLONES renglón(es)); se tomó solo la llave (${#LLAVE} letras)."
+export CLOUDFLARE_API_TOKEN="$LLAVE"
 (cd .cloudflare && sha256sum -c --quiet worker.sha256) || {
   echo "::error::.cloudflare/worker.js no es la copia de profase-datos. Qué hacer: en profase-datos corre «python3 -I herramientas/cloudflare/reparte.py» y sube lo que cambie."
   exit 1
