@@ -294,6 +294,8 @@ button,select,input,textarea{font:inherit;color:inherit}
     oblig_sin_tarea: 'El SAT dice que el cliente presenta una obligación y no tiene su tarea en el WorkFlow',
     linea_por_vencer: 'La línea de captura está por vencer y el SAT no tiene su pago',
     linea_vencida: 'La línea de captura venció y el SAT no tiene su pago',
+    // 535: ya se subió el comprobante del pago (o se terminó la tarea) y el SAT todavía no lo refleja (no es algo que esté mal)
+    linea_comprobante: 'Ya se subió el comprobante del pago a «Línea Pagada»; falta que el SAT lo refleje (tarda uno o dos días hábiles)',
     linea_sin_pago: '«Línea Pagada» está terminada en el WorkFlow, pero el SAT no tiene el pago',
     nomina_sin_sat: 'El timbrado de nómina está terminado en el WorkFlow, pero en el SAT faltan los recibos',
     canceladas_activas: 'El reporte de canceladas está terminado, pero en QUO siguen facturas que el SAT ya tiene canceladas',
@@ -308,15 +310,16 @@ button,select,input,textarea{font:inherit;color:inherit}
   var CORTO = { wf_sin_sat: 'Terminada en el WorkFlow; el SAT no la tiene', acuse_otro: 'PDF de otra empresa o de otro mes en la tarea',
     opinion_negativa: 'Opinión del SAT negativa', por_vencer: 'Por vencer; el SAT todavía no la tiene', vencida: 'Ya venció; el SAT no la tiene',
     sin_terminar: 'Presentada en el SAT; falta cerrarla en el WorkFlow', rev_xml: 'Presentada, pero no cuadra con el SAT',
-    oblig_sin_tarea: 'Obligación en el SAT sin tarea en el WorkFlow', linea_por_vencer: 'Línea de captura por vencer; el SAT no tiene el pago',
+    oblig_sin_tarea: 'Obligación en el SAT sin tarea en el WorkFlow', linea_por_vencer: 'Línea de captura por vencer o recién vencida; el SAT no tiene el pago',
     linea_vencida: 'Línea de captura vencida; el SAT no tiene el pago', linea_sin_pago: 'Línea pagada en el WorkFlow; el SAT no tiene el pago',
+    linea_comprobante: 'Pagada según comprobante; falta que el SAT la refleje',
     nomina_sin_sat: 'Nómina terminada en el WorkFlow; faltan recibos en el SAT', canceladas_activas: 'Canceladas en el SAT; siguen vigentes en QUO',
     imss_negativa: 'Opinión del IMSS negativa', ceros_espera: 'DyP en ceros; esperando al cliente',
     tarde: 'Presentada en el SAT después de su fecha; con recargos' };
   // «Cómo va» de lo que todavía no es un error (POR_ATENDER): qué falta, en palabras (antes, «Por atender» para los tres)
   var FALTA = { por_vencer: 'Por presentar', sin_terminar: 'Por cerrar en el WorkFlow', linea_por_vencer: 'Por pagar' };
   var TONO_T = { wf_sin_sat: 'rojo', acuse_otro: 'naranja', opinion_negativa: 'ambar', por_vencer: 'ambar', vencida: 'rojo', sin_terminar: 'azul', rev_xml: 'naranja', oblig_sin_tarea: 'ambar',
-    linea_por_vencer: 'ambar', linea_vencida: 'rojo', linea_sin_pago: 'rojo', nomina_sin_sat: 'rojo', canceladas_activas: 'naranja', imss_negativa: 'ambar', ceros_espera: 'gris', tarde: 'rojo' };
+    linea_por_vencer: 'ambar', linea_vencida: 'rojo', linea_sin_pago: 'rojo', nomina_sin_sat: 'rojo', canceladas_activas: 'naranja', imss_negativa: 'ambar', ceros_espera: 'gris', linea_comprobante: 'gris', tarde: 'rojo' };
   // lo que todavía se puede atender a tiempo (no es un error: es un aviso de que se acerca)
   var POR_ATENDER = { por_vencer: 1, sin_terminar: 1, linea_por_vencer: 1 };
   // lo que ya salió mal (rojo en la lista)
@@ -338,14 +341,16 @@ button,select,input,textarea{font:inherit;color:inherit}
   function mesTxt(h) { return /anual/i.test(h.actividad || '') || h.diag_clave === 'obl_anual' ? 'Anual de ' + h.ejercicio : h.mes ? MESES_L[h.mes - 1] + ' de ' + h.ejercicio : String(h.ejercicio || ''); }
   function per(h) { return h.ejercicio + '-' + String(h.mes || 1).padStart(2, '0'); }
   function abierto(h) { return h.estado === 'abierto'; }
-  // lo que está mal o por vencer (sin «Esperando al cliente», que va aparte: 471)
-  function malo(h) { return abierto(h) && h.tipo !== 'ceros_espera'; }
+  // lo que está mal o por vencer (sin «Esperando al cliente», que va aparte: 471; ni «Pagada según comprobante», que espera al SAT: 535)
+  var ESPERA_T = { ceros_espera: 1, linea_comprobante: 1 };
+  function malo(h) { return abierto(h) && !ESPERA_T[h.tipo]; }
   function czEstado(h) { return h.ceros && h.ceros.estado === 'por_confirmar' ? 'Falta que su gerente lo confirme' : h.ceros && h.ceros.info ? 'Llegó la información' : 'Esperando al cliente'; }
   function como(h) {
     if (h.estado === 'descartado' && h.no_aplica) return chip('No le toca al despacho · ' + fecha(h.resuelto), 'az');
     if (!abierto(h)) return chip('Ya quedó · ' + fecha(h.resuelto), 'ok');
     if (h.reabrio) return chip('La tarea regresó a Rechazada', 'mal');
     if (h.tipo === 'ceros_espera') return chip(czEstado(h), 'az');
+    if (h.tipo === 'linea_comprobante') return chip('Esperando al SAT', 'az');
     if (POR_ATENDER[h.tipo]) return chip(FALTA[h.tipo] || 'Por atender', 'ojo');
     return chip('Por corregir', 'mal');
   }
@@ -355,6 +360,7 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (!abierto(h)) return 'Ya quedó';
     if (h.reabrio) return 'La tarea regresó a Rechazada';
     if (h.tipo === 'ceros_espera') return czEstado(h);
+    if (h.tipo === 'linea_comprobante') return 'Esperando al SAT';
     if (POR_ATENDER[h.tipo]) return FALTA[h.tipo] || 'Por atender';
     return 'Por corregir';
   }
@@ -565,7 +571,7 @@ button,select,input,textarea{font:inherit;color:inherit}
         + '<td class="cli">' + esc(h.rs || h.rfc) + '<div class="mut">' + esc(h.rfc) + (h.grupo ? ' · ' + esc(h.grupo) : '') + '</div></td>'
         + '<td class="num">' + esc(mesTxt(h)) + '</td>'
         + venceCelda(h)
-        + '<td class="que">' + chip(CORTO[h.tipo] || h.tipo, MAL_T[h.tipo] ? 'mal' : h.tipo === 'sin_terminar' || h.tipo === 'ceros_espera' ? 'az' : 'ojo')
+        + '<td class="que">' + chip(CORTO[h.tipo] || h.tipo, MAL_T[h.tipo] ? 'mal' : h.tipo === 'sin_terminar' || ESPERA_T[h.tipo] ? 'az' : 'ojo')
         + '<div class="idea">' + esc(h.diagnostico || '') + '</div></td>'
         + costoCelda(h, PR)
         + '<td>' + (h.actividad ? esc(h.actividad) + '<div class="mut">' + esc([h.resp ? 'Responsable: ' + h.resp : '', h.aut ? 'Autoriza: ' + h.aut : ''].filter(Boolean).join(' · ')) + '</div>' : '<span class="mut">Del cliente</span>') + '</td>'
@@ -601,6 +607,20 @@ button,select,input,textarea{font:inherit;color:inherit}
     if (ab && h.consecuencia) L.push(['va', 'Si no se corrige: ' + esc(h.consecuencia)]);
     if (ab && h.act) L.push(['va', 'Se corrige en la tarea; al quedar, este hallazgo pasa solo a «Ya quedó».']);
     if (ab && obl) L.push(['va', 'En cuanto tenga su tarea en el WorkFlow (o la constancia ya no traiga la obligación), la revisión de cada mañana lo pasa sola a «Ya quedó».']);
+    // 535: la línea de captura: cuándo revisó Centauro el pago en el SAT, el comprobante y «Revisar el pago ahora»
+    var lin = /^linea_/.test(h.tipo), pg = h.pago || {}, cp = h.comp;
+    if (ab && lin) {
+      var ult = pg.rapido && (!pg.completa || pg.rapido > pg.completa) ? pg.rapido : pg.completa;
+      L.push(['va', (ult ? 'Centauro revisó el pago en el SAT por última vez el ' + esc(fechaHora(ult)) + '.' : 'Centauro todavía no ha revisado el pago de este mes en el SAT.')
+        + (pg.camino ? ' Ya va en camino otra revisión: en unos minutos se pone al día.' : '')
+        + (pg.error ? ' La última vez no se pudo: ' + esc(String(pg.error).replace(/[.\s]+$/, '')) + '.' : '')]);
+      if (cp) L.push(['si', 'El comprobante: ' + (cp.doc ? '«' + esc(cp.nombre || 'Documento') + '»' : 'la tarea se terminó') + ' el ' + esc(fecha(cp.en)) + (cp.quien ? ' (' + esc(cp.quien) + ')' : '') + '.']);
+    }
+    var revPago = ab && lin && DATOS.pago_puede && !CONSULTA
+      ? '<div class="sg-fila pago-rev"><button class="btn" type="button" id="f-pago"' + (pg.camino ? ' disabled' : '') + '>' + (pg.camino ? 'Revisando el pago…' : 'Revisar el pago ahora') + '</button>'
+        + '<p class="mut">Centauro entra al SAT con la e.firma del cliente y revisa solo «Declaraciones pagadas» de este mes; te llega a la campanita cómo salió.</p>'
+        + '<p class="nota bien" id="f-pago-ok" hidden role="status"></p><p class="nota mal" id="f-pago-err" hidden role="alert"></p></div>'
+      : '';
     var aud = '<dl class="aud">'
       + '<dt>Qué dice el SAT</dt><dd>' + esc(h.sat_dice || '') + '</dd>'
       + '<dt>Qué dice el WorkFlow</dt><dd>' + esc(h.wf_dice || '') + '</dd>'
@@ -636,7 +656,7 @@ button,select,input,textarea{font:inherit;color:inherit}
         + '<p>' + esc(h.diagnostico || '') + '</p>'
         + '<div class="seg-chips">' + como(h) + (h.mio && ab ? ' ' + chip('Te toca', 'na') : '') + (costoDe(h) ? ' ' + chip('Le costó ' + pesos(h.costo.total), 'mal') : '') + '</div>',
       bajoResumen: pasos + window.PROFASE_SEG.falta(ab ? 'Qué hacer' : 'Cómo quedó', L),
-      despues: (h.act ? '<div class="sg-fila"><button class="btn acento" type="button" id="f-tarea">Abrir la tarea en el Panel de trabajo</button></div>' : '') + marcar,
+      despues: (h.act ? '<div class="sg-fila"><button class="btn acento" type="button" id="f-tarea">Abrir la tarea en el Panel de trabajo</button></div>' : '') + revPago + marcar,
       pestanas: [{ id: 'aud', t: 'Mini auditoría', html: aud }].concat(costoDe(h) ? [{ id: 'costo', t: 'Le costó al cliente', html: costoTabla(h) }] : [])
         .concat([{ id: 'tarea', t: 'La tarea', html: tarea }]),
       alCerrar: function () { if (VI !== inst) return; VI = null; pinta(); },
@@ -644,10 +664,30 @@ button,select,input,textarea{font:inherit;color:inherit}
         var b = scrim.querySelector('#f-tarea'); if (b) b.onclick = function () { abreTarea(h); };
         var n = scrim.querySelector('#f-noap'); if (n) n.onclick = function () { marca(h, true, (scrim.querySelector('#f-mot') || {}).value, n, scrim); };
         var s2 = scrim.querySelector('#f-sile'); if (s2) s2.onclick = function () { marca(h, false, null, s2, scrim); };
+        var rp = scrim.querySelector('#f-pago'); if (rp) rp.onclick = function () { revisaPago(h, rp, scrim); };
       }
     });
     VI = inst;
     pinta();
+  }
+
+  /* «Revisar el pago ahora» (535): el robot de Centauro revisa solo «Declaraciones pagadas» de ese cliente; la base revisa quién
+     y cuántas veces al día */
+  async function revisaPago(h, btn, scrim) {
+    var err = scrim && scrim.querySelector('#f-pago-err'), okp = scrim && scrim.querySelector('#f-pago-ok');
+    if (err) err.hidden = true;
+    btn.disabled = true;
+    try {
+      var r = await rpc('cen_hall_pago_pide', { p_id: h.id });
+      var t = (r && r.mensaje) || 'Listo: Centauro revisa el pago en unos minutos; te llega a la campanita cómo salió.';
+      if (okp) { okp.textContent = t; okp.hidden = false; } else avisa(t);
+      btn.textContent = 'Revisando el pago…';
+      h.pago = Object.assign({}, h.pago || {}, { camino: true });
+    } catch (e) {
+      var m = falla(e, 'pedir que Centauro revise el pago');
+      if (err) { err.textContent = m; err.hidden = false; } else error(m);
+      btn.disabled = false;
+    }
   }
 
   /* «No le toca al despacho» / «Sí le toca» (solo gerentes y la dirección; la base lo vuelve a revisar) */
