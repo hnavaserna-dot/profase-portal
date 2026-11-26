@@ -206,8 +206,10 @@
     /* QUO: lo de los sistemas Quo junto, lo que se vende y su soporte (Héctor Daniel Nava, 8-nov-2026, 15:46: «Así es»; antes
        Q Chat iba en Chat). Q Chat es una sola pantalla (qchat.html, vista qch) con tres opciones: cada una abre su pestaña
        (p; el botón de la vista dice cuál está abierta con data-sub, lo pone qch_tab.js). Solo a quien la base deja
-       (qchat_estado(), 326_qchat.sql); el cotizador y las membresías, a quien ya los tiene (es_quo()). La clave «qchat» no
-       cambió (las ligas de la campanita y los recorridos siguen igual). */
+       (qchat_estado(), 326_qchat.sql); Clientes Quo, a quien ya lo tiene (es_quo()), y el Cotizador QUO, desde el 25-nov-2026
+       (540), solo a la dirección (es_quo_cot(): Héctor Daniel Nava lo usa y Héctor Nava Ramos lo ve; quo_tab.js no le pinta el
+       botón a nadie más, así que el menú tampoco lo ofrece). La clave «qchat» no cambió (las ligas de la campanita y los
+       recorridos siguen igual). */
     /* «Clientes Quo» (21-nov-2026; Héctor Daniel Nava: «en el CRM… en el menú QUO»; «súper fácil de administrar»): antes
        «Control de membresías»; la misma clave (quo-membresias) y la misma página, que ahora abre en cada cliente de los
        sistemas Quo con su membresía, su cuenta, sus usuarios y lo de Gold. Va primero. */

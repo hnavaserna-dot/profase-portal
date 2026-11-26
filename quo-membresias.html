@@ -147,6 +147,15 @@
       return P.sb.rpc('es_quo').then(function(r){ return r.data === true; });
     }).catch(function(){ return false; });
   };
+  /* el Cotizador QUO y sus cotizaciones, solo la dirección (25-nov-2026, 540: es_quo_cot()); a Fernando Cadengo y a Gabo
+     esta pantalla no les enseña cotizaciones (la base tampoco se las deja leer) */
+  window.QUO_COT = function(){
+    return P.listo.then(function(p){
+      if (!p) return false;
+      if (p.rol === 'director') return true;
+      return P.sb.rpc('es_quo_cot').then(function(r){ return r.data === true; });
+    }).catch(function(){ return false; });
+  };
 })();
 </script>
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
@@ -1276,6 +1285,7 @@ let conexion='cargando';        // cargando | lista | sin-db
 let puedeEscribir=null;         // null = no informado
 let puedeAdmin=null;            // null = no informado; false = colabora pero no administra
 let clientes=[], pagos=[], cotizaciones=[], facturitas=[], historial=[];
+let COT=false;   // ¿ve las cotizaciones del Cotizador QUO? (solo la dirección desde el 25-nov-2026, 540)
 let config={ cuentaCobro:{banco:'',titular:'',clabe:'',cuenta:''}, cotizador:{url:'',nombre:''}, etiquetas:ETIQUETAS_INICIALES };
 let almacen=null;               // {files,bytes,maxFiles,maxBytes}
 let vista='cq', seleccion=null;
@@ -1364,7 +1374,7 @@ async function iniciar(){
     render();
   }, alErrar);
 
-  db.collection('cotizaciones').onSnapshot(s=>{
+  if(COT) db.collection('cotizaciones').onSnapshot(s=>{
     cotizaciones=s.docs.map(d=>Object.assign({}, d.data(), {id:d.id}));
     if(vista==='cotizaciones') render();
   }, alErrar);
@@ -3607,7 +3617,7 @@ function vistaPrecios(){
   if(sinAdmin()){
     h+='<div class="note" style="margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 16px">'+
        '<b>Puedes consultar el tarifario, no cambiarlo.</b> Los porcentajes, el IVA y la cuenta de depósito sólo los modifica quien administra la página. '+
-       'Clientes, pagos y cotizaciones sí los capturas con normalidad.</div>';
+       'Clientes'+(COT?', pagos y cotizaciones':' y pagos')+' sí los capturas con normalidad.</div>';
   }
 
   h+='<div class="note" style="margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 16px">'+
@@ -4874,7 +4884,7 @@ function cqArmaBarra(){
   const botones=[xl]; if(!ro) botones.push(nuevo);
   const mas=[[mk('Panel de membresías', ir('panel'), 'El panel de antes: por tipo de cartera, por vencer, sin comprobante y lo cobrado en el mes'),
               mk('Padrón y grupos', ir('clientes'), 'La lista de antes, con sus categorías y los grupos (quién paga por quién)'),
-              mk('Todas las cotizaciones', ir('cotizaciones'), 'Las del Cotizador QUO, por estatus')],
+              COT?mk('Todas las cotizaciones', ir('cotizaciones'), 'Las del Cotizador QUO, por estatus'):null],
              [ro?null:mk('Registrar un pago suelto', function(){ cerrarOverlay(); modalPago(null, null); }, 'Un depósito que todavía no sabes de quién es'),
               (function(){ const b=mk('Descuentos', function(){ cqDescuentos(); }, 'Los descuentos de la compra en línea: un código como BUENFIN o un precio especial para una cuenta');
                 b.id='cq-mas-desc'; b.hidden=!cqDescPapel(); return b; })(),   // sale cuando la base dice quién los ve (al traer lo de Quo)
@@ -5033,8 +5043,9 @@ function cqFalta(r){
   }
   if(r.tipo==='cuenta' && r.ge){
     const d=r.gdias;
-    l.push(r.ge==='vencida'?['no','Lo que tenía en Gold venció '+(d!=null?'hace '+(-d)+' días':'')+'. Qué hacer: cotízale y, si sigue, dale de alta su membresía.']
-      : r.ge==='por_vencer'?['va','Lo de Gold vence en '+d+' días. Qué hacer: cotízale antes de que venza.']
+    // las cotizaciones son de la dirección (540): a quien no cotiza, el «Qué hacer» le dice a quién pasárselo
+    l.push(r.ge==='vencida'?['no','Lo que tenía en Gold venció '+(d!=null?'hace '+(-d)+' días':'')+'. Qué hacer: '+(COT?'cotízale':'si pide cotización, pásasela a la dirección')+' y, si sigue, dale de alta su membresía.']
+      : r.ge==='por_vencer'?['va','Lo de Gold vence en '+d+' días. Qué hacer: '+(COT?'cotízale antes de que venza.':'avísale a la dirección antes de que venza, para cotizarle.')]
       : r.ge==='sin_fecha'?['va','Gold no trae su vencimiento. Qué hacer: revisa con el cliente hasta cuándo pagó.']
       : ['si', r.ge==='gratis'?'Es la cuenta gratis.':'Lo de Gold sigue vigente.']);
   }
@@ -5240,18 +5251,18 @@ function cqFicha(k){
     : [{id:'pagos', t:'Membresía', html:cqTabPagos(r)}].concat(r.a && clSus(r.a).length ? [{id:'linea', t:'Compra en línea', html:cqTabLinea(r)}] : [], [
        {id:'usuarios', t:'Usuarios', html:cqTabUsuarios(r)},
        {id:'cuenta', t:'Cuenta', html:cqTabCuenta(r)},
-       {id:'cots', t:'Cotizaciones', html:cqTabCots(r)},
+       {id:'cots', t:'Cotizaciones', html:COT?cqTabCots(r):''},
        {id:'gold', t:'Lo de Gold', html:cqTabGold(r)},
-       {id:'bit', t:'Bitácora', html:cqTabBitacora(r)}]);
+       {id:'bit', t:'Bitácora', html:cqTabBitacora(r)}].filter(function(x){ return x.id!=='cots' || COT; }));
   const ro=soloLectura(), cierra=function(){ if(CQV===v){ CQV=null; v.cerrar(); } };
   const acc=[];
   if(!ro && r.c) acc.push({t:'Registrar pago', accion:function(){ cierra(); pagoEditando=null; cerrarOverlay(); modalPago(r.c.id, null); }},
                          {t:'Editar datos', tipo:'b2', accion:function(){ cierra(); seleccion=r.c.id; pagoEditando=null; modalFicha(r.c.id); }});
   if(!ro && r.tipo==='cuenta' && !r.linea) acc.push({t:'Dar de alta su membresía', accion:function(){ cierra(); cqAltaDesdeCuenta(r.a); }});
-  if(!ro && r.x && estCot(r.x)==='Aprobada' && !r.x.clienteId) acc.push({t:'Dar de alta como cliente', accion:function(){ cierra(); altaDesdeCotizacion(r.x.id); }});
+  if(COT && !ro && r.x && estCot(r.x)==='Aprobada' && !r.x.clienteId) acc.push({t:'Dar de alta como cliente', accion:function(){ cierra(); altaDesdeCotizacion(r.x.id); }});
   if(r.linea && cqDescPapel()==='crea') acc.push({t:'Darle un descuento', tipo:'b2', accion:function(){ cierra(); cqDescForma(null, r.a.id, r.k); }});
   if(r.tipo==='solicitud' && cqAdmin()) acc.push({t:cqAdmin()==='hace'?'Atender la solicitud':'Abrir la solicitud', accion:function(){ cierra(); CQA.sl.rev=false; cqaSFicha(r.s.id); }});
-  if(!ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot', cliente:cqParaCotizar(r)}, location.origin); }catch(e){} }});
+  if(COT && !ro && r.tipo!=='solicitud') acc.push({t:'Nueva cotización', tipo:'b2', accion:function(){ cierra(); try{ window.parent.postMessage({quoSub:'cot', cliente:cqParaCotizar(r)}, location.origin); }catch(e){} }});
   const v=CQV=window.PROFASE_SEG.abre({ ancho:true, sinPlatica:true, kick:'Clientes Quo', titulo:r.nombre||'Sin nombre',
     nav: pos>=0 && lista.length>1 ? { pos:pos+1, total:lista.length, donde:'en tu lista', ant:pos>0, sig:pos<lista.length-1,
       ir:function(dir){ const n=lista[pos+(dir<0?-1:1)]; if(n) cqFicha(n); } } : null,
@@ -5612,11 +5623,11 @@ function cqDescApaga(x){
 }
 function cqComoSeLee(){
   abrirModal('Cómo se lee esta pantalla', 'Clientes Quo junta en un solo lugar a cada cliente de los sistemas Quo.',
-    '<p><b>Las pilas</b> dicen qué atender hoy: vencidos, los que vencen en 30 días, pagos sin comprobante, prospectos y cotizaciones sin respuesta, lo que falta ligar y los que están al corriente. Pica una para ver solo esos; otra vez, para quitarlo.</p>'
-    +'<p><b>Cada renglón</b> es una membresía (lo que se le cobra), una cuenta de Quo que todavía no tiene membresía, una cuenta que se registró sola y paga en línea, una cotización sin cliente o una solicitud de la página de venta.</p>'
+    '<p><b>Las pilas</b> dicen qué atender hoy: vencidos, los que vencen en 30 días, pagos sin comprobante, prospectos'+(COT?' y cotizaciones sin respuesta':'')+', lo que falta ligar y los que están al corriente. Pica una para ver solo esos; otra vez, para quitarlo.</p>'
+    +'<p><b>Cada renglón</b> es una membresía (lo que se le cobra), una cuenta de Quo que todavía no tiene membresía, una cuenta que se registró sola y paga en línea, '+(COT?'una cotización sin cliente o ':'')+'una solicitud de la página de venta.</p>'
     +'<p><b>Compraron en línea</b> son los que se registraron solos en www.quosistemas.com: su prueba de 30 días, su plan de cada sistema y sus pagos con tarjeta (los cobra Stripe; aquí solo se ven). Si su pago no pasa, tienen 5 días de gracia y luego solo entran a «Mi suscripción», sin que se borre nada.</p>'
     +(cqDescPapel()?'<p><b>Más ▾ › Descuentos</b>: los códigos como BUENFIN y los precios especiales para una cuenta. Los crean Héctor Daniel Nava y Fernando Cadengo, cada uno dice quién lo autorizó y, si a un cobro le tocan dos, cuenta solo el mayor.</p>':'')
-    +'<p><b>La ficha</b> trae arriba «Qué falta» y abajo sus pestañas: la membresía y sus pagos, sus usuarios de Contabilita, Facturita y Nominita (y los que tenía en Quo Gold), su cuenta con sus RFC, sus cotizaciones, lo que tenía comprado en Gold y la bitácora de su cuenta.</p>'
+    +'<p><b>La ficha</b> trae arriba «Qué falta» y abajo sus pestañas: la membresía y sus pagos, sus usuarios de Contabilita, Facturita y Nominita (y los que tenía en Quo Gold), su cuenta con sus RFC, '+(COT?'sus cotizaciones, ':'')+'lo que tenía comprado en Gold y la bitácora de su cuenta.</p>'
     +'<p><b>La membresía se liga con su cuenta de Quo</b> sola, por su RFC o por el correo de la plataforma; si no la encuentra, se escoge a mano en la pestaña «Usuarios».</p>'
     +(cqAdmin()?'<p><b>Lo que hacía la Consola Quo</b> vive aquí: en «Más ▾», «Usuarios de todas las cuentas», «Solicitudes de la página»'+(cqAdmin()==='hace'?' y «Agregar cliente en Quo»':'')+'; en la ficha, «Cuenta» trae '+(cqAdmin()==='hace'?'«Cambiar nombre o sistemas» y ':'')+'su despacho contable, y «Usuarios», a su gente.'+(cqAdmin()==='hace'?'':' Los cambios los hacen Héctor Daniel Nava y Fernando Cadengo.')+'</p>':'')
     +'<p>Lo de Quo se lee directo de la base de Quo cada vez que abres la pantalla. Nada cobra, avisa ni suspende solo: cada acción la hace una persona.</p>',
@@ -6558,10 +6569,11 @@ function cqaTrasCarga(){
 
 function render(){
   document.documentElement.style.setProperty('--eyebrow', JSON.stringify(EYEBROW[vista]||'Clientes Quo'));
-  document.getElementById('nav').innerHTML=MODULOS.filter(m=>!m.mas||vista===m.id).map(m=>
+  if(vista==='cotizaciones' && !COT) vista='cq';
+  document.getElementById('nav').innerHTML=MODULOS.filter(m=>(m.id!=='cotizaciones'||COT)&&(!m.mas||vista===m.id)).map(m=>
     '<button data-vista="'+esc(m.id)+'" aria-current="'+(vista===m.id)+'">'+m.label+'</button>').join('');
   const cu=(config.cotizador||{});
-  document.getElementById('enlace-cot').innerHTML = (window.parent!==window)
+  document.getElementById('enlace-cot').innerHTML = (window.parent!==window && COT)
     ? '<a class="linkbar" href="#" data-cotizador>Cotizador QUO &#8594;</a>' : '';
   const v=document.getElementById('view');
   if(conexion==='cargando'){ v.innerHTML=vistaCargando(); return; }
@@ -6972,8 +6984,13 @@ document.addEventListener('click', function(ev){
 });
 
 render();
-window.QUO_ACCESO().then(function(ok){
-  if(ok){ iniciar(); return; }
+window.QUO_ACCESO().then(async function(ok){
+  if(ok){
+    try{ COT = await window.QUO_COT(); }catch(e){ COT=false; }
+    window.__cqCot=COT;   // la guía «?» y el recorrido lo leen para no enseñar cotizaciones a quien no las ve
+    if(!COT){ const pp=CQ_PILAS.find(function(x){ return x.k==='prospecto'; }); if(pp){ pp.t='Prospectos'; pp.d='Solicitudes de la página de venta.'; } }
+    iniciar(); return;
+  }
   document.getElementById('view').innerHTML='<div class="arranque"><h2>Sin acceso</h2>'+
     '<p>Esta sección es solo para quienes llevan Quo Contabilita.</p></div>';
 });
