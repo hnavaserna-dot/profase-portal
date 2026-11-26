@@ -236,6 +236,30 @@
     if (rows.length < 2 && !(t.__poPag && rows.length)) return false;
     for (var i = 0; i < rows.length && i < 200; i++) if (rows[i].querySelector(CAPTURA)) return false;
     if (semantico(rows)) return false;
+    t.__poN = rows.length;
+    return true;
+  }
+  // Lo mismo que viable(), solo para los renglones que se agregaron al final de una tabla que ya se podía ordenar
+  // (revisión nocturna del 26-nov-2026: Variaciones › «Resueltas» agrega ~6,500 renglones en 17 pedazos y, con cada
+  // pedazo, viable() volvía a leer cada celda de todos los renglones: 168 ms). Agregar al final no hace «semántica» a una
+  // tabla que no lo era (sus pares de antes siguen igual) ni cambia lo que ya se revisó; solo hay que ver los nuevos:
+  // celdas de varios renglones y, entre los primeros 200 de datos, campos para capturar. null: no se sabe, revísala toda.
+  function viableNuevos(t, cab, nuevos) {
+    if (!t.isConnected || t.closest('[data-sin-orden]')) return false;
+    if (!cab || cab.n < 2 || !t.tBodies.length) return false;
+    if (t.__poPag && t.__poPag.no) return false;
+    if (propio(t)) return false;
+    if (!t.__po || t.__poN == null || t.__po.cab.n !== cab.n) return null;
+    var n = t.__poN;
+    for (var i = 0; i < nuevos.length; i++) {
+      var tr = nuevos[i];
+      if (!tr.parentNode || tr.parentNode.parentNode !== t || tr.parentNode.tagName !== 'TBODY') return null;
+      for (var c = 0; c < tr.cells.length; c++) if ((tr.cells[c].rowSpan || 1) > 1) return false;
+      if (especial(tr, cab.n) || esTotal(tr)) continue;
+      if (n < 200 && tr.querySelector(CAPTURA)) return false;
+      n++;
+    }
+    t.__poN = n;
     return true;
   }
 
@@ -279,9 +303,11 @@
     });
     t.__po = null;
   }
-  function decora(t) {
+  function decora(t, nuevos) {
     var cab = cabeza(t);
-    if (!viable(t, cab)) { if (t.__po) quitaCab(t); return null; }
+    var ok = nuevos && nuevos.length ? viableNuevos(t, cab, nuevos) : null;
+    if (ok === null) ok = viable(t, cab);
+    if (!ok) { if (t.__po) quitaCab(t); return null; }
     // ¿ya estaba y los títulos son los mismos?
     if (t.__po && t.__po.cab.n === cab.n && t.__po.cab.hojas.every(function (h, c) { return h === cab.hojas[c] && (!h || !h.classList.contains('po-th') || h.querySelector('.po-o')); })) return t.__po;
     if (t.__po) quitaCab(t);
@@ -502,24 +528,43 @@
   });
 
   // ---------- revisar las tablas que entran o cambian ----------
-  function revisa(t) {
+  function revisa(t, nuevos) {
     if (!t || t.__poRev) return;
     t.__poRev = true;
     try {
-      var P = decora(t);
+      var P = decora(t, nuevos);
       if (P && ESTADO[P.k] && !(t.__poPag && !t.__poPag.no)) ordenaDom(t);
       else if (P) pintaCab(t);
     } finally { t.__poRev = false; }
   }
   var NO_MIRA = /^(SCRIPT|STYLE|LINK|svg|path|BR|IMG|INPUT|OPTION)$/;
+  // Por tabla, lo que cambió: si solo se le agregaron renglones al final de un tbody (un pedazo más de una tabla
+  // larga), solo esos renglones (nv); cualquier otra cosa (quitar, insertar en medio, los títulos), toda (nv = null).
+  function soloAlFinal(rec) {
+    if (rec.type !== 'childList' || rec.removedNodes.length || rec.nextSibling) return null;
+    var a = rec.addedNodes, out = [];
+    for (var i = 0; i < a.length; i++) {
+      var n = a[i];
+      if (n.nodeType === 3 && !/\S/.test(n.nodeValue)) continue;
+      if (n.nodeType !== 1 || n.tagName !== 'TR') return null;
+      out.push(n);
+    }
+    return out;
+  }
   var mo = new MutationObserver(function (ms) {
-    var ts = [];
-    function pon(t) { if (t && ts.indexOf(t) < 0) ts.push(t); }
+    var ts = [], nv = [];
+    function pon(t, filas) {
+      if (!t) return;
+      var i = ts.indexOf(t);
+      if (i < 0) { ts.push(t); nv.push(filas || null); return; }
+      nv[i] = nv[i] && filas ? nv[i].concat(filas) : null;
+    }
     for (var i = 0; i < ms.length; i++) {
       var g = ms[i].target;
       if (g && g.nodeType === 1) {
         var tag = g.tagName;
-        if (tag === 'TBODY' || tag === 'THEAD' || tag === 'TABLE' || tag === 'TFOOT') pon(g.closest('table'));
+        if (tag === 'TBODY') pon(g.closest('table'), g.parentNode && g.parentNode.tagName === 'TABLE' ? soloAlFinal(ms[i]) : null);
+        else if (tag === 'THEAD' || tag === 'TABLE' || tag === 'TFOOT') pon(g.closest('table'));
         else if (tag === 'TR' || tag === 'TH') { if (g.closest('thead')) pon(g.closest('table')); }
         else if (g.closest && g.closest('thead')) pon(g.closest('table'));
       }
@@ -531,7 +576,7 @@
         }
       }
     }
-    for (var x = 0; x < ts.length; x++) revisa(ts[x]);
+    for (var x = 0; x < ts.length; x++) revisa(ts[x], nv[x]);
     mo.takeRecords();
   });
   function todas() { var ts = document.getElementsByTagName('table'); for (var i = 0; i < ts.length; i++) revisa(ts[i]); mo.takeRecords(); }
