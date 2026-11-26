@@ -765,6 +765,39 @@
       });
       return r;
     }
+    /* Sin hojas en blanco que el Word no trae (Héctor Daniel Nava, 26-nov-2026, 13:32, con el PDF de unas resoluciones
+       que bajó del chat, con la tercera hoja en blanco: «corrígelo aquí y en el chat»). Word guarda dónde empezó cada hoja
+       la última vez que se guardó (w:lastRenderedPageBreak) y docx-preview parte la hoja ahí. Después de un salto de
+       página a mano (o de un párrafo con «salto de página anterior»), esa marca cae justo al principio de la hoja que ya
+       había empezado y docx-preview deja entre las dos una hoja sin nada, que en Word no existe. Aquí, antes de repartir,
+       se quita toda hoja que no trae nada que se vea (ni texto, ni imagen, ni tabla, ni línea, ni viñeta, ni fondo; el
+       encabezado y el pie del documento no cuentan). Si todas salieran vacías, se queda la primera. Al «Ver» y en el PDF. */
+    function seVe(el) {
+      var cs = getComputedStyle(el);
+      if (cs.backgroundImage && cs.backgroundImage !== 'none') return true;
+      var bg = cs.backgroundColor || '', m = /rgba?\(([^)]+)\)/.exec(bg);
+      if (m) {
+        var c = m[1].split(',').map(function (v) { return parseFloat(v); });
+        if ((c.length < 4 || c[3] > 0) && !(c[0] >= 250 && c[1] >= 250 && c[2] >= 250)) return true;
+      }
+      if (['Top', 'Right', 'Bottom', 'Left'].some(function (l) { return cs['border' + l + 'Style'] !== 'none' && parseFloat(cs['border' + l + 'Width']) > 0; })) return true;
+      var an = getComputedStyle(el, '::before').content;
+      return !!an && an !== 'none' && an !== 'normal' && an !== '""' && an !== "''";
+    }
+    function vaciaHoja(h) {
+      var arts = Array.prototype.filter.call(h.children, function (x) { return x.tagName === 'ARTICLE'; });
+      if (!arts.length) return false;
+      return arts.every(function (a) {
+        if (/\S/.test(a.textContent || '')) return false;
+        if (a.querySelector('img,svg,canvas,object,embed,video,iframe,picture,table,hr,math')) return false;
+        return !Array.prototype.some.call(a.querySelectorAll('*'), seVe);
+      });
+    }
+    function sinHojasVacias() {
+      var hs = Array.prototype.slice.call(raiz.querySelectorAll('section.docx')), vacias = hs.filter(vaciaHoja);
+      if (vacias.length && vacias.length === hs.length) vacias.shift();
+      vacias.forEach(function (h) { if (h.parentNode) h.parentNode.removeChild(h); });
+    }
     function reparte(h) {
       var pag = parseFloat(getComputedStyle(h).minHeight) || 0;
       if (pag < 200 || h.offsetHeight <= pag * 1.2) return;
@@ -1253,6 +1286,7 @@
         // las letras del documento llegan después de dibujarlo: se espera a que estén (hasta 3 s) antes de medir las hojas
         void raiz.offsetHeight;
         try { if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(function (r) { setTimeout(r, 3000); })]); } catch (e) { /* sin letras */ }
+        try { sinHojasVacias(); } catch (e) { /* se quedan como venían */ }
         Array.prototype.forEach.call(raiz.querySelectorAll('section.docx'), function (h) {
           try { reparte(h); } catch (e) { /* se queda como venía */ }
         });
