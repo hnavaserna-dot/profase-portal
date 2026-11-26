@@ -18,6 +18,10 @@
    - Q Chat (19-nov-2026, 447_qchat_fila_avisos.sql; Héctor Daniel Nava: «Sí, así es»): lo que avisa la campanita de Q Chat
      (un cliente en la fila, «te tocó un chat», una llamada…) llega igual al celular de quien atiende o supervisa; al
      picarlo abre QUO › Conversaciones (o Tickets a desarrollo): si el portal está abierto se le manda «qch-abre».
+   - Pendientes (26-nov-2026, portal/sql/546_pendientes_suenan.sql; Héctor Daniel Nava: «si para todos; dale»): el día que
+     vence un pendiente y cada día que siga vencido suena como un recordatorio. Se queda hasta que lo piquen; con el portal
+     al frente, la página enseña su propia ventana («pend-ahora»); al picarlo abre Agenda › Pendientes en ese pendiente
+     («pend-abre»; pend 0 = varios: la lista).
    - Picar el aviso de un mensaje abre la conversación de quien lo mandó (Héctor Daniel Nava, 9-nov-2026: «no te abre el
      Chat automáticamente con la persona que te lo mandó; te abre el Chat completo»). Si el portal está abierto, se le
      manda «chat-abre» con la conversación y un número (id); si no, se abre con ?chat=<conversación>. Y por si la página no
@@ -54,9 +58,11 @@ self.addEventListener('push', function (e) {
             rcd: typeof d.rcd === 'number' ? d.rcd : null,
             sala: typeof d.sala === 'string' && /^[0-9a-f-]{36}$/i.test(d.sala) ? d.sala : null,
             // Q Chat (447_qchat_fila_avisos.sql, 19-nov-2026): lo que avisa la campanita de Q Chat, también al celular
-            qch: typeof d.qch === 'string' && /^qchat(-tickets)?$/.test(d.qch) ? d.qch : null }
+            qch: typeof d.qch === 'string' && /^qchat(-tickets)?$/.test(d.qch) ? d.qch : null,
+            // Pendientes (546_pendientes_suenan.sql, 26-nov-2026): el número del pendiente (0 = varios)
+            pend: typeof d.pend === 'number' && d.pend >= 0 && d.pend % 1 === 0 ? d.pend : null }
   };
-  if (op.data.rcd) op.requireInteraction = true;   // un recordatorio se queda hasta que lo piquen (el ícono chico sigue siendo el globito)
+  if (op.data.rcd || op.data.pend != null) op.requireInteraction = true;   // un recordatorio se queda hasta que lo piquen (el ícono chico sigue siendo el globito)
   var cita = /[?&]cita=([0-9a-f-]{36})/i.exec(op.data.url); op.data.cita = cita ? cita[1] : null;
   // «te está llamando» (llamadas del chat, 63_chat_llamadas.sql): se queda hasta que la piquen y vibra
   if (d.llamada === true) { op.requireInteraction = true; op.vibrate = [400, 200, 400, 200, 400]; }
@@ -67,6 +73,7 @@ self.addEventListener('push', function (e) {
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ws) {
     var alFrente = ws.some(function (w) { return w.visibilityState === 'visible' && w.focused && /\/(director|gerentes|contadores)\.html/.test(w.url); });
     if (alFrente && op.data.rcd) ws.forEach(function (w) { try { w.postMessage({ tipo: 'rcd-ahora', aviso: op.data.rcd }); } catch (x) {} });
+    if (alFrente && op.data.pend != null) ws.forEach(function (w) { try { w.postMessage({ tipo: 'pend-ahora', pend: op.data.pend }); } catch (x) {} });
     if (alFrente && op.data.sala) {
       ws.forEach(function (w) { if (w.focused) w.postMessage({ tipo: 'sala-espera', sala: op.data.sala }); });
       if (!apple) return null;
@@ -83,7 +90,7 @@ self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   var data = e.notification.data || {}, url = new URL(data.url || '/', self.location.origin).href;
   // el de un mensaje del chat: se queda en la memoria hasta que la página lo abra (o un minuto); mientras, este archivo sigue vivo
-  var chat = !data.rcd && !data.sala && !data.cita && !data.qch && typeof data.conv === 'string' && /^[0-9a-f-]{36}$/i.test(data.conv);
+  var chat = !data.rcd && !data.sala && !data.cita && !data.qch && data.pend == null && typeof data.conv === 'string' && /^[0-9a-f-]{36}$/i.test(data.conv);
   var id = chat ? Date.now().toString(36) + Math.random().toString(36).slice(2, 8) : null, espera = null;
   if (chat) {
     var p = { conv: data.conv, id: id, t: Date.now(), listo: null };
@@ -98,6 +105,7 @@ self.addEventListener('notificationclick', function (e) {
         else if (data.sala) w.postMessage({ tipo: 'sala-abre', sala: data.sala });
         else if (data.cita) w.postMessage({ tipo: 'cita-abre', cita: data.cita });
         else if (data.qch) w.postMessage({ tipo: 'qch-abre', liga: data.qch });
+        else if (data.pend != null) w.postMessage({ tipo: 'pend-abre', pend: data.pend });
         else w.postMessage({ tipo: 'chat-abre', conv: data.conv || null, id: id });
         return w.focus ? Promise.resolve(w.focus()).catch(function () {}) : null;
       }
