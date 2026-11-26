@@ -56,8 +56,7 @@ revisa() {
     [ "$aqui" = "$ahi" ] || mal="$mal $f"
   done
   local cab
-  cab=$(curl -fsS -m 20 -o /dev/null -D - "$COPIA/index.html" | tr -d '
-') || cab=""
+  cab=$(curl -fsS -m 20 -o /dev/null -D - "$COPIA/index.html" | tr -d '\r') || cab=""
   echo "$cab" | grep -qi '^access-control-allow-origin: \*$' || mal="$mal (cabecera de acceso)"
   if [ "$MARCOS" = "si" ]; then
     echo "$cab" | grep -qi "^content-security-policy: frame-ancestors 'self'$" || mal="$mal (cabecera de los marcos)"
