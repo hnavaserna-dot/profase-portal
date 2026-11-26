@@ -987,6 +987,256 @@
       cv.width = 0; cv.height = 0;
       return hojas.length;
     }
+    /* Los cuadros de texto flotantes de Word, en su lugar (Héctor Daniel Nava, 26-nov-2026, 11:52 y 12:05, con la captura
+       de unas resoluciones en el chat: las dos firmas, cada una en su cuadro de texto, salían encimadas al «Ver» y, al
+       bajarlo en PDF, «la firma aparece hasta abajo»; «corríjelo también en el CRM! para que no vuelva a pasar nunca con
+       ningún documento»). docx-preview no sabe dibujar los cuadros de texto de hoy («wps»): usa el respaldo viejo (VML),
+       que los pone sueltos encima de la hoja (position:absolute, contados desde la orilla de la hoja y no del margen), y
+       el que no trae respaldo se pierde completo. Aquí, antes de dibujar, se pasan al hilo del documento: los de un mismo
+       párrafo van lado a lado, en su orden y con su ancho, en una tabla sin bordes justo después de su párrafo (uno a la
+       derecha o al centro queda a la derecha o al centro); los que van uno encima del otro, en renglones aparte. Así
+       nunca se enciman, no se salen de la hoja, no se pierden y, al repartir las hojas, se van con su párrafo. Solo
+       cambia la copia que se dibuja (el Word que se baja es el mismo); un cuadro con imágenes adentro, uno dentro de otro
+       y los de los encabezados y pies se quedan como venían. Si algo falla, el Word se dibuja como venía. */
+    var CJ_EMU = 635;   // EMU por veintavo de punto
+    function cjHijos(el, n) { return Array.prototype.filter.call(el ? el.childNodes : [], function (x) { return x.nodeType === 1 && x.localName === n; }); }
+    function cjSube(el, n) { for (var x = el.parentNode; x && x.nodeType === 1; x = x.parentNode) if (x.localName === n) return x; return null; }
+    function cjHay(el, n) { return el.getElementsByTagNameNS('*', n).length > 0; }
+    // una medida de VML ('207.4pt', '2in', '3cm', '120px' o sin unidad, que es px) en veintavos de punto
+    function cjTw(v) {
+      var m = /^\s*(-?[\d.]+)\s*(pt|in|cm|mm|px|pc)?\s*$/i.exec(v || '');
+      if (!m) return NaN;
+      return parseFloat(m[1]) * ({ pt: 20, 'in': 1440, cm: 566.93, mm: 56.693, px: 15, pc: 240 })[(m[2] || 'px').toLowerCase()];
+    }
+    function cjEstilo(s) {
+      var o = {};
+      String(s || '').split(';').forEach(function (p) { var i = p.indexOf(':'); if (i > 0) o[p.slice(0, i).trim().toLowerCase()] = p.slice(i + 1).trim(); });
+      return o;
+    }
+    function cjColor(v) { var m = /^#?([0-9a-f]{6})$/i.exec(String(v || '').trim()); return m ? m[1].toUpperCase() : ''; }
+    // dónde y de qué tamaño, de un cuadro de hoy (wp:anchor o wp:inline con wps; también dentro de un grupo wpg)
+    function cjGeoDml(tc) {
+      var an = cjSube(tc, 'anchor') || cjSube(tc, 'inline'), wsp = cjSube(tc, 'wsp');
+      var g = { flota: !!an && an.localName === 'anchor', x: NaN, y: 0, w: NaN, h: NaN, alin: '', rel: 'margin', gx: 0, gy: 0, ow: NaN,
+                ins: [144, 72, 144, 72], borde: null, fondo: '' };
+      var ext = an && cjHijos(an, 'extent')[0];
+      if (ext) { g.w = g.ow = +ext.getAttribute('cx') / CJ_EMU; g.h = +ext.getAttribute('cy') / CJ_EMU; }
+      var ph = an && cjHijos(an, 'positionH')[0], pv = an && cjHijos(an, 'positionV')[0];
+      if (ph) {
+        g.rel = ph.getAttribute('relativeFrom') || 'margin';
+        var al = cjHijos(ph, 'align')[0], of = cjHijos(ph, 'posOffset')[0];
+        if (al) g.alin = al.textContent.trim(); else if (of) g.x = +of.textContent / CJ_EMU;
+      }
+      if (pv) { var ov = cjHijos(pv, 'posOffset')[0]; if (ov) g.y = +ov.textContent / CJ_EMU; }
+      var sp = wsp && cjHijos(wsp, 'spPr')[0];
+      // dentro de un grupo: su lugar y su tamaño, en las medidas del grupo
+      var grp = wsp && cjSube(wsp, 'wgp'), xs = sp && cjHijos(sp, 'xfrm')[0];
+      if (grp && xs) {
+        var gp = cjHijos(grp, 'grpSpPr')[0], xg = gp && cjHijos(gp, 'xfrm')[0];
+        var num = function (el, n, a) { var e = el && cjHijos(el, n)[0]; return e ? +e.getAttribute(a) : NaN; };
+        var sx = num(xg, 'ext', 'cx') / num(xg, 'chExt', 'cx'), sy = num(xg, 'ext', 'cy') / num(xg, 'chExt', 'cy');
+        if (isFinite(sx) && isFinite(sy)) {
+          g.gx = (num(xs, 'off', 'x') - num(xg, 'chOff', 'x')) * sx / CJ_EMU;
+          g.gy = (num(xs, 'off', 'y') - num(xg, 'chOff', 'y')) * sy / CJ_EMU;
+          g.w = num(xs, 'ext', 'cx') * sx / CJ_EMU; g.h = num(xs, 'ext', 'cy') * sy / CJ_EMU;
+          if (!isFinite(g.gx)) g.gx = 0;
+          if (!isFinite(g.gy)) g.gy = 0;
+        }
+      }
+      var bp = wsp && cjHijos(wsp, 'bodyPr')[0];
+      if (bp) ['lIns', 'tIns', 'rIns', 'bIns'].forEach(function (k, i) { var v = bp.getAttribute(k); if (v != null && isFinite(+v)) g.ins[[0, 1, 2, 3][i]] = Math.max(0, +v / CJ_EMU); });
+      if (sp) {
+        var ln = cjHijos(sp, 'ln')[0];
+        if (ln && !cjHijos(ln, 'noFill').length && cjHijos(ln, 'solidFill').length) {
+          var c = cjHijos(ln, 'solidFill')[0].getElementsByTagNameNS('*', 'srgbClr')[0];
+          g.borde = { color: (c && cjColor(c.getAttribute('val'))) || '000000', sz: Math.max(2, Math.round((+ln.getAttribute('w') || 9525) / 12700 * 8)) };
+        }
+        var sf = cjHijos(sp, 'solidFill')[0], sc = sf && cjHijos(sf, 'srgbClr')[0];
+        if (sc) g.fondo = cjColor(sc.getAttribute('val'));
+      }
+      return g;
+    }
+    // lo mismo, de un cuadro de antes (VML: v:shape o v:rect con su v:textbox; también dentro de un v:group)
+    function cjGeoVml(tc) {
+      var tb = cjSube(tc, 'textbox'), sh = tb && tb.parentNode;
+      var s = cjEstilo(sh && sh.getAttribute && sh.getAttribute('style'));
+      var g = { flota: false, x: NaN, y: 0, w: NaN, h: NaN, alin: '', rel: 'text', gx: 0, gy: 0, ow: NaN, ins: [144, 72, 144, 72], borde: null, fondo: '' };
+      var grp = sh && cjSube(sh, 'group'), fuera = s;
+      if (grp) {
+        // dentro de un grupo, las medidas van en las unidades del grupo (coordsize): se pasan a las del grupo en la hoja
+        var gs = cjEstilo(grp.getAttribute('style')), cs = String(grp.getAttribute('coordsize') || '21600,21600').split(','),
+            co = String(grp.getAttribute('coordorigin') || '0,0').split(',');
+        var ex = cjTw(gs.width) / (+cs[0] || 21600), ey = cjTw(gs.height) / (+cs[1] || +cs[0] || 21600);
+        if (isFinite(ex) && isFinite(ey)) {
+          g.gx = ((parseFloat(s.left) || 0) - (+co[0] || 0)) * ex; g.gy = ((parseFloat(s.top) || 0) - (+co[1] || 0)) * ey;
+          g.w = (parseFloat(s.width) || 0) * ex; g.h = (parseFloat(s.height) || 0) * ey;
+        }
+        fuera = gs;
+        g.ow = cjTw(gs.width);
+      } else { g.w = g.ow = cjTw(s.width); g.h = cjTw(s.height); }
+      g.flota = fuera.position === 'absolute';
+      g.alin = fuera['mso-position-horizontal'] || '';
+      if (g.alin === 'absolute') g.alin = '';
+      g.rel = fuera['mso-position-horizontal-relative'] || 'text';
+      g.x = (cjTw(fuera['margin-left']) || 0) + (cjTw(fuera.left) || 0);
+      g.y = (cjTw(fuera['margin-top']) || 0) + (cjTw(fuera.top) || 0);
+      var ins = String((tb && tb.getAttribute('inset')) || '').split(',');
+      ins.forEach(function (v, i) { var t = cjTw(v.trim() || 'x'); if (i < 4 && isFinite(t)) g.ins[i] = Math.max(0, t); });
+      var st = sh && cjHijos(sh, 'stroke')[0], sin = /^(f|false)$/i;
+      if (sh && !sin.test(sh.getAttribute('stroked') || '') && !(st && sin.test(st.getAttribute('on') || '')))
+        g.borde = { color: cjColor(sh.getAttribute('strokecolor')) || '000000', sz: Math.max(2, Math.round((cjTw(sh.getAttribute('strokeweight') || '.75pt') || 15) / 20 * 8)) };
+      if (sh && !sin.test(sh.getAttribute('filled') || '')) g.fondo = cjColor(sh.getAttribute('fillcolor'));
+      return g;
+    }
+    async function sinCajas(buf) {
+      if (typeof JSZip === 'undefined' || typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return buf;
+      var zip = await JSZip.loadAsync(buf), ruta = 'word/document.xml', rel = zip.file('_rels/.rels');
+      if (rel) {
+        var rx = await rel.async('string'), mr = /<Relationship\b[^>]*>/g, x;
+        while ((x = mr.exec(rx))) if (/Type="[^"]*\/officeDocument"/.test(x[0])) { var tg = /Target="\/?([^"]+)"/.exec(x[0]); if (tg) ruta = tg[1]; }
+      }
+      var fz = zip.file(ruta);
+      if (!fz) return buf;
+      var txt = await fz.async('string');
+      if (txt.indexOf('txbxContent') < 0) return buf;
+      var doc = new DOMParser().parseFromString(txt, 'application/xml');
+      if (doc.getElementsByTagName('parsererror').length) return buf;
+      var R = doc.documentElement, W = R.namespaceURI, pre = R.prefix ? R.prefix + ':' : '';
+      function nw(n, at, hijos) {
+        var e = doc.createElementNS(W, pre + n);
+        Object.keys(at || {}).forEach(function (k) { e.setAttributeNS(W, pre + k, String(at[k])); });
+        (hijos || []).forEach(function (h) { e.appendChild(h); });
+        return e;
+      }
+      function wv(el, n) { if (!el) return NaN; var v = el.getAttributeNS(W, n); if (v == null || v === '') v = el.getAttribute(pre + n); return v == null || v === '' ? NaN : +v; }
+      var body = cjHijos(R, 'body')[0];
+      if (!body) return buf;
+      var sp = cjHijos(body, 'sectPr')[0], pz = cjHijos(sp, 'pgSz')[0], pm = cjHijos(sp, 'pgMar')[0];
+      var pgW = wv(pz, 'w'), mL = wv(pm, 'left'), mR = wv(pm, 'right');
+      if (!(pgW > 0)) pgW = 12240;
+      if (!(mL >= 0)) mL = 1440;
+      if (!(mR >= 0)) mR = 1440;
+      var TW = Math.max(1440, pgW - mL - mR);
+      // cada cuadro: el hijo del renglón (w:r) que lo lleva (mc:AlternateContent, w:drawing o w:pict) y su párrafo
+      var cajas = [];
+      Array.prototype.slice.call(doc.getElementsByTagNameNS('*', 'txbxContent')).forEach(function (tc) {
+        if (cjSube(tc, 'txbxContent')) return;   // uno dentro de otro se va con el de afuera
+        var el = tc, run = null;
+        while (el.parentNode && el.parentNode.nodeType === 1) {
+          if (el.parentNode.localName === 'r' && el.parentNode.namespaceURI === W) { run = el.parentNode; break; }
+          el = el.parentNode;
+        }
+        if (!run) return;
+        var p = cjSube(run, 'p');
+        if (!p || p.namespaceURI !== W) return;
+        var c = null;
+        for (var i = 0; i < cajas.length; i++) if (cajas[i].el === el) c = cajas[i];
+        if (!c) { c = { el: el, p: p, eleccion: [], respaldo: [], solo: [] }; cajas.push(c); }
+        if (cjSube(tc, 'Choice')) c.eleccion.push(tc); else if (cjSube(tc, 'Fallback')) c.respaldo.push(tc); else c.solo.push(tc);
+      });
+      var hechos = 0, porP = [];
+      cajas.forEach(function (c) {
+        // con imágenes adentro (un grupo con fotos, por ejemplo), se queda como venía
+        if (cjHay(c.el, 'blip') || cjHay(c.el, 'imagedata')) return;
+        var dml = c.eleccion.length ? c.eleccion : (c.el.localName === 'drawing' ? c.solo : []);
+        var vml = c.eleccion.length ? [] : (c.respaldo.length ? c.respaldo : (c.el.localName === 'pict' ? c.solo : []));
+        var usa = dml.length ? dml : vml;
+        if (!usa.length) return;
+        var geos = usa.map(function (tc) { var g = dml.length ? cjGeoDml(tc) : cjGeoVml(tc); g.tc = tc; return g; });
+        // uno en el renglón (no flotante) se queda donde va, salvo que docx-preview lo fuera a perder (wps sin respaldo VML)
+        var flota = geos.some(function (g) { return g.flota; });
+        if (!flota && !(dml.length && !c.respaldo.length)) return;
+        var grupo = null;
+        for (var i = 0; i < porP.length; i++) if (porP[i].p === c.p) grupo = porP[i];
+        if (!grupo) { grupo = { p: c.p, cajas: [], quita: [] }; porP.push(grupo); }
+        geos.forEach(function (g) { grupo.cajas.push(g); });
+        grupo.quita.push(c.el);
+      });
+      porP.forEach(function (gr) {
+        // el ancho donde caben: el del texto de la hoja o, en una tabla, el de su celda
+        var area = TW, celda = cjSube(gr.p, 'tc');
+        if (celda) {
+          var tcw = cjHijos(cjHijos(celda, 'tcPr')[0], 'tcW')[0], tw = wv(tcw, 'w');
+          var tipo = tcw ? (tcw.getAttributeNS(W, 'type') || tcw.getAttribute(pre + 'type') || 'dxa') : '';
+          area = tipo === 'dxa' && tw > 400 ? tw - 216 : Math.min(TW, 4320);
+        }
+        gr.cajas.forEach(function (g) {
+          var ow = isFinite(g.ow) && g.ow > 0 ? g.ow : g.w, rel = String(g.rel || '').toLowerCase().replace(/[^a-z]/g, '');
+          var ancho = area, desde = 0, al = String(g.alin || '').toLowerCase(), base;
+          if (!celda) {
+            if (rel === 'page') { ancho = pgW; desde = -mL; }
+            else if (/^(leftmargin|leftmarginarea|insidemargin|innermarginarea)$/.test(rel)) { ancho = mL; desde = -mL; }
+            else if (/^(rightmargin|rightmarginarea|outsidemargin|outermarginarea)$/.test(rel)) { ancho = mR; desde = area; }
+          }
+          if (!(ow > 0)) ow = Math.min(area, 4320);
+          if (al === 'left' || al === 'inside') base = desde;
+          else if (al === 'right' || al === 'outside') base = desde + ancho - ow;
+          else if (al === 'center') base = desde + (ancho - ow) / 2;
+          else base = desde + (isFinite(g.x) ? g.x : 0);
+          g.ancho = Math.max(720, Math.min(area, g.w > 0 ? g.w : ow));
+          g.izq = Math.max(0, Math.min(area - g.ancho, base + (g.gx || 0)));
+          g.arriba = (isFinite(g.y) ? g.y : 0) + (g.gy || 0);
+          g.alto = g.h > 0 ? g.h : 720;
+        });
+        // renglones: los que se tocan a lo alto van en el mismo, de izquierda a derecha; los demás, abajo
+        var filas = [];
+        gr.cajas.slice().sort(function (a, b) { return a.arriba - b.arriba; }).forEach(function (g) {
+          var f = filas[filas.length - 1];
+          if (f && g.arriba < f.fin - 60) { f.cajas.push(g); f.fin = Math.max(f.fin, g.arriba + g.alto); }
+          else filas.push({ cajas: [g], fin: g.arriba + g.alto });
+        });
+        var tras = gr.p;
+        filas.forEach(function (f) {
+          var cs = f.cajas.sort(function (a, b) { return a.izq - b.izq; }), piezas = [], x = 0;
+          cs.forEach(function (g) {
+            var hueco = g.izq - x;
+            if (hueco >= 60) piezas.push({ w: hueco });
+            piezas.push({ w: g.ancho, g: g });
+            x = Math.max(x, g.izq) + g.ancho;
+          });
+          var total = piezas.reduce(function (s, q) { return s + q.w; }, 0), k = total > area ? area / total : 1;
+          piezas.forEach(function (q) { q.w = Math.max(240, Math.floor(q.w * k)); });
+          var sinB = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (b) { return nw(b, { val: 'nil' }); });
+          var tbl = nw('tbl', {}, [
+            nw('tblPr', {}, [nw('tblW', { w: piezas.reduce(function (s, q) { return s + q.w; }, 0), type: 'dxa' }), nw('tblBorders', {}, sinB),
+              nw('tblLayout', { type: 'fixed' }),
+              nw('tblCellMar', {}, ['top', 'left', 'bottom', 'right'].map(function (b) { return nw(b, { w: 0, type: 'dxa' }); }))]),
+            nw('tblGrid', {}, piezas.map(function (q) { return nw('gridCol', { w: q.w }); }))]);
+          var tr = nw('tr', {}, [nw('trPr', {}, [nw('cantSplit')])]);
+          piezas.forEach(function (q) {
+            var pr = nw('tcPr', {}, [nw('tcW', { w: q.w, type: 'dxa' })]), tc = nw('tc', {}, [pr]);
+            if (!q.g) {
+              // el hueco entre dos cuadros: una celda vacía que no agrega alto
+              tc.appendChild(nw('p', {}, [nw('pPr', {}, [nw('spacing', { before: 0, after: 0, line: 20, lineRule: 'exact' })])]));
+            } else {
+              var g = q.g;
+              if (g.borde) pr.appendChild(nw('tcBorders', {}, ['top', 'left', 'bottom', 'right'].map(function (b) { return nw(b, { val: 'single', sz: g.borde.sz, space: 0, color: g.borde.color }); })));
+              if (g.fondo && g.fondo !== 'FFFFFF') pr.appendChild(nw('shd', { val: 'clear', color: 'auto', fill: g.fondo }));
+              pr.appendChild(nw('tcMar', {}, [nw('top', { w: Math.round(g.ins[1]), type: 'dxa' }), nw('left', { w: Math.round(g.ins[0]), type: 'dxa' }),
+                nw('bottom', { w: Math.round(g.ins[3]), type: 'dxa' }), nw('right', { w: Math.round(g.ins[2]), type: 'dxa' })]));
+              var hijos = Array.prototype.slice.call(g.tc.childNodes);
+              hijos.forEach(function (h) { tc.appendChild(h); });
+              var ult = null;
+              for (var j = tc.childNodes.length - 1; j >= 0; j--) if (tc.childNodes[j].nodeType === 1) { ult = tc.childNodes[j]; break; }
+              if (!ult || ult.localName !== 'p') tc.appendChild(nw('p'));
+            }
+            tr.appendChild(tc);
+          });
+          tbl.appendChild(tr);
+          tras.parentNode.insertBefore(tbl, tras.nextSibling);
+          tras = tbl;
+          hechos++;
+        });
+        // en una celda de tabla, lo último tiene que ser un párrafo
+        var sig = tras.nextSibling;
+        while (sig && sig.nodeType !== 1) sig = sig.nextSibling;
+        if (celda && !sig) tras.parentNode.appendChild(nw('p'));
+        gr.quita.forEach(function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+      });
+      if (!hechos) return buf;
+      zip.file(ruta, new XMLSerializer().serializeToString(doc));
+      return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+    }
     async function abre(m) {
       E.logo = m.logo || ''; E.agua = m.pdf ? '' : (m.agua || ''); E.sub = m.sub || ''; E.tipo = m.tipo;
       document.body.classList.toggle('sin-marca', !m.marca);
@@ -994,7 +1244,9 @@
       if (m.fondo) document.body.style.background = m.fondo;
       var n = 0;
       if (m.tipo === 'word') {
-        await docx.renderAsync(m.b, raiz, null, { className: 'docx', inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
+        var bytes = m.b;
+        try { bytes = await sinCajas(m.b); } catch (e) { bytes = m.b; }
+        await docx.renderAsync(bytes, raiz, null, { className: 'docx', inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false,
           useBase64URL: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, renderEndnotes: true,
           renderComments: false, renderChanges: false, experimental: false, debug: false });
         caja = raiz.querySelector('.docx-wrapper') || raiz;
