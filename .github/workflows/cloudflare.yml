@@ -1,0 +1,39 @@
+# Cloudflare: copia del sitio (Héctor Daniel Nava, 26-nov-2026, 12:41 y 12:49: «si a darle»; «toma control de mi mac; y a
+# adarle»). Para que crmprofase.com.mx abra aunque se caiga GitHub, Cloudflare enseña las mismas páginas que publica
+# GitHub Pages: con cada cambio de main (y cada 6 horas, por si una se brincó) sube lo de main a Cloudflare y revisa que la
+# copia sea idéntica. Sin la llave CLOUDFLARE_API_TOKEN no hace nada. La pone
+# profase-datos/herramientas/cloudflare/reparte.py: no se cambia a mano.
+name: "Cloudflare: copia del sitio"
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  copia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Subir la copia a Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bash .cloudflare/despliega.sh || exit 1
+          # si mientras subía llegó algo más nuevo a main, se sube eso (una vez); así nunca se queda una copia vieja
+          git fetch -q origin main
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "Llegó algo más nuevo a main mientras se subía: se sube eso."
+            git checkout -q origin/main && bash .cloudflare/despliega.sh
+          fi

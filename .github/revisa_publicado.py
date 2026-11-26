@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 SITIO = os.environ.get("SITIO", "https://crmprofase.com.mx").rstrip("/")
 ESPERA_MAX = int(os.environ.get("ESPERA_MAX", "900"))
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NO_SE_SIRVEN = {"CNAME", "README.md"}
+NO_SE_SIRVEN = {"CNAME", "README.md", "_headers"}   # _headers: el de la copia de Cloudflare (plan B)
 # Lo que una página pide y todavía no existe a propósito (no es falla: sale como nota, para que no se olvide)
 ESPERADOS = {}   # (el logo de Multinacional ya está desde el 12-nov-2026: img/multinacional.png)
 VISTAS_LAPTOP = ["index.html", "inicio.html", "director.html", "gerentes.html", "contadores.html"]
