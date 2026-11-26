@@ -76,7 +76,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9f3c0096fd"></script><script src="js/tabla-pegada.js?v=5439a66df1"></script><script src="js/ordenar.js?v=88d4caf3d4"></script><script src="js/marca.js?v=79ec165350"></script><script src="js/visor.js?v=915cd57705"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=16ece3abca"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/pilas.js?v=448072076e"></script><script src="js/seguimiento.js?v=472416ff75"></script><script src="js/paginas.js?v=6ea322887b"></script>
+<script src="js/supabase.js?v=bb37eb706b"></script><script src="js/portal.js?v=9f3c0096fd"></script><script src="js/tabla-pegada.js?v=5439a66df1"></script><script src="js/ordenar.js?v=88d4caf3d4"></script><script src="js/fecha-campo.js?v=54b3472b05"></script><script src="js/marca.js?v=79ec165350"></script><script src="js/visor.js?v=915cd57705"></script><script src="js/cfdi.js?v=971b013d7a"></script><script src="js/vista-archivos.js?v=16ece3abca"></script><script src="js/buscador.js?v=bdda9a797c"></script><script src="js/filtros.js?v=59c3845b59"></script><script src="js/pilas.js?v=448072076e"></script><script src="js/seguimiento.js?v=472416ff75"></script><script src="js/paginas.js?v=6ea322887b"></script>
 <style>
 /* Portal PROFASE · Clientes › Buzón tributario (3-nov-2026, pedido de Fernando Cadengo; portal/sql/195_buzon_tributario.sql).
    El concentrado de los avisos que manda el SAT a sat@profase.com.mx («Nuevo mensaje en el Buzón Tributario de <RFC>»):
@@ -98,6 +98,11 @@
        «CANCELACIÓN DE FACTURA» con un «UUID: …» por renglón (f.en_avisos, f.uuids). No entra a «Empezar a revisar» ni
        se asigna o reabre; si no era cancelación, se le cambia el concepto. «Es cancelación de factura» (quien asigna): en
        la ficha (con el mensaje del SAT pegado, de ahí sale el UUID) o varios a la vez desde la selección.
+     - (533, 25-nov-2026, mejora de Francisco Rivera) cada aviso es COMUNICADO, MENSAJE o ACTO ADMINISTRATIVO (f.clase: lo
+       pone la base por lo que escribe el SAT; lo que no se sabe, ACTO) y se ve en «Concepto», donde decía «Sin concepto»
+       (el concepto, si lo tiene, debajo). Solo los actos llevan plazo: «Plazo por confirmar» (la pila, el filtro y la
+       etiqueta) cuenta solo los actos. El tipo lo cambia quien asigna (bzt_tipo; en la ficha, «Tipo» en «Qué sigue», o
+       varios a la vez con «Cambiar tipo»); a COMUNICADO o MENSAJE se quita el plazo que tuviera. Las cancelaciones no cambian.
      - «Cargar mi Excel» (Liliana y Frank): su Excel de siempre entra como «Histórico», sin repetir (por su índice).
      - (245) «+ Subir aviso» (Héctor Daniel Nava, 4-nov-2026): para los clientes que no tienen el correo de PROFASE en su
        buzón del SAT. Quien ve al cliente en el panel escoge la razón social, el día en que llegó y el archivo, y entra como
@@ -226,6 +231,7 @@ tr.click:hover td{background:var(--navy-soft)}
 .uuid{margin-top:3px;font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}
 .uuid b{font-family:inherit;font-weight:600;color:var(--ink)}
 @media (max-width:480px){.uuid{font-size:11px}}   /* (362) que el UUID quepa en un renglón en el celular */
+.con-l{margin-top:2px;font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}   /* (533) el concepto, debajo del tipo */
 .nota-l{margin-top:3px;padding-left:7px;border-left:2px solid var(--line-strong);font-size:12px;line-height:1.35;color:var(--muted);max-width:min(360px,100%);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .falta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
 .falta .chip{white-space:normal}
@@ -320,6 +326,7 @@ tr.click:hover td{background:var(--navy-soft)}
         <button class="btn chico" type="button" id="sel-info">Solo informativo</button>
         <button class="btn chico" type="button" id="sel-cancel">Es cancelación</button>
         <button class="btn chico" type="button" id="sel-concepto">Cambiar concepto</button>
+        <button class="btn chico" type="button" id="sel-tipo">Cambiar tipo</button>
         <button class="btn chico" type="button" id="sel-limpia">Quitar selección</button>
       </div>
       <div class="tabla"><table class="resp"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
@@ -338,7 +345,10 @@ tr.click:hover td{background:var(--navy-soft)}
   var FECHAS = {}, EST = null, CONSULTA = false, DATOS = null, PES = 'avisos', KPI = '', FILAS = [], VISTAS = 50, SEL = {}, ABIERTO = null, V = null, DOCS = {}, GUARDADA = null;
   var ESTADOS = { nuevo: ['Nuevo', 'na'], asignado: ['Asignado', 'az'], proceso: ['En proceso', 'ojo'], cerrado: ['Cerrado', 'ok'],
                   informativo: ['Informativo', ''], historico: ['Histórico', ''] };
-  var TIPO = { mensaje: 'Mensaje', acto: 'Acto administrativo' };
+  // (533) el tipo de cada aviso (lo pone la base; solo los actos administrativos llevan plazo)
+  var CLASES = { comunicado: 'COMUNICADO', mensaje: 'MENSAJE', acto: 'ACTO ADMINISTRATIVO' };
+  function claseTxt(f) { return (f && CLASES[f.clase]) || ''; }
+  function esActo(f) { return !!f && f.clase === 'acto'; }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fecha(s) { return PROFASE_FECHA.dia(s); }
@@ -397,7 +407,10 @@ tr.click:hover td{background:var(--navy-soft)}
   }
   function conceptoCelda(f) {
     if (enAvisos(f)) return 'CANCELACIÓN DE FACTURA' + uuidsHtml(f) + (f.nota ? '<div class="nota-l" title="' + esc(f.nota) + '">' + esc(f.nota) + '</div>' : '');
-    var h = f.concepto_n ? esc(f.concepto_n) + (f.tipo ? ' <span class="mut">· ' + esc(TIPO[f.tipo] || '') + '</span>' : '') : (f.nota ? '' : '<span class="mut">Sin concepto</span>');
+    // (533) el tipo (COMUNICADO, MENSAJE o ACTO ADMINISTRATIVO) donde decía «Sin concepto»; el concepto, si lo tiene, debajo
+    var tp = claseTxt(f), con = f.concepto_n && norm(f.concepto_n) !== norm(tp) ? f.concepto_n : '';
+    var h = tp ? esc(tp) + (con ? '<div class="con-l">' + esc(con) + '</div>' : '')
+      : f.concepto_n ? esc(f.concepto_n) : (f.nota ? '' : '<span class="mut">Sin concepto</span>');
     return h + (f.nota ? '<div class="nota-l" title="' + esc(f.nota) + '">' + esc(f.nota) + '</div>' : '');
   }
   // (202) el plazo de un aviso abierto: confirmado (con su fecha límite o sin plazo) o por confirmar
@@ -406,7 +419,7 @@ tr.click:hover td{background:var(--navy-soft)}
   function fechaCorta(s) { return PROFASE_FECHA.dia(s, false); }
   function porVencer(f) { return abierto(f) && f.plazo === 'con' && f.vence && f.vence <= masDias(DATOS.hoy, 7); }
   function plazoChip(f) {
-    if (!abierto(f)) return '';
+    if (!abierto(f) || !esActo(f)) return '';   // (533) los comunicados y mensajes no llevan plazo
     if (f.plazo === 'sin') return chip('Sin plazo');
     if (f.plazo === 'con' && f.vence) return f.vence < DATOS.hoy ? chip('Venció el ' + fechaCorta(f.vence), 'mal') : chip('Vence el ' + fechaCorta(f.vence), porVencer(f) ? 'ojo' : 'az');
     return chip('Plazo por confirmar', 'na');
@@ -523,7 +536,7 @@ tr.click:hover td{background:var(--navy-soft)}
     var c = DATOS.cuentas || {};
     var L = PES === 'cancel'
       ? [['plazo', 'En plazo', c.cancel_plazo, 'naranja', 'Todavía se puede contestar'], ['vencido', 'Plazo vencido', (c.cancel || 0) - (c.cancel_plazo || 0), 'gris', 'Se consideran aceptadas']]
-      : [['nuevo', 'Nuevos', c.nuevos, 'naranja', 'Sin asignar todavía'], ['confirmar', 'Plazo por confirmar', c.confirmar, 'ambar', 'Abiertos sin plazo'],
+      : [['nuevo', 'Nuevos', c.nuevos, 'naranja', 'Sin asignar todavía'], ['confirmar', 'Plazo por confirmar', c.confirmar, 'ambar', 'Actos administrativos sin plazo'],
          ['porvencer', 'Vencen en 7 días', c.porvencer, 'rojo', ''],
          ['mios', 'Asignados a mí', c.mios, 'azul', 'Tuyos o de apoyo'], ['asignado', 'Asignados', c.asignados, 'azul', ''],
          ['proceso', 'En proceso', c.proceso, 'violeta', ''], ['cerrado', 'Cerrados', c.cerrados, 'verde', ''], ['informativo', 'Informativos', c.informativos, 'gris', ''],
@@ -550,7 +563,7 @@ tr.click:hover td{background:var(--navy-soft)}
         if (est === 'vencido' && f.limite && f.limite >= DATOS.hoy) return false;
       } else {
         if (est === 'mios') { if (!enAviso(f, EST.yo) || ['asignado', 'proceso'].indexOf(f.estado) < 0) return false; }   // (296) también de apoyo
-        else if (est === 'confirmar') { if (!abierto(f) || f.plazo) return false; }
+        else if (est === 'confirmar') { if (!abierto(f) || f.plazo || !esActo(f)) return false; }   // (533) solo los actos
         else if (est === 'abiertos') { if (!abierto(f)) return false; }
         else if (est === 'porvencer') { if (!porVencer(f)) return false; }
         else if (est && f.estado !== est) return false;
@@ -571,7 +584,7 @@ tr.click:hover td{background:var(--navy-soft)}
   function textoDe(f) {
     var t = TXT ? TXT.get(f) : undefined;
     if (t === undefined) {
-      t = norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; }), f.uuids || []).join(' '));
+      t = norm([f.razon, f.rfc, f.grupo, f.folio, f.detalle, f.concepto_n, claseTxt(f), f.asignado_n].concat(apoyosDe(f).map(function (y) { return y.n; }), f.uuids || []).join(' '));
       if (TXT) TXT.set(f, t);
     }
     return t;
@@ -817,17 +830,19 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<dt>Llegó</dt><dd>' + esc(fecha(a.fecha)) + (a.hora ? ' · ' + esc(a.hora) : '') + (a.origen === 'excel' ? ' <span class="mut">(del Excel)</span>' : a.origen === 'manual' ? ' <span class="mut">(lo subió a mano ' + esc(a.subio || '') + ')</span>' : a.origen === 'sat' ? ' <span class="mut">(la vio Centauro en el portal de facturas del SAT; no llegó su correo)</span>' : '') + '</dd>'
       + '<dt>Cliente</dt><dd>' + esc(cliente(a)) + (a.grupo ? '<div class="mut">' + esc(a.grupo) + '</div>' : '') + '</dd>'
       + '<dt>RFC</dt><dd>' + esc(a.rfc) + '</dd>'
-      + '<dt>Tipo</dt><dd>' + esc(TIPO[a.tipo] || 'Sin tipo') + '</dd>'
+      + '<dt>Tipo</dt><dd>' + (a.concepto === 'cancelacion' ? 'Cancelación de factura'
+          : esc(claseTxt(a) || 'Sin tipo') + ' <span class="mut">(' + (a.clase_por ? 'lo cambió ' + esc(a.clase_por) + (a.clase_en ? ', ' + esc(fh(a.clase_en)) : '') : 'lo puso el CRM') + ')</span>') + '</dd>'
       + '<dt>Concepto</dt><dd>' + esc(a.concepto_n || 'Sin concepto') + (a.concepto_texto && a.concepto_texto !== a.concepto_n ? ' <span class="mut">(en el Excel: ' + esc(a.concepto_texto) + ')</span>' : '')
           + (a.concepto === 'cancelacion' ? uuidsHtml(a) : '') + '</dd>'
       + (a.folio ? '<dt>Folio u oficio</dt><dd>' + esc(a.folio) + '</dd>' : '')
       + (a.detalle ? '<dt>Del buzón</dt><dd>' + esc(a.detalle) + '</dd>' : '')
       + (a.consulta ? '<dt>Se consultó en el SAT</dt><dd>' + esc(fecha(a.consulta)) + '</dd>' : '')
       + (a.limite ? '<dt>Plazo para contestar</dt><dd>' + esc(fecha(a.limite)) + '</dd>' : '')
-      + (a.concepto !== 'cancelacion' && a.notificado ? '<dt>Queda notificado</dt><dd>' + esc(fecha(a.notificado))
+      + (a.concepto !== 'cancelacion' && esActo(a) && a.notificado ? '<dt>Queda notificado</dt><dd>' + esc(fecha(a.notificado))
           + (a.notif_prop ? ' ' + chip('Lo propone el CRM · por confirmar', 'na') + '<div class="mut">El 4.º día hábil después del aviso, si nadie lo abre antes (art. 134-I del CFF).</div>'
                           : (a.plazo_por ? ' <span class="mut">(lo confirmó ' + esc(a.plazo_por) + ', ' + esc(fh(a.plazo_en)) + ')</span>' : '')) + '</dd>' : '')
-      + (a.concepto !== 'cancelacion' && (a.plazo || abierto(a)) ? '<dt>Plazo</dt><dd>' + (a.plazo === 'con' ? esc('Vence el ' + fecha(a.vence)) + (a.plazo_dias ? ' <span class="mut">(' + a.plazo_dias + ' días hábiles)</span>' : '') + (abierto(a) ? ' ' + plazoChip(a) : '')
+      + (a.concepto !== 'cancelacion' && !esActo(a) ? '<dt>Plazo</dt><dd><span class="mut">No lleva: solo los actos administrativos llevan plazo.</span></dd>'   // (533)
+         : a.concepto !== 'cancelacion' && (a.plazo || abierto(a)) ? '<dt>Plazo</dt><dd>' + (a.plazo === 'con' ? esc('Vence el ' + fecha(a.vence)) + (a.plazo_dias ? ' <span class="mut">(' + a.plazo_dias + ' días hábiles)</span>' : '') + (abierto(a) ? ' ' + plazoChip(a) : '')
           : a.plazo === 'sin' ? 'Sin plazo' : chip('Por confirmar', 'na')) + '</dd>' : '')
       + (a.camino ? '<dt>Camino</dt><dd>' + esc(CAMINOS[a.camino] || a.camino)
           + (a.pendiente && a.pendiente.ve ? ' · <button class="lnk" type="button" id="a-pend">' + (a.soy ? 'Ver mi pendiente' : 'Ver su pendiente') + '</button> <span class="mut">(' + esc(PEND[a.pendiente.estatus] || a.pendiente.estatus) + ')</span>' : '') + '</dd>' : '')
@@ -871,6 +886,12 @@ tr.click:hover td{background:var(--navy-soft)}
       + '<div class="acciones"><button class="btn" type="button" id="a-can">' + (enAvisos(a) ? 'Guardar el UUID' : 'Es cancelación de factura') + '</button></div></div>');
     if (enAvisos(a) && pu.clasificar) acc.push('<div class="mut">Es una cancelación de factura informativa: no se asigna. Si no lo es, cámbiale el concepto.</div>');
     if (pu.cerrar && !pu.asignar && !a.asignado) acc.push('<div class="mut">Para cerrarlo, primero lo asigna ' + esc(EST.asignan || 'quien asigna los avisos') + ' o la dirección.</div>');
+    // (533) el tipo: lo cambia quien asigna; al pasarlo a ACTO ADMINISTRATIVO aparece «Plazo por confirmar» y a COMUNICADO o
+    // MENSAJE se quita (si ya tenía plazo, se quita y queda en la bitácora)
+    if (pu.tipo) acc.push('<div class="bloque" id="a-tipo-box"><div class="t">Tipo</div><div class="campo"><div class="opciones" role="radiogroup" aria-label="Tipo">'
+      + ['comunicado', 'mensaje', 'acto'].map(function (k) { return '<label><input type="radio" name="a-tipo" value="' + k + '"' + (a.clase === k ? ' checked' : '') + '> ' + CLASES[k] + '</label>'; }).join('')
+      + '</div><div class="mut" id="a-tipo-nota"></div></div>'
+      + '<div class="acciones"><button class="btn" type="button" id="a-tipo" disabled>Guardar el tipo</button></div></div>');
     // (202) el plazo: el CRM propone la fecha de notificación; Liliana o Frank la confirman y dicen si lleva plazo
     if (pu.plazo) acc.push('<div class="bloque" id="a-plazo-box"><div class="t">El plazo</div>'
       + '<div class="campo"><label for="a-not">Queda notificado el</label><input type="date" id="a-not" value="' + esc(String(a.notificado || a.propuesta || '').slice(0, 10)) + '">'
@@ -925,7 +946,8 @@ tr.click:hover td{background:var(--navy-soft)}
     var linea = esCan ? '' : window.PROFASE_SEG.pasos({ titulo: 'Cómo va el aviso', lista: [
       { t: 'Llegó', est: 'ok', marca: '✓', title: 'Llegó el ' + fecha(a.fecha) },
       { t: inf ? 'Informativo' : 'Asignado', est: inf ? 'off' : a.asignado ? 'ok' : 'na', marca: inf ? '—' : a.asignado ? '✓' : '2', title: a.asignado ? eqTxt : 'Sin asignar' },
-      { t: a.plazo === 'con' && a.vence ? 'Vence ' + fechaCorta(a.vence) : a.plazo === 'sin' ? 'Sin plazo' : 'Plazo', marca: a.plazo && !a.notif_prop ? (venc && ab ? '✕' : '✓') : '3',
+      !esActo(a) ? { t: 'Sin plazo', est: 'off', marca: '—', title: 'Es un ' + (claseTxt(a) || 'aviso') + ': solo los actos administrativos llevan plazo' }   // (533)
+      : { t: a.plazo === 'con' && a.vence ? 'Vence ' + fechaCorta(a.vence) : a.plazo === 'sin' ? 'Sin plazo' : 'Plazo', marca: a.plazo && !a.notif_prop ? (venc && ab ? '✕' : '✓') : '3',
         est: a.plazo && !a.notif_prop ? (venc && ab ? 'mal' : porVencer(a) ? 'am' : 'ok') : ab ? 'na' : '', title: a.plazo ? (a.plazo === 'con' ? 'Vence el ' + fecha(a.vence) : 'Sin plazo') : 'Por confirmar' },
       { t: a.camino ? (a.camino === 'trabajo' ? 'Lleva trabajo' : 'Contestando') : 'Camino', est: a.camino ? 'ok' : ab ? 'na' : '', marca: a.camino ? '✓' : '4', title: a.camino ? CAMINOS[a.camino] || a.camino : 'Sin escoger' },
       { t: cer ? 'Cerrado' : inf ? 'Informativo' : 'Cerrado', est: cer ? 'ok' : inf ? 'off' : '', marca: cer ? '✓' : inf ? '—' : '5', title: a.cerrado_por ? a.cerrado_por + ' · ' + fh(a.cerrado_en) : 'Abierto' }] });
@@ -938,7 +960,8 @@ tr.click:hover td{background:var(--navy-soft)}
     else {
       L.push(a.asignado ? ['si', 'Lo tiene ' + esc(eqTxt) + '.'] : ['no', 'Asignarlo: un responsable y, si hace falta, apoyos.']);
       L.push(a.concepto ? ['si', 'Concepto: ' + esc(a.concepto_n || a.concepto) + '.'] : ['no', 'Escoger el concepto.']);
-      if (!a.plazo || a.notif_prop) L.push(['no', 'Confirmar el plazo: el CRM propone que queda notificado el ' + esc(fecha(a.notificado || a.propuesta)) + '.']);
+      if (!esActo(a)) L.push(['si', 'Es un ' + esc(claseTxt(a) || 'aviso') + ': no lleva plazo (solo los actos administrativos).']);   // (533)
+      else if (!a.plazo || a.notif_prop) L.push(['no', 'Confirmar el plazo: el CRM propone que queda notificado el ' + esc(fecha(a.notificado || a.propuesta)) + '.']);
       else L.push(a.plazo === 'con' ? [venc ? 'no' : 'va', (venc ? 'Venció el ' : 'Vence el ') + esc(fecha(a.vence)) + '.'] : ['si', 'No lleva plazo para contestar.']);
       L.push(a.camino ? ['si', esc(CAMINOS[a.camino] || a.camino) + '.'] : ['no', 'Escoger el camino: se resuelve contestando o lleva trabajo.']);
       if (!(a.notas || []).length) L.push(['va', 'Para cerrarlo hace falta al menos una nota en «Seguimiento».']);
@@ -951,12 +974,13 @@ tr.click:hover td{background:var(--navy-soft)}
       nav: idx >= 0 && COLA.length > 1 ? { pos: idx + 1, total: COLA.length, donde: 'en tu lista', ant: idx > 0, sig: idx < COLA.length - 1,
         ir: function (d) { var nx = COLA[idx + d]; if (nx != null) { ABIERTO = nx; ficha(nx); } } } : null,
       resumen: '<div class="r1"><h3>' + esc(a.rfc) + (a.grupo ? ' · ' + esc(a.grupo) : '') + '</h3><span class="big">' + estChip(a) + '</span></div>'
-        + '<p>' + esc(TIPO[a.tipo] || 'Sin tipo') + (a.folio ? ' · ' + esc(a.folio) : '') + (a.origen === 'excel' ? ' · del Excel' : a.origen === 'manual' ? ' · lo subió a mano ' + esc(a.subio || '') : '') + '</p>'
+        + '<p>' + esc(esCan ? 'Cancelación de factura' : claseTxt(a) || 'Sin tipo') + (a.folio ? ' · ' + esc(a.folio) : '') + (a.origen === 'excel' ? ' · del Excel' : a.origen === 'manual' ? ' · lo subió a mano ' + esc(a.subio || '') : '') + '</p>'
         + '<div class="r2"><span>Llegó <b>' + esc(fecha(a.fecha)) + '</b></span>'
-        + (!esCan && a.notificado ? '<span>Queda notificado <b>' + esc(fecha(a.notificado)) + '</b></span>' : '')
+        + (!esCan && esActo(a) && a.notificado ? '<span>Queda notificado <b>' + esc(fecha(a.notificado)) + '</b></span>' : '')
         + (!esCan && a.plazo === 'con' && a.vence ? '<span>Vence <b' + (venc && ab ? ' class="mal"' : '') + '>' + esc(fecha(a.vence)) + '</b></span>' : '')
         + (esCan && a.limite ? '<span>Plazo <b>' + esc(fecha(a.limite)) + '</b></span>' : '') + '</div>'
-        + '<div class="seg-chips">' + (a.concepto_n ? '<span class="tg">' + esc(a.concepto_n) + '</span>' : '<span class="tg">Sin concepto</span>') + plazoChip(a)
+        + '<div class="seg-chips">' + (!esCan && claseTxt(a) ? '<span class="tg">' + esc(claseTxt(a)) + '</span>' : '')   // (533) el tipo
+        + (a.concepto_n && norm(a.concepto_n) !== norm(claseTxt(a)) ? '<span class="tg">' + esc(a.concepto_n) + '</span>' : !esCan && claseTxt(a) ? '' : '<span class="tg">Sin concepto</span>') + plazoChip(a)
         + '<span class="seg-quien">' + (a.asignado ? esc(eqTxt) : 'Sin asignar') + '</span></div>'
         + (esCan ? uuidsHtml(a) : ''),
       bajoResumen: linea + window.PROFASE_SEG.falta(cer || inf ? 'Cómo quedó' : 'Qué falta', L),
@@ -1078,6 +1102,25 @@ tr.click:hover td{background:var(--navy-soft)}
       return rpc('bzt_plazo', { p_id: a.id, p: { notificado: $('a-not').value, plazo: pla, dias: pla === 'con' && d ? +d : null,
                                                 vence: pla === 'con' && venceMano ? $('a-ven').value : (pla === 'con' && !d ? $('a-ven').value : null) } });
     }
+    // (533) el tipo: el botón se prende al escoger otro; si ya tenía plazo y pasa a COMUNICADO o MENSAJE, lo dice antes
+    if ($('a-tipo-box')) {
+      var syncT = function () {
+        var v = radio('a-tipo'), b = $('a-tipo'), nota = $('a-tipo-nota');
+        b.disabled = !v || v === a.clase;
+        var tenia = a.plazo === 'con' ? 'vence el ' + fecha(a.vence) : a.plazo === 'sin' ? 'sin plazo' : '';
+        nota.textContent = v && v !== 'acto' && v !== a.clase && tenia ? 'Tiene el plazo confirmado (' + tenia + '): al guardarlo como ' + CLASES[v] + ' se quita el plazo (queda en la bitácora).'
+          : 'Solo los actos administrativos llevan plazo («Plazo por confirmar»). ' + (a.clase_por ? 'Lo cambió ' + a.clase_por + '.' : 'Lo puso el CRM por lo que dice el correo del SAT; si está mal, cámbialo aquí.');
+      };
+      document.querySelectorAll('input[name="a-tipo"]').forEach(function (x) { x.addEventListener('change', syncT); });
+      syncT();
+    }
+    boton('a-tipo', async function () {
+      var v = radio('a-tipo'); if (!v) throw new Error('Escoge el tipo. Qué hacer: escógelo en esta misma ventana y vuelve a guardar.');
+      var r = await rpc('bzt_tipo', { p_ids: [a.id], p_tipo: v });
+      if (r && r.ficha) pintaFicha(r.ficha); else await ficha(a.id);
+      avisa('Listo: es un ' + CLASES[v] + '.' + (v === 'acto' ? ' Sale en «Plazo por confirmar» hasta que se capture su plazo.' : ' No lleva plazo.') + (r && r.plazos ? ' Se le quitó el plazo que tenía (queda en la bitácora).' : ''));
+      await carga();
+    });
     boton('a-plazo', async function () {
       var r = await guardaPlazo();
       pintaFicha(r); avisa(r.plazo === 'con' ? 'Listo: vence el ' + fecha(r.vence) + '.' : 'Listo: quedó sin plazo.'); await carga();
@@ -1193,6 +1236,29 @@ tr.click:hover td{background:var(--navy-soft)}
       this.disabled = true;
       try { var r = await rpc('bzt_clasifica', { p_ids: ids(), p_concepto: $('m-con').value }); noPregunta(); SEL = {}; avisa((r.cambiados || 0) + ' cambiados.'); await carga(); }
       catch (e) { error(falla(e)); this.disabled = false; }
+    };
+  };
+
+  // (533) varios a la vez: el tipo (COMUNICADO, MENSAJE o ACTO ADMINISTRATIVO)
+  $('sel-tipo').onclick = function () {
+    var n = ids().length;
+    pregunta({ kick: kSel(), titulo: 'Cambiar el tipo',
+      html: '<div class="sg-campos"><div class="sg-campo ancho"><label>Tipo</label><div class="opciones" role="radiogroup" aria-label="Tipo">'
+      + ['comunicado', 'mensaje', 'acto'].map(function (k) { return '<label><input type="radio" name="m-tipo" value="' + k + '"> ' + CLASES[k] + '</label>'; }).join('') + '</div>'
+      + '<span class="n">Solo los actos administrativos llevan plazo: a COMUNICADO o MENSAJE se les quita «Plazo por confirmar» (y el plazo, si ya tenían; queda en la bitácora). Las cancelaciones de factura no cambian.</span></div></div>',
+      acciones: [{ t: 'Guardar', tipo: 'b1', id: 'm-ok' }] });
+    $('m-ok').onclick = async function () {
+      var v = radio('m-tipo'); if (!v) return error('Escoge el tipo: COMUNICADO, MENSAJE o ACTO ADMINISTRATIVO. Qué hacer: escógelo en esta misma ventana y vuelve a guardar.');
+      this.disabled = true;
+      try {
+        var r = await rpc('bzt_tipo', { p_ids: ids(), p_tipo: v }); noPregunta(); SEL = {};
+        avisa((r.cambiados || 0) + (r.cambiados === 1 ? ' quedó como ' : ' quedaron como ') + r.tipo + '.'
+          + (r.iguales ? ' ' + r.iguales + (r.iguales === 1 ? ' ya lo era.' : ' ya lo eran.') : '')
+          + (r.plazos ? ' A ' + r.plazos + ' se les quitó el plazo.' : '')
+          + (r.por_concepto ? ' ' + r.por_concepto + ' no cambiaron: su concepto es de acto administrativo (cámbiaselo primero).' : '')
+          + (r.cancelaciones ? ' Las cancelaciones de factura no cambian.' : ''));
+        await carga();
+      } catch (e) { error(falla(e)); this.disabled = false; }
     };
   };
 
@@ -1418,11 +1484,11 @@ tr.click:hover td{background:var(--navy-soft)}
       var head = cancel ? ['Fecha', 'Cliente', 'Grupo', 'RFC', 'De quién', 'Plazo'] : ['Fecha', 'Cliente', 'Grupo', 'RFC', 'Tipo', 'Concepto', 'Folio u oficio', 'Asignado a', 'Estado', 'Queda notificado', 'Plazo', 'Camino'];
       var filas = L.map(function (f) {
         return cancel ? [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, deQuien(f), f.limite && f.limite >= DATOS.hoy ? 'Vence ' + fecha(f.limite) : 'Plazo vencido']
-          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, TIPO[f.tipo] || '',
+          : [fecha(f.fecha), cliente(f), f.grupo || '', f.rfc, enAvisos(f) ? '' : claseTxt(f),   // (533) el tipo
              enAvisos(f) ? 'CANCELACIÓN DE FACTURA\n' + ((f.uuids || []).length ? f.uuids.map(function (u) { return 'UUID: ' + u; }).join('\n') : 'UUID: sin dato') : f.concepto_n || '',   // (362)
              f.folio || '', asignadosTexto(f), (ESTADOS[f.estado] || [f.estado])[0],
              f.notificado ? fecha(f.notificado) + (f.notif_prop ? ' (propuesta)' : '') : '',
-             f.plazo === 'con' ? 'Vence el ' + fecha(f.vence) : f.plazo === 'sin' ? 'Sin plazo' : abierto(f) ? 'Por confirmar' : '',
+             f.plazo === 'con' ? 'Vence el ' + fecha(f.vence) : !esActo(f) ? (enAvisos(f) ? '' : 'No lleva') : f.plazo === 'sin' ? 'Sin plazo' : abierto(f) ? 'Por confirmar' : '',
              CAMINOS[f.camino] || ''];
       });
       var MK = window.PROFASE_MARCA, EX = await MK.excelJS(), wb = MK.libro(EX, titulo), ws = wb.addWorksheet(titulo.slice(0, 31));
@@ -1468,6 +1534,7 @@ tr.click:hover td{background:var(--navy-soft)}
       if (q.get('ver') === 'apoyos') window.__bztAbre('ver:apoyos');
       if (q.get('ver') === 'cancelaciones') window.__bztAbre('ver:cancelaciones');
       if (q.get('ver') === 'correo-pdf') window.__bztAbre('ver:correo-pdf');
+      if (q.get('ver') === 'tipos') window.__bztAbre('ver:tipos');
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
   // desde un aviso o el Inicio (bzt_tab.js): abre ese aviso o los nuevos
@@ -1555,6 +1622,22 @@ tr.click:hover td{background:var(--navy-soft)}
         enCorreo();
       };
       ilu6(); return;
+    }
+    // (533) lo nuevo: el tipo de cada aviso («Nuevos cambios», clave ver|tipos|…): «Avisos del SAT» con «Plazo por confirmar»
+    // y la columna «Concepto» iluminados
+    if (String(x || '') === 'ver:tipos') {
+      var t8 = 0, ilu8 = function () {
+        if (!EST || !$('cargando').hidden || !$('principal') || $('principal').hidden || !DATOS) { if (t8++ < 80) setTimeout(ilu8, 150); return; }
+        if (PES !== 'avisos') document.querySelector('[data-pes="avisos"]').click();
+        if (DATOS.pes !== 'avisos') { if (t8++ < 80) setTimeout(ilu8, 150); return; }
+        var k = document.querySelector('[data-ppl="confirmar"]'), th = $('thead');
+        [k, th].forEach(function (el) { if (!el) return; el.style.outline = '3px solid var(--accent)'; el.style.outlineOffset = '2px'; });
+        try { (k || th).scrollIntoView({ block: 'center' }); } catch (e) {}
+        setTimeout(function () { [k, th].forEach(function (el) { if (el) { el.style.outline = ''; el.style.outlineOffset = ''; } }); }, 6000);
+        avisa('Nuevo: en «Concepto» cada aviso dice si es COMUNICADO, MENSAJE o ACTO ADMINISTRATIVO. Solo los actos administrativos llevan «Plazo por confirmar».'
+          + (EST.asigna ? ' Si el CRM se equivocó, cámbialo en la ficha («Tipo», en «Qué sigue») o varios a la vez con «Cambiar tipo».' : ''));
+      };
+      ilu8(); return;
     }
     var v = VER[String(x || '').replace(/^ver:/, '')];
     if (/^ver:/.test(String(x || '')) && v) {

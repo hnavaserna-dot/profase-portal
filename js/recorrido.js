@@ -161,6 +161,7 @@
   function clamp(v, a, b) { return Math.max(a, Math.min(v, b)); }
   // ¿se ve de verdad? (no escondida, no transparente, y al menos un pedazo dentro de la pantalla)
   function aLaVista(el) {
+    el = deFecha(el);
     try {
       var g = caja(el);
       if (!g) return false;
@@ -180,7 +181,12 @@
     } catch (e) { return false; }
   }
   // para escoger entre varias partes: no escondida y dentro de lo ancho de la pantalla (lo de más abajo sí cuenta)
+  // un campo de fecha: el de siempre va escondido y se ve el dd/mm/aaaa de junto (js/fecha-campo.js); cuenta ese
+  function deFecha(e) {
+    return e && e.classList && e.classList.contains('pf-fc-nat') && e.previousElementSibling && e.previousElementSibling.hasAttribute('data-fecha-vista') ? e.previousElementSibling : e;
+  }
   function sePuede(el) {
+    el = deFecha(el);
     try {
       var g = caja(el);
       if (!g) return false;
@@ -496,6 +502,7 @@
       function busca(p) {
         var e = null;
         try { e = typeof p.el === 'function' ? p.el() : document.querySelector(p.el); } catch (x) { e = null; }
+        e = deFecha(e);   // un campo de fecha: se ilumina el dd/mm/aaaa que se ve
         return e && caja(e) ? e : null;
       }
       function acomoda() {
