@@ -259,6 +259,8 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
 .pi-ojo:hover{border-color:var(--navy);background:var(--navy-soft)}
 .pi-ojo[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
 .pi-ojo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* el de las tarjetas (25-nov-2026): a la derecha del título, antes de «Ver todo» */
+.card header .c-ojo{margin-left:auto;margin-top:0}
 .pi-tapa{letter-spacing:.08em;color:var(--muted);white-space:nowrap}
 .pi-cab:disabled{cursor:default}
 .pi-cab:not(:disabled):hover h3{color:var(--accent-ink)}
@@ -706,7 +708,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       $('grid').insertBefore(el, sig);
     }
     el.classList.remove('carga'); el.removeAttribute('aria-busy');
-    el.querySelector('.cuerpo').innerHTML = html;
+    c.html = html; pintaCuerpo(el, c);   // lo que trae dinero sale tapado, con su ojito
     ponIr(el, c);
     revela();
   }
@@ -1315,8 +1317,8 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     return h;
   }
   function repintaEq() {
-    var el = $('c-conectados'); if (!el || el.classList.contains('carga') || !EQ) return;
-    el.querySelector('.cuerpo').innerHTML = htmlConectados();
+    var el = $('c-conectados'), c = tarjetaDe('conectados'); if (!el || el.classList.contains('carga') || !EQ || !c) return;
+    c.html = htmlConectados(); pintaCuerpo(el, c);
   }
   function tConectados() {
     return { id: 'conectados', t: 'Equipo conectado', s: 'Ahora mismo · se actualiza solo', liga: 'chat', ligaTxt: 'Ver todos', arma: async function () {
@@ -1489,23 +1491,72 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
      Inicio, al volver a la app y cada 2 minutos, y solo si el Inicio se ve. El «Hoy», «En 20 min» o «Venció» se recalcula
      cada 30 segundos sin preguntar a la base. Una pila: lo más urgente encima; se desliza con el dedo (o con las flechas
      y el teclado) y vuelve a empezar al llegar al final. */
-  var AG = { firma: null, pilas: [], idx: {}, top: {}, pidiendo: null, adel: null, ult: 0, arrastre: false, repintar: false, noClic: 0, tn: 0, ver: {} };
+  var AG = { firma: null, pilas: [], idx: {}, top: {}, pidiendo: null, adel: null, ult: 0, arrastre: false, repintar: false, noClic: 0, tn: 0, ver: {}, verC: {}, monto: {} };
   /* Las pilas con montos salen tapadas (Héctor Daniel Nava, 17-nov-2026, 10:08: «como hay veces que yo soy el que proyecta
      al equipo; quiero que esta pila tenga un ojito para tapar y destapar; y que siempre esté tapado… tanto a mí como a
      HNR»; escogió que también «Reembolsos por pagar» y que se vuelvan a tapar al salir del Inicio). Lo destapado vive
      solo en esta página (AG.ver), nunca en el navegador ni en la base: al volver a cargar, al salir del Inicio
-     (ini_tab.js llama a INICIO.tapa) o al esconderse la app, se tapa otra vez. Una pila nueva con montos entra aquí. */
+     (ini_tab.js llama a INICIO.tapa) o al esconderse la app, se tapa otra vez.
+     Y todo el dinero del Inicio, de todos (Héctor Daniel Nava, 25-nov-2026: «hoy se lo quise mostrar a un cliente y no
+     quise… aplica esto para todo lo que tenga números de dinero y demás en la pantalla de inicio de todos»; «Si ssi es»):
+     cualquier pila o tarjeta que enseñe un monto ($ y un número, también US$) sale tapada sola con su ojito, sin tener que
+     agregarla a ninguna lista (AG.monto para las pilas, AG.verC para las tarjetas; pintaCuerpo). Solo el dinero: los
+     nombres, los conteos y los porcentajes se siguen viendo. TAPA se queda para las de la dirección aunque estén vacías. */
   var TAPA = { comision: 1, reembolsos: 1 };
+  var DINERO = /\$\s?\d/;
+  function conDinero(t) { return DINERO.test(String(t == null ? '' : t)); }
+  function pilaConDinero(P) { return (P.items || []).some(function (it) { return conDinero(it.t) || conDinero(it.s); }); }
+  function tapable(k) { return !!TAPA[k] || !!AG.monto[k]; }
   var OJO = { ver: SVGA_OJO('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
               tapar: SVGA_OJO('<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>') };
   function SVGA_OJO(d) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
-  function tapada(k) { return !!TAPA[k] && !AG.ver[k]; }
+  function tapada(k) { return tapable(k) && !AG.ver[k]; }
   var MONTO = /-?\$\s?\d[\d,]*(?:\.\d+)?/g;
   function sinMonto(s) { return String(s == null ? '' : s).replace(MONTO, '$ •••••'); }
+  // las tarjetas: lo que trae dinero se tapa en el texto (y en lo que lee el lector de pantalla); para destapar se vuelve a
+  // pintar con lo que armó la tarjeta (c.html), así nunca se pierde nada
+  function nodoConDinero(raiz) {
+    if (conDinero(raiz.textContent)) return true;
+    var l = raiz.querySelectorAll('[title],[aria-label]');
+    for (var i = 0; i < l.length; i++) if (conDinero(l[i].getAttribute('title')) || conDinero(l[i].getAttribute('aria-label'))) return true;
+    return false;
+  }
+  function tapaNodo(raiz) {
+    var w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT), n, l = [];
+    while ((n = w.nextNode())) if (conDinero(n.nodeValue)) l.push(n);
+    l.forEach(function (t) { t.nodeValue = sinMonto(t.nodeValue); });
+    raiz.querySelectorAll('[title],[aria-label]').forEach(function (e) {
+      ['title', 'aria-label'].forEach(function (a) { var v = e.getAttribute(a); if (conDinero(v)) e.setAttribute(a, sinMonto(v).replace(/\$ •••••/g, 'monto tapado')); });
+    });
+  }
+  function tarjetaTapada(id) { return !AG.verC[id]; }
+  function tarjetaDe(id) { for (var i = 0; i < TARJETAS.length; i++) if (TARJETAS[i].id === id) return TARJETAS[i]; return null; }
+  function pintaCuerpo(el, c) {
+    var cu = el.querySelector('.cuerpo'); if (!cu) return;
+    cu.innerHTML = c.html;
+    var hay = nodoConDinero(cu);
+    if (hay && tarjetaTapada(c.id)) tapaNodo(cu);
+    ponOjo(el, c, hay);
+  }
+  function ponOjo(el, c, hay) {
+    var hd = el.querySelector('header'), b = hd && hd.querySelector('.c-ojo');
+    if (!hd) return;
+    if (!hay) { if (b) b.remove(); return; }
+    var vis = !tarjetaTapada(c.id), txt = (vis ? 'Tapar' : 'Ver') + ' los montos';
+    if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'pi-ojo c-ojo'; b.setAttribute('data-c', c.id); hd.insertBefore(b, hd.querySelector('.ir')); }
+    b.setAttribute('aria-pressed', String(vis)); b.setAttribute('aria-label', txt + ': ' + String(c.t || '').toLowerCase()); b.title = txt;
+    b.innerHTML = vis ? OJO.tapar : OJO.ver;
+  }
+  function ojoTarjeta(id) {
+    var c = tarjetaDe(id), el = $('c-' + id); if (!c || !el || c.html == null) return;
+    AG.verC[id] = !AG.verC[id]; pintaCuerpo(el, c);
+  }
   // tapa todo lo destapado (y vuelve a pintar solo si había algo destapado)
   function tapaTodo() {
-    var habia = false; for (var k in AG.ver) if (AG.ver[k]) habia = true;
-    AG.ver = {};
+    var habia = false, cs = []; for (var k in AG.ver) if (AG.ver[k]) habia = true;
+    for (var id in AG.verC) if (AG.verC[id]) cs.push(id);
+    AG.ver = {}; AG.verC = {};
+    cs.forEach(function (id) { var c = tarjetaDe(id), el = $('c-' + id); if (c && el && c.html != null) pintaCuerpo(el, c); });
     if (habia) { if (AG.arrastre) AG.repintar = true; else pintaAgenda(); }
   }
   var SVGA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
@@ -1653,11 +1704,12 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   }
   function pilaHtml(P) {
     var its = P.items || [], n = +P.n || its.length, k = String(P.k || ''), i = idxDe(P);
+    AG.monto[k] = pilaConDinero(P);
     var h = '<article class="pila" data-k="' + esc(k) + '" aria-roledescription="pila" aria-label="' + esc((P.t || k) + ': ' + n) + '"><div class="pi-top">'
       + '<button type="button" class="pi-cab"' + (P.liga && ve(P.liga) ? ' title="Ver todo"' : ' disabled') + '><span class="pi-ico">' + (ICO[k] || ICO.otro) + '</span>'
       + '<h3>' + esc(P.t || k) + '</h3>' + (n ? cuenta(P) : '') + '<span class="pi-va" aria-hidden="true">›</span></button>'
       + (P.nuevo && nuevoDe(k) ? '<button type="button" class="pi-mas" aria-label="Nuevo: ' + esc(String(P.t || k).toLowerCase()) + '" title="Nuevo">+</button>' : '')
-      + (TAPA[k] && its.length ? (function () {
+      + (tapable(k) && its.length ? (function () {
           var vis = !tapada(k), txt = (vis ? 'Tapar' : 'Ver') + ' los montos';
           return '<button type="button" class="pi-ojo" aria-pressed="' + vis + '" aria-label="' + esc(txt + ': ' + String(P.t || k).toLowerCase()) + '" title="' + txt + '">'
             + (vis ? OJO.tapar : OJO.ver) + '</button>';
@@ -1855,7 +1907,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       var rcb = e.target.closest('.pi-recb');   // 464: «Recordarle»
       if (rcb) { recordar({ cosa: rcb.getAttribute('data-r') }, rcb); return; }
       var oj = e.target.closest('.pi-ojo');   // el ojito: tapa o destapa los montos de esa pila
-      if (oj) { var ok = oj.closest('.pila').getAttribute('data-k'); if (TAPA[ok]) { AG.ver[ok] = !AG.ver[ok]; pintaAgenda(); } return; }
+      if (oj) { var ok = oj.closest('.pila').getAttribute('data-k'); if (tapable(ok)) { AG.ver[ok] = !AG.ver[ok]; pintaAgenda(); } return; }
       var ms = e.target.closest('.pi-mas');
       if (ms) { var f = nuevoDe(ms.closest('.pila').getAttribute('data-k')); if (f) f(); return; }
       var cb = e.target.closest('.pi-cab');
@@ -1905,6 +1957,8 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     abre('cobranza', x);
   }
   document.addEventListener('click', function (e) {
+    var co = e.target.closest('.c-ojo');   // el ojito de una tarjeta: tapa o destapa su dinero
+    if (co) { e.preventDefault(); e.stopPropagation(); ojoTarjeta(co.getAttribute('data-c')); return; }
     var wv = e.target.closest('[data-wf]');
     if (wv) { e.preventDefault(); e.stopPropagation(); abre('panel', wv.getAttribute('data-wf')); return; }
     var c = e.target.closest('[data-cxc]');
@@ -1916,6 +1970,9 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
           if (!C) return;
           if (!CXP || CXP.D !== C.D) CXP = window.PROFASE_CXC.prepara(C.D);
           window.PROFASE_CXC.resumen(CXP, { cia: p[0], pila: p[1], ver: ve('cobranza') ? abreCobranza : null });
+          // si su tarjeta está tapada, el resumen también sale tapado (para destaparlo, el ojito de la tarjeta)
+          var card = c.closest('.card'), dl = document.querySelectorAll('.cx-dlg');
+          if (card && tarjetaTapada(card.id.slice(2)) && dl.length) tapaNodo(dl[dl.length - 1]);
         });
         return;
       }
