@@ -184,7 +184,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .mas{color:var(--accent-ink)}}
 .foto{display:block;width:100%;aspect-ratio:1638/2048;background:var(--surface-2);border:0;padding:0;cursor:zoom-in;position:relative}
 .foto img{display:block;width:100%;height:100%;object-fit:cover}
-.foto .sin{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12.5px}
+.foto .sin{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12.5px;padding:12px;text-align:center;overflow-wrap:anywhere}
 /* 505 (24-nov-2026): en qué red sale, su formato y la que todavía no tiene su pieza */
 .redes{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 12px 8px;font-size:12.5px;color:var(--muted)}
 .sinp{margin:0 12px;border:2px dashed var(--line-strong);border-radius:10px;background:var(--surface-2);padding:18px 14px;text-align:center;display:grid;gap:6px;justify-items:center}
@@ -196,6 +196,12 @@ button,select,input,textarea{font:inherit;color:inherit}
 .carr .foto{flex:0 0 100%;scroll-snap-align:start}
 .carr-n{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 12px 0;font-size:12px;color:var(--muted)}
 .reel{display:block;width:100%;max-height:560px;aspect-ratio:9/16;background:#000;object-fit:contain}
+/* 27-nov-2026 (Héctor Daniel Nava: «Los videos no funcionan a la perfección. Se traban, se detienen… Corrígelo para poderlo
+   ver siempre a la perfección»): el Reel va en su caja; el mismo <video> se queda en ella aunque la pantalla se vuelva a pintar */
+.reel-caja{display:block;width:100%;background:#000;min-width:0}
+.carr .reel-caja{flex:0 0 100%;scroll-snap-align:start}
+.reel-caja .rsin{display:grid;place-items:center;width:100%;aspect-ratio:9/16;max-height:560px;color:#C9D2E0;font-size:12.5px;padding:12px;text-align:center;overflow-wrap:anywhere}
+.reel-caja .rfalla{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:8px 10px;background:var(--red-soft);color:var(--red);font-size:12.5px;overflow-wrap:anywhere}
 .anterior{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0;font-size:12.5px;color:var(--muted)}
 .pub .info{padding:10px 12px 0;display:grid;gap:6px}
 .msg{padding:8px 10px;border-radius:8px;font-size:12.5px;overflow-wrap:anywhere}
@@ -432,14 +438,170 @@ button,select,input,textarea{font:inherit;color:inherit}
   function pubsTodas() { return pubsDe(null); }
   function cuenta(est) { return pubs().filter(function (p) { return est.indexOf(p.estado) >= 0 && (!CAMP || p.campana === CAMP); }).length; }
 
-  /* ---------- las imágenes (cubeta privada; se piden juntas y se guardan una hora) ---------- */
+  /* ---------- las imágenes (cubeta privada; se piden juntas y duran una hora) ---------- */
+  // 27-nov-2026: la liga dura una hora; a los 50 minutos se pide otra (antes se quedaba la vieja y, vencida, el video se
+  // quedaba a medias)
+  var URL_T = {};
+  function fresca(r) { return !!URLS[r] && Date.now() - (URL_T[r] || 0) < 50 * 60000; }
   async function urls(rutas) {
-    var faltan = rutas.filter(function (r) { return r && !URLS[r]; });
+    var faltan = rutas.filter(function (r, i) { return r && !fresca(r) && rutas.indexOf(r) === i; });
     if (!faltan.length) return;
     try {
       var s = await P.sb.storage.from('facebook').createSignedUrls(faltan, 3600);
-      (s.data || []).forEach(function (x) { if (x && !x.error && x.signedUrl && x.path) URLS[x.path] = x.signedUrl; });
+      (s.data || []).forEach(function (x) { if (x && !x.error && x.signedUrl && x.path) { URLS[x.path] = x.signedUrl; URL_T[x.path] = Date.now(); } });
     } catch (e) {}
+  }
+
+  /* ---------- los Reels: que se vean siempre bien (27-nov-2026, Héctor Daniel Nava: «Los videos no funcionan a la
+     perfección. Se traban, se detienen… Corrígelo para poderlo ver siempre a la perfección»). Lo que los cortaba:
+     (1) la pantalla se vuelve a pintar sola (cada 30 s mientras algo entra a Facebook, al regresar a la pestaña y después
+     de cada botón) y cada vez tiraba el <video> y hacía otro: el que iba sonando se paraba y volvía a empezar; (2) se veía
+     por internet, a pedazos, desde la cubeta (se traba si la red titubea) y con una liga de una hora que, vencida, lo
+     dejaba a medias; (3) el marco no dejaba pantalla completa (fbk_tab.js). Ahora: cada tarjeta tiene su <video> y se
+     reusa al repintar (no se corta); lo que se repinta solo espera a que el video se pare; cada video se baja completo a la
+     memoria de esta página cuando se acerca a la vista (uno a la vez; nunca se guarda en el navegador) y de ahí se ve sin
+     trabarse; si la liga vence o falla, se pide otra y sigue donde iba; suena uno a la vez y se pausa si sale de la vista;
+     mientras suena, el portal no se recarga por una versión nueva ni le salta nada encima (PORTAL.escribiendo). */
+  var VID = {}, MEM = {}, MALMEM = {}, REINT = {}, COLA = [], BAJANDO = false, REPINTA = false, VIO = null, VEO = null;
+  function completa() {
+    try { if (document.fullscreenElement || document.webkitFullscreenElement) return true; } catch (e) {}
+    return Object.keys(VID).some(function (k) { return !!VID[k].webkitDisplayingFullscreen; });
+  }
+  function ocupados() { return completa() || Object.keys(VID).some(function (k) { return !!VID[k].__suena; }); }
+  function avisaOcupado() { try { if (P && P.escribiendo) P.escribiendo('video-reel', ocupados()); } catch (e) {} }
+  function enMemoria(r) { return !!MEM[r] && !MALMEM[r]; }
+  // el video desde t (la marca #t también hace que el iPhone enseñe el primer cuadro antes de reproducir)
+  function ponSrc(v, u, t, sigue) {
+    v.__src = u;
+    v.src = u + '#t=' + (t > 0.05 ? t.toFixed(2) : '0.001');
+    if (sigue) { try { var x = v.play(); if (x && x.catch) x.catch(function () {}); } catch (e) {} }
+  }
+  function hazVideo(r, nombre) {
+    var v = document.createElement('video');
+    v.className = 'reel'; v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+    v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.setAttribute('aria-label', nombre || 'Reel de la publicación'); v.setAttribute('data-vr', r);
+    v.addEventListener('play', function () {
+      v.__suena = true;
+      Object.keys(VID).forEach(function (k) { var o = VID[k]; if (o !== v && !o.paused) { try { o.pause(); } catch (e) {} } });   // uno a la vez
+      avisaOcupado();
+    });
+    v.addEventListener('playing', function () { REINT[r] = 0; quitaFalla(v); });
+    v.addEventListener('pause', function () { v.__suena = false; alParar(v, r); });
+    v.addEventListener('ended', function () { v.__suena = false; alParar(v, r); });
+    v.addEventListener('error', function () { var iba = !!v.__suena; v.__suena = false; avisaOcupado(); arregla(v, r, iba); });
+    v.addEventListener('webkitendfullscreen', function () { alParar(v, r); });   // el iPhone salió de pantalla completa
+    ponSrc(v, enMemoria(r) ? MEM[r] : URLS[r], 0, false);
+    return v;
+  }
+  // parado al principio o al final: si ya está en memoria, se cambia a esa copia (a media reproducción no se toca)
+  function aMemoria(v, r) {
+    if (!enMemoria(r) || v.__src === MEM[r] || v.__suena) return;
+    if (!v.ended && (v.currentTime || 0) > 0.05) return;
+    ponSrc(v, MEM[r], 0, false);
+  }
+  function alParar(v, r) {
+    avisaOcupado();
+    aMemoria(v, r);
+    if (REPINTA && !ocupados()) { REPINTA = false; pinta(); }
+  }
+  // se cayó: si fue la copia en memoria (este navegador no la quiso), sigue por internet; si fue la liga, se pide otra y
+  // sigue donde iba; a la tercera, el aviso con qué hacer
+  async function arregla(v, r, iba) {
+    var t = v.currentTime || 0;
+    if (v.__src && v.__src === MEM[r]) MALMEM[r] = true;
+    else {
+      REINT[r] = (REINT[r] || 0) + 1;
+      if (REINT[r] > 2) return fallaVideo(v, r);
+      delete URLS[r];
+    }
+    await urls([r]);
+    var u = enMemoria(r) ? MEM[r] : URLS[r];
+    if (!u) return fallaVideo(v, r);
+    ponSrc(v, u, t, iba);
+  }
+  function fallaVideo(v, r) {
+    v.__falla = true;
+    var c = v.parentNode;
+    if (!c || c.querySelector('.rfalla')) return;
+    var d = document.createElement('div'); d.className = 'rfalla'; d.setAttribute('role', 'status');
+    d.innerHTML = '<span>No se pudo ver el video. Qué hacer: revisa tu internet y pica «Volver a intentar».</span><button class="btn chico" type="button">Volver a intentar</button>';
+    d.querySelector('button').onclick = async function () {
+      REINT[r] = 0; delete URLS[r]; quitaFalla(v);
+      await urls([r]);
+      var u = enMemoria(r) ? MEM[r] : URLS[r];
+      if (u) ponSrc(v, u, 0, false); else fallaVideo(v, r);
+    };
+    c.appendChild(d);
+  }
+  function quitaFalla(v) { v.__falla = false; var c = v.parentNode, d = c && c.querySelector('.rfalla'); if (d) c.removeChild(d); }
+  // el video completo a la memoria de la página, uno a la vez, cuando se acerca a la vista (con «ahorro de datos», no)
+  function aLaCola(r) {
+    if (!r || MEM[r] || MALMEM[r] || COLA.indexOf(r) >= 0) return;
+    try { if (navigator.connection && navigator.connection.saveData) return; } catch (e) {}
+    COLA.push(r); bajaSiguiente();
+  }
+  async function bajaSiguiente() {
+    if (BAJANDO) return;
+    var r = COLA.shift();
+    if (!r) return;
+    if (MEM[r] || MALMEM[r]) return bajaSiguiente();
+    BAJANDO = true;
+    try {
+      await urls([r]);
+      if (!URLS[r]) throw new Error('sin liga');
+      var res = await fetch(URLS[r], { credentials: 'omit' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var b = await res.blob();
+      if (!b || b.size < 1000) throw new Error('vacío');
+      if (!/^video\//.test(b.type || '')) b = new Blob([b], { type: 'video/mp4' });
+      MEM[r] = URL.createObjectURL(b);
+      Object.keys(VID).forEach(function (k) { if (VID[k].getAttribute('data-vr') === r) aMemoria(VID[k], r); });
+    } catch (e) { /* se queda por internet: se sigue viendo igual */ }
+    BAJANDO = false;
+    bajaSiguiente();
+  }
+  // lo que ya no está en ninguna publicación se suelta de la memoria
+  function sueltaMemoria() {
+    var hay = {};
+    pubsTodas().forEach(function (p) { medios(p).forEach(function (m) { hay[m.ruta] = 1; }); });
+    Object.keys(MEM).forEach(function (r) { if (!hay[r]) { try { URL.revokeObjectURL(MEM[r]); } catch (e) {} delete MEM[r]; } });
+  }
+  function observa(v) {
+    if (!('IntersectionObserver' in window)) { aLaCola(v.getAttribute('data-vr')); return; }
+    if (!VIO) VIO = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) aLaCola(e.target.getAttribute('data-vr')); }); }, { rootMargin: '800px 0px' });
+    // fuera de la vista (se deslizó, se cambió de pestaña del carrusel o de sección del menú): se pausa
+    if (!VEO) VEO = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { var v = e.target; if (!e.isIntersecting && !v.paused && !completa()) { try { v.pause(); } catch (x) {} } });
+    }, { threshold: 0 });
+    VIO.observe(v); VEO.observe(v);
+  }
+  // cada caja de Reel recibe su <video> de siempre (el mismo, aunque la lista se haya vuelto a pintar: así no se corta)
+  function montaVideos(final) {
+    var hay = {};
+    $('lista').querySelectorAll('.reel-caja[data-vk]').forEach(function (c) {
+      var k = c.getAttribute('data-vk'), r = c.getAttribute('data-vr'), v = VID[k];
+      if (!v) {
+        if (!enMemoria(r) && !URLS[r]) {
+          if (final) { var s = c.querySelector('.rsin'); if (s) s.textContent = 'No se pudo cargar el video. Qué hacer: revisa tu internet y vuelve a abrir esta pestaña.'; }
+          return;
+        }
+        v = VID[k] = hazVideo(r, c.getAttribute('data-vn'));
+      }
+      hay[k] = 1;
+      if (v.parentNode !== c) { c.textContent = ''; c.appendChild(v); }
+      if (v.__falla) fallaVideo(v, r);
+      observa(v);
+    });
+    if (!final) return;
+    Object.keys(VID).forEach(function (k) {
+      if (hay[k]) return;
+      var v = VID[k];
+      try { v.pause(); } catch (e) {}
+      try { if (VIO) VIO.unobserve(v); if (VEO) VEO.unobserve(v); } catch (e) {}
+      delete VID[k];
+    });
+    avisaOcupado();
   }
 
   /* ---------- pintar ---------- */
@@ -522,10 +684,10 @@ button,select,input,textarea{font:inherit;color:inherit}
     return '<button class="foto" type="button" data-a="foto" data-r="' + esc(r) + '" aria-label="Ver la imagen ' + (n > 1 ? (i + 1) + ' de ' + n + ' ' : '') + 'en grande">'
       + (u ? '<img src="' + esc(u) + '" alt="Imagen ' + (n > 1 ? (i + 1) + ' de ' + n + ' ' : '') + 'de la publicación ' + esc(p.tema || p.id) + '" loading="lazy">' : '<span class="sin">Cargando la imagen…</span>') + '</button>';
   }
+  // 27-nov-2026: solo la caja; el <video> lo pone montaVideos() y es el mismo de siempre para esa tarjeta
   function video(p, r) {
-    var u = URLS[r];
-    return u ? '<video class="reel" controls playsinline preload="metadata" src="' + esc(u) + '" aria-label="Reel de la publicación ' + esc(p.tema || p.id) + '"></video>'
-      : '<div class="foto" data-v="' + esc(r) + '" style="aspect-ratio:9/16;max-height:560px"><span class="sin">Cargando el video…</span></div>';
+    return '<div class="reel-caja" data-vr="' + esc(r) + '" data-vk="' + esc(p.id + '|' + r) + '" data-vn="' + esc('Reel de la publicación ' + (p.tema || p.id)) + '">'
+      + (VID[p.id + '|' + r] ? '' : '<span class="rsin">Cargando el video…</span>') + '</div>';
   }
   function pieza(p) {
     var ms = medios(p);
@@ -589,17 +751,16 @@ button,select,input,textarea{font:inherit;color:inherit}
       var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0];
       el.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { accion(b.getAttribute('data-a'), p, el, b); }; });
     });
-    var faltan = []; $('lista').querySelectorAll('.pub').forEach(function (el) { var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0]; if (p) medios(p).forEach(function (m) { if (m.ruta && !URLS[m.ruta]) faltan.push(m.ruta); }); });
+    var faltan = []; $('lista').querySelectorAll('.pub').forEach(function (el) { var p = pubs().filter(function (x) { return x.id === el.getAttribute('data-p'); })[0]; if (p) medios(p).forEach(function (m) { if (m.ruta && !fresca(m.ruta)) faltan.push(m.ruta); }); });
+    // 27-nov-2026: los Reels que ya estaban regresan a su caja en este mismo momento (el que iba sonando sigue sonando)
+    montaVideos(!faltan.length);
     if (faltan.length) urls(faltan).then(function () {
       $('lista').querySelectorAll('.foto[data-r]').forEach(function (f) {
         var r = f.getAttribute('data-r');
         if (f.querySelector('img')) return;
-        f.innerHTML = URLS[r] ? '<img src="' + esc(URLS[r]) + '" alt="' + esc(f.getAttribute('aria-label').replace(/^Ver la /, '').replace(/ en grande$/, '')) + '" loading="lazy">' : '<span class="sin">No se pudo cargar la imagen</span>';
+        f.innerHTML = URLS[r] ? '<img src="' + esc(URLS[r]) + '" alt="' + esc(f.getAttribute('aria-label').replace(/^Ver la /, '').replace(/ en grande$/, '')) + '" loading="lazy">' : '<span class="sin">No se pudo cargar la imagen. Qué hacer: revisa tu internet y vuelve a abrir esta pestaña.</span>';
       });
-      $('lista').querySelectorAll('[data-v]').forEach(function (f) {
-        var r = f.getAttribute('data-v');
-        f.outerHTML = URLS[r] ? '<video class="reel" controls playsinline preload="metadata" src="' + esc(URLS[r]) + '" aria-label="Reel de la publicación"></video>' : '<div class="foto" style="aspect-ratio:9/16;max-height:560px"><span class="sin">No se pudo cargar el video</span></div>';
-      });
+      montaVideos(true);
     });
     vigila();
   }
@@ -1056,14 +1217,21 @@ button,select,input,textarea{font:inherit;color:inherit}
   }
 
   /* ---------- traer ---------- */
-  async function carga() {
+  // fondo (27-nov-2026): lo que se vuelve a traer solo (cada 30 s mientras algo entra a Facebook, o al regresar a la pestaña).
+  // Si nada cambió, no se repinta; si cambió y un Reel va sonando (o en pantalla completa), se repinta cuando se pare.
+  var HUELLA = '';
+  async function carga(fondo) {
     var r = await Promise.all([rpc('fb_lista'), rpc('fb_medicion').catch(function () { return null; }), rpc('fb_promos_lista').catch(function () { return null; })]);
+    var h = ''; try { h = JSON.stringify(r); } catch (e) { h = ''; }
+    if (fondo && h && h === HUELLA) return;
+    HUELLA = h;
     DATOS = r[0]; MED = r[1]; PROMO = r[2]; MEDPUB = {};
+    sueltaMemoria();
     ((MED && MED.publicaciones) || []).forEach(function (m) { if (m.pub) MEDPUB[m.pub] = m; });
     var todas = pubsTodas(), hayMed = !!(MED && (MED.publicaciones || []).length);
     $('vacio').hidden = todas.length > 0 || hayMed; $('todo').hidden = !todas.length && !hayMed;
     if (CAMP && !(DATOS.campanas || []).some(function (c) { return c.id === CAMP; })) CAMP = '';
-    if (todas.length || hayMed) pinta();
+    if (todas.length || hayMed) { if (fondo && ocupados()) REPINTA = true; else pinta(); }
   }
   // mientras algo autorizado entra a Facebook (o se quita), se vuelve a preguntar cada 30 s, hasta 6 minutos y solo si se ve
   function vigila() {
@@ -1077,7 +1245,7 @@ button,select,input,textarea{font:inherit;color:inherit}
       if (Date.now() - desde > 6 * 60000) { clearInterval(VIGILA); VIGILA = null; return; }
       var marco = window.frameElement;
       if (document.hidden || (marco && !marco.offsetParent) || !$('dlg').hidden) return;
-      carga().catch(function () {});
+      carga(true).catch(function () {});
     }, 30000);
   }
   document.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { TAB = b.getAttribute('data-t'); pinta(); }; });
@@ -1122,7 +1290,8 @@ button,select,input,textarea{font:inherit;color:inherit}
       $('cargando').hidden = true;
     } catch (e) { $('cargando').hidden = true; error(falla(e)); }
   }
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) carga().catch(function () {}); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && EST && EST.ve && $('dlg').hidden) carga(true).catch(function () {}); });
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (t) { document.addEventListener(t, function () { if (REPINTA && !ocupados()) { REPINTA = false; pinta(); } avisaOcupado(); }); });
   arranca();
 })();
 </script>
