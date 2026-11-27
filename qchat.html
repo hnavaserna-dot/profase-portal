@@ -237,6 +237,12 @@ button,select,input,textarea{font:inherit;color:inherit}
   .segv .sg-pans>.qch-chat{flex:1 0 auto}
   .segv .qch-chat .cv-pie{position:static}
 }
+/* y en cualquier pantalla: si la caja para contestar (con la sugerencia, «De la mano» y las respuestas rápidas) pasa de la
+   mitad del lugar de la plática, tampoco va pegada, para que nunca tape los mensajes (revisión de pantallas del 26-nov-2026:
+   en el iPhone de 390 tapaba la captura que mandó el cliente). Lo decide acomodaPie() con lo que de verdad miden */
+.segv .sg-pans:has(>.qch-chat.pie-suelta){overflow-y:auto;overscroll-behavior:contain}
+.segv .sg-pans>.qch-chat.pie-suelta{flex:1 0 auto}
+.segv .qch-chat.pie-suelta .cv-pie{position:static}
 .cv-cab,.cv-av{flex:none}
 .tk-cuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:grid;gap:14px;align-content:start;overscroll-behavior:contain}
 .tk-cuerpo h4{margin:0 0 6px;font-family:var(--f-display);font-stretch:85%;font-size:15px}
@@ -309,6 +315,12 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
 .sug{background:var(--ia);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13.5px;overflow-wrap:anywhere;white-space:pre-wrap}
 .sug>b{display:block;font-size:12px;color:var(--muted);margin-bottom:2px;white-space:normal}
 .sug .acciones{margin-top:8px;white-space:normal}
+.rec{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:var(--navy-soft);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 11px;font-size:13px}
+.rec>span{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+.rec .x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;min-width:32px;min-height:32px;border-radius:8px}
+.rec .x:hover{color:var(--ink);background:var(--surface)}
+.ms .mano{display:block;margin-top:6px;padding:5px 9px;border-radius:8px;background:var(--navy-soft);font-size:12.5px;overflow-wrap:anywhere;white-space:normal}
+.ms .mano b{font-weight:700}
 .ver-img{display:block;max-width:100%;max-height:calc(100vh - 160px);max-height:calc(100dvh - 160px);margin:0 auto 10px;border-radius:10px;border:1px solid var(--line)}
 .ligar{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 12px;background:var(--bg)}
 .ligar>b{display:block;margin-bottom:4px}
@@ -507,9 +519,10 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   <div class="cv-pie" id="cv-pie" hidden>
     <div class="sug" id="cv-sug" hidden></div>
     <div class="rap" id="cv-rap" aria-label="Respuestas rápidas"></div>
+    <div class="rec" id="cv-rec" hidden></div>
     <textarea id="cv-txt" maxlength="4000" placeholder="Escribe tu respuesta…" aria-label="Tu respuesta"></textarea>
     <div class="acciones"><span class="mut" id="cv-ayuda">Enter manda; Shift+Enter, otro renglón.</span>
-      <span class="acciones"><button class="btn" type="button" id="cv-sugiere">Sugerir respuesta</button><button class="btn acento" type="button" id="cv-manda">Mandar</button></span></div>
+      <span class="acciones"><button class="btn" type="button" id="cv-mano" title="El cliente lo recorre en su pantalla, paso por paso y obligatorio">Llevarlo de la mano</button><button class="btn" type="button" id="cv-sugiere">Sugerir respuesta</button><button class="btn acento" type="button" id="cv-manda">Mandar</button></span></div>
   </div>
 </div></div>
 
@@ -554,6 +567,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   var YO = null, CONSULTA = false, DATOS = null, MET = null, Q = '', SIS = '', EST = '', AG = '', VISTA = '', PAG = null, BAR = null, EBAR = null;
   var LISTA = [], COLA = [], ABIERTO = null, CV = null, SALAS = [], TAB = 'conv', VISTO = {}, ULT_CLI = {}, PRIMERA = true;
   var TK = null, TKL = [], TKV = '', TQ = '', TPAG = null, TKBAR = null, TKA = null, TKCOLA = [], AUTO = {}, AVLL = {};
+  var REC = {}, RUTAS = {}, SIN_REC = {};   // «Llevarlo de la mano»: la ruta escogida de cada conversación, las rutas de cada guía
   var IMGS = {}, IMGC = {}, DESC = {}, SUGT = null;   // las capturas (solo en la memoria de la página), el borrador descartado
   var TK_TXT = { autorizar: 'Por autorizar', revisar: 'Por revisar', proceso: 'En proceso', listo: 'Ya quedó', no_procede: 'No procede' };
   var REPO = { contabilita: 'hnavaserna-dot/quocontabilita-crm (contabilita.quosistemas.com)', facturita: 'hnavaserna-dot/quofacturita-crm (facturita.quosistemas.com)',
@@ -867,6 +881,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       + (m.de === 'ia' || m.de === 'persona' ? '<div class="tx">' + TX.formato(m.texto, { ligas: true }) + '</div>' : esc(m.texto))
       + (m.adj ? '<button class="cap" type="button" data-adj="' + Number(m.adj) + '" aria-label="Ver la captura en grande">'
           + (IMGS[m.adj] ? '<img alt="Captura de pantalla del cliente" src="' + esc(IMGS[m.adj]) + '">' : '<span>Captura de pantalla…</span>') + '</button>' : '')
+      + manoDe(m)
       + (fu.length ? '<span class="fu">Fuentes: ' + fu.map(function (f) { return '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.titulo || f.url) + '</a>'; }).join(' · ') + '</span>' : '')
       + '<span class="hr">' + esc(cuando(m.creado)) + (m.de === 'persona' ? ' · <span title="' + esc(palTitulo(m)) + '">' + palomitas(m) + '</span>' : '') + '</span></div>';
   }
@@ -931,7 +946,9 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     cargaImgs(c.id);
     pintaRapidas(c, mia);
     pintaSug(c, mia);
+    pintaRec(c, mia);
     evAlDia(c, mia);
+    acomodaPie();
   }
   // la cabecera de la conversación y la nota de «ya leyó y se fue» o «se cierra sola»: se repintan solas cada pocos segundos
   // (dónde anda el cliente cambia sin que cambie la conversación)
@@ -954,6 +971,24 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     }
     n.className = t ? cl : ''; n.innerHTML = t;
   }
+  /* La caja para contestar va pegada abajo mientras cabe; si pasa de la mitad del lugar de la plática (la sugerencia de la
+     asistente, «De la mano» y las respuestas rápidas abiertas en un celular), deja de ir pegada y la columna se desliza, así
+     nunca tapa los mensajes. Se revisa cada vez que cambia lo que mide la caja o su lugar. */
+  var PIE_RO = null, PIE_PANS = null;
+  function acomodaPie() {
+    var pie = $('cv-pie'), chat = pie && pie.closest('.qch-chat'), pans = chat && chat.closest('.sg-pans');
+    if (!chat || !pans) return;
+    if (window.ResizeObserver) {
+      if (!PIE_RO) { PIE_RO = new ResizeObserver(function () { requestAnimationFrame(acomodaPie); }); PIE_RO.observe(pie); }
+      if (PIE_PANS !== pans) { if (PIE_PANS) PIE_RO.unobserve(PIE_PANS); PIE_PANS = pans; PIE_RO.observe(pans); }
+    }
+    var lugar = pans.clientHeight, suelta = !pie.hidden && lugar > 0 && pie.offsetHeight > lugar * 0.55;
+    if (chat.classList.contains('pie-suelta') === suelta) return;
+    chat.classList.toggle('pie-suelta', suelta);
+    // al soltarla, abajo: lo último que se dijo y la caja completa a la vista
+    if (suelta) pans.scrollTop = pans.scrollHeight;
+  }
+  window.addEventListener('resize', function () { requestAnimationFrame(acomodaPie); });
   async function abre(id, callado) {
     id = Number(id);
     try {
@@ -1057,6 +1092,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     if (!mia || !t || DESC[c.id] === t) { el.hidden = true; el.innerHTML = ''; }
     else {
       el.innerHTML = '<b>Sugerencia de la asistente · revísala antes de mandarla</b><div class="tx">' + TX.formato(t) + '</div>'
+        + (CV.sugerencia_rec ? '<span class="mano"><b>De la mano:</b> ' + esc(CV.sugerencia_rec) + '</span>' : '')
         + '<div class="acciones"><button class="btn acento" type="button" data-sg="usar">Usarla</button><button class="btn" type="button" data-sg="no">Descartar</button></div>';
       el.hidden = false;
     }
@@ -1069,8 +1105,102 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   };
   $('cv-sug').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-sg]'); if (!b || !CV) return;
-    if (b.getAttribute('data-sg') === 'usar') { var t = $('cv-txt'); t.value = TX.plano(CV.sugerencia || '', { vacios: true }).join('\n'); try { t.focus(); } catch (z) {} }
-    DESC[CV.conv.id] = CV.sugerencia; $('cv-sug').hidden = true;
+    if (b.getAttribute('data-sg') === 'usar') {
+      var t = $('cv-txt'); t.value = TX.plano(CV.sugerencia || '', { vacios: true }).join('\n');
+      if (CV.sugerencia_rec) REC[CV.conv.id] = CV.sugerencia_rec;
+      try { t.focus(); } catch (z) {}
+    }
+    DESC[CV.conv.id] = CV.sugerencia; $('cv-sug').hidden = true; pintaRec(CV.conv, true);
+  });
+
+  /* ---------- «Llevarlo de la mano» (26-nov-2026; Héctor Daniel Nava: «sí así es») ----------
+     Una respuesta que lleva a una pantalla va con su recorrido: al cliente le sale solo en su pantalla, de la mano y
+     obligatorio (sin «Saltar»; con «Ver después»), nunca guarda ni timbra nada por él, y aquí se ve cómo le fue. La ruta
+     sale de la guía «dónde está cada cosa» de su sistema (Quo la da: «rutas») o se escribe como en la guía; Quo la revisa. */
+  var REC_TXT = { empezo: 'Lo empezó', despues: 'Lo dejó para después', listo: 'Lo recorrió completo ✓', sin_acceso: 'No tiene esa pantalla' };
+  function manoDe(m) {
+    if (!m.recorrido || (m.de !== 'persona' && m.de !== 'ia')) return '';
+    if (m.de === 'ia' && !m.rec_estado) return '';   // la de la asistente, solo si el cliente picó «Enséñamelo»
+    var e = REC_TXT[m.rec_estado] || 'Todavía no lo abre';
+    return '<span class="mano"><b>De la mano:</b> ' + esc(m.recorrido) + ' · ' + esc(e) + (m.rec_estado && m.rec_en ? ' ' + esc(cuando(m.rec_en)) : '') + '</span>';
+  }
+  function recLimpia(r) {
+    return String(r || '').replace(/\s*[›>]\s*/g, ' › ').replace(/\s+/g, ' ').replace(/^[ ›]+|[ ›]+$/g, '').trim().slice(0, 240);
+  }
+  function sinAcento(x) { return String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  // la ruta que trae el texto: el renglón con «›», sin lo que va antes («Entra a…», «ve a:») ni lo que sigue al final
+  function rutaDe(t) {
+    var ren = String(t || '').split('\n').filter(function (l) { return l.indexOf('›') >= 0; })[0];
+    if (!ren) return '';
+    var pz = ren.split('›');
+    var a = pz[0].split(/[:;.!?¿¡]\s*|\s(?:en|a|ve a|entra a|ir a|vaya a|ingresa a|desde)\s/i).pop();
+    var z = pz[pz.length - 1].split(/[.;!?]\s|\s(?:y|para|donde|ahí|ahi)\s|,\s/i)[0];
+    pz[0] = a; pz[pz.length - 1] = z;
+    var r = recLimpia(pz.join('›').replace(/^[«"'(\s]+|[»"')\s]+$/g, ''));
+    return /[A-Za-zÁÉÍÓÚÑáéíóúñ0-9]/.test(r) && r.indexOf('›') > 0 ? r : '';
+  }
+  function pintaRec(c, mia) {
+    var el = $('cv-rec'), bt = $('cv-mano'), r = REC[c.id];
+    bt.hidden = !mia;
+    bt.textContent = r ? 'Cambiar el recorrido' : 'Llevarlo de la mano';
+    el.hidden = !mia || !r;
+    el.innerHTML = mia && r ? '<span><b>De la mano:</b> ' + esc(r) + ' <span class="mut">· le sale solo en su pantalla, obligatorio, al mandar</span></span>'
+      + '<button class="x" type="button" data-rec="quita" aria-label="Quitar el recorrido de esta respuesta" title="Quitar el recorrido">✕</button>' : '';
+  }
+  async function rutasDe(s) {
+    if (RUTAS[s]) return RUTAS[s];
+    var d = await qc('rutas', { sistema: s });
+    return (RUTAS[s] = Array.isArray(d.rutas) ? d.rutas : []);
+  }
+  async function eligeRuta(sugerida, alEscoger) {
+    if (!CV) return;
+    var c = CV.conv, id = c.id, lista = null, err = '';
+    try { lista = await rutasDe(c.sistema); } catch (e) { err = falla(e); lista = []; }
+    if (!CV || CV.conv.id !== id) return;
+    var ini = recLimpia(sugerida || REC[id] || ''), clave = sinAcento(ini.split(' › ').slice(0, 2).join(' › '));
+    function filas(q) {
+      var w = sinAcento(q).split(/\s+/).filter(Boolean), out = [];
+      lista.forEach(function (x, i) {
+        var h = sinAcento(x.que + ' ' + x.ruta);
+        if (w.every(function (p) { return h.indexOf(p) >= 0; })) out.push({ x: x, i: i, ya: clave && sinAcento(x.ruta).indexOf(clave) === 0 });
+      });
+      out.sort(function (a, b) { return (b.ya ? 1 : 0) - (a.ya ? 1 : 0) || a.i - b.i; });
+      if (!out.length) return '<li><span class="t mut">' + (err ? esc(err) : lista.length ? 'Nada con eso. Qué hacer: busca con otra palabra o escríbela arriba, como en la guía.' : 'La guía de este sistema no trae rutas todavía. Qué hacer: escríbela arriba, como en la guía.') + '</span></li>';
+      return out.slice(0, 60).map(function (o) {
+        return '<li><span class="t"><b>' + esc(o.x.que) + '</b>' + (o.ya ? ' ' + chip('Coincide con tu respuesta', 'ok') : '') + '<br><span class="mut">' + esc(o.x.ruta) + '</span></span>'
+          + '<button class="btn" type="button" data-rc-i="' + o.i + '">Escoger</button></li>';
+      }).join('');
+    }
+    $('dlg-c').innerHTML = '<h3 id="dlg-t">Llevarlo de la mano</h3>'
+      + '<p>Al mandar tu respuesta, al cliente le sale solo el recorrido en su pantalla: lo lleva paso por paso y es obligatorio (puede dejarlo para después, no saltarlo). Nunca guarda, manda ni timbra nada por él. Aquí ves si ya lo recorrió.</p>'
+      + '<div class="ligar"><b>La ruta, como en la guía</b><input id="rc-ruta" maxlength="240" autocomplete="off" aria-label="La ruta del recorrido" placeholder="Menú › Opción › Pestaña › «Botón»" value="' + esc(ini) + '">'
+      + '<div class="acciones"><span class="mut" style="flex:1">Escríbela con «›» entre cada paso o escógela abajo.</span><button class="btn acento" type="button" data-rc="usar">' + (alEscoger ? 'Usar esta y mandar' : 'Usar esta') + '</button></div></div>'
+      + '<div class="ligar"><b>De la guía de ' + esc(SIS_TXT[c.sistema] || c.sistema) + '</b><input id="rc-busca" autocomplete="off" aria-label="Buscar en la guía" placeholder="Buscar: folio, factura, nómina, banco…"><ul id="rc-lista">' + filas('') + '</ul></div>'
+      + '<p class="nota mal" id="rc-err" role="alert" hidden></p>'
+      + '<div class="acciones"><button class="btn" type="button" data-i="-1">Cancelar</button></div>';
+    $('dlg').hidden = false;
+    try { P.escribiendo('qchat-mano', true); } catch (e) {}
+    $('rc-busca').oninput = function () { $('rc-lista').innerHTML = filas(this.value); };
+    function usa(r) {
+      r = recLimpia(r);
+      if (!r || !/[A-Za-zÁÉÍÓÚÑáéíóúñ0-9]/.test(r) || /[<>]/.test(r)) { var er = $('rc-err'); er.textContent = 'La ruta no se entiende. Qué hacer: escríbela como en la guía, con «›» entre cada paso («Menú › Opción › Pestaña › «Botón»»), o escógela de la lista.'; er.hidden = false; return; }
+      REC[id] = r; $('dlg').hidden = true; try { P.escribiendo('qchat-mano', false); } catch (e) {}
+      pintaRec(c, true);
+      if (alEscoger) manda(true); else try { $('cv-txt').focus(); } catch (e) {}
+    }
+    $('rc-ruta').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); usa(this.value); } };
+    $('dlg-c').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.getAttribute('data-i') === '-1') { $('dlg').hidden = true; try { P.escribiendo('qchat-mano', false); } catch (x) {} return; }
+      if (b.getAttribute('data-rc') === 'usar') { usa($('rc-ruta').value); return; }
+      var n = b.getAttribute('data-rc-i'); if (n != null && lista[+n]) usa(lista[+n].ruta);
+    };
+    setTimeout(function () { try { (ini ? $('rc-ruta') : $('rc-busca')).focus(); } catch (e) {} }, 30);
+  }
+  $('cv-mano').onclick = function () { eligeRuta(rutaDe($('cv-txt').value) || '', false); };
+  $('cv-rec').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rec]'); if (!b || !CV) return;
+    delete REC[CV.conv.id]; SIN_REC[CV.conv.id] = $('cv-txt').value.trim(); pintaRec(CV.conv, true);
   });
 
   // Las respuestas rápidas de todos: las cambia quien supervisa (Más ▾ › Respuestas rápidas)
@@ -1114,14 +1244,29 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       }
     };
   }
-  async function manda() {
-    var t = $('cv-txt').value.trim(); if (!t || !CV) return;
+  async function manda(sinPreguntar) {
+    if (!CV || $('cv-manda').disabled) return;   // mientras se manda una, Enter no manda otra
+    var id = CV.conv.id, t = $('cv-txt').value.trim(), r = REC[id] || '';
+    if (!t && !r) return;
+    // si la respuesta dice a dónde ir («Menú › Opción…») y no lleva su recorrido, se pregunta una vez (no se manda sola)
+    var det = !r && sinPreguntar !== true && t.indexOf('›') >= 0 && SIN_REC[id] !== t ? rutaDe(t) : '';
+    if (det) {
+      pregunta('¿Lo llevo de la mano?', 'Tu respuesta dice a dónde ir («' + det + '»). Con el recorrido, el cliente lo hace en su pantalla, paso por paso y obligatorio (puede dejarlo para después, no saltarlo), y aquí ves si ya lo recorrió.',
+        [['Mandar sin recorrido', '', async function () { SIN_REC[id] = t; setTimeout(function () { manda(true); }, 0); }],
+         ['Sí, de la mano', 'acento', async function () { setTimeout(function () { eligeRuta(det, true); }, 0); }]]);
+      return;
+    }
     $('cv-manda').disabled = true;
-    try { CV = await qc('contesta', { id: CV.conv.id, texto: t }); $('cv-txt').value = ''; pintaConv(); carga().catch(function () {}); }
+    try {
+      CV = await qc('contesta', { id: id, texto: t, recorrido: r || undefined });
+      if ($('cv-txt').value.trim() === t) $('cv-txt').value = '';   // lo que escribió mientras se mandaba no se borra
+      delete REC[id]; delete SIN_REC[id]; pintaConv(); carga().catch(function () {});
+      if (r) avisa('Listo: le mandaste el recorrido de la mano. Le sale solo en su pantalla y aquí ves si ya lo recorrió.');
+    }
     catch (e) { error(falla(e)); }
     $('cv-manda').disabled = false;
   }
-  $('cv-manda').onclick = manda;
+  $('cv-manda').onclick = function () { manda(); };
   $('cv-txt').addEventListener('keydown', function (e) {
     var tec = P && P.conTeclado ? P.conTeclado() : true;
     if (e.key === 'Enter' && !e.shiftKey && tec) { e.preventDefault(); manda(); }
@@ -1426,7 +1571,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
       try { await botones[i][2](); $('dlg').hidden = true; } catch (x) { error(falla(x)); b.disabled = false; }
     };
   }
-  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) { $('dlg').hidden = true; try { P.escribiendo('qchat-ticket', false); } catch (x) {} } });
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg')) { $('dlg').hidden = true; try { P.escribiendo('qchat-ticket', false); P.escribiendo('qchat-mano', false); } catch (x) {} } });
   function cuenta(d) {
     var q = d.cuenta || {}, u = d.usuario || {}, l = function (a, t) { return (a || []).length ? '<h4>' + t + '</h4><ul>' + a.map(function (r) { return '<li>' + esc(r.razon || '') + ' · ' + esc(r.rfc || '') + '</li>'; }).join('') + '</ul>' : ''; };
     $('dlg-c').innerHTML = '<h3 id="dlg-t">Su cuenta (solo ver)</h3><dl class="dl"><dt>Cuenta</dt><dd>' + esc(q.nombre || '') + (q.activa === false ? ' ' + chip('Suspendida', 'mal') : '') + '</dd>'
