@@ -157,16 +157,14 @@
       { k: 'est-marcas', v: 'estf', p: 'marca', t: 'Marcas registradas', d: 'Cada marca con su amortización año por año, lo que le queda y cómo cuadra con la anual.' },
       { k: 'est-indemnizaciones', v: 'estf', p: 'indemnizacion', t: 'Indemnizaciones', d: 'Cada indemnización con lo usado cada año y lo que le queda.' },
       { k: 'est-premios', v: 'estf', p: 'premio', t: 'Premios', d: 'Cada premio con lo usado cada año, lo que le queda y su entrega al cliente.' }] },
-    /* Biblioteca legal (Héctor Daniel Nava, 24-nov-2026: «podemos hacer algo parecido nosotros [a Sisthemis]?»; «1- todo el
-       equipo»; «a darle»; 510_biblioteca.sql): las leyes, códigos, reglamentos y la Miscelánea, artículo por artículo, con lo
-       que cita cada uno y quién lo cita, sus versiones, notas y carpetas. Para todo el equipo (bib_estado()). Una sola pantalla
-       (biblioteca.html, vista bib) con cuatro opciones (p; el botón de la vista dice cuál está abierta con data-sub, lo pone
-       bib_tab.js). */
-    { k: 'bib', t: 'Biblioteca legal', d: 'Las leyes, códigos y la Miscelánea vigentes: busca un artículo, léelo y ve con qué se relaciona.', subs: [
-      { k: 'biblioteca', v: 'bib', p: 'buscar', t: 'Buscar', d: 'Escribe «CFF 69-B», una regla de la Miscelánea o palabras, y abre el artículo con sus relacionados.' },
-      { k: 'biblioteca-leyes', v: 'bib', p: 'leyes', t: 'Leyes y códigos', d: 'Todas las leyes por materia, cada una con su índice.' },
-      { k: 'biblioteca-carpetas', v: 'bib', p: 'carpetas', t: 'Mis carpetas', d: 'Lo que guardaste para citar, con «Copiar fundamento».' },
-      { k: 'biblioteca-nuevo', v: 'bib', p: 'nuevo', t: 'Lo nuevo', d: 'Lo que cambió en las leyes y qué cambió, palabra por palabra.' }] },
+    /* Biblioteca legal (24-nov-2026, 510_biblioteca.sql; para todo el equipo, bib_estado()). */
+    /* Desde el 26-nov-2026 la Biblioteca legal vive en Quo Lexita (lexita.quosistemas.com; Héctor Daniel Nava, 25-nov-2026:
+       «sacarla del CRM… nuestros usuarios del CRM puedan ingresar, pero que esté aparte»; 26-nov-2026, 11:17: «si
+       coontinua»): su opción abre Quo Lexita en otra pestaña (url) y el equipo entra con su mismo usuario y contraseña del
+       CRM. La vista bib se queda solo para lo que llega por una liga (un aviso o el Inicio): dice que ya es Quo Lexita y
+       trae «Abrir Quo Lexita» (bib_tab.js). */
+    { k: 'bib', t: 'Biblioteca legal', d: 'Ahora es Quo Lexita: las leyes, los códigos, la Miscelánea y las tesis, artículo por artículo. Entras con tu mismo usuario.', subs: [
+      { k: 'biblioteca', v: 'bib', url: 'https://lexita.quosistemas.com/app.html', t: 'Abrir Quo Lexita', d: 'Se abre en otra pestaña, con tu mismo usuario y contraseña del CRM; tus carpetas y notas ya están allá.' }] },
     // RH (30-oct-2026, pedido de Daniel; lo propuso Alex Luna): solo Alex Luna, HNR y Daniel (y Colaboradores, quien
     // los captura); quién ve cada opción lo decide la base (rh_estado(), portal/sql/72_rh.sql; bloque rh_tab.js)
     // 1-nov-2026 (pedido de Daniel; 115_rh_solicitudes.sql): RH le aparece a todos, cada quien con lo suyo: Mis solicitudes
@@ -518,7 +516,10 @@
         + '<div class="pm-subs"><div class="pm-fly" aria-hidden="true">' + esc(m.t) + '<span class="pm-fd">' + esc(m.d || '') + '</span></div><ul class="pm-sl">'
         + x.subs.map(function (s) {
           var n = avisoDe(s);
-          return '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>' + esc(nombre(s))
+          // una opción con url (Quo Lexita, 26-nov-2026) es una liga que se abre en otra pestaña
+          var ah = s.url ? '<li><a href="' + esc(s.url) + '" target="_blank" rel="noopener noreferrer" data-k="' + esc(s.k) + '" data-url="1">'
+            : '<li><a href="#' + esc(s.k) + '" data-k="' + esc(s.k) + '"' + (s === act ? ' aria-current="page"' : '') + '>';
+          return ah + esc(nombre(s)) + (s.url ? '<span class="pm-fuera" aria-label="se abre en otra pestaña"> ↗</span>' : '')
             + (n > 0 ? '<span class="pm-av" aria-label="' + n + ' pendientes">' + n + '</span>' : '') + (s.d ? '<span class="pm-sd">' + esc(s.d) + '</span>' : '') + '</a></li>';
         }).join('') + '</ul></div></div>';
     });
@@ -767,6 +768,8 @@
 
     lista.addEventListener('click', function (e) {
       var a = e.target.closest('a[data-k]');
+      // la liga a otra pestaña (Quo Lexita) la abre el navegador; aquí solo se cierra el menú
+      if (a && a.dataset.url) { cierraFly(); if (movil()) abre(false); return; }
       if (a) { e.preventDefault(); ir(a.dataset.k); return; }
       if (e.target.closest('.pm-inicio')) { var ini = inicio(); if (ini) ir(ini.k); return; }
       var mb = e.target.closest('.pm-mb');
