@@ -1463,6 +1463,13 @@
     function revisa() {
       clearTimeout(espera);
       espera = setTimeout(function () {
+        /* revisión nocturna 27-nov-2026: una pantalla que agrega renglones por pedazos lo dice con
+           <html data-agregando="<hora>"> (Variaciones › «Resueltas»); mientras tanto no tiene ninguna ventana abierta (sus
+           pedazos esperan y quitan la marca si se abre una, como en la burbuja del chat). Con cada pedazo esta revisión le
+           pedía al navegador los estilos de los renglones recién puestos; ahí solo se vuelve a ver en 300 ms, y en cuanto la
+           marca se quita (o a los 3 s, si se quedara) revisa como siempre: la misma regla, solo un poco después. */
+        var ag = document.documentElement.getAttribute('data-agregando');
+        if (ag && Date.now() - (+ag || 0) < 3000) { espera = setTimeout(revisa, 300); return; }
         var hay = hayVentana();
         if (hay && !habia) alinea();   // solo al abrirse: si la persona desliza después, no se le regresa
         habia = hay;
