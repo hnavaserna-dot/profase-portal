@@ -383,6 +383,7 @@ table.acu tr.utl td{font-weight:750;border-top:2px solid var(--line-strong);back
 table.acu tr.sumas td{font-weight:750;background:var(--navy-soft)}
 table.acu tr.en td:first-child small{display:block;font-size:11.5px;color:var(--muted);font-weight:600}
 table.acu td.na{color:var(--muted)}
+table.acu td.monto small.sinrep{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:normal}
 .acu-nota{margin:0;padding:10px 14px 12px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line)}
 .acu-nota b{color:var(--ink)}
 @media (max-width:700px){
@@ -394,6 +395,10 @@ table.acu td.na{color:var(--muted)}
   table.acu-m thead tr.sumas{background:var(--navy-soft)}
   table.acu-m thead tr.sumas td.w{grid-column:1/-1}
   table.acu tr.sub td:first-child{padding-left:0}
+  /* en tarjetas, el fondo de los renglones de suma va en toda la tarjeta, no en parches por celda */
+  table.resp.acu tr.utl{background:var(--surface-2);border-top:2px solid var(--line-strong)}
+  table.resp.acu tr.sumas{background:var(--navy-soft)}
+  table.resp.acu tr.utl td,table.resp.acu tr.sumas td{background:transparent;border-top:0}
 }
 @media (max-width:700px){
   input,select,textarea,.filtros input,.filtros select,.lista input,.periodo select{font-size:16px}
@@ -409,6 +414,9 @@ table.acu td.na{color:var(--muted)}
   .falta li .btn{grid-column:2;justify-self:start}
   table.resp thead{display:none}
   table.resp tbody tr,table.resp tfoot tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+  /* el pie, en tarjeta: su fondo en toda la tarjeta, no en parches por celda */
+  table.resp tfoot tr{background:var(--surface-2)}
+  table.resp tfoot td{background:transparent}
   table.resp td{border:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left!important;white-space:normal}
   table.resp td::before{content:attr(data-l);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
   table.resp td[data-l=""]::before{display:none}
@@ -495,8 +503,9 @@ table.acu td.na{color:var(--muted)}
         <p class="acu-nota" id="acu-nota"></p>
       </section>
       <section class="card" aria-labelledby="h-arep" id="a-rep" hidden>
-        <header><div><h2 id="h-arep">El reparto del año</h2><div class="sub">Lo de cada quien, sumado mes por mes. Cada utilidad se reparte aparte.</div></div></header>
-        <div class="tabla"><table class="resp acu" id="t-arep" data-sin-orden><thead></thead><tbody></tbody></table></div>
+        <header><div><h2 id="h-arep">El reparto del año</h2><div class="sub">Lo de cada quien, sumado mes por mes. Cada utilidad se reparte aparte. Abajo, cómo cuadra con la utilidad del año.</div></div></header>
+        <div class="tabla"><table class="resp acu" id="t-arep" data-sin-orden><thead></thead><tbody></tbody><tfoot></tfoot></table></div><!-- a-la-mano: el cuadre va abajo a propósito: se lee de lo repartido a la utilidad del año -->
+        <p class="acu-nota" id="arep-nota"></p>
       </section>
       <div class="vacio" id="acu-vacio" hidden></div>
     </div>
@@ -1034,6 +1043,27 @@ table.acu td.na{color:var(--muted)}
   function celda(v, l, cls) {
     return v == null ? '<td data-l="' + esc(l) + '" class="monto na">—</td>' : '<td data-l="' + esc(l) + '" class="monto' + (cls ? ' ' + cls : '') + '">' + dineroH(v) + '</td>';
   }
+  // la utilidad de un mes que trajo pérdida y no se repartió (lo dice la base: «sin_reparto»)
+  function celdaU(u, l) {
+    return '<td data-l="' + esc(l) + '" class="monto">' + dineroH(u.utilidad) + (u.sin_reparto ? '<small class="sinrep">No se repartió</small>' : '') + '</td>';
+  }
+  // «abril, junio y octubre»
+  function listaMeses(L) {
+    var n = (L || []).map(function (m) { return MESES_L[m - 1].toLowerCase(); });
+    return n.length < 2 ? (n[0] || '') : n.slice(0, -1).join(', ') + ' y ' + n[n.length - 1];
+  }
+  // por qué lo repartido no es la utilidad del año, de cada utilidad (todo lo dice la base; aquí solo se escribe)
+  function porQueReparto(d, e, nom) {
+    var t = d.totales[e] || {}, sr = t.sin_repartir || { meses: [] }, pr = t.perdida_repartida || { meses: [] }, x = [];
+    if (sr.meses.length) x.push(nom + ': ' + (sr.meses.length === 1 ? listaMeses(sr.meses) + ' trajo pérdida y no se repartió' : listaMeses(sr.meses) + ' trajeron pérdida y no se repartieron')
+      + '; esa pérdida (' + dinero(sr.utilidad) + ') no se le descontó a nadie en los meses con ganancia.');
+    if (pr.meses.length) {
+      var antes = e === 'decomsa' && pr.meses.every(function (m) { var y = (d.meses || []).filter(function (z) { return z.mes === m; })[0]; return y && y.decomsa.esquema === 'antes'; });
+      x.push(nom + ': en ' + listaMeses(pr.meses) + ' la pérdida (' + dinero(pr.utilidad) + ') sí se repartió, en negativo'
+        + (antes && d.corte ? ', como se hacía antes del ' + fecha(d.corte) : '') + '.');
+    }
+    return x;
+  }
   function pintaAcu() {
     var d = ACU.d[PER.anio], ok = d && !d.futuro && d.totales;
     $('a-per').innerHTML = d ? acuPer(d) : (ACU.err[PER.anio] ? 'No se pudo leer el año.' : '');
@@ -1082,7 +1112,8 @@ table.acu td.na{color:var(--muted)}
         return '<tr' + (r[4] ? ' class="' + r[4] + '"' : '') + '><td data-l="" class="w">' + esc(r[0]) + '</td>' + celda(r[1], LD) + celda(r[2], 'QUO') + celda(r[3], 'Las dos') + '</tr>';
       }).join('');
       nota = 'Cada número es la suma de lo que dice cada mes en su pestaña (Utilidad y Utilidad QUO). Quo no lleva reserva. Sin las devoluciones de IVA e ISR ni lo de SV.'
-        + (d.quo_al ? ' Lo cobrado de Quo, al ' + fechaHora(d.quo_al) + '.' : '') + (d.quo_nota ? ' ' + d.quo_nota : '');
+        + (d.quo_al ? ' Lo cobrado de Quo, al ' + fechaHora(d.quo_al) + '.' : '') + (d.quo_nota ? ' ' + d.quo_nota : '')
+        + ' Lo repartido no es la utilidad del año: abajo, en «El reparto del año», cómo cuadra.';
       // el reparto del año, de cada utilidad por su lado
       var RD = (t.reparto || {}).decomsa || [], RQ = (t.reparto || {}).quo || [], qn = [];
       RD.concat(RQ).forEach(function (x) { if (qn.indexOf(x.quien) < 0) qn.push(x.quien); });
@@ -1092,6 +1123,22 @@ table.acu td.na{color:var(--muted)}
         $('t-arep').tBodies[0].innerHTML = qn.map(function (k) {
           return '<tr><td data-l="" class="w"><b>' + esc(k) + '</b></td>' + celda(de1(RD, k), 'De la utilidad ' + LD) + celda(de1(RQ, k), 'De la Utilidad QUO') + '</tr>';
         }).join('');
+        // el cuadre: lo repartido + la pérdida de los meses que no se repartieron (+ centavos) = la utilidad del año (la de arriba)
+        var sr = function (o) { return (o.sin_repartir || {}).utilidad; }, srN = function (o) { return ((o.sin_repartir || {}).meses || []).length; };
+        var F = [['= Lo repartido en el año', de.repartido, q.repartido, 'tg']];
+        if (srN(de) || srN(q)) F.push(['Pérdida de los meses que no se repartieron (no se le descontó a nadie)', srN(de) ? sr(de) : null, srN(q) ? sr(q) : null, '']);
+        if (Number(de.sin_asignar) || Number(q.sin_asignar)) {
+          var poco = Math.abs(Number(de.sin_asignar)) < 1 && Math.abs(Number(q.sin_asignar)) < 1;
+          F.push([poco ? 'Centavos del redondeo de cada mes' : 'Lo que no se asignó (el reparto no suma 100 %)', de.sin_asignar, q.sin_asignar, 'sub']);
+        }
+        F.push(['= Utilidad del año (la de arriba)', de.utilidad, q.utilidad, 'utl']);
+        $('t-arep').tFoot.innerHTML = F.map(function (r) {
+          return '<tr class="' + r[3] + '"><td data-l="" class="w">' + esc(r[0]) + '</td>' + celda(r[1], 'De la utilidad ' + LD) + celda(r[2], 'De la Utilidad QUO') + '</tr>';
+        }).join('');
+        var pq = porQueReparto(d, 'decomsa', 'Utilidad ' + LD).concat(porQueReparto(d, 'quo', 'Utilidad QUO'));
+        $('arep-nota').textContent = pq.length
+          ? 'Por qué no da lo mismo: cada mes se reparte su propia utilidad; si un mes trae pérdida, ese mes no se reparte nada y su pérdida no se descuenta de lo que se reparte en los otros meses. ' + pq.join(' ')
+          : 'Lo repartido es la utilidad de cada mes: en el año no hubo meses con pérdida.';
         $('a-rep').hidden = false;
       }
     } else if (ACU.tab === 'hdn') {
@@ -1134,12 +1181,12 @@ table.acu td.na{color:var(--muted)}
           + '<td data-l="" class="w"><b>' + esc(nm) + '</b>' + (m.en_curso ? '<small>Va en curso</small>' : '') + '</td>'
           + celda(m.hdn.cerrada, T.l_comision || 'Comisión HDN')
           + '<td data-l="Pago"><span class="chip ' + esc(e[1]) + '">' + esc(e[0]) + '</span></td>'
-          + celda(m.decomsa.ingresos, 'Ingresos ' + LD) + celda(m.decomsa.utilidad, 'Utilidad ' + LD)
-          + celda(m.quo.ingresos, 'Cobró QUO') + celda(m.quo.utilidad, 'Utilidad QUO')
+          + celda(m.decomsa.ingresos, 'Ingresos ' + LD) + celdaU(m.decomsa, 'Utilidad ' + LD)
+          + celda(m.quo.ingresos, 'Cobró QUO') + celdaU(m.quo, 'Utilidad QUO')
           + celda((m.juntas || {}).utilidad, 'Utilidad de las dos') + '</tr>';
       }).join('');
       ft.innerHTML = '<tr class="utl">' + sumas() + '</tr>';
-      nota = 'Las sumas del año van arriba y abajo. Cada renglón es lo que dice ese mes en su pestaña.';
+      nota = 'Las sumas del año van arriba y abajo. Cada renglón es lo que dice ese mes en su pestaña. «No se repartió»: ese mes trajo pérdida y no se repartió nada.';
     }
     $('acu-nota').textContent = nota;
   }
@@ -2893,6 +2940,7 @@ table.acu td.na{color:var(--muted)}
         monedas.forEach(function (c) { ws.getColumn(c).numFmt = '$#,##0.00;-$#,##0.00'; });
         ws.views = [{ state: 'frozen', ySplit: arriba ? f0 + 1 : f0 }];
         MK.impresion(ws, { repetir: arriba ? f0 + 1 : f0 });
+        return ws;
       };
       var v = function (x) { return x == null ? '' : Number(x); };
       hoja('Por empresa', ['Concepto', LD, 'QUO', 'Las dos'], [
@@ -2925,7 +2973,22 @@ table.acu td.na{color:var(--muted)}
       RD.concat(RQ).forEach(function (x) { if (qn.indexOf(x.quien) < 0) qn.push(x.quien); });
       if (qn.length) {
         var de1 = function (L, k) { var x = L.filter(function (z) { return z.quien === k; })[0]; return x ? v(x.monto) : ''; };
-        hoja('Reparto', ['Quién', 'De la utilidad ' + LD, 'De la Utilidad QUO'], qn.map(function (k) { return [k, de1(RD, k), de1(RQ, k)]; }), [30, 22, 22], [2, 3]);
+        var srN = function (o) { return ((o.sin_repartir || {}).meses || []).length; };
+        var FR = qn.map(function (k) { return [k, de1(RD, k), de1(RQ, k)]; });
+        FR.push(['= Lo repartido en el año', v(de.repartido), v(q.repartido)]);
+        if (srN(de) || srN(q)) FR.push(['Pérdida de los meses que no se repartieron (no se le descontó a nadie)', srN(de) ? v(de.sin_repartir.utilidad) : '', srN(q) ? v(q.sin_repartir.utilidad) : '']);
+        if (Number(de.sin_asignar) || Number(q.sin_asignar))
+          FR.push([Math.abs(Number(de.sin_asignar)) < 1 && Math.abs(Number(q.sin_asignar)) < 1 ? 'Centavos del redondeo de cada mes' : 'Lo que no se asignó (el reparto no suma 100 %)', v(de.sin_asignar), v(q.sin_asignar)]);
+        var wsR = hoja('Reparto', ['Quién', 'De la utilidad ' + LD, 'De la Utilidad QUO'], FR, [56, 22, 22], [2, 3], null,
+          ['= Utilidad del año (la de «Por empresa»)', v(de.utilidad), v(q.utilidad)]);
+        var pq = porQueReparto(d, 'decomsa', 'Utilidad ' + LD).concat(porQueReparto(d, 'quo', 'Utilidad QUO'));
+        if (pq.length) {
+          var rn = wsR.rowCount + 2;
+          wsR.getCell(rn, 1).value = 'Por qué no da lo mismo: cada mes se reparte su propia utilidad; si un mes trae pérdida, ese mes no se reparte nada y su pérdida no se descuenta de lo que se reparte en los otros meses. ' + pq.join(' ');
+          wsR.mergeCells(rn, 1, rn, 3);
+          wsR.getCell(rn, 1).alignment = { wrapText: true, vertical: 'top' };
+          wsR.getRow(rn).height = 90;
+        }
       }
       await MK.guardar(wb, 'Acumulado del año ' + y + ' PROFASE.xlsx');
     } catch (e) { error('No se pudo armar el archivo. Qué hacer: vuelve a intentar.'); }
