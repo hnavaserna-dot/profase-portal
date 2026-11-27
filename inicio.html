@@ -945,6 +945,45 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     } };
   }
 
+  /* --- Lo que vende y cobra Quo (559, 27-nov-2026; Héctor Daniel Nava: «agregame a quosistemas cuánto hemos cobrado
+     (vendido) etc en mi inicio y HNR»): solo la dirección (ini_quo_ventas() solo contesta con el rol director). Vendido es
+     lo timbrado de las ventas de Quo; cobrado, lo que pagaron en línea de verdad (sin los cobros de prueba). Solo sumas y
+     cuántos: nada de una cuenta. Sale tapado, como todo el dinero del Inicio; cada número abre Utilidad QUO. --- */
+  function tQuo() {
+    return { id: 'quo', t: 'Sistemas Quo', s: 'Lo que vende y cobra Quo', liga: 'comisiones-direccion', ligaTxt: 'Utilidad QUO', arma: async function () {
+      var d = null; try { d = await rpc('ini_quo_ventas'); } catch (e) { return null; }
+      if (!d) return null;
+      if (d.sin_datos) return '<p class="nota">' + esc(d.nota || 'Todavía no llega lo que vende Quo.') + '</p>';
+      var E = d.este || {}, A = d.anterior || {}, Y = d.anio || {}, PC = d.por_cobrar || {}, AC = d.activas || {};
+      var v = function (o) { return +((o || {}).civa) || 0; }, sv = function (o) { return +((o || {}).siva) || 0; }, n = function (o) { return +((o || {}).n) || 0; };
+      var mesN = function (ym) { var m = +String(ym || '').slice(5, 7); return m ? MESL[m - 1] : ''; };
+      var at = function (t) { return 'data-quo="utq" aria-label="' + esc(t + ': abrir Utilidad QUO') + '"'; };
+      var h = '<div class="kp">'
+        + kb(at('Vendido en ' + mesN(E.mes)), 'Vendido en ' + mesN(E.mes), fm(v(E.vendido)), esc(fm(sv(E.vendido)) + ' sin IVA · ' + plural(n(E.vendido), 'factura', 'facturas')))
+        + kb(at('Cobrado en ' + mesN(E.mes)), 'Cobrado en ' + mesN(E.mes), fm(v(E.cobrado)), esc(fm(sv(E.cobrado)) + ' sin IVA · ' + plural(n(E.cobrado), 'cobro', 'cobros')), 'bien')
+        + kb(at('En ' + (Y.anio || '')), 'Cobrado en ' + (Y.anio || ''), fm(v(Y.cobrado)), esc('vendido ' + fm(v(Y.vendido))))
+        + kb(at('Por cobrar'), 'Por cobrar', fm(v(PC)), esc(n(PC) ? plural(n(PC), 'suscripción con un cobro que no pasó', 'suscripciones con un cobro que no pasó') : 'ningún cobro pendiente'), n(PC) ? 'mal' : 'bien')
+        + '</div>';
+      h += '<p class="tl">Suscripciones</p>' + lista([
+        { pt: 'bien', a: plural(n(AC), 'activa', 'activas'), b: esc((+AC.mensual || 0) + ' mensuales · ' + (+AC.anual || 0) + ' anuales') },
+        { pt: 'ojo', a: plural(+d.en_prueba || 0, 'en prueba de 30 días', 'en prueba de 30 días'), b: 'todavía no pagan' }
+      ]);
+      var M = (d.meses || []).slice(-6);
+      if (M.some(function (x) { return +x.cobrado > 0 || +x.vendido > 0; })) {
+        h += '<p class="tl">Cobrado por mes</p>' + barras(M.map(function (x) {
+          var m = +String(x.mes).slice(5, 7);
+          return { alto: +x.cobrado || 0, l: MESC[m - 1], cls: x.mes === E.mes ? 'na' : '', aria: MESL[m - 1] + ': cobrado ' + fm(x.cobrado) + ', vendido ' + fm(x.vendido) };
+        }));
+      }
+      var nt = 'Mes anterior (' + mesN(A.mes) + '): vendido ' + fm(v(A.vendido)) + ' y cobrado ' + fm(v(A.cobrado)) + ', con IVA. ';
+      if (!d.cobros) nt += 'Los cobros en línea de verdad todavía no están prendidos: lo cobrado es lo que se paga desde que se prendan. ';
+      if (d.nota) nt += d.nota + ' ';
+      else if (d.al) nt += 'Lo de Quo al ' + horaCorta(d.al) + '.';
+      h += '<p class="nota">' + esc(nt.trim()) + '</p>';
+      return h;
+    } };
+  }
+
   // --- Cumplimiento SAT de todo el despacho (dirección) ---
   /* La efectividad por mes del año (la dirección con «B»): la misma cuenta de «Avance por mes contable» del WorkFlow
      (renderMes de profase.html): sin lo que está en pausa por el cliente, tareas = terminadas + pendientes, vencidas con la
@@ -2279,7 +2318,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
   function en(c, lado) { c.lado = lado; return c; }
   // el Inicio de antes de «B» (quien está en SIN_B: la dirección, Eva Rangel y Dora Montalvo), tal como estaba
   function armaAntes() {
-    if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tCumplimiento(), tRevisar(),
+    if (PERFIL === 'direccion') TARJETAS = [tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tQuo(), tCumplimiento(), tRevisar(),
       tFirmas('e.firma y sellos', 'De todos los clientes'), tAvisos()];
     else if (PERFIL === 'coordina') TARJETAS = [tCorretea(), tPendientes('Mis actividades', 'Del WorkFlow: donde eres responsable o autorizas'),
       tTesoreria(), tFirmas('e.firma y sellos', 'Vencidas o por vencer'), tPantallas(), tAvisos()];
@@ -2296,7 +2335,7 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
     // las mismas tarjetas de antes, sin quitar ninguna, en otro acomodo: a la izquierda cómo va el WorkFlow, e.firma y sellos
     // y quién está fuera; a la derecha «Tu agenda», la cobranza, lo que espera un «sí», RH, el equipo y los avisos
     if (PERFIL === 'direccion') TARJETAS = [tTopDireccion(), en(tCumplimiento(), 'i'), en(tFirmas('e.firma y sellos', 'De todos los clientes'), 'i'), en(tAusencias(), 'i'),
-      tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tRevisar(), tRH(), tAvisos()];
+      tCobranza('Cobranza', 'Lo que nos deben, por compañía'), tQuo(), tRevisar(), tRH(), tAvisos()];
     else if (PERFIL === 'cadengo') TARJETAS = [tTopCadengo(DEP), en(tCobradoMeses(), 'i'), en(tPorAutorizar(), 'i'), en(tEquipo(DEP), 'i'),
       en(tCobranza('Cobranza DECOMSA', 'Lo que nos deben'), 'i'), tTesoreria(), tPortal(), tPendientes('Mis actividades', 'Donde eres responsable o autorizas'), tAvisos()];
     else if (PERFIL === 'gerente') TARJETAS = [tTopEquipo(DEP), tEquipo(DEP), en(tConfirmar(DEP), 'i'), tAvanceMeses('equipo', DEP),
@@ -2353,6 +2392,9 @@ button.k .t::after{content:' ›';color:var(--accent);font-weight:800}
       }
       if (ve('cobranza')) { e.preventDefault(); e.stopPropagation(); abreCobranza('cia:' + p[0] + '|pila:' + p[1] + '|grp:' + p.slice(2).join('|')); return; }
     }
+    // 559: lo de Quo (sus números y «Utilidad QUO ›») abre Comisiones de dirección en Utilidad QUO
+    var qv = e.target.closest('[data-quo],#c-quo .ir');
+    if (qv) { e.preventDefault(); e.stopPropagation(); abre('comisiones-direccion', 'utq'); return; }
     var b = e.target.closest('[data-liga],[data-equipo]'); if (!b) return;
     if (b.hasAttribute('data-equipo') || b.closest('#c-conectados')) { abreEquipo(); return; }
     var id = b.getAttribute('data-notif');

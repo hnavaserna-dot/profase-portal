@@ -269,6 +269,8 @@ tr.click:hover td{background:var(--navy-soft)}
 .res .f{font-weight:750}
 .res .f.v{font-family:var(--f-display);font-size:21px}
 .res .t{grid-column:1/-1;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding-top:8px}
+.res .nt{grid-column:1/-1;font-size:12.5px;color:var(--muted);padding:0 0 2px 10px;line-height:1.35}
+.res .nt.nota0{padding-left:0}
 .repa{padding:12px 14px 14px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:10px;min-width:0}
 @media (max-width:860px){.repa{border-left:0;border-top:1px solid var(--line)}}
 .repa h3{font-size:15px;font-weight:700}
@@ -412,13 +414,14 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   <div class="nota bien" id="aviso" hidden role="status"></div>
   <div class="cargando" id="cargando">Cargando…</div>
 
-  <!-- Las cinco pestañas y el mes -->
+  <!-- Las seis pestañas y el mes (559, 27-nov-2026: «Utilidad QUO», la misma pantalla de Utilidad con lo de Quo) -->
   <div class="barra" id="barra" hidden>
     <div class="secs" id="secs" role="tablist" aria-label="Secciones de Comisiones de dirección">
       <button type="button" role="tab" id="sx-res" data-sec="res" aria-selected="true"><b>Resumen</b><small>El mes de un vistazo</small></button>
       <button type="button" role="tab" id="sx-fac" data-sec="fac" aria-selected="false"><b><span id="tt-fac">Facturas</span><span class="cta" id="b-fac" hidden></span></b><small>Cuáles llevan comisión</small></button>
       <button type="button" role="tab" id="sx-com" data-sec="com" aria-selected="false"><b id="tt-com">Comisión</b><small>Pagos, reembolsos y deducciones</small></button>
       <button type="button" role="tab" id="sx-uti" data-sec="uti" aria-selected="false"><b id="tt-uti">Utilidad</b><small>Gastos, reserva y reparto</small></button>
+      <button type="button" role="tab" id="sx-utq" data-sec="utq" aria-selected="false"><b>Utilidad QUO</b><small>Lo que cobra Quo, sus gastos y su reparto</small></button>
       <button type="button" role="tab" id="sx-dev" data-sec="dev" aria-selected="false"><b>Devoluciones de IVA e ISR<span class="cta" id="b-dev" hidden></span></b><small>Todas y su pago a SV</small></button>
     </div>
     <div class="periodo" id="periodo">
@@ -613,7 +616,11 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   var PER = { anio: A0, mes: M0 };                 // un solo mes para todas las pestañas
   var FAC = { rango: 'mes', desde: '', hasta: '', q: '', tab: 'disponible', filas: [], tot: {}, pide: 0, clave: '' };
   var COM = { tab: 'pagos', d: null, pide: 0, clave: '' };
-  var UTI = { tab: 'res', d: null, pide: 0, clave: '' };   // 5-nov-2026: la primera vez abre en el resultado del mes
+  var UTI_D = { tab: 'res', d: null, pide: 0, clave: '' };   // 5-nov-2026: la primera vez abre en el resultado del mes
+  // 559 (27-nov-2026): «Utilidad QUO» es la misma pantalla con lo de Quo. UTI es la que se ve; NEG dice de cuál negocio es,
+  // y en Quo cada llamada pasa por la única puerta de la base, cdir_quo(), con los mismos datos que la de DECOMSA
+  var UTI_Q = { tab: 'res', d: null, pide: 0, clave: '' };
+  var UTI = UTI_D, NEG = 'decomsa';
   var DEV = { tab: 'lista', d: null, pide: 0 };
   var DLIS = { est: '', cli: '' };   // 260: el filtro de la lista de todas las devoluciones
   var SVSEL = {};                     // 269: las devoluciones escogidas para pagarle a SV (por su clave)
@@ -623,7 +630,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   // 5-nov-2026: las pilas que sirven de pestañas en Facturas, Comisión y Utilidad; cada pestaña se acuerda de la última que
   // usaste (solo en este navegador; si no se puede guardar, abre en la de siempre)
   var PILAS_DE = { fac: ['disponible', 'incluida', 'descartada'], com: ['pagos', 'reembolso', 'deduccion', 'cuenta', 'pagar'],
-                   uti: ['res', 'nomina', 'personal', 'ext', 'reserva', 'rdir'] };
+                   uti: ['res', 'nomina', 'personal', 'ext', 'reserva', 'rdir'], utq: ['res', 'nomina', 'personal', 'ext', 'rdir'] };
   var PILAS_K = 'profase-cdir-pilas';
   function pilasMem() { try { return JSON.parse(localStorage.getItem(PILAS_K) || '{}') || {}; } catch (e) { return {}; } }
   function pilaGuarda(sec, k) { try { var o = pilasMem(); o[sec] = k; localStorage.setItem(PILAS_K, JSON.stringify(o)); } catch (e) { /* sin almacenamiento */ } }
@@ -631,7 +638,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var o = pilasMem();
     if (PILAS_DE.fac.indexOf(o.fac) >= 0) FAC.tab = o.fac;
     if (PILAS_DE.com.indexOf(o.com) >= 0) COM.tab = o.com;
-    if (PILAS_DE.uti.indexOf(o.uti) >= 0) UTI.tab = o.uti;
+    if (PILAS_DE.uti.indexOf(o.uti) >= 0) UTI_D.tab = o.uti;
+    if (PILAS_DE.utq.indexOf(o.utq) >= 0) UTI_Q.tab = o.utq;
   }
   // una pila que sirve de pestaña (attr: data-ft, data-ct o data-ut) o que lleva a otra pestaña (data-ir)
   var LUZ = { k: '', hasta: 0 };   // la pila que se ilumina un momento (el aviso de lo nuevo la pide antes de que se pinte)
@@ -645,7 +653,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function verPila(sec, k) {
     if (!PILAS_DE[sec] || PILAS_DE[sec].indexOf(k) < 0) return;
     pilaGuarda(sec, k);
-    if (sec === 'fac') { FAC.tab = k; pintaFac(); } else if (sec === 'com') { COM.tab = k; pintaCom(); } else { UTI.tab = k; pintaUti(); }
+    if (sec === 'fac') { FAC.tab = k; pintaFac(); } else if (sec === 'com') { COM.tab = k; pintaCom(); } else { (sec === 'utq' ? UTI_Q : UTI_D).tab = k; pintaUti(); }
   }
   var COSTO_EN = '$';        // los costos de la factura se capturan en $ o en % del subtotal (se queda mientras la pestaña esté abierta)
 
@@ -663,6 +671,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function perK() { return PER.anio + '-' + dos(PER.mes); }
   function falla(e, que) { return window.PORTAL && PORTAL.falla ? PORTAL.falla(e, que) : (String((e && (e.message || e.error_description || e.msg)) || '').replace(/^.*?ERROR:\s*/, '') || 'No se pudo. Qué hacer: vuelve a intentar en un momento.'); }
   async function rpc(fn, args) { var r = await P.sb.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; }
+  // 559: lo de la pestaña de Utilidad que se ve; en «Utilidad QUO», por cdir_quo() (la base revisa que sea de lo que se deja)
+  async function rpcU(fn, args) { return NEG === 'quo' ? rpc('cdir_quo', { p_que: fn, p: args || {} }) : rpc(fn, args); }
+  function esQuo() { return NEG === 'quo'; }
   // los avisos chicos son la pieza común del portal (con su ✕); si no está, el renglón de arriba
   function avisa(t, boton, accion) {
     if (P && P.avisoChico) { P.avisoChico({ id: 'cdir', texto: t, boton: boton, accion: accion, ms: boton ? 9000 : 5000 }); return; }
@@ -696,6 +707,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       fac: { t: 'Facturas ' + (T.b_facturas || ''), s: 'Decide qué facturas llevan comisión. En las incluidas se capturan los costos, a quién va la comisión y el comentario; la utilidad y la comisión las calcula el sistema.' },
       com: { t: T.l_comision || 'Comisión HDN', s: 'La comisión del mes: la de los pagos de las facturas incluidas, más los reembolsos y menos las deducciones.' },
       uti: { t: 'Utilidad ' + (T.b_utilidad || ''), s: 'El resultado del mes: ingresos, nómina, gastos del personal, gastos extraordinarios y reserva, con la utilidad y su reparto.' },
+      utq: { t: 'Utilidad QUO', s: 'El resultado del mes de Quo: lo que cobró Quo (sin IVA) entra solo; la nómina, los gastos del personal, los gastos extraordinarios y los reembolsos se capturan, y sus costos de sistemas entran solos. Sin reserva, con su reparto.' },
       dev: { t: 'Devoluciones de IVA e ISR', s: 'Cada devolución con su factura: el monto devuelto, si ya se pagó, el costo SV (solo las de IVA), la utilidad, la comisión y el pago SV de cada semana. Lo calcula el sistema.' }
     };
     $('tt-fac').textContent = SECS.fac.t; $('tt-com').textContent = SECS.com.t; $('tt-uti').textContent = SECS.uti.t;
@@ -732,6 +744,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       if (ir === 'svp') muestra('dev', 'semanas');   // 269: el aviso de «Pagos a SV» (cdir_tab.js, PROFASE_ABRE: 'ver:pagos-sv')
       else if (/^dev-(devs|cobra|porfac|isrsv)$/.test(ir)) muestra('dev', ir.slice(4));   // 360: los avisos de una devolución (su lista o lo que se cobra)
       else if (ir === 'reem' || ir === 'reemv') { muestra('uti', 'rdir'); if (ir === 'reemv') luzRdir(); }   // 288: la pila del Inicio y el aviso de lo nuevo
+      else if (ir === 'reemq') muestra('utq', 'rdir');   // 559: los reembolsos que paga Quo (la pila del Inicio y sus avisos)
+      else if (ir === 'utq') muestra('utq');             // 559: el aviso de lo nuevo
       else muestra(mi ? 'com' : 'res', mi ? 'pagar' : null);   // la pila del Inicio abre el pago de la comisión
     } catch (e) {
       $('cargando').hidden = true;
@@ -757,20 +771,21 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (a === PER.anio && m === PER.mes) return;
     PER.anio = a; PER.mes = m;
     periodos();
-    if (VISTA === 'res') cargaRes(); else if (VISTA === 'fac') { rangoFac(); cargaFac(); } else if (VISTA === 'com') cargaCom(); else if (VISTA === 'uti') cargaUti();
+    if (VISTA === 'res') cargaRes(); else if (VISTA === 'fac') { rangoFac(); cargaFac(); } else if (VISTA === 'com') cargaCom(); else if (VISTA === 'uti' || VISTA === 'utq') cargaUti();
   }
   function muestra(v, sub) {
     VISTA = v; cierra();
-    ['res', 'fac', 'com', 'uti', 'dev'].forEach(function (k) {
-      $('s-' + k).hidden = k !== v;
-      $('sx-' + k).setAttribute('aria-selected', String(k === v));
-    });
+    // 559: «Utilidad QUO» usa la misma sección de Utilidad, con lo de Quo
+    var quo = v === 'utq', sec = quo ? 'uti' : v;
+    NEG = quo ? 'quo' : 'decomsa'; UTI = quo ? UTI_Q : UTI_D;
+    ['res', 'fac', 'com', 'uti', 'dev'].forEach(function (k) { $('s-' + k).hidden = k !== sec; });
+    ['res', 'fac', 'com', 'uti', 'utq', 'dev'].forEach(function (k) { $('sx-' + k).setAttribute('aria-selected', String(k === v)); });
     $('periodo').hidden = v === 'dev';
     $('subt').textContent = (SECS[v] || {}).s || '';
     if (sub && PILAS_DE[v] && PILAS_DE[v].indexOf(sub) >= 0) pilaGuarda(v, sub);
     if (v === 'fac') { if (sub) FAC.tab = sub; rangoFac(); cargaFac(); }
     else if (v === 'com') { if (sub) COM.tab = sub; cargaCom(); }
-    else if (v === 'uti') { if (sub) UTI.tab = sub; cargaUti(); }
+    else if (v === 'uti' || v === 'utq') { if (sub) UTI.tab = sub; cargaUti(); }
     else if (v === 'dev') { if (sub) DEV.tab = sub; cargaDev(); }
     else cargaRes();
     try { window.scrollTo(0, 0); } catch (e) {}
@@ -788,14 +803,16 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       rpc('cdir_mod_utilidad', { p_anio: PER.anio, p_mes: PER.mes }),
       rpc('cdir_facturas', { p: { desde: d1, hasta: d2 } }),
       rpc('cdir_dev', { p: {} }),
+      rpc('cdir_quo', { p_que: 'cdir_mod_utilidad', p: { p_anio: PER.anio, p_mes: PER.mes } }),   // 559: la utilidad de Quo
       ph
     ]);
     if (n !== RES.pide) return;
     r.pop();   // el pago de la comisión avisa de su falla en su pestaña; aquí solo se esperó
     if (r[0].status === 'fulfilled') { COM.d = r[0].value; COM.clave = k; }
-    if (r[1].status === 'fulfilled') { UTI.d = r[1].value; UTI.clave = k; }
+    if (r[1].status === 'fulfilled') { UTI_D.d = r[1].value; UTI_D.clave = k; }
     if (r[2].status === 'fulfilled') { RES.fac = r[2].value || {}; RES.clave = k; }
     if (r[3].status === 'fulfilled') DEV.d = r[3].value;
+    if (r[4].status === 'fulfilled') { UTI_Q.d = r[4].value; UTI_Q.clave = k; }
     if (r[2].status === 'fulfilled' && FAC.rango === 'mes') { FAC.filas = (RES.fac || {}).filas || []; FAC.tot = (RES.fac || {}).totales || {}; FAC.clave = d1 + '|' + d2; }
     var mal = r.filter(function (x) { return x.status !== 'fulfilled'; });
     estado('res-estado', mal.length ? 'Parte no se pudo leer' : '', mal.length ? 'mal' : '');
@@ -831,10 +848,15 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       v: tt ? (nd ? esc(plural(nd, 'por decidir', 'por decidir')) : (ti.n || (tt.descartadas || {}).n ? 'Todas decididas' : 'Sin facturas')) : '…', chica: tt && !nd,
       d: tt ? esc(plural(ti.n || 0, 'incluida', 'incluidas')) + ' · comisión ' + esc(dinero(ti.comision)) : '' });
     // 3. la utilidad del mes
-    var ru = (UTI.clave === perK() && UTI.d && UTI.d.resumen) || null;
+    var ru = (UTI_D.clave === perK() && UTI_D.d && UTI_D.d.resumen) || null;
     h += pila({ l: 'Utilidad ' + (T.b_utilidad || '') + ' · ' + mes, ir: 'uti', sub: 'res', ir_t: 'Ver el resultado',
       v: ru ? esc(dinero(ru.utilidad)) : '…',
-      d: ru ? ((ru.reparto || []).length ? (ru.reparto || []).map(function (x) { return esc(x.quien) + ' ' + esc(dinero(x.monto)); }).join(' · ') : (UTI.d.esquema === 'desde' ? 'Después de la reserva' : '')) : '' });
+      d: ru ? ((ru.reparto || []).length ? (ru.reparto || []).map(function (x) { return esc(x.quien) + ' ' + esc(dinero(x.monto)); }).join(' · ') : (UTI_D.d.esquema === 'desde' ? 'Después de la reserva' : '')) : '' });
+    // 3b. 559: la utilidad de Quo
+    var rq = (UTI_Q.clave === perK() && UTI_Q.d && UTI_Q.d.resumen) || null;
+    h += pila({ l: 'Utilidad QUO · ' + mes, ir: 'utq', sub: 'res', ir_t: 'Ver el resultado',
+      v: rq ? esc(dinero(rq.utilidad)) : '…',
+      d: rq ? 'Cobró ' + esc(dinero(rq.ingresos)) + ' sin IVA · gastos ' + esc(dinero(rq.total_gastos)) : '' });
     // 4. las devoluciones de IVA (de todas las fechas)
     var dd = DEV.d, toca = semanaToca(dd), prox = semanaProx(dd), pf = dd ? (dd.por_facturar || []).length : 0;
     h += pila({ l: 'Devoluciones de IVA e ISR', ir: 'dev', sub: toca.length ? 'semanas' : (pf ? 'porfac' : 'devs'), ir_t: 'Ver',
@@ -877,12 +899,16 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (PHDN.anio === PER.anio && PHDN.d) (PHDN.d.meses || []).filter(function (m) { return !m.en_curso && Number(m.por_pagar) > 0 && (m.estado === 'por_pagar' || m.estado === 'diferencia'); })
       .forEach(function (m) { L.push({ c: dinero(m.por_pagar), t: (T.l_comision || 'Comisión HDN') + ' de ' + mesNom(m) + (m.estado === 'diferencia' ? ': diferencia por pagar' : ' por pagar'), s: 'Cuando se pague, se marca con su fecha.', b: CAPTURA ? 'Pagar' : 'Ver', ir: 'com', sub: 'pagar', mes: PER.anio + '-' + dos(m.mes) }); });
     // 288: lo que falta por reembolsar a la dirección (de todas las fechas)
-    ((UTI.clave === perK() && UTI.d && UTI.d.rdir && UTI.d.rdir.pendiente) || []).forEach(function (x) {
+    ((UTI_D.clave === perK() && UTI_D.d && UTI_D.d.rdir && UTI_D.d.rdir.pendiente) || []).forEach(function (x) {
       L.push({ c: dinero(x.monto), t: 'Reembolso a ' + x.nombre + ' por pagar', s: plural(x.n, 'gasto', 'gastos') + ' que pagó de su bolsa. Al pagarlo cuenta como gasto en la utilidad del mes.', b: CAPTURA ? 'Pagar' : 'Ver', ir: 'uti', sub: 'rdir' });
+    });
+    // 559: lo que Quo le debe reembolsar a la dirección (su parte de los pagos a Claude, por ejemplo)
+    ((UTI_Q.clave === perK() && UTI_Q.d && UTI_Q.d.rdir && UTI_Q.d.rdir.pendiente) || []).forEach(function (x) {
+      L.push({ c: dinero(x.monto), t: 'Reembolso de Quo a ' + x.nombre + ' por pagar', s: plural(x.n, 'gasto', 'gastos') + ' que le toca pagar a Quo. Al pagarlo cuenta como gasto en la Utilidad QUO del mes.', b: CAPTURA ? 'Pagar' : 'Ver', ir: 'utq', sub: 'rdir' });
     });
     if (ru && AJUSTES && !(ru.reparto || []).length) L.push({ c: '!', t: 'Falta poner el reparto de la utilidad', s: 'Se pone una vez en Ajustes.', b: 'Ponerlo', aj: 'reparto' });
     var pasado = PER.anio < A0 || (PER.anio === A0 && PER.mes < M0);
-    if (pasado && UTI.clave === perK() && UTI.d && !(UTI.d.nomina || []).length) L.push({ c: '0', t: 'La nómina de ' + mes + ' no está capturada', s: '', b: CAPTURA ? 'Capturar' : 'Ver', ir: 'uti', sub: 'nomina' });
+    if (pasado && UTI_D.clave === perK() && UTI_D.d && !(UTI_D.d.nomina || []).length) L.push({ c: '0', t: 'La nómina de ' + mes + ' no está capturada', s: '', b: CAPTURA ? 'Capturar' : 'Ver', ir: 'uti', sub: 'nomina' });
     $('falta-sub').textContent = L.length ? plural(L.length, 'cosa', 'cosas') + ' por hacer' : '';
     $('r-falta').innerHTML = L.length ? L.map(function (x) {
       return '<li><span class="chip na grande">' + esc(x.c) + '</span><span class="t">' + esc(x.t) + (x.s ? '<small>' + esc(x.s) + '</small>' : '') + '</span>'
@@ -1383,9 +1409,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var n = ++UTI.pide, k = perK();
     if (UTI.clave === k && UTI.d) pintaUti();
     try {
-      var d = await rpc('cdir_mod_utilidad', { p_anio: PER.anio, p_mes: PER.mes });
-      if (n !== UTI.pide) return;
-      UTI.d = d; UTI.clave = k; pintaUti();
+      var U = UTI, d = await rpcU('cdir_mod_utilidad', { p_anio: PER.anio, p_mes: PER.mes });
+      if (n !== U.pide) return;
+      U.d = d; U.clave = k; if (U === UTI) pintaUti();
     } catch (e) { if (n === UTI.pide) error(falla(e, 'No se pudo leer el mes')); }
   }
   // 5-nov-2026: las seis pilas de la utilidad (sirven de pestañas); la primera, el resultado del mes con su reparto
@@ -1393,17 +1419,20 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var hay = !!UTI.d, r = d.resumen || {}, tot = d.totales || {}, rs = d.reserva || {}, R = d.rdir || {}, k = UTI.tab;
     var cl = function (n) { return hay ? dineroH(n) : '…'; }, cuantos = function (x) { return (d[x] || []).length; };
     var pm = (R.pendiente || []).reduce(function (s, x) { return s + (Number(x.monto) || 0); }, 0), np = (R.pendientes || []).length;
-    $('u-pilas').innerHTML = pilaT({ attr: 'data-ut="res"', on: k === 'res', acento: true, l: '= Utilidad del mes', v: cl(r.utilidad),
-          d: hay ? esc(mes) + (d.esquema === 'desde' ? ' · después de la reserva' : '') + ' · con su reparto' : '', ir: 'Ver el resultado' })
+    var quo = esQuo(), na = quo ? (d.ext || []).filter(function (x) { return x.automatico; }).length : 0;
+    $('u-pilas').innerHTML = pilaT({ attr: 'data-ut="res"', on: k === 'res', acento: true, l: quo ? '= Utilidad QUO del mes' : '= Utilidad del mes', v: cl(r.utilidad),
+          d: hay ? esc(mes) + (quo ? ' · sin reserva' : d.esquema === 'desde' ? ' · después de la reserva' : '') + ' · con su reparto' : '', ir: 'Ver el resultado' })
       + pilaT({ attr: 'data-ut="nomina"', on: k === 'nomina', l: 'Nómina', v: cl(tot.nomina), d: hay ? esc(plural(cuantos('nomina'), 'persona', 'personas')) : '' })
       + pilaT({ attr: 'data-ut="personal"', on: k === 'personal', l: 'Gastos del personal', v: cl(tot.personal), d: hay ? esc(plural(cuantos('personal'), 'gasto', 'gastos')) : '' })
-      + pilaT({ attr: 'data-ut="ext"', on: k === 'ext', l: 'Gastos extraordinarios', v: cl(tot.ext), d: hay ? esc(plural(cuantos('ext'), 'gasto', 'gastos')) : '' })
-      + pilaT({ attr: 'data-ut="reserva"', on: k === 'reserva', l: 'Reserva', v: cl(rs.saldo_final), d: hay ? 'Saldo final · movimientos del mes ' + esc(dinero(rs.movimientos)) : '' })
+      + pilaT({ attr: 'data-ut="ext"', on: k === 'ext', l: 'Gastos extraordinarios', v: cl(tot.ext),
+                d: hay ? esc(plural(cuantos('ext'), 'gasto', 'gastos')) + (na ? ' · ' + esc(plural(na, 'automático', 'automáticos')) : '') : '' })
+      + (quo ? '' : pilaT({ attr: 'data-ut="reserva"', on: k === 'reserva', l: 'Reserva', v: cl(rs.saldo_final), d: hay ? 'Saldo final · movimientos del mes ' + esc(dinero(rs.movimientos)) : '' }))
       + pilaT({ attr: 'data-ut="rdir"', on: k === 'rdir', l: 'Reembolsos a la dirección', v: cl(pm),
-                d: hay ? (np ? esc(plural(np, 'gasto', 'gastos')) + ' por reembolsar' : 'Nada por reembolsar') : '', ojo: np > 0, ir: CAPTURA && np ? 'Pagar' : 'Ver', luz: LUZ.k === 'rdir' && Date.now() < LUZ.hasta });
+                d: hay ? (np ? esc(plural(np, 'gasto', 'gastos')) + ' por reembolsar' : 'Nada por reembolsar') : '', ojo: np > 0, ir: CAPTURA && np ? 'Pagar' : 'Ver', luz: !quo && LUZ.k === 'rdir' && Date.now() < LUZ.hasta });
   }
   function pintaUti() {
-    var d = UTI.d || {}, k = UTI.tab, L = k === 'reserva' ? ((d.reserva || {}).filas || []) : (d[k] || []), tb = $('t-uti'), mes = mesTxt(PER.anio, PER.mes);
+    if (esQuo() && PILAS_DE.utq.indexOf(UTI.tab) < 0) UTI.tab = 'res';   // 559: Quo no lleva reserva
+    var d = UTI.d || {}, k = UTI.tab, L = k === 'reserva' ? ((d.reserva || {}).filas || []) : (d[k] || []), tb = $('t-uti'), mes = mesTxt(PER.anio, PER.mes), quo = esQuo();
     pilasUti(d, mes);
     $('u-card-res').hidden = k !== 'res'; $('u-card-lista').hidden = k === 'res';
     if (k === 'res') {
@@ -1416,7 +1445,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('u-rpend').hidden = k !== 'rdir'; $('u-rpagos').hidden = k !== 'rdir'; $('u-pagar').hidden = true;
     if (k === 'rdir') { pintaRdir(d, mes); pintaResultado(d, mes); return; }
     $('uti-vacia').textContent = 'Nada capturado en este mes.';
-    $('uti-ayuda').textContent = UT[k].a + (CAPTURA && k !== 'reserva' ? ' Pica un renglón para cambiarlo o borrarlo; «Copiar del mes anterior» trae lo del mes pasado.' : CAPTURA ? ' Pica un renglón que no sea automático para cambiarlo.' : '');
+    $('uti-ayuda').textContent = (quo ? 'Lo de Quo. ' : '') + UT[k].a + (CAPTURA && k !== 'reserva' ? ' Pica un renglón para cambiarlo o borrarlo; «Copiar del mes anterior» trae lo del mes pasado.' : CAPTURA ? ' Pica un renglón que no sea automático para cambiarlo.' : '')
+      + (quo && k === 'ext' ? ' Los renglones «Automático» no se cambian a mano.' : '');
     var ed = function (x) { return CAPTURA && !x.automatico ? ' class="click" tabindex="0" data-edita="' + k + ':' + esc(x.id) + '"' : ''; };
     if (k === 'nomina') {
       tb.tHead.innerHTML = '<tr><th>Día</th><th>Persona</th><th class="monto">Nómina</th><th class="monto">Carga laboral</th><th class="monto">Total</th></tr>';
@@ -1426,7 +1456,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       tb.tBodies[0].innerHTML = L.map(function (x) { return '<tr' + ed(x) + '><td data-l="Día">' + esc(x.dia) + '</td><td class="w" data-l="Persona"><span class="rs">' + esc(x.empleado) + '</span></td><td class="w" data-l="Gasto">' + esc(x.concepto) + '</td><td class="monto" data-l="Monto">' + esc(dinero(x.monto)) + '</td></tr>'; }).join('');
     } else if (k === 'ext') {
       tb.tHead.innerHTML = '<tr><th>Día</th><th>Gasto</th><th class="monto">Monto</th></tr>';
-      tb.tBodies[0].innerHTML = L.map(function (x) { return '<tr' + ed(x) + '><td data-l="Día">' + esc(x.dia) + '</td><td class="w" data-l="Gasto"><span class="rs">' + esc(x.concepto) + '</span></td><td class="monto" data-l="Monto">' + esc(dinero(x.monto)) + '</td></tr>'; }).join('');
+      tb.tBodies[0].innerHTML = L.map(function (x) { return '<tr' + ed(x) + '><td data-l="Día">' + esc(x.dia) + '</td><td class="w" data-l="Gasto"><span class="rs">' + esc(x.concepto) + '</span>'
+        + (x.automatico ? ' <span class="chip az">Automático</span>' + (x.estimado ? ' <span class="chip na" title="El mes sigue abierto: se pone al día solo">Estimado</span>' : '') + (x.sin_tc ? ' <span class="chip na" title="Sin el tipo de cambio de su día: se usó el más cercano">Tipo de cambio aproximado</span>' : '') : '')
+        + '</td><td class="monto" data-l="Monto">' + esc(dinero(x.monto)) + '</td></tr>'; }).join('');
     } else {
       tb.tHead.innerHTML = '<tr><th>Día</th><th>Descripción</th><th class="monto">Monto</th></tr>';
       tb.tBodies[0].innerHTML = L.map(function (x) { return '<tr' + ed(x) + '><td data-l="Día">' + esc(x.dia) + '</td><td class="w" data-l="Descripción"><span class="rs">' + esc(x.descripcion) + '</span>' + (x.automatico ? ' <span class="chip az">Automático</span>' : '') + '</td><td class="monto" data-l="Monto">' + dineroH(x.monto) + '</td></tr>'; }).join('');
@@ -1442,7 +1474,14 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     $('u-trae').hidden = !CAPTURA;
     $('u-recalcula').hidden = k !== 'reserva';
     var au = d.auto || {};
-    $('u-auto').hidden = k !== 'reserva';
+    $('u-auto').hidden = !(k === 'reserva' || (quo && k === 'ext'));
+    if (quo) {
+      // 559: los costos de Quo entran solos de Administración › Costos de sistemas (en pesos, su parte de Quo), una sola vez
+      $('u-auto').textContent = 'Los renglones «Automático» son los costos de los sistemas Quo de Administración › Costos de sistemas (GitHub, la base, Claude, Marketing y lo demás que se le cobra a Quo), en pesos y solo su parte de Quo. '
+        + 'Mientras el mes sigue abierto dicen «Estimado» y se ponen al día solos; cada costo entra una sola vez y nadie los cambia a mano. Lo que pagó la dirección de su bolsa por Quo va en «Reembolsos a la dirección».';
+      pintaResultado(d, mes);
+      return;
+    }
     $('u-auto').textContent = 'Los renglones «Automático» (comisiones del equipo calculadas y pagadas) los calcula el sistema y nadie los cambia a mano. '
       + (au.origen === 'access' ? 'Hoy salen del sistema de comisiones del Access' + (au.copiado ? ' (última copia: ' + PROFASE_FECHA.fechaHora(au.copiado) + ')' : '') + '.'
          : au.origen === 'crm' ? 'Desde noviembre de 2026 salen solos de Tesorería › Comisiones: «calculadas», lo del equipo por los pagos de clientes del mes; «pagadas», lo que se le pagó al equipo en el mes'
@@ -1452,8 +1491,24 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     pintaResultado(d, mes);
   }
   // el resultado del mes (con lo de cada pestaña de abajo)
+  var QSIS = { contabilita: 'Quo Contabilita', facturita: 'Quo Facturita', nominita: 'Quo Nominita', lexita: 'Quo Lexita' };
   function pintaResultado(d, mes) {
     var r = d.resumen || {}, h = '';
+    if (d.esquema === 'quo') {
+      // 559: Utilidad QUO. Lo que cobró Quo (sin IVA) entra solo; sin reserva; el reparto es el de Quo
+      var I = d.ingresos || {}, por = I.por || {}, ks = Object.keys(por);
+      $('ruti-sub').textContent = mes + ' · sin reserva' + (I.al ? ' · lo de Quo al ' + PROFASE_FECHA.fechaHora(I.al) : '');
+      h += fila('Lo que cobró Quo (sin IVA)', r.ingresos);
+      ks.forEach(function (x) { h += '<span class="nt">' + esc((QSIS[x] || x) + ': ' + dinero((por[x] || {}).siva) + ' (' + plural((por[x] || {}).n || 0, 'cobro', 'cobros') + ')') + '</span>'; });
+      if (I.nota) h += '<span class="nt nota0">' + esc(I.nota) + '</span>';
+      h += '<span class="t">Gastos</span>' + fila('Nómina', r.nomina) + fila('Gastos del personal', r.personal) + fila('Gastos extraordinarios', r.ext);
+      if (Number(r.ext_auto)) h += '<span class="nt">' + esc('De ahí, costos de sistemas (automático): ' + dinero(r.ext_auto)) + '</span>';
+      h += fila('Reembolsos a la dirección', r.reembolsos) + fila('Total de gastos', r.total_gastos, true) + fila('Utilidad QUO', r.utilidad, true);
+      $('r-uti').innerHTML = h;
+      if (!(r.reparto || []).length) $('r-rep').innerHTML = '<div class="mut" style="grid-column:1/-1;border:0;background:none;padding:0">' + (AJUSTES ? 'Falta poner el reparto de Quo: se pone en «Ajustes y catálogos».' : 'Sin reparto puesto para Quo.') + '</div>';
+      else $('r-rep').innerHTML = (r.reparto || []).map(function (x) { return '<div><div class="l">' + esc(x.quien) + '</div><div class="v num">' + dineroH(x.monto) + '</div></div>'; }).join('');
+      return;
+    }
     $('ruti-sub').textContent = mes + ' · ' + (d.esquema === 'desde' ? 'esquema con reserva (desde ' + fecha(d.corte) + ')' : 'esquema hasta ' + fecha(d.corte));
     h += fila('Ingresos del mes', r.ingresos) + '<span class="t">Gastos</span>' + fila('Nómina', r.nomina) + fila('Gastos del personal', r.personal) + fila('Gastos extraordinarios', r.ext);
     if (r.reembolsos != null) h += fila('Reembolsos a la dirección', r.reembolsos);   // 288: lo que se le pagó a la dirección en el mes
@@ -1468,7 +1523,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var msg = que === 'contactos' ? 'Se agregan las personas de la nómina del mes anterior, en ceros, para que captures sus montos. ¿Continuar?' : 'Se copian los renglones del mes anterior a este mes. ¿Continuar?';
     if (!(await pregunta(msg))) return;
     try {
-      var r = await rpc('cdir_trae', { p_tabla: t, p_anio: PER.anio, p_mes: PER.mes, p_que: que });
+      var r = await rpcU('cdir_trae', { p_tabla: t, p_anio: PER.anio, p_mes: PER.mes, p_que: que });
       avisa(r.agregados === 1 ? 'Se agregó 1 renglón.' : 'Se agregaron ' + r.agregados + ' renglones.' + (r.ya_estaban ? ' ' + r.ya_estaban + ' ya estaban y no se repitieron.' : ''));
     } catch (e) { error(falla(e)); }
     RES.clave = ''; await cargaUti();
@@ -1483,6 +1538,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function rdD() { return (UTI.d && UTI.d.rdir) || { quienes: [], pendientes: [], pendiente: [], pagados: [], pagos: [], mes: 0 }; }
   function pintaRdir(d, mes) {
     var R = d.rdir || rdD(), tb = $('t-uti'), cia = T.cia_ingresos || '', mm = mes.toLowerCase();
+    if (esQuo()) cia = 'Quo';   // 559
     $('uti-ayuda').textContent = 'Lo que la dirección pagó de su bolsa' + (cia ? ' por ' + cia : '') + '. Lo que falta por reembolsar no cuenta en la utilidad; al picar «Pagar», cuenta como gasto en la utilidad del mes de la fecha en que se paga y el reparto se ajusta solo.'
       + (CAPTURA ? ' Pica uno por reembolsar para cambiarlo o borrarlo, y uno pagado para ver su pago.' : ' Pica uno pagado para ver su pago.');
     var P = R.pendiente || [];
@@ -1544,14 +1600,14 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var p = { quien: $('rd-qu').value, fecha: $('rd-fe').value, concepto: $('rd-co').value, comentario: $('rd-ce').value, monto: $('rd-mo').value };
     if (E.id) p.id = E.id;
     b.disabled = true; msgEn('');
-    try { await rpc('cdir_rdir_guarda', { p: p }); cierra(); avisa('Guardado: queda por reembolsar.'); RES.clave = ''; await cargaUti(); }
+    try { await rpcU('cdir_rdir_guarda', { p: p }); cierra(); avisa('Guardado: queda por reembolsar.'); RES.clave = ''; await cargaUti(); }
     catch (e) { msgEn(falla(e)); b.disabled = false; }
   }
   async function rdirBorra(b) {
     var E = EDITA; if (!E || E.tipo !== 'rdir' || !E.id) return;
     if (!(await pregunta('Está por borrar este reembolso. ¿Desea continuar?'))) return;
     b.disabled = true;
-    try { await rpc('cdir_rdir_borra', { p_id: E.id }); cierra(); avisa('Se borró el reembolso.'); RES.clave = ''; await cargaUti(); }
+    try { await rpcU('cdir_rdir_borra', { p_id: E.id }); cierra(); avisa('Se borró el reembolso.'); RES.clave = ''; await cargaUti(); }
     catch (e) { msgEn(falla(e)); b.disabled = false; }
   }
   function rdirPagaForma(quien) {
@@ -1604,7 +1660,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (!fe) { msgEn('Escoge la fecha en que se pagó.'); return; }
     b.disabled = true; msgEn('');
     try {
-      var r = await rpc('cdir_rdir_pagar', { p: { ids: ids, fecha: fe, metodo: $('rd-pm').value, nota: $('rd-pn').value } });
+      var r = await rpcU('cdir_rdir_pagar', { p: { ids: ids, fecha: fe, metodo: $('rd-pm').value, nota: $('rd-pn').value } });
       cierra(); avisa('Listo: quedó pagado (' + dinero(r.monto) + ') y cuenta como gasto en la utilidad de ' + fechaMes(r.periodo) + '.');
       RES.clave = ''; await cargaUti();
     } catch (e) { msgEn(falla(e)); b.disabled = false; }
@@ -1630,7 +1686,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   async function rdirRegresa(b) {
     var E = EDITA; if (!E || E.tipo !== 'rdpago') return;
     b.disabled = true; msgEn('');
-    try { await rpc('cdir_rdir_regresa', { p_pago: E.id, p_motivo: $('rd-rm').value }); cierra(); avisa('Se regresó: sus gastos volvieron a «Por reembolsar».'); RES.clave = ''; await cargaUti(); }
+    try { await rpcU('cdir_rdir_regresa', { p_pago: E.id, p_motivo: $('rd-rm').value }); cierra(); avisa('Se regresó: sus gastos volvieron a «Por reembolsar».'); RES.clave = ''; await cargaUti(); }
     catch (e) { msgEn(falla(e)); b.disabled = false; }
   }
   // la pestaña nueva, iluminada, cuando se llega desde el aviso de «Nuevos cambios» (cdir_tab.js: 'ver:reembolsos')
@@ -1644,7 +1700,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   }
   function excelRdir(b) {
     var R = rdD(), per = mesTxt(PER.anio, PER.mes), pen = R.pendientes || [], pag = R.pagados || [];
-    excel(b, 'Reembolsos a la direccion ' + per + ' PROFASE', 'Reembolsos a la dirección', [(T.t_utilidad || ''), 'Periodo: ' + per, pen.length + ' por reembolsar · ' + pag.length + ' pagados en el mes'],
+    var Q = esQuo() ? ' QUO' : '';   // 559
+    excel(b, 'Reembolsos a la direccion' + Q + ' ' + per + ' PROFASE', 'Reembolsos a la dirección' + Q, [Q ? 'Utilidad QUO' : (T.t_utilidad || ''), 'Periodo: ' + per, pen.length + ' por reembolsar · ' + pag.length + ' pagados en el mes'],
       ['Fecha', 'Quién lo pagó', 'Qué se pagó', 'Comentario', 'Monto', 'Cómo va', 'Fecha de pago'],
       pen.map(function (x) { return [fecha(x.fecha), x.nombre, x.concepto, x.comentario || '', x.monto, 'Por reembolsar', '']; })
         .concat(pag.map(function (x) { return [fecha(x.fecha), x.nombre, x.concepto, x.comentario || '', x.monto, 'Pagado', fecha(x.fecha_pago)]; })),
@@ -1695,7 +1752,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
             + '<div class="sg-fila" style="margin-top:0"><button class="sg-b1" type="button" id="aj-pct-ok">Guardar %</button></div>'
           : '<div class="dl"><span>Hoy</span><span class="v"><strong>' + esc(pct(EST.porcentaje)) + '</strong></span></div><p class="sg-hint">Lo cambia la dirección.</p>')
         + '<div class="msg" id="v-msg" hidden></div></div>')
-      + (AJUSTES ? sec('Reparto de la utilidad', '<div class="cdv-in"><p class="sg-hint">Quién recibe qué parte de la utilidad de cada mes, en cada esquema.</p><div class="sg-fila" style="margin-top:0"><button class="sg-b2" type="button" data-aj="reparto">Cambiar el reparto</button></div></div>') : '')
+      + (AJUSTES ? sec('Reparto de la utilidad', '<div class="cdv-in"><p class="sg-hint">Quién recibe qué parte de la utilidad de cada mes, en cada esquema y en la Utilidad QUO.</p><div class="sg-fila" style="margin-top:0"><button class="sg-b2" type="button" data-aj="reparto">Cambiar el reparto</button></div></div>') : '')
       + sec('Catálogos', '<div class="ajgrid">' + cats.map(function (c) {
           var n = c.k === 'emp' ? EMP.length : catDe(+c.k).length;
           return '<button class="btn" type="button" data-cat="' + c.k + '">' + esc(c.t) + ' <span class="chip">' + n + '</span><small>' + esc(c.s) + '</small></button>';
@@ -1712,7 +1769,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function repartoForma() {
     if (!AJUSTES) return;
     EDITA = { tipo: 'reparto' };
-    var R = (EST && EST.reparto) || { antes: [], desde: [] };
+    var R = (EST && EST.reparto) || { antes: [], desde: [], quo: [] };
     function filas(k) {
       var l = (R[k] || []).slice(); while (l.length < 4) l.push({ quien: '', pct: '' });
       return l.map(function (x, i) {
@@ -1723,6 +1780,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     abre({ kick: 'Ajustes de la dirección', titulo: 'Reparto de la utilidad', sub: 'Queda guardado en la base, no en el código.', forma: true,
       cuerpo: volver() + sec('Esquema hasta ' + fecha(EST.corte), '<div class="sg-campos">' + filas('antes') + '</div>')
         + sec('Esquema desde ' + fecha(EST.corte), '<div class="sg-campos">' + filas('desde') + '</div>')
+        + sec('Utilidad QUO', '<div class="sg-campos">' + filas('quo') + '</div>')   // 559: el reparto de la utilidad de Quo
         + '<div class="msg" id="v-msg" hidden></div>',
       pie: 'Deja vacíos los renglones que no se usan. Cada esquema suma hasta 100 %.',
       acciones: [bot('rp-guarda', 'Guardar')] });
@@ -1740,9 +1798,9 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       return out;
     }
     var p;
-    try { p = { reparto_antes: { partes: lee('antes') }, reparto_desde: { partes: lee('desde') } }; } catch (er) { msgEn(falla(er)); return; }
+    try { p = { reparto_antes: { partes: lee('antes') }, reparto_desde: { partes: lee('desde') }, reparto_quo: { partes: lee('quo') } }; } catch (er) { msgEn(falla(er)); return; }
     b.disabled = true;
-    try { EST = await rpc('cdir_ajustes', { p: p }); cierra(); avisa('El reparto quedó guardado.'); RES.clave = ''; UTI.clave = ''; if (VISTA === 'uti') await cargaUti(); else if (VISTA === 'res') cargaRes(); }
+    try { EST = await rpc('cdir_ajustes', { p: p }); cierra(); avisa('El reparto quedó guardado.'); RES.clave = ''; UTI_D.clave = ''; UTI_Q.clave = ''; if (VISTA === 'uti' || VISTA === 'utq') await cargaUti(); else if (VISTA === 'res') cargaRes(); }
     catch (er) { msgEn(falla(er)); }
     finally { b.disabled = false; }
   }
@@ -1811,7 +1869,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       + campo('e-n1', 'Monto', inp('e-n1', x ? Number(x.monto).toFixed(2) : '', ' inputmode="decimal"')) + campo('e-n2', '%', inp('e-n2', x ? (Number(x.porcentaje) * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 }) : '100', ' inputmode="decimal"'));
     var nom = { nomina: 'Gasto de nómina', personal: 'Gasto del personal', ext: 'Gasto extraordinario', reserva: 'Movimiento de reserva', reembolso: 'Reembolso', deduccion: 'Deducción' }[tabla];
     var nota = tabla === 'nomina' ? 'El total (nómina + carga laboral) lo calcula el sistema al guardar.' : tabla === 'reembolso' ? 'El total (monto × %) lo calcula el sistema al guardar; los reembolsos suman.' : tabla === 'deduccion' ? 'Aquí van los anticipos de la comisión y los descuentos; un anticipo va en el mes de la comisión que se adelanta. El total (−monto × %) lo calcula el sistema al guardar; las deducciones restan.' : '';
-    abre({ kick: mesTxt(PER.anio, PER.mes), titulo: (x ? 'Cambiar ' : 'Agregar ') + nom.toLowerCase(), forma: true,
+    var deQuo = esQuo() && tabla !== 'reembolso' && tabla !== 'deduccion';   // 559: lo que se captura en «Utilidad QUO» es de Quo
+    abre({ kick: mesTxt(PER.anio, PER.mes) + (deQuo ? ' · Utilidad QUO' : ''), titulo: (x ? 'Cambiar ' : 'Agregar ') + nom.toLowerCase() + (deQuo ? ' de Quo' : ''), forma: true,
       cuerpo: '<div class="sg-campos">' + c + '</div>'
         + (nota ? '<p class="sg-hint" style="margin-top:12px">' + nota + '</p>' : '')
         + '<div class="msg" id="v-msg" hidden></div>',
@@ -1838,7 +1897,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     b.disabled = true; msgEn('');
     try {
       if ($('e-con')) p.concepto_id = await conId();
-      await rpc('cdir_guarda', { p_tabla: E.tabla, p: p });
+      var cg = { p_tabla: E.tabla, p: p };
+      if (E.tabla === 'reembolso' || E.tabla === 'deduccion') await rpc('cdir_guarda', cg); else await rpcU('cdir_guarda', cg);
       cierra(); avisa(conNuevo ? 'Guardado. «' + conNuevo + '» ya está en la lista de gastos.' : 'Guardado.'); RES.clave = '';
       if (E.tabla === 'reembolso' || E.tabla === 'deduccion') await cargaCom(); else await cargaUti();
     } catch (e) { msgEn(falla(e)); b.disabled = false; }
@@ -1848,7 +1908,8 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     if (!(await pregunta('Está por eliminar este registro. ¿Desea continuar?'))) return;
     b.disabled = true;
     try {
-      await rpc('cdir_borra', { p_tabla: E.tabla, p_id: E.id });
+      var cb = { p_tabla: E.tabla, p_id: E.id };
+      if (E.tabla === 'reembolso' || E.tabla === 'deduccion') await rpc('cdir_borra', cb); else await rpcU('cdir_borra', cb);
       cierra(); avisa('Se borró el registro.'); RES.clave = '';
       if (E.tabla === 'reembolso' || E.tabla === 'deduccion') await cargaCom(); else await cargaUti();
     } catch (e) { msgEn(falla(e)); b.disabled = false; }
@@ -1879,7 +1940,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
       if (tipo === 'emp') await rpc('cdir_empleado_guarda', { p: { id: id || null, nombre: texto, activo: activo !== false } });
       else await rpc('cdir_catalogo_guarda', { p: { id: id || null, tipo: +tipo, concepto: texto } });
       await catalogos(); catalogo(tipo === 'emp' ? 'emp' : +tipo, reg); msgEn('Guardado.', 'bien');
-      if (VISTA === 'fac') pintaFac(); else if (VISTA === 'uti') cargaUti();
+      if (VISTA === 'fac') pintaFac(); else if (VISTA === 'uti' || VISTA === 'utq') cargaUti();
     } catch (e) { msgEn(falla(e)); }
   }
 
@@ -2618,14 +2679,25 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
   function excelUti(b) {
     if (UTI.tab === 'rdir') { excelRdir(b); return; }   // 288
     var d = UTI.d || {}, k = UTI.tab, per = mesTxt(PER.anio, PER.mes), L = k === 'reserva' ? ((d.reserva || {}).filas || []) : (d[k] || []), suma = (d.totales || {})[k];
-    var lin = [(T.t_utilidad || ''), 'Periodo: ' + per, L.length + ' renglones'];
-    if (k === 'nomina') excel(b, 'Gastos de nomina ' + per + ' PROFASE', 'Gastos de nómina', lin, ['Día', 'Persona', 'Nómina', 'Carga laboral', 'Total'], L.map(function (x) { return [x.dia, x.empleado || '', x.nomina, x.carga, x.total]; }), [3, 4, 5], [7, 40, 15, 15, 15], [['Suma del periodo', '', '', '', suma]]);
-    else if (k === 'personal') excel(b, 'Gastos del personal ' + per + ' PROFASE', 'Gastos del personal', lin, ['Día', 'Persona', 'Gasto', 'Monto'], L.map(function (x) { return [x.dia, x.empleado || '', x.concepto || '', x.monto]; }), [4], [7, 40, 30, 15], [['Suma del periodo', '', '', suma]]);
+    var q = esQuo(), Q = q ? ' QUO' : '';   // 559: los de Utilidad QUO dicen QUO en el nombre y el título
+    var lin = [q ? 'Utilidad QUO' : (T.t_utilidad || ''), 'Periodo: ' + per, L.length + ' renglones'];
+    if (q && k === 'ext') { excel(b, 'Gastos extraordinarios QUO ' + per + ' PROFASE', 'Gastos extraordinarios QUO', lin, ['Día', 'Gasto', 'De dónde', 'Monto'], L.map(function (x) { return [x.dia, x.concepto || '', x.automatico ? 'Automático (Costos de sistemas)' : 'Lo capturó Tesorería', x.monto]; }), [4], [7, 48, 30, 15], [['Suma del periodo', '', '', suma]]); return; }
+    if (k === 'nomina') excel(b, 'Gastos de nomina' + Q + ' ' + per + ' PROFASE', 'Gastos de nómina', lin, ['Día', 'Persona', 'Nómina', 'Carga laboral', 'Total'], L.map(function (x) { return [x.dia, x.empleado || '', x.nomina, x.carga, x.total]; }), [3, 4, 5], [7, 40, 15, 15, 15], [['Suma del periodo', '', '', '', suma]]);
+    else if (k === 'personal') excel(b, 'Gastos del personal' + Q + ' ' + per + ' PROFASE', 'Gastos del personal', lin, ['Día', 'Persona', 'Gasto', 'Monto'], L.map(function (x) { return [x.dia, x.empleado || '', x.concepto || '', x.monto]; }), [4], [7, 40, 30, 15], [['Suma del periodo', '', '', suma]]);
     else if (k === 'ext') excel(b, 'Gastos extraordinarios ' + per + ' PROFASE', 'Gastos extraordinarios', lin, ['Día', 'Gasto', 'Monto'], L.map(function (x) { return [x.dia, x.concepto || '', x.monto]; }), [3], [7, 44, 15], [['Suma del periodo', '', suma]]);
     else { var rs = d.reserva || {}; excel(b, 'Reserva ' + per + ' PROFASE', 'Reserva', lin.concat(['Saldo inicial ' + dinero(rs.saldo_inicial) + ' · Saldo final ' + dinero(rs.saldo_final)]), ['Día', 'Descripción', 'Automático', 'Monto'], L.map(function (x) { return [x.dia, x.descripcion || '', x.automatico ? 'Sí' : 'No', x.monto]; }), [4], [7, 44, 12, 15], [['Movimientos del periodo', '', '', rs.movimientos]]); }
   }
   function excelRUti(b) {
     var d = UTI.d || {}, r = d.resumen || {}, per = mesTxt(PER.anio, PER.mes);
+    if (d.esquema === 'quo') {   // 559: el resultado del mes de Quo, sin reserva
+      var G = [['Lo que cobró Quo (sin IVA)', r.ingresos]];
+      var por = ((d.ingresos || {}).por) || {};
+      Object.keys(por).forEach(function (k) { G.push(['   ' + (QSIS[k] || k), (por[k] || {}).siva]); });
+      G = G.concat([['Nómina', r.nomina], ['Gastos del personal', r.personal], ['Gastos extraordinarios', r.ext], ['   De ahí, costos de sistemas (automático)', r.ext_auto], ['Reembolsos a la dirección', r.reembolsos], ['Total de gastos', r.total_gastos], ['Utilidad QUO', r.utilidad]]);
+      (r.reparto || []).forEach(function (x) { G.push([x.quien, x.monto]); });
+      excel(b, 'Resultado del mes QUO ' + per + ' PROFASE', 'Resultado del mes QUO', ['Utilidad QUO', 'Periodo: ' + per, $('ruti-sub').textContent], ['Concepto', 'Monto'], G, [2], [44, 18]);
+      return;
+    }
     var F = [['Ingresos del mes', r.ingresos], ['Nómina', r.nomina], ['Gastos del personal', r.personal], ['Gastos extraordinarios', r.ext]];
     if (r.reembolsos != null) F.push(['Reembolsos a la dirección', r.reembolsos]);   // 288
     if (d.esquema === 'desde') F = F.concat([['Total de gastos', r.total_gastos], ['Subtotal', r.subtotal], ['Total a reservar', r.a_reservar], ['Utilidad después de la reserva', r.utilidad]]);
@@ -2681,7 +2753,7 @@ input.svck{width:20px;height:20px;margin:0;accent-color:var(--navy);flex:0 0 aut
     var ca = t.closest('[data-cat]'); if (ca) { var k = ca.getAttribute('data-cat'); catalogo(k === 'emp' ? 'emp' : +k); return; }
     var ft = t.closest('[data-ft]'); if (ft) { verPila('fac', ft.getAttribute('data-ft')); return; }
     var ct = t.closest('[data-ct]'); if (ct) { verPila('com', ct.getAttribute('data-ct')); return; }
-    var ut = t.closest('[data-ut]'); if (ut) { verPila('uti', ut.getAttribute('data-ut')); return; }
+    var ut = t.closest('[data-ut]'); if (ut) { verPila(VISTA === 'utq' ? 'utq' : 'uti', ut.getAttribute('data-ut')); return; }
     var dt = t.closest('[data-dt]'); if (dt) { DEV.tab = dt.getAttribute('data-dt'); pintaDev(); return; }
     var isv = t.closest('[data-isrsv]'); if (isv) { if (!isv.disabled) devIsrSv(isv); return; }   // 371
     var nco = t.closest('[data-nocobra]'); if (nco) { if (!nco.disabled) devNoCobra(nco); return; }   // 467
