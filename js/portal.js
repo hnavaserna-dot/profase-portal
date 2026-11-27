@@ -1382,8 +1382,15 @@
     var espera = null;
     function todas(centra) {
       clearTimeout(espera);
-      espera = setTimeout(function () {
+      espera = setTimeout(function corre() {
         if (!document.body) return;
+        /* revisión nocturna 27-nov-2026 («Comprobar real»: al abrir Variaciones › «Resueltas», esta revisión le pedía al
+           navegador acomodar la tabla completa entre pedazo y pedazo: 109 ms de «código» en «marca»). Mientras una
+           pantalla agrega renglones por pedazos (<html data-agregando="<hora>">, la misma marca de la burbuja del chat y
+           de las ventanas) se vuelve a ver en 300 ms; en cuanto la marca se quita (o a los 3 s, si se quedara) revisa como
+           siempre: las mismas tiras y tablas, con las mismas clases, solo un poco después. */
+        var ag = document.documentElement.getAttribute('data-agregando');
+        if (ag && Date.now() - (+ag || 0) < 3000) { espera = setTimeout(corre, 300); return; }
         lados();
         document.querySelectorAll(TIRAS).forEach(function (t) { try { marca(t, centra); } catch (e) { /* nada */ } });
         document.querySelectorAll(GRUPOS).forEach(function (t) { try { if (!t.matches(TIRAS)) marca(t, centra, 'pt-tabla'); } catch (e) { /* nada */ } });
