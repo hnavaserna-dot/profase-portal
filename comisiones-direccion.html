@@ -284,6 +284,9 @@ tr.click:hover td{background:var(--navy-soft)}
 .reparto .e{margin-top:5px;display:flex;flex-wrap:wrap;gap:3px 6px;align-items:center;font-size:12px;color:var(--muted);min-width:0}
 .reparto .e:empty{display:none}
 .reparto .e span{overflow-wrap:anywhere;min-width:0}
+/* 566: cómo sale el reparto del mes, con lo que va del año */
+.racum{margin:0;font-size:13px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+.racum b{color:var(--ink);font-variant-numeric:tabular-nums}
 .entbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:10px;font-size:13px;min-width:0}
 .entbar .t{min-width:0;overflow-wrap:anywhere}
 .entbar .t b{font-variant-numeric:tabular-nums}
@@ -608,7 +611,7 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
       <header><div><h2 id="h-ruti">Resultado del mes</h2><div class="sub" id="ruti-sub">&nbsp;</div></div></header>
       <div class="estadoR">
         <div class="res" id="r-uti"></div>
-        <div class="repa"><h3>Reparto</h3><div class="reparto" id="r-rep"></div><div class="entbar" id="r-ent" hidden></div></div>
+        <div class="repa"><h3>Reparto</h3><p class="racum" id="r-acum" hidden></p><div class="reparto" id="r-rep"></div><div class="entbar" id="r-ent" hidden></div></div>
       </div>
     </section>
     <section class="card" aria-labelledby="h-uti" id="u-card-lista" hidden>
@@ -1070,7 +1073,9 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
   }
   // la utilidad de un mes que trajo pérdida y no se repartió (lo dice la base: «sin_reparto»)
   function celdaU(u, l, en) {
-    return '<td data-l="' + esc(l) + '" class="monto">' + dineroH(u.utilidad) + (u.sin_reparto ? '<small class="sinrep">No se repartió</small>' : '')
+    // 566: lo que se ganó y se fue a cubrir la pérdida de los meses de antes del año (lo dice la base: «cubre»)
+    var cub = Number(u.cubre) > 0.004 ? '<small class="sinrep">' + (Number(u.repartido) > 0.004 ? 'Una parte cubrió la pérdida de antes' : 'Cubrió la pérdida de antes') + '</small>' : '';
+    return '<td data-l="' + esc(l) + '" class="monto">' + dineroH(u.utilidad) + (u.sin_reparto ? '<small class="sinrep">No se repartió</small>' : '') + cub
       + (en ? '<small class="ent ' + en.c + '">' + esc(en.t) + '</small>' : '') + '</td>';
   }
   // 564: si ya se entregó el reparto de ese mes de cada utilidad (lo dice la base en «entregas»)
@@ -1110,11 +1115,22 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
     var n = (L || []).map(function (m) { return MESES_L[m - 1].toLowerCase(); });
     return n.length < 2 ? (n[0] || '') : n.slice(0, -1).join(', ') + ' y ' + n[n.length - 1];
   }
+  // 566: la regla del reparto en palabras (la misma en la pantalla y en el Excel)
+  function reglaReparto(d) {
+    var t = d.totales || {}, ac = ['decomsa', 'quo'].some(function (e) { return (t[e] || {}).regla === 'acumulado'; });
+    return ac
+      ? 'cada mes se reparte lo que la utilidad del año (de enero a ese mes) pasa de lo que ya se repartió en los meses de antes. Un mes con pérdida no reparte nada y no se le descuenta a nadie; lo que se gana después primero cubre esa pérdida y, cuando la utilidad del año vuelve a pasar de lo ya repartido, se reparte la diferencia. Cada año empieza en cero'
+        + (d.corte && (d.meses || []).some(function (m) { return m.decomsa && m.decomsa.esquema === 'antes'; }) ? ' (antes del ' + fecha(d.corte) + ', cada mes se repartía su utilidad, también la pérdida).' : '.')
+      : 'cada mes se reparte su propia utilidad; si un mes trae pérdida, ese mes no se reparte nada y su pérdida no se descuenta de lo que se reparte en los otros meses.';
+  }
   // por qué lo repartido no es la utilidad del año, de cada utilidad (todo lo dice la base; aquí solo se escribe)
   function porQueReparto(d, e, nom) {
-    var t = d.totales[e] || {}, sr = t.sin_repartir || { meses: [] }, pr = t.perdida_repartida || { meses: [] }, x = [];
+    var t = d.totales[e] || {}, sr = t.sin_repartir || { meses: [] }, pr = t.perdida_repartida || { meses: [] }, cu = t.cubierto || { meses: [] }, x = [];
+    var acum = t.regla === 'acumulado';   // 566: con lo que va del año
     if (sr.meses.length) x.push(nom + ': ' + (sr.meses.length === 1 ? listaMeses(sr.meses) + ' trajo pérdida y no se repartió' : listaMeses(sr.meses) + ' trajeron pérdida y no se repartieron')
-      + '; esa pérdida (' + dinero(sr.utilidad) + ') no se le descontó a nadie en los meses con ganancia.');
+      + '; esa pérdida (' + dinero(sr.utilidad) + ') no se le descontó a nadie' + (acum ? ' de lo ya repartido.' : ' en los meses con ganancia.'));
+    if ((cu.meses || []).length) x.push(nom + ': de lo que se ganó en ' + listaMeses(cu.meses) + ', ' + dinero(cu.utilidad) + ' se fue a cubrir esa pérdida y no se repartió.');
+    if (acum && Number(t.por_cubrir) > 0.004) x.push(nom + ': para volver a repartir, en el año falta ganar ' + dinero(t.por_cubrir) + ' (lo que la utilidad del año va abajo de lo ya repartido).');
     if (pr.meses.length) {
       var antes = e === 'decomsa' && pr.meses.every(function (m) { var y = (d.meses || []).filter(function (z) { return z.mes === m; })[0]; return y && y.decomsa.esquema === 'antes'; });
       x.push(nom + ': en ' + listaMeses(pr.meses) + ' la pérdida (' + dinero(pr.utilidad) + ') sí se repartió, en negativo'
@@ -1185,6 +1201,9 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
         var sr = function (o) { return (o.sin_repartir || {}).utilidad; }, srN = function (o) { return ((o.sin_repartir || {}).meses || []).length; };
         var F = [['= Lo repartido en el año', de.repartido, q.repartido, 'tg']];
         if (srN(de) || srN(q)) F.push(['Pérdida de los meses que no se repartieron (no se le descontó a nadie)', srN(de) ? sr(de) : null, srN(q) ? sr(q) : null, '']);
+        // 566: lo que se ganó después y se fue a cubrir esa pérdida (no se repartió)
+        var cuN = function (o) { return ((o.cubierto || {}).meses || []).length; };
+        if (cuN(de) || cuN(q)) F.push(['Utilidad que cubrió esa pérdida (no se repartió)', cuN(de) ? de.cubierto.utilidad : null, cuN(q) ? q.cubierto.utilidad : null, '']);
         if (Number(de.sin_asignar) || Number(q.sin_asignar)) {
           var poco = Math.abs(Number(de.sin_asignar)) < 1 && Math.abs(Number(q.sin_asignar)) < 1;
           F.push([poco ? 'Centavos del redondeo de cada mes' : 'Lo que no se asignó (el reparto no suma 100 %)', de.sin_asignar, q.sin_asignar, 'sub']);
@@ -1195,7 +1214,7 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
         }).join('');
         var pq = porQueReparto(d, 'decomsa', 'Utilidad ' + LD).concat(porQueReparto(d, 'quo', 'Utilidad QUO'));
         $('arep-nota').textContent = pq.length
-          ? 'Por qué no da lo mismo: cada mes se reparte su propia utilidad; si un mes trae pérdida, ese mes no se reparte nada y su pérdida no se descuenta de lo que se reparte en los otros meses. ' + pq.join(' ')
+          ? 'Por qué no da lo mismo: ' + reglaReparto(d) + ' ' + pq.join(' ')
           : 'Lo repartido es la utilidad de cada mes: en el año no hubo meses con pérdida.';
         $('a-rep').hidden = false;
         pintaAcuEnt(d, LD);   // 564
@@ -1245,7 +1264,7 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
           + celda((m.juntas || {}).utilidad, 'Utilidad de las dos') + '</tr>';
       }).join('');
       ft.innerHTML = '<tr class="utl">' + sumas() + '</tr>';
-      nota = 'Las sumas del año van arriba y abajo. Cada renglón es lo que dice ese mes en su pestaña. «No se repartió»: ese mes trajo pérdida y no se repartió nada.'
+      nota = 'Las sumas del año van arriba y abajo. Cada renglón es lo que dice ese mes en su pestaña. «No se repartió»: ese mes trajo pérdida y no se repartió nada. «Cubrió la pérdida de antes»: lo que se ganó ese mes primero cubrió la pérdida de los meses de antes del año, y eso no se repartió.'
         + (d.entregas ? ' «Entregado» o «Por entregar»: si ya se le entregó a cada quien su parte del reparto de ese mes (se marca en la pestaña Utilidad de cada mes).' : '');
     }
     $('acu-nota').textContent = nota;
@@ -1845,6 +1864,7 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
         + ' es de la API de Claude, que ya va arriba en gastos extraordinarios: aquí no se cuenta otra vez.') + '</span>';
       h += fila('Total de gastos', r.total_gastos, true) + fila('Utilidad QUO', r.utilidad, true);
       $('r-uti').innerHTML = h;
+      repAcum(r.reparto && r.reparto.length ? r.reparto_acum : null);   // 566
       if (!(r.reparto || []).length) $('r-rep').innerHTML = '<div class="mut" style="grid-column:1/-1;border:0;background:none;padding:0">' + (AJUSTES ? 'Falta poner el reparto de Quo: se pone en «Ajustes y catálogos».' : 'Sin reparto puesto para Quo.') + '</div>';
       else $('r-rep').innerHTML = repCards(r.reparto);
       pintaEnt();
@@ -1856,9 +1876,26 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
     if (d.esquema === 'desde') h += fila('Total de gastos', r.total_gastos, true) + fila('Subtotal', r.subtotal, true) + '<span class="t">Reserva</span>' + fila('Total a reservar', r.a_reservar) + fila('Utilidad después de la reserva', r.utilidad, true);
     else h += '<span class="t">Reserva</span>' + fila('Reserva', r.reserva) + fila('Utilidad', r.utilidad, true);
     $('r-uti').innerHTML = h;
+    repAcum(r.reparto && r.reparto.length ? r.reparto_acum : null);   // 566
     if (!(r.reparto || []).length) $('r-rep').innerHTML = '<div class="mut" style="grid-column:1/-1;border:0;background:none;padding:0">' + (AJUSTES ? 'Falta poner el reparto: se pone en «Ajustes y catálogos».' : 'Sin reparto puesto para este esquema.') + '</div>';
     else $('r-rep').innerHTML = repCards(r.reparto);
     pintaEnt();
+  }
+  /* 566 (27-nov-2026): cómo sale el reparto del mes, con lo que va del año. Héctor Daniel Nava, con la captura del Acumulado
+     (utilidad negativa y lo repartido en positivo): «Sigo sin entender…»; a la recomendación, «Si oublicado y no; cada año se
+     empieza en 0». Todo lo calcula la base (reparto_acum de cdir_mod_utilidad y cdir_mod_utilidad_quo): aquí solo se escribe. */
+  function repAcum(a) {
+    var p = $('r-acum'); if (!p) return;
+    var base = Number(a && a.base) || 0, toca = Number(a && a.toca) || 0, cubre = Number(a && a.cubre) || 0, falta = Number(a && a.falta) || 0, h = '';
+    var B = function (x) { return '<b>' + esc(dinero(x)) + '</b>'; };
+    if (a && a.regla === 'acumulado') {
+      if (base < -0.004) h = 'Este mes trajo pérdida: no se reparte nada y no se le descuenta a nadie. Lo que se gane en los meses que siguen primero la cubre' + (falta > 0.004 ? ': para volver a repartir, en el año falta ganar ' + B(falta) + '.' : '.');
+      else if (cubre > 0.004 && toca > 0.004) h = 'De la utilidad de este mes, ' + B(cubre) + ' cubrió la pérdida de los meses de antes del año; se reparte lo demás, ' + B(toca) + '.';
+      else if (cubre > 0.004) h = 'La utilidad de este mes se fue a cubrir la pérdida de los meses de antes del año, así que no se reparte nada' + (falta > 0.004 ? ': para volver a repartir, en el año falta ganar ' + B(falta) + '.' : '.');
+      else if (falta > 0.004) h = 'Este mes no trae utilidad que repartir: para volver a repartir, en el año falta ganar ' + B(falta) + '.';
+      if (h) h += ' En el año van ' + B(a.acum) + ' de utilidad y en los meses de antes ya se repartieron ' + B(a.repartido_antes) + '; cada año empieza en cero.';
+    }
+    p.innerHTML = h; p.hidden = !h;
   }
   /* 564 (27-nov-2026): si ya se le entregó a cada quien su parte del reparto. Héctor Daniel Nava: «En alguna parte donde tú
      recomiendes, sí se ponga que se repartió, porque por el momento la realidad es que no se repartió nada»; a la propuesta,
@@ -1923,8 +1960,12 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
       h = 'Falta por entregar: <b>' + esc(dinero(D.falta)) + '</b>' + (Number(D.entregado) > 0 ? ' · ya se entregaron ' + esc(dinero(D.entregado)) : '');
       if (D.puede) b = '<button class="btn azul chico" type="button" data-entmarca="">Marcar entregado</button>';
     }
+    else if ((D.personas || []).some(function (p) { return Number(p.de_mas) > 0; })) {
+      var dm = (D.personas || []).reduce(function (s, p) { return s + (Number(p.de_mas) > 0 ? Number(p.de_mas) : 0); }, 0);
+      h = 'Se entregó de más: <b>' + esc(dinero(dm)) + '</b>. El reparto de este mes bajó después de entregarlo; nada se descuenta solo.';
+    }
     else if (Number(D.entregado) > 0) h = 'Ya se entregó todo el reparto de este mes.';
-    else h = 'Este mes no hubo utilidad que entregar.';
+    else h = 'Este mes no hay nada que entregar del reparto.';
     bar.innerHTML = '<span class="t">' + h + '</span>' + b;
     bar.hidden = false;
   }
@@ -3190,6 +3231,8 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
         var FR = qn.map(function (k) { return [k, de1(RD, k), de1(RQ, k)]; });
         FR.push(['= Lo repartido en el año', v(de.repartido), v(q.repartido)]);
         if (srN(de) || srN(q)) FR.push(['Pérdida de los meses que no se repartieron (no se le descontó a nadie)', srN(de) ? v(de.sin_repartir.utilidad) : '', srN(q) ? v(q.sin_repartir.utilidad) : '']);
+        var cuN = function (o) { return ((o.cubierto || {}).meses || []).length; };   // 566
+        if (cuN(de) || cuN(q)) FR.push(['Utilidad que cubrió esa pérdida (no se repartió)', cuN(de) ? v(de.cubierto.utilidad) : '', cuN(q) ? v(q.cubierto.utilidad) : '']);
         if (Number(de.sin_asignar) || Number(q.sin_asignar))
           FR.push([Math.abs(Number(de.sin_asignar)) < 1 && Math.abs(Number(q.sin_asignar)) < 1 ? 'Centavos del redondeo de cada mes' : 'Lo que no se asignó (el reparto no suma 100 %)', v(de.sin_asignar), v(q.sin_asignar)]);
         var wsR = hoja('Reparto', ['Quién', 'De la utilidad ' + LD, 'De la Utilidad QUO'], FR, [56, 22, 22], [2, 3], null,
@@ -3197,7 +3240,7 @@ table.acu td.monto small.ent.na{color:var(--accent-ink)}
         var pq = porQueReparto(d, 'decomsa', 'Utilidad ' + LD).concat(porQueReparto(d, 'quo', 'Utilidad QUO'));
         if (pq.length) {
           var rn = wsR.rowCount + 2;
-          wsR.getCell(rn, 1).value = 'Por qué no da lo mismo: cada mes se reparte su propia utilidad; si un mes trae pérdida, ese mes no se reparte nada y su pérdida no se descuenta de lo que se reparte en los otros meses. ' + pq.join(' ');
+          wsR.getCell(rn, 1).value = 'Por qué no da lo mismo: ' + reglaReparto(d) + ' ' + pq.join(' ');
           wsR.mergeCells(rn, 1, rn, 3);
           wsR.getCell(rn, 1).alignment = { wrapText: true, vertical: 'top' };
           wsR.getRow(rn).height = 90;
