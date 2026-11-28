@@ -5449,7 +5449,14 @@ async function cqAltaDesdeCuenta(a){
    vuelve a revisar. Cada uno dice quién lo autorizó; si a un cobro le tocan dos, cuenta solo el mayor. ---------- */
 const DS_AUTORIZA=['Héctor Daniel Nava','Héctor Nava Ramos','Fernando Cadengo'];
 const DS_PER=[['mensual','Mensual'],['anual','Anual'],['paquete','Paquete de timbres']];
-const DS_DUR={una_vez:'Solo el primer cobro', meses:'Varios meses', siempre:'Mientras dure'};
+/* Un código nunca es «para siempre» (Héctor Daniel Nava, 27-nov-2026, 19:02: «cuadra NO es vitalicio verdad?»): para un código
+   se escoge «Mientras dure la promoción», con su último día; «Para siempre» es solo de un precio especial de una cuenta. */
+const DS_DUR={una_vez:'Solo el primer cobro', meses:'Varios meses', vigencia:'Mientras dure la promoción', siempre:'Para siempre'};
+function dsDurTxt(x){
+  if(x.duracion==='meses') return x.meses+' meses';
+  if(x.duracion==='vigencia') return 'Mientras dure la promoción'+(x.hasta?' (hasta '+cqFecha(x.hasta)+')':'');
+  return DS_DUR[x.duracion]||'';
+}
 let DS=null;   // {lista, cargando}
 function cqDescPapel(){ const p=CQ.d&&CQ.d.yo&&CQ.d.yo.descuentos; return p==='crea'&&!soloLectura()?'crea':p?'ve':null; }
 function dsCuanto(d){ return d.pct!=null?Number(d.pct).toLocaleString('es-MX',{maximumFractionDigits:2})+' %':money(d.monto)+' antes de IVA'; }
@@ -5499,7 +5506,7 @@ async function cqDescuentos(aviso){
   else h+='<div class="cq-tw"><table class="cq-t cq-mini"><thead><tr><th>Descuento</th><th>Cuánto</th><th>Para</th><th>Vigencia</th><th class="r">Usos</th><th>Autorizó</th><th>Cómo está</th>'+(papel==='crea'?'<th>Acciones</th>':'')+'</tr></thead><tbody>'
     +L.map(function(x){ const e=dsEstado(x);
       return '<tr><td><b>'+esc(x.nombre)+'</b><div class="cq-mu">'+(x.tipo==='codigo'?'Código '+esc(x.codigo):'Para '+esc(x.cuenta||'una cuenta'))+'</div></td>'
-        +'<td>'+esc(dsCuanto(x))+'<div class="cq-mu">'+esc(x.duracion==='meses'?x.meses+' meses':DS_DUR[x.duracion]||'')+'</div></td>'
+        +'<td>'+esc(dsCuanto(x))+'<div class="cq-mu">'+esc(dsDurTxt(x))+'</div>'+(x.solo_planes?'<div class="cq-mu">Solo planes</div>':'')+'</td>'
         +'<td>'+esc(dsPara(x))+'</td>'
         +'<td>'+esc(cqFecha(x.desde))+(x.hasta?'<div class="cq-mu">al '+esc(cqFecha(x.hasta))+'</div>':'<div class="cq-mu">sin fecha de fin</div>')+'</td>'
         +'<td class="r">'+Number(x.usos||0).toLocaleString('es-MX')+(x.usos_max?' de '+Number(x.usos_max).toLocaleString('es-MX'):'')+'</td>'
@@ -5530,7 +5537,7 @@ function dsLeeGrupo(raiz, nombre){
 function cqDescForma(x, cuentaId, volverA){
   if(cqDescPapel()!=='crea') return;
   cerrarOverlay();
-  const d=x||{tipo:cuentaId?'cuenta':'codigo', cuenta_id:cuentaId||null, desde:HOY, duracion:'una_vez', sistemas:[], periodos:[]};
+  const d=x||{tipo:cuentaId?'cuenta':'codigo', cuenta_id:cuentaId||null, desde:HOY, duracion:'una_vez', sistemas:[], periodos:[], solo_planes:false};
   const usado=x&&Number(x.usos)>0;
   const ctas=cqCuentas().filter(function(a){ return !a.propia; });
   const v=dsVentana(x?'Editar el descuento':'Nuevo descuento',
@@ -5542,11 +5549,13 @@ function cqDescForma(x, cuentaId, volverA){
     +'<div class="field" data-ds-si="codigo"><label for="ds-codigo">Código</label><input type="text" id="ds-codigo" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" value="'+esc(d.codigo||'')+'" placeholder="BUENFIN"'+(usado?' disabled':'')+'><span class="help">De 3 a 24 letras, números o guiones, sin espacios</span></div>'
     +'<div class="field wide" data-ds-si="cuenta"><label for="ds-cuenta">La cuenta</label><div id="ds-cuenta-b"></div><span class="help">Las cuentas de Quo de los clientes (la casa no lleva descuentos)</span></div>'
     +'<div class="field"><label>Cuánto</label>'+dsBotones('forma', [['pct','En %'],['monto','En pesos']], d.monto!=null&&d.pct==null?'monto':'pct', false)
-      +'<input type="number" id="ds-valor" min="0.01" step="0.01" inputmode="decimal" value="'+esc(d.pct!=null?d.pct:d.monto!=null?d.monto:'')+'" placeholder="15"'+(usado?' disabled':'')+'><span class="help">En pesos, antes de IVA</span></div>'
+      +'<input type="number" id="ds-valor" min="0.01" step="0.01" inputmode="decimal" value="'+esc(d.pct!=null?d.pct:d.monto!=null?d.monto:'')+'" placeholder="15"'+(usado?' disabled':'')+'><span class="help" data-ds-valor-ayuda></span></div>'
     +'<div class="field"><label>Cuánto dura</label>'+dsBotones('dur', Object.keys(DS_DUR).map(function(k){ return [k, DS_DUR[k]]; }), d.duracion||'una_vez', false)
-      +'<input type="number" id="ds-meses" min="1" max="36" step="1" value="'+esc(d.meses||'')+'" placeholder="Meses (1 a 36)" data-ds-si-dur="meses"></div>'
+      +'<input type="number" id="ds-meses" min="1" max="36" step="1" value="'+esc(d.meses||'')+'" placeholder="Meses (1 a 36)" data-ds-si-dur="meses">'
+      +'<span class="help" data-ds-dur-ayuda></span></div>'
     +'<div class="field wide"><label>Sistemas</label>'+dsBotones('sis', CQ_SIS.map(function(s){ return [s[0], s[1]]; }), d.sistemas||[], true)+'<span class="help">Si no escoges ninguno, vale en los tres</span></div>'
     +'<div class="field wide"><label>Planes</label>'+dsBotones('per', DS_PER, d.periodos||[], true)+'<span class="help">Si no escoges ninguno, vale en todos</span></div>'
+    +'<div class="field wide"><label class="cqa-fila"><input type="checkbox" id="ds-solo-planes"'+(d.solo_planes?' checked':'')+(usado?' disabled':'')+'><span><b>Solo planes</b></span></label><span class="help">No toca los timbres ni los usuarios o trabajadores adicionales: solo el precio del plan</span></div>'
     +campo('Desde', '<input type="date" id="ds-desde" value="'+esc(String(d.desde||HOY).slice(0,10))+'">')
     +campo('Hasta', '<input type="date" id="ds-hasta" value="'+esc(d.hasta?String(d.hasta).slice(0,10):'')+'">', 'Vacío: sin fecha de fin')
     +campo('Usos máximos', '<input type="number" id="ds-usos" min="1" max="100000" step="1" value="'+esc(d.usos_max||'')+'" placeholder="Sin límite">', 'Cuántos cobros en total, entre todos')
@@ -5565,6 +5574,12 @@ function cqDescForma(x, cuentaId, volverA){
     const t=dsLeeGrupo(caja, 'tipo'), du=dsLeeGrupo(caja, 'dur');
     caja.querySelectorAll('[data-ds-si]').forEach(function(n){ n.hidden=n.getAttribute('data-ds-si')!==t; });
     const m=caja.querySelector('[data-ds-si-dur]'); if(m) m.hidden=du!=='meses';
+    /* un código nunca es «para siempre»: ese botón solo sale para un precio especial de una cuenta */
+    const bs=caja.querySelector('[data-ds-grupo="dur"] button[data-v="siempre"]');
+    if(bs){ bs.hidden=t==='codigo'; if(t==='codigo' && bs.getAttribute('aria-pressed')==='true'){ bs.setAttribute('aria-pressed','false'); const bv=caja.querySelector('[data-ds-grupo="dur"] button[data-v="vigencia"]'); if(bv) bv.setAttribute('aria-pressed','true'); } }
+    const ay=caja.querySelector('[data-ds-dur-ayuda]'), du2=dsLeeGrupo(caja, 'dur');
+    const va=caja.querySelector('[data-ds-valor-ayuda]'); if(va) va.textContent=dsLeeGrupo(caja, 'forma')==='monto'?'En pesos, antes de IVA':'Porcentaje de descuento sobre el precio';
+    if(ay) ay.textContent=du2==='vigencia'?'Se aplica a los cobros hasta su «Hasta» (en el plan anual, el primer año; en el mensual, los cobros hasta ese día). Escribe su «Hasta».':du2==='siempre'?'En todos los cobros de esa cuenta, mientras esté prendido.':'';
   };
   caja.addEventListener('click', function(ev){
     const b=ev.target.closest('[data-ds-grupo] button'); if(!b || b.disabled) return;
@@ -5586,11 +5601,14 @@ function cqDescForma(x, cuentaId, volverA){
     if(tipo==='cuenta' && !cuenta){ cqMvError(v, 'Escoge la cuenta del cliente. Qué hacer: escribe parte de su nombre y escógela de la lista.'); return; }
     if(!(num>0) || (forma==='pct' && num>100)){ cqMvError(v, 'Escribe cuánto: el % va de 0.01 a 100 y los pesos, más de cero. Qué hacer: corrígelo y vuelve a guardar.'); return; }
     if(dur==='meses' && !(Number(val('ds-meses'))>=1 && Number(val('ds-meses'))<=36)){ cqMvError(v, 'Escribe cuántos meses dura (de 1 a 36). Qué hacer: escríbelo o escoge otra duración.'); return; }
+    if(tipo==='codigo' && dur==='siempre'){ cqMvError(v, 'Un código no puede ser para siempre. Qué hacer: escoge «Mientras dure la promoción» y escribe su «Hasta», o «Solo el primer cobro» o «Varios meses».'); return; }
+    if(dur==='vigencia' && !val('ds-hasta')){ cqMvError(v, '«Mientras dure la promoción» necesita su último día. Qué hacer: escribe la fecha en «Hasta» y vuelve a guardar.'); return; }
     if(val('ds-hasta') && val('ds-hasta')<val('ds-desde')){ cqMvError(v, '«Hasta» va después de «Desde». Qué hacer: corrige una de las dos fechas.'); return; }
     if(!aut){ cqMvError(v, 'Escoge quién lo autorizó. Qué hacer: pica Héctor Daniel Nava, Héctor Nava Ramos o Fernando Cadengo.'); return; }
     const desc={ id:x?x.id:null, nombre:val('ds-nombre'), tipo:tipo, codigo:tipo==='codigo'?val('ds-codigo').toUpperCase():null, cuenta_id:tipo==='cuenta'?Number(cuenta):null,
       pct:forma==='pct'?num:null, monto:forma==='monto'?num:null, sistemas:dsLeeGrupo(caja, 'sis'), periodos:dsLeeGrupo(caja, 'per'),
       desde:val('ds-desde')||HOY, hasta:val('ds-hasta')||null, duracion:dur||'una_vez', meses:dur==='meses'?Number(val('ds-meses')):null,
+      solo_planes:!!(caja.querySelector('#ds-solo-planes')&&caja.querySelector('#ds-solo-planes').checked),
       usos_max:val('ds-usos')?Number(val('ds-usos')):null, autorizo:aut, motivo:val('ds-motivo') };
     const btn=this, t0=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
     dsPide({accion:'desc_guarda', descuento:desc}, 'guardar el descuento').then(function(){
