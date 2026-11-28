@@ -894,10 +894,10 @@ table.reg tr.editando{background:var(--sky-soft)}
      manda ese; el timbrado de los recibos va incluido. */
   var NOMI = { mensual:[449,749,1349,2999], anual:[4490,7490,13490,29990], trabM:15, trabA:150, borrador:true };
   var NLIM = [
-    { t:'1 empresa · 15 trab.',   doc:'1 empresa · hasta 15 trabajadores · 1 usuario · recibos timbrados incluidos', trab:15 },
-    { t:'3 empresas · 50 trab.',  doc:'Hasta 3 empresas · hasta 50 trabajadores · 3 usuarios · recibos timbrados incluidos', trab:50 },
-    { t:'10 empresas · 150 trab.', doc:'Hasta 10 empresas · hasta 150 trabajadores · 5 usuarios · recibos timbrados incluidos', trab:150 },
-    { t:'Ilimitadas · 500 trab.', doc:'Empresas y usuarios ilimitados · hasta 500 trabajadores · recibos timbrados incluidos', trab:500 }
+    { t:'1 empresa · 15 trab.',   doc:'1 empresa · hasta 15 trabajadores · 1 usuario · hasta 130 recibos timbrados al mes', trab:15, rec:130 },
+    { t:'3 empresas · 50 trab.',  doc:'Hasta 3 empresas · hasta 50 trabajadores · 3 usuarios · hasta 250 recibos timbrados al mes', trab:50, rec:250 },
+    { t:'10 empresas · 150 trab.', doc:'Hasta 10 empresas · hasta 150 trabajadores · 5 usuarios · hasta 700 recibos timbrados al mes', trab:150, rec:700 },
+    { t:'Ilimitadas · 500 trab.', doc:'Empresas y usuarios ilimitados · hasta 500 trabajadores · hasta 2,500 recibos timbrados al mes', trab:500, rec:2500 }
   ];
   var SIS = [ { k:'conta', t:'Quo Contabilita', s:'Contabilidad' }, { k:'fact', t:'Quo Facturita', s:'Timbres' },
               { k:'nomi', t:'Quo Nominita', s:'Nómina' } ];
@@ -918,7 +918,10 @@ table.reg tr.editando{background:var(--sky-soft)}
      «Los precios y planes los decide él el lunes 30-nov… solo se carguen los números en el Cotizador QUO»; «Está pensando vender
      solo la línea PRO… déjenlo fácil de hacer el lunes»). Si quo_ajustes/cotizador trae «conta», manda eso, igual que «nomi»:
      { lineas:['PRO'] (las que se venden; sin esto, las dos), PRO:{ mensual:[4], anual:[4] } y LITE igual (cada plan ya final, sin
-     factor, antes del IVA; la línea que no venga sigue con BASE × factor) y usuario (el usuario adicional, ya final) }. Lo pone la
+     factor, antes del IVA; la línea que no venga sigue con BASE × factor) y usuario: { mensual, anual } (el usuario adicional, ya final, por
+     mes y por año; Héctor Daniel Nava, 27-nov-2026, 15:59: «Hay que separarlo en mensual y anual… no cargues precios»; un número
+     solo, como antes del 27-nov, se cotiza pero nunca se publica en la tienda) y borrador (en falso, la tienda lo recibe ya no de
+     borrador; sin esto, de borrador) }. Lo pone la
      base (un archivo de portal/sql/cambios/ con su «sí»); aquí no se captura. La línea que no se vende no se cotiza y, al publicar
      en la tienda, sale de la venta (activo: false; nada se borra). */
   var CONTA = null;
@@ -963,7 +966,13 @@ table.reg tr.editando{background:var(--sky-soft)}
         }
       });
     });
-    if (Number(c.usuario) > 0) o.usuario = Number(c.usuario);
+    /* el usuario adicional, por mes y por año (27-nov-2026); un número solo (como era antes) solo sirve para cotizar */
+    if (c.usuario && typeof c.usuario === 'object'){
+      var u = {};
+      ['mensual','anual'].forEach(function(per){ if (Number(c.usuario[per]) > 0) u[per] = Number(c.usuario[per]); });
+      if (u.mensual || u.anual) o.usuario = u;
+    } else if (Number(c.usuario) > 0) o.usuarioCobro = Number(c.usuario);
+    if (typeof c.borrador === 'boolean') o.borrador = c.borrador;
     return o;
   }
   function lineasVenta(){ return CONTA ? CONTA.lineas : ['LITE','PRO']; }
@@ -973,7 +982,11 @@ table.reg tr.editando{background:var(--sky-soft)}
     if (f) return f[plan];
     return BASE[linea][periodo][plan] * (periodo === 'mensual' ? S.fm : S.fa);
   }
-  function precioUsuario(fc){ return CONTA && CONTA.usuario ? CONTA.usuario : USUARIO * fc; }
+  function precioUsuario(fc, periodo){
+    if (CONTA && CONTA.usuario && CONTA.usuario[periodo]) return CONTA.usuario[periodo];
+    if (CONTA && CONTA.usuarioCobro) return CONTA.usuarioCobro;
+    return USUARIO * fc;
+  }
   function precioTimbre(i){ return TIMBRES[i].p * S.fc; }
   function precioNomi(plan, periodo){ return NOMI[periodo][plan]; }
   function precioTrab(periodo){ return periodo === 'mensual' ? NOMI.trabM : NOMI.trabA; }
@@ -1035,8 +1048,8 @@ table.reg tr.editando{background:var(--sky-soft)}
       radios($('nplan'), 'nplan',
         [0,1,2,3].map(function(i){ return { v:i, t:'Plan ' + (i+1), s:NLIM[i].t }; }),
         function(){ return S.nplan; }, function(v){ S.nplan = Number(v); });
-      $('nomi-hint').textContent = 'Incluye el timbrado de los recibos de nómina de hasta ' + nf.format(NLIM[S.nplan].trab) +
-        ' trabajadores; cada trabajador de más, ' + money(precioTrab(S.periodo)) + (S.periodo === 'mensual' ? ' al mes' : ' al año') + ' antes de IVA.';
+      $('nomi-hint').textContent = 'Incluye hasta ' + nf.format(NLIM[S.nplan].trab) + ' trabajadores y hasta ' + nf.format(NLIM[S.nplan].rec) +
+        ' recibos timbrados al mes; cada trabajador de más, ' + money(precioTrab(S.periodo)) + (S.periodo === 'mensual' ? ' al mes' : ' al año') + ' antes de IVA.';
     }
     if (conLicencia()){
       radios($('periodo'), 'periodo',
@@ -1115,7 +1128,8 @@ table.reg tr.editando{background:var(--sky-soft)}
                  : (S.periodo === 'mensual' ? 'Mensualidad' : 'Anualidad, 360 días de vigencia')),
         q:1, pu:(cort ? 0 : precioLicencia(S.linea, S.plan, S.periodo))
       });
-      if (S.usuarios > 0) l.push({ c:'Usuario adicional', d:'Costo por usuario', q:S.usuarios, pu:precioUsuario(S.fc) });
+      if (S.usuarios > 0) l.push({ c:'Usuario adicional', d:'Por usuario, ' + (S.periodo === 'mensual' ? 'al mes' : 'al año'),
+                                   q:S.usuarios, pu:precioUsuario(S.fc, S.periodo) });
       if (S.almac >= 0) l.push({
         c:'Almacenamiento adicional · Rango ' + (S.almac + 1),
         d:'Incluye ' + nf.format(ALMAC[S.almac].xml) + ' XML', q:1, pu:ALMAC[S.almac].p * S.fc });
@@ -1456,6 +1470,8 @@ table.reg tr.editando{background:var(--sky-soft)}
         o[per] = a.map(Number);
     });
     ['trabM','trabA'].forEach(function(k){ if (Number(n[k]) >= 0 && n[k] !== '' && n[k] !== null) o[k] = Number(n[k]); });
+    /* el usuario adicional de Nominita, por mes y por año (27-nov-2026): solo si trae precio; sin él, no se publica */
+    ['usuarioM','usuarioA'].forEach(function(k){ if (Number(n[k]) > 0) o[k] = Number(n[k]); });
     if (typeof n.borrador === 'boolean') o.borrador = n.borrador;
     return o;
   }
@@ -1463,6 +1479,7 @@ table.reg tr.editando{background:var(--sky-soft)}
     if (!n || typeof n !== 'object') return;
     var o = nomiDe(n, NOMI);
     NOMI.mensual = o.mensual; NOMI.anual = o.anual; NOMI.trabM = o.trabM; NOMI.trabA = o.trabA; NOMI.borrador = o.borrador;
+    NOMI.usuarioM = o.usuarioM; NOMI.usuarioA = o.usuarioA;
     pintarNomiAjustes();
   }
   function pintarNomiAjustes(){
@@ -2114,7 +2131,7 @@ table.reg tr.editando{background:var(--sky-soft)}
      Cadengo no»), por la función «quo-clientes»; la base de Quo los vuelve a revisar todos (qs_canal_precios: todo o nada).
      A quien solo los ve, la nota de abajo le dice quién los publica. */
   var TI = { papel:null, tienda:null, trayendo:false, confirma:false, ocupado:false, listo:'' };
-  var TI_SIS = { contabilita:'Contabilita', facturita:'Facturita', nominita:'Nominita' };
+  var TI_SIS = { contabilita:'Contabilita', facturita:'Facturita', nominita:'Nominita', lexita:'Lexita' };
   var TI_PER = { mensual:'al mes', anual:'al año', paquete:'paquete', cada_cobro:'en cada cobro' };
   function r2(v){ return Math.round(v * 100) / 100; }
   function tiendaFactor(id){
@@ -2136,7 +2153,13 @@ table.reg tr.editando{background:var(--sky-soft)}
         });
       });
     });
-    l.push({ sistema:'contabilita', clave:'usuario', periodo:'cada_cobro', precio:r2(conta && conta.usuario ? conta.usuario : USUARIO * fc), nombre:'Usuario adicional' });
+    /* el usuario adicional de Contabilita, por mes y por año (27-nov-2026): solo se publica con su precio puesto en «conta.usuario»;
+       el de «cada cobro» de antes ya no se publica (en la tienda está apagado y se queda así) */
+    ['mensual','anual'].forEach(function(per){
+      if (conta && conta.usuario && conta.usuario[per] > 0)
+        l.push({ sistema:'contabilita', clave:'usuario', periodo:per, precio:r2(conta.usuario[per]), nombre:'Usuario adicional',
+                 activo:true, borrador:(conta.borrador !== false) });
+    });
     TIMBRES.forEach(function(t){
       l.push({ sistema:'facturita', clave:'timbres-' + t.n, periodo:'paquete', precio:r2(t.p * fc), nombre:nf.format(t.n) + ' timbres' });
     });
@@ -2146,6 +2169,29 @@ table.reg tr.editando{background:var(--sky-soft)}
       });
       l.push({ sistema:'nominita', clave:'trabajador', periodo:per, precio:r2(per === 'mensual' ? nomi.trabM : nomi.trabA),
                nombre:'Trabajador adicional', borrador:!!nomi.borrador });
+      var pu = per === 'mensual' ? nomi.usuarioM : nomi.usuarioA;
+      if (pu > 0) l.push({ sistema:'nominita', clave:'usuario', periodo:per, precio:r2(pu), nombre:'Usuario adicional',
+                           activo:true, borrador:!!nomi.borrador });
+    });
+    lexitaDe(AJ_DOC && AJ_DOC.lexita).forEach(function(x){ l.push(x); });
+    return l;
+  }
+  /* Quo Lexita (27-nov-2026; Héctor Daniel Nava: «no cargues precios: los decidimos Héctor Nava Ramos y yo el lunes 30-nov»): sus
+     renglones ya están en la tienda, sin precio, de borrador y apagados. Si quo_ajustes/cotizador trae «lexita», se publican los que
+     traen precio: { sola:{ mensual, anual }, despacho:{ mensual, anual }, complemento:{ mensual, anual } (por cada usuario que usa
+     Lexita), usuario:{ mensual, anual } (solo con Despacho) y borrador (en falso, ya no de borrador; sin esto, de borrador) }.
+     Cada precio ya final, antes del IVA. Lo que no trae precio no se publica y se queda como está. */
+  var LX_NOM = { sola:'Lexita Sola', despacho:'Lexita Despacho', complemento:'Complemento de Quo Contabilita', usuario:'Usuario adicional' };
+  function lexitaDe(x){
+    var l = [];
+    if (!x || typeof x !== 'object') return l;
+    var borr = x.borrador !== false;
+    ['sola','despacho','complemento','usuario'].forEach(function(k){
+      var v = x[k]; if (!v || typeof v !== 'object') return;
+      ['mensual','anual'].forEach(function(per){
+        if (Number(v[per]) > 0) l.push({ sistema:'lexita', clave:k, periodo:per, precio:r2(Number(v[per])), nombre:LX_NOM[k],
+                                         activo:true, borrador:borr });
+      });
     });
     return l;
   }
@@ -2188,8 +2234,16 @@ table.reg tr.editando{background:var(--sky-soft)}
     }
     if (k.falta.length) lista.appendChild(tiendaNota('El cotizador trae ' + k.falta.length + ' que la tienda no tiene ('
       + k.falta.map(tiendaNombre).join('; ') + '): esos no se publican. Qué hacer: pídele a tu Claude que los agregue a la tienda; los demás sí se publican.'));
-    if (k.solo.length) lista.appendChild(tiendaNota('La tienda tiene ' + k.solo.length + ' que el cotizador no trae ('
-      + k.solo.map(tiendaNombre).join('; ') + '); esos se quedan como están.'));
+    /* los renglones nuevos de la tienda (27-nov-2026: el usuario adicional por mes y por año, los planes de Quo Lexita) nacen sin
+       precio, de borrador y apagados; se publican el día que el cotizador les ponga su precio (quo_ajustes/cotizador) */
+    /* lo que ya está fuera de la venta y el cotizador ya no trae (como el usuario adicional «en cada cobro», apagado desde el
+       27-nov-2026) no se vende ni hay nada que hacer: no se menciona */
+    var sinPrecio = k.solo.filter(function(x){ return !(Number(x.precio) > 0); }),
+        otros = k.solo.filter(function(x){ return Number(x.precio) > 0 && x.activo !== false; });
+    if (sinPrecio.length) lista.appendChild(tiendaNota('La tienda tiene ' + sinPrecio.length + (sinPrecio.length === 1 ? ' renglón' : ' renglones')
+      + ' que todavía no tienen precio (' + sinPrecio.map(tiendaNombre).join('; ') + '): no se venden. Se publican el día que les pongas su precio en el cotizador.'));
+    if (otros.length) lista.appendChild(tiendaNota('La tienda tiene ' + otros.length + ' que el cotizador no trae ('
+      + otros.map(tiendaNombre).join('; ') + '); esos se quedan como están.'));
     if (n && TI.papel !== 'publica') lista.appendChild(tiendaNota('Los precios de la tienda los publica la dirección. Qué hacer: si hay que cambiar uno, pídeselo a la dirección.'));
     var puede = TI.papel === 'publica' && !consulta() && n > 0;
     pie.hidden = !puede;
