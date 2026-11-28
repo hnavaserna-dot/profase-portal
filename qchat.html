@@ -309,6 +309,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .cv-pie{border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:grid;gap:8px;background:var(--surface);position:sticky;bottom:0;z-index:1}
 .cv-pie textarea{border:1px solid var(--line-strong);background:var(--surface);border-radius:10px;padding:9px 11px;min-height:64px;max-height:180px;resize:vertical;width:100%}
 .cv-pie .acciones{justify-content:space-between}
+.cv-pie #cv-arch-va.nota{margin:0;padding:8px 12px}
 details.bit{font-size:12.5px;color:var(--muted)}
 details.bit ul{margin:6px 0 0;padding-left:18px}
 /* lo de la revisión del 8-nov-2026, 17:17: las capturas del cliente, las respuestas rápidas y el borrador de la asistente */
@@ -538,8 +539,10 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     <div class="rap" id="cv-rap" aria-label="Respuestas rápidas"></div>
     <div class="rec" id="cv-rec" hidden></div>
     <textarea id="cv-txt" maxlength="4000" placeholder="Escribe tu respuesta…" aria-label="Tu respuesta"></textarea>
+    <div class="mut" id="cv-arch-va" role="status" hidden></div>
+    <input type="file" id="cv-arch-in" hidden accept=".pdf,.xml,.zip,.xlsx,.xls,.csv,.docx,.doc,.txt">
     <div class="acciones"><span class="mut" id="cv-ayuda">Enter manda; Shift+Enter, otro renglón.</span>
-      <span class="acciones"><button class="btn" type="button" id="cv-mano" title="El cliente lo recorre en su pantalla, paso por paso y obligatorio">Llevarlo de la mano</button><button class="btn" type="button" id="cv-sugiere">Sugerir respuesta</button><button class="btn acento" type="button" id="cv-manda">Mandar</button></span></div>
+      <span class="acciones"><button class="btn" type="button" id="cv-arch" title="Mándale un archivo al cliente: PDF, XML, ZIP, Excel, Word o texto, hasta 10 MB">📎 Archivo</button><button class="btn" type="button" id="cv-mano" title="El cliente lo recorre en su pantalla, paso por paso y obligatorio">Llevarlo de la mano</button><button class="btn" type="button" id="cv-sugiere">Sugerir respuesta</button><button class="btn acento" type="button" id="cv-manda">Mandar</button></span></div>
   </div>
 </div></div>
 
@@ -905,6 +908,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   }
   function salaDe(id) { return SALAS.filter(function (s) { return s.conv === id; })[0]; }
   function pintaConv() {
+    var va0 = $('cv-arch-va'); if (va0 && va0.dataset.conv && va0.dataset.conv !== String(CV.conv.id)) { va0.hidden = true; va0.textContent = ''; va0.dataset.conv = ''; }
     var c = CV.conv, mia = puede() && c.estado === 'atencion' && c.agente === YO.usuario, sup = YO && YO.papel === 'supervisa' && !CONSULTA;
     var a = [];
     if (puede() && (c.estado === 'fila' || (sup && c.estado !== 'cerrada' && c.agente !== YO.usuario)))
@@ -1089,7 +1093,7 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
   function archTarjeta(m) {
     var d = archDoc(m);
     return '<div class="arch" data-arch="' + Number(m.adj) + '" title="' + esc(m.arch.n) + '"><span class="ai" aria-hidden="true">' + esc(archEtiq(m.arch.n)) + '</span>'
-      + '<span class="an"><b>' + esc(m.arch.n) + '</b><small>' + esc(archPesa(m.arch.b)) + ' · lo mandó el cliente</small></span><span class="aa">'
+      + '<span class="an"><b>' + esc(m.arch.n) + '</b><small>' + esc(archPesa(m.arch.b)) + (m.arch.s ? ' · se lo mandamos al cliente' : ' · lo mandó el cliente') + '</small></span><span class="aa">'
       + (archSeVe(d) ? '<button class="btn" type="button" data-aver="' + Number(m.adj) + '">Ver</button>' : '')
       + '<button class="btn" type="button" data-abaja="' + Number(m.adj) + '">Bajar</button></span></div>';
   }
@@ -1337,6 +1341,58 @@ details.bit ul{margin:6px 0 0;padding-left:18px}
     $('cv-manda').disabled = false;
   }
   $('cv-manda').onclick = function () { manda(); };
+  // soporte le manda un archivo al cliente: los mismos tipos y el mismo tope que él; sube en partes y Quo lo revisa otra vez
+  var ARCH_EXT = ['pdf', 'xml', 'zip', 'xlsx', 'xls', 'csv', 'docx', 'doc', 'txt'], ARCH_MAX = 10 * 1024 * 1024, ARCH_PARTE = 655360;
+  function archId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* abajo */ }
+    var b = new Uint8Array(16); crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+    var h = [].map.call(b, function (x) { return (x + 256).toString(16).slice(1); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+  function arch64(blob) {
+    return new Promise(function (ok, mal) {
+      var r = new FileReader();
+      r.onload = function () { var d = String(r.result || ''); ok(d.slice(d.indexOf(',') + 1)); };
+      r.onerror = function () { mal(new Error('No se pudo leer el archivo en tu equipo. Qué hacer: vuelve a escogerlo con «📎 Archivo»; si sigue, guárdalo otra vez en tu equipo y escógelo de nuevo.')); };
+      r.readAsDataURL(blob);
+    });
+  }
+  function archNoVa(f) {
+    var e = archExt(f.name);
+    if (/^(cer|key|pfx|p12|req)$/.test(e)) return 'Por seguridad, la e.firma y los sellos nunca van por el chat. Qué hacer: que el cliente los suba él en su sistema, donde se capturan sus RFC; ahí se guardan protegidos.';
+    if (/^(xlsm|xltm|xlsb|docm|dotm|pptm)$/.test(e)) return 'Ese archivo trae macros y por seguridad no se puede mandar. Qué hacer: guárdalo como .xlsx o .docx (sin macros) y vuelve a escogerlo.';
+    if (ARCH_EXT.indexOf(e) < 0) return 'Ese tipo de archivo no se puede mandar por aquí. Qué hacer: mándalo en PDF, XML, ZIP, Excel (xlsx, xls o csv), Word (docx o doc) o texto (txt); una imagen, ponla en un PDF o en un ZIP.';
+    if (!f.size) return 'El archivo viene vacío. Qué hacer: revisa que sea el archivo correcto y vuelve a escogerlo.';
+    if (f.size > ARCH_MAX) return 'El archivo es muy grande: hasta 10 MB. Qué hacer: mándalo en un ZIP (los XML se achican mucho) o en varias partes.';
+    return '';
+  }
+  async function mandaArchivo(f) {
+    if (!CV || !f) return;
+    var no = archNoVa(f); if (no) { archDice(no, true); return; }
+    var id = CV.conv.id, sube = archId(), n = Math.max(1, Math.ceil(f.size / ARCH_PARTE)), va = $('cv-arch-va'), mal = '';
+    var t = REC[id] ? '' : $('cv-txt').value.trim();   // si hay un recorrido por mandar, el texto es de él
+    $('cv-arch').disabled = true; $('cv-manda').disabled = true; archDice('');
+    try {
+      for (var i = 0; i < n; i++) {
+        va.hidden = false; va.textContent = 'Mandando «' + f.name + '»… ' + Math.round(i * 100 / n) + ' %';
+        await qc('sube', { id: id, sube: sube, n: i, datos: await arch64(f.slice(i * ARCH_PARTE, (i + 1) * ARCH_PARTE)) });
+      }
+      va.textContent = 'Revisando «' + f.name + '»…';
+      CV = await qc('manda_archivo', { id: id, sube: sube, nombre: f.name, texto: t || undefined });
+      if (t && $('cv-txt').value.trim() === t) $('cv-txt').value = '';
+      pintaConv(); carga().catch(function () {});
+      avisa('Listo: le mandaste «' + f.name + '» al cliente. Le sale en su burbuja para bajarlo; si con eso queda, pica «Terminar» arriba.');
+    } catch (e) { mal = falla(e); }
+    archDice(mal, !!mal); $('cv-arch').disabled = false; $('cv-manda').disabled = false;
+  }
+  // Lo que va pasando con el archivo (o por qué no se pudo), ahí mismo, junto al botón; se quita al abrir otra conversación.
+  function archDice(t, mal) {
+    var va = $('cv-arch-va'); t = t && mal && window.PORTAL && PORTAL.conQueHacer ? PORTAL.conQueHacer(t) : (t || '');
+    va.className = mal ? 'nota mal' : 'mut'; va.setAttribute('role', mal ? 'alert' : 'status');
+    va.textContent = t; va.hidden = !t; va.dataset.conv = CV ? String(CV.conv.id) : '';
+  }
+  $('cv-arch').onclick = function () { if (CV && !$('cv-arch').disabled) { $('cv-arch-in').value = ''; $('cv-arch-in').click(); } };
+  $('cv-arch-in').addEventListener('change', function () { var f = this.files && this.files[0]; this.value = ''; if (f) mandaArchivo(f); });
   $('cv-txt').addEventListener('keydown', function (e) {
     var tec = P && P.conTeclado ? P.conTeclado() : true;
     if (e.key === 'Enter' && !e.shiftKey && tec) { e.preventDefault(); manda(); }
