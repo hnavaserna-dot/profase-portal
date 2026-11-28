@@ -235,7 +235,7 @@
       'fill="' + Q_NAR + '" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg><span></span></div>';
     (document.body || document.documentElement).appendChild(host);
     var $ = function (s) { return sh.querySelector(s); };
-    UI = { host: host, sh: sh, barra: $('.b'), tx: $('.tx'), tc: $('.tc'), mas: $('.mas'), bControl: $('[data-a="control"]'), pc: $('.pc'), pu: $('.pu'), puNom: $('.pu span'),
+    UI = { host: host, sh: sh, barra: $('.b'), tx: $('.tx'), tc: $('.tc'), mas: $('.mas'), bControl: $('[data-a="control"]'), bVoz: $('[data-a="voz"]'), pc: $('.pc'), pu: $('.pu'), puNom: $('.pu span'),
            alClic: null, tPu: 0 };
     try { if (localStorage.getItem('profase-envivo-abajo') === '1') UI.barra.classList.add('abajo'); } catch (e) { /* nada */ }
     sh.addEventListener('click', function (ev) {
@@ -262,7 +262,10 @@
     setTimeout(function () { a.remove(); }, 1500);
   }
 
-  // Lo que hace el cliente: o = {canal, quien, control, pideControl, alControl(bool), alHablar(), alTerminar(), alAccion(txt)}
+  // Lo que hace el cliente: o = {canal, quien, control, pideControl, llamada, alControl(bool), alHablar(), alTerminar(), alAccion(txt)}
+  // llamada: cómo va la llamada de esa conversación ('pedida', 'abierta' —quien atiende ya la abrió y el cliente no ha
+  // entrado—, 'dentro' —ya está en ella— o nada). Con 'abierta' el botón de voz dice «Entrar a la llamada» y, si se acaba de
+  // abrir, la barra se despliega sola (en el celular) para que el cliente lo vea. Su micrófono se prende solo al entrar.
   function cliente(o) {
     o = o || {};
     if (ACT_C) ACT_C.fin(true);
@@ -270,7 +273,8 @@
     var E = {
       canal: null, listo: false, rec: null, stop: null, cola: [], full: false, timer: null, seq: 0, envio: Promise.resolve(),
       z: false, control: !!o.control, pideControl: !!o.pideControl, quien: o.quien || 'Soporte', visto: 0, tFull: 0,
-      vivo: true, pregunta: null, tick: null, conAgente: false
+      vivo: true, pregunta: null, tick: null, conAgente: false,
+      llamada: o.llamada || '', avisaLl: false
     };
     var REC = null;
 
@@ -278,15 +282,23 @@
       if (!E.vivo) return;
       ui.barra.hidden = false;
       ui.barra.classList.toggle('vivo', E.conAgente && !!E.rec);
-      ui.tx.textContent = E.conAgente && E.rec ? E.quien + ' ve tu pantalla' + (E.control ? ' y la puede mover' : '')
-        : E.listo ? 'Esperando a que ' + E.quien + ' abra tu pantalla…' : 'Conectando la ayuda en vivo…';
+      var llAb = E.llamada === 'abierta';
+      ui.tx.textContent = (E.conAgente && E.rec ? E.quien + ' ve tu pantalla' + (E.control ? ' y la puede mover' : '')
+        : E.listo ? 'Esperando a que ' + E.quien + ' abra tu pantalla…' : 'Conectando la ayuda en vivo…')
+        + (llAb ? ' · Te abrió la llamada' : '');
+      // la llamada: «Entrar a la llamada» resaltado cuando quien atiende ya la abrió; ya adentro, el botón no hace falta
+      ui.bVoz.hidden = E.llamada === 'dentro';
+      ui.bVoz.textContent = llAb ? 'Entrar a la llamada' : 'Hablar por voz';
+      ui.bVoz.className = llAb ? '' : 'l';
       ui.bControl.textContent = E.control ? 'Quitarle el control' : 'Dejar que la mueva';
       ui.bControl.className = E.control ? 'n' : '';
-      ui.tc.textContent = E.conAgente && E.rec ? 'En vivo con ' + E.quien : E.listo ? 'Esperando a ' + E.quien + '…' : 'Conectando…';
+      ui.tc.textContent = llAb ? E.quien + ' te abrió la llamada' : E.conAgente && E.rec ? 'En vivo con ' + E.quien : E.listo ? 'Esperando a ' + E.quien + '…' : 'Conectando…';
       ui.pc.hidden = !(E.pideControl && !E.control);
-      if (!ui.pc.hidden && !ui.barra.classList.contains('abierta')) {   // te piden moverla: en el celular se abre sola para que lo veas
+      // te piden moverla o te acaban de abrir la llamada: en el celular se abre sola para que lo veas
+      var quiere = !ui.pc.hidden || (E.avisaLl && llAb);
+      if (quiere && !ui.barra.classList.contains('abierta')) {
         abre(true); E.seAbrio = true;
-      } else if (ui.pc.hidden && E.seAbrio) {                           // ya contestó: se vuelve a poner chica
+      } else if (!quiere && E.seAbrio) {                                // ya contestó o ya entró: se vuelve a poner chica
         abre(false); E.seAbrio = false;
       }
       ui.pc.querySelector('b').textContent = E.quien + ' pide mover tu pantalla para enseñarte. Lo que timbre, cancele o borre te lo pregunta antes.';
@@ -297,7 +309,7 @@
       if (a === 'control') { ponControl(!E.control); if (o.alControl) o.alControl(E.control); }
       else if (a === 'si') { ponControl(true); if (o.alControl) o.alControl(true); }
       else if (a === 'no') { E.pideControl = false; pinta(); if (o.alControl) o.alControl(false); }
-      else if (a === 'voz') { if (o.alHablar) o.alHablar(); }
+      else if (a === 'voz') { E.avisaLl = false; pinta(); if (o.alHablar) o.alHablar(); }
       else if (a === 'fin') { if (o.alTerminar) o.alTerminar(); else api.fin(); }
     };
     function abre(si) {
@@ -563,6 +575,11 @@
         if (n.quien) E.quien = n.quien;
         if (typeof n.control === 'boolean' && n.control !== E.control) { E.control = n.control; if (!n.control && E.pregunta) E.pregunta.no(); mandaEstado(); }
         if (typeof n.pideControl === 'boolean') E.pideControl = n.pideControl && !E.control;
+        if (typeof n.llamada === 'string' && n.llamada !== E.llamada) {
+          // solo cuando se acaba de abrir (no al salirse de ella): se despliega una vez para que la vea
+          E.avisaLl = n.llamada === 'abierta' && (E.llamada === '' || E.llamada === 'pedida');
+          E.llamada = n.llamada;
+        }
         pinta();
       },
       fin: function (sinAdios) {
