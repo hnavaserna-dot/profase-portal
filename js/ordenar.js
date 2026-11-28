@@ -455,6 +455,10 @@
     for (var i = 0; i < por.length; i++) { if (por[i] == null || pos[por[i]] != null) return null; pos[por[i]] = i; }
     return orden.map(function (k) { return arr[pos[k]]; });
   }
+  // ¿vive dentro de una pestaña escondida que guarda lo acomodado? (data-guarda, js/portal.js): para esta pieza, escondida
+  // como con display:none, sin pedirle al navegador que la acomode solo para preguntar (28-nov-2026)
+  var CVH = !!(window.CSS && window.CSS.supports && window.CSS.supports('content-visibility', 'hidden'));
+  function guardado(el) { try { return CVH && !!(el && el.closest && el.closest('[hidden][data-guarda-ya]')); } catch (e) { return false; } }
   // la tabla con un orden escogido más cercana a un botón (o la tabla misma); si junto al botón hay dos, ninguna
   function cerca(ref) {
     if (typeof ref === 'string') ref = document.getElementById(ref);
@@ -462,7 +466,7 @@
     if (ref.tagName === 'TABLE') return ref;
     for (var n = ref.parentElement, k = 0; n && k < 8; n = n.parentElement, k++) {
       var ts = n.getElementsByTagName('table'), con = [];
-      for (var i = 0; i < ts.length; i++) { var t = ts[i]; if (t.__po && ESTADO[t.__po.k] && t.offsetParent) con.push(t); }
+      for (var i = 0; i < ts.length; i++) { var t = ts[i]; if (t.__po && ESTADO[t.__po.k] && !guardado(t) && t.offsetParent) con.push(t); }
       if (con.length === 1) return con[0];
       if (con.length > 1) return null;
     }

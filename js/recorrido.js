@@ -121,10 +121,16 @@
     listo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>'
   };
 
+  function guardado(el) {
+    try { var v = el.ownerDocument.defaultView; return !!(v.CSS && v.CSS.supports && v.CSS.supports('content-visibility', 'hidden') && el.closest && el.closest('[hidden][data-guarda-ya]')); }
+    catch (e) { return false; }
+  }
   // dónde está una parte en la pantalla, aunque viva dentro del marco de una pestaña
   function caja(el) {
     try {
-      if (!el || !el.getClientRects().length) return null;
+      // lo de una pestaña escondida que guarda lo acomodado (data-guarda, js/portal.js) no está a la vista, como con
+      // display:none (28-nov-2026)
+      if (!el || guardado(el) || !el.getClientRects().length) return null;
       var r = el.getBoundingClientRect(), x = r.left, y = r.top, w = el.ownerDocument.defaultView;
       while (w && w !== window && w.frameElement) {
         var f = w.frameElement.getBoundingClientRect();

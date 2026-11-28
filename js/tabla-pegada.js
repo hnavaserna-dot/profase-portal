@@ -79,6 +79,10 @@
     return !!FINA;
   }
   function desliza(o) { return o === 'auto' || o === 'scroll'; }
+  // ¿vive dentro de una pestaña escondida que guarda lo acomodado? (data-guarda; la capa común de js/portal.js la deja sin
+  // pintar con content-visibility:hidden: medir adentro la obligaría a acomodarse). Sin content-visibility, nunca.
+  var CVH = !!(window.CSS && window.CSS.supports && window.CSS.supports('content-visibility', 'hidden'));
+  function guardado(el) { try { return CVH && !!(el && el.closest && el.closest('[hidden][data-guarda-ya]')); } catch (e) { return false; } }
   // el recuadro que desliza la tabla a los lados: el de arriba más cercano (hasta 3 arriba) con overflow-x auto o scroll
   function recuadro(t) {
     for (var e = t.parentElement, n = 0; e && n < 3 && e !== document.body && e !== document.documentElement; e = e.parentElement, n++) {
@@ -106,6 +110,9 @@
     var c = document.body.querySelectorAll(':scope>*,:scope>*>*,:scope>*>*>*,:scope>*>*>*>*');
     for (var i = 0; i < c.length; i++) {
       var e = c[i]; if (/^(SCRIPT|STYLE|LINK|TEMPLATE|TABLE)$/.test(e.tagName)) continue;
+      // una pestaña que guarda lo acomodado (data-guarda, js/portal.js) va fija y fuera de la vista mientras está escondida:
+      // no es algo fijo de arriba (28-nov-2026)
+      if (e.hasAttribute('data-guarda')) continue;
       var cs = getComputedStyle(e), p = cs.position;
       if ((p === 'sticky' || p === '-webkit-sticky' || p === 'fixed') && cs.top !== 'auto' && parseFloat(cs.top) < 200) l.push(e);
     }
@@ -192,6 +199,9 @@
         if (x.tb) { ro.unobserve(x.tb); x.tb.classList.remove('tp-pega', 'tp-fondo'); }
         x.tb = tb; x.v = ''; x.fondo = undefined; if (tb) ro.observe(tb);
       }
+      // dentro de una pestaña escondida que guarda lo acomodado (data-guarda, js/portal.js): como con display:none (mide 0),
+      // sin pedirle al navegador que la acomode solo para medirla (28-nov-2026)
+      if (guardado(w)) return { sobra: false, ancho: 0, peg: false };
       var cw = w.clientWidth, sw = w.scrollWidth, sobra = cw > 0 && sw - cw > 1;
       var m = { sobra: sobra, ancho: w.offsetWidth + sw - cw, peg: false };
       if (!tb || !cw) return m;
@@ -255,6 +265,9 @@
   var mo = new MutationObserver(function (ms) {
     if (pend || !mano.matches) return;
     for (var i = 0; i < ms.length; i++) {
+      // una pestaña que guarda lo acomodado (data-guarda) que se esconde o se vuelve a ver: su tabla no cambia de tamaño
+      // (lo acomodado se guarda) y el ResizeObserver no avisa; se vuelve a medir aquí (28-nov-2026)
+      if (ms[i].type === 'attributes') { var g = ms[i].target; if (g.hasAttribute && g.hasAttribute('data-guarda')) { pide(); return; } continue; }
       for (var a = ms[i].addedNodes, j = 0; j < a.length; j++) {
         var n = a[j];
         if (n.nodeType === 1 && !NO.test(n.tagName) && (n.tagName === 'TABLE' || n.getElementsByTagName('table').length)) { FIJAS = null; pide(); return; }
@@ -266,7 +279,7 @@
   function otroTema() { for (var i = 0; i < X.length; i++) { X[i].fondo = undefined; X[i].v = ''; } pide(); }
   new MutationObserver(otroTema).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   try { var osc = matchMedia('(prefers-color-scheme: dark)'); if (osc.addEventListener) osc.addEventListener('change', otroTema); } catch (e) { /* nada */ }
-  function arranca() { mo.observe(document.body, { childList: true, subtree: true }); pide(); }
+  function arranca() { mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] }); pide(); }
   if (mano.addEventListener) mano.addEventListener('change', pide);
   window.addEventListener('resize', function () { FIJAS = null; pide(); }, { passive: true });
   if (document.body) arranca(); else document.addEventListener('DOMContentLoaded', arranca);

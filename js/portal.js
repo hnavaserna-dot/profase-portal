@@ -294,6 +294,47 @@
   }
   P.escondeGuardando = escondeGuardando;
 
+  /* ---- Pestañas que guardan lo acomodado (revisión nocturna del 28-nov-2026; docs/revision-nocturna.md, «Lo más
+     importante»). Lo mismo que escondeGuardando (arriba), pero para las pestañas de adentro de una pantalla: «Comprobar real»
+     medía cada noche que al pasar de una pestaña a otra con una tabla grande (Variaciones / Movimientos › «Resueltas» y
+     «Bitácora»; Reclasificación de activo fijo › «Control y avance») la pantalla se trababa de 0.4 a 1.2 s solo por
+     esconder la de antes: con display:none el navegador deshace lo acomodado de toda su tabla (decenas de miles de piezas) y,
+     al volver, lo arma otra vez. La pestaña que lleva data-guarda se sigue escondiendo con hidden (la página no cambia nada
+     y todo lo que pregunta por hidden sigue igual); la capa común de pantallas (abajo, en «css») la deja fuera de la vista y
+     sin pintar, con lo acomodado guardado (content-visibility:hidden), y aquí se le pone aria-hidden mientras está
+     escondida, para que el lector de pantalla no la lea (igual que con display:none). P.enGuardado(el) dice si algo vive
+     dentro de una de esas pestañas escondida: lo que mide la página (las tiras y tablas anchas de aquí, js/tabla-pegada.js,
+     js/ordenar.js, js/recorrido.js) la trata como escondida sin pedirle al navegador que la acomode solo para medirla
+     (medir adentro la obligaría a acomodarse y se perdería lo ganado). Una pantalla nueva con pestañas grandes le pone
+     data-guarda a cada pestaña (role="tabpanel"); construir.py (exige_guarda()) cuida la pieza. Solo guarda lo acomodado de
+     una pestaña que ya se vio una vez (data-guarda-ya, que se pone aquí la primera vez que se ve): una que nunca se ha
+     visto no tiene nada acomodado que guardar y, si saliera fuera de la vista desde el principio, al verse por primera vez
+     contaría como algo que «se movió al cargar» (extra/se_mueve.py: Activo fijo, que abre con todas escondidas hasta
+     que llegan sus datos, pasaba de 0.1 a 0.58); así, la primera vez aparece como con display:none. ---- */
+  var CV_OK = !!(window.CSS && window.CSS.supports && window.CSS.supports('content-visibility', 'hidden'));
+  P.enGuardado = function (el) {
+    try { return CV_OK && !!(el && el.closest && el.closest('[hidden][data-guarda-ya]')); } catch (e) { return false; }
+  };
+  (function guardaPestanas() {
+    if (!CV_OK) return;
+    var aria = function (s) {
+      if (s.hidden) { if (s.getAttribute('aria-hidden') !== 'true') s.setAttribute('aria-hidden', 'true'); }
+      else {
+        if (s.getAttribute('aria-hidden') === 'true') s.removeAttribute('aria-hidden');
+        if (!s.hasAttribute('data-guarda-ya')) s.setAttribute('data-guarda-ya', '');   // ya se vio: desde aquí guarda lo acomodado
+      }
+    };
+    var mo = window.MutationObserver ? new MutationObserver(function (ms) { for (var i = 0; i < ms.length; i++) aria(ms[i].target); }) : null;
+    var busca = function () {
+      var l = document.querySelectorAll('[data-guarda]');
+      for (var i = 0; i < l.length; i++) {
+        var s = l[i]; if (s.__pfGuarda) continue; s.__pfGuarda = true;
+        aria(s); if (mo) mo.observe(s, { attributes: true, attributeFilter: ['hidden'] });
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', busca); else busca();
+  })();
+
   /* ---- Un solo menú abierto a la vez (regla de Daniel, 30-oct-2026, 16:40: «corrige este tipo de errores; que no se
      entrelapen»; el menú de la foto salía encima de la campanita abierta). Cada menú o lista que se despliega (el de la
      foto, la campanita, las tarjetas del menú, los filtros, «Con marca / Original», las opciones de un mensaje del
@@ -1278,6 +1319,18 @@
       // recuadro o fondo) lo dice en su página con «/* renglón completo */» y width:auto. construir.py
       // (exige_desplegables()) no publica si se quita.
       + ':where(details)>summary{width:fit-content;max-width:100%}'
+      // Pestañas que guardan lo acomodado (revisión nocturna 28-nov-2026; ver P.enGuardado, abajo): una pestaña de adentro de
+      // una pantalla que lleva data-guarda, escondida con hidden, ya no se quita de la página (display:none) sino que el
+      // navegador guarda lo acomodado y no la pinta (content-visibility:hidden), fuera de la vista y sin ocupar lugar. Al
+      // esconderla ya no deshace lo acomodado de toda su tabla ni, al volver, lo vuelve a armar («Comprobar real»: Variaciones
+      // › «Bitácora» se trababa 0.5 a 0.7 s y Activo fijo › «Control y avance» 0.6 s solo por eso). Lo mismo, en el mismo
+      // lugar: no se ve, no ocupa lugar, no se pica ni se enfoca y el lector de pantalla no la lee (aria-hidden). Sin
+      // content-visibility (un navegador viejo), como siempre: display:none. Con el mismo display que tiene a la vista
+      // (block, o flow-root si js/tabla-pegada.js le puso tp-fr): un display distinto obligaría a rehacer todo. Solo la que
+      // ya se vio una vez (data-guarda-ya): la primera vez aparece como con display:none (no cuenta como que «se movió»).
+      + '@supports (content-visibility:hidden){[hidden][data-guarda][data-guarda-ya]:not([hidden=until-found i]){display:block!important;'
+      + 'content-visibility:hidden!important;position:fixed!important;left:-100000px!important;top:0!important;width:100%!important}'
+      + '[hidden][data-guarda][data-guarda-ya].tp-fr:not([hidden=until-found i]){display:flow-root!important}}'
       // Lo que va pegado al lado de una pantalla (un índice, una lista de opciones o una vista previa) se desliza por
       // dentro (Héctor Daniel Nava, 11-nov-2026, 10:30, con la ficha de Clientes › Base de clientes: «quiero poder
       // deslizarme hacia abajo sin tener que mover todo lo de la parte derecha»; «revisa en qué otras partes hay opciones
@@ -1322,6 +1375,9 @@
     function clase(t, c, si) { if (t.classList.contains(c) !== !!si) t.classList.toggle(c, !!si); }
     function marca(t, centra, base) {
       base = base || 'pt-desliza';
+      // dentro de una pestaña escondida que guarda lo acomodado (data-guarda): lo mismo que con display:none (no se
+      // desliza), sin pedirle al navegador que la acomode solo para medirla
+      if (P.enGuardado(t)) { clase(t, base, false); clase(t, 'pt-izq', false); clase(t, 'pt-der', false); return; }
       var cs = getComputedStyle(t);
       if (!/(auto|scroll)/.test(cs.overflowX) || t.scrollWidth <= t.clientWidth + 2) {
         clase(t, base, false); clase(t, 'pt-izq', false); clase(t, 'pt-der', false); return;
@@ -1352,6 +1408,7 @@
        cuadros de resumen), tampoco se sale por abajo y su lista se desliza completa sin mover lo de junto; al bajar,
        crece hasta pegarse. Solo cambia una variable de su estilo (no despierta a los MutationObserver). */
     function ajustaLado(el) {
+      if (P.enGuardado(el)) { if (el.style.getPropertyValue('--lado-alto')) el.style.removeProperty('--lado-alto'); return; }
       var cs = getComputedStyle(el);
       if (cs.position !== 'sticky' || !el.getClientRects().length) {
         if (el.style.getPropertyValue('--lado-alto')) el.style.removeProperty('--lado-alto');
@@ -1396,6 +1453,8 @@
         document.querySelectorAll(GRUPOS).forEach(function (t) { try { if (!t.matches(TIRAS)) marca(t, centra, 'pt-tabla'); } catch (e) { /* nada */ } });
         var tablas = document.querySelectorAll('table');
         for (var i = 0; i < tablas.length && i < 80; i++) {
+          // la de una pestaña escondida que guarda lo acomodado: como con display:none, su recuadro no se desliza
+          if (P.enGuardado(tablas[i])) { var c0 = tablas[i].closest('.pt-tabla'); if (c0 && P.enGuardado(c0)) marca(c0, false, 'pt-tabla'); continue; }
           try { var c = cajaDe(tablas[i]); if (c && !c.matches(TIRAS) && !c.matches(GRUPOS)) marca(c, false, 'pt-tabla'); } catch (e) { /* nada */ }
         }
       }, 120);
