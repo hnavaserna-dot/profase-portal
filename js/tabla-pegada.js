@@ -199,9 +199,11 @@
         if (x.tb) { ro.unobserve(x.tb); x.tb.classList.remove('tp-pega', 'tp-fondo'); }
         x.tb = tb; x.v = ''; x.fondo = undefined; if (tb) ro.observe(tb);
       }
-      // dentro de una pestaña escondida que guarda lo acomodado (data-guarda, js/portal.js): como con display:none (mide 0),
-      // sin pedirle al navegador que la acomode solo para medirla (28-nov-2026)
-      if (guardado(w)) return { sobra: false, ancho: 0, peg: false };
+      // dentro de una pestaña escondida que guarda lo acomodado (data-guarda, js/portal.js): no se mide (no se le pide al
+      // navegador que la acomode solo para medirla) y no se toca nada: se queda como estaba hasta que se vuelve a ver. Si se
+      // soltaba (quitarle tp-pega al esconderla y ponérsela otra vez al volver), el navegador volvía a calcular los estilos
+      // de toda la tabla al regresar (de 0.15 a 0.5 s trabado en «Resueltas»; 28-nov-2026)
+      if (guardado(w)) return null;
       var cw = w.clientWidth, sw = w.scrollWidth, sobra = cw > 0 && sw - cw > 1;
       var m = { sobra: sobra, ancho: w.offsetWidth + sw - cw, peg: false };
       if (!tb || !cw) return m;
@@ -226,7 +228,7 @@
     // …y luego se escribe
     if (P !== PEGA) { PEGA = P; document.documentElement.style.setProperty('--tp-pega', P + 'px'); }
     X.forEach(function (x, j) {
-      var m = md[j];
+      var m = md[j]; if (!m) return;   // escondida y guardada: no se toca
       if (x.b) {
         if (x.b.hidden === m.sobra) x.b.hidden = !m.sobra;
         if (m.sobra && x.ancho !== m.ancho) { x.ancho = m.ancho; x.b.firstChild.style.width = m.ancho + 'px'; }
